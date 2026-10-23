@@ -4,10 +4,21 @@ Writes a run's per-section markdown (analysts, research, trading, risk,
 portfolio) plus a consolidated ``complete_report.md`` under ``save_path``. The
 CLI and ``TradingAgentsGraph.save_reports`` both call this, so a headless / API
 run produces the same on-disk report tree a CLI run does.
+
+Stage 2: the writer additionally emits the shared quality/debate artifacts
+(``0_quality/*``, ``2_research/debate_trace.json``, ``run_summary.json``) via
+:func:`tradingagents.report_artifacts.write_report_artifacts`, and adds concise
+``Data Quality`` and ``Run Summary`` sections to ``complete_report.md``.
 """
 
 from datetime import datetime
 from pathlib import Path
+
+from tradingagents.report_artifacts import (
+    build_data_quality_section,
+    build_run_summary_section,
+    write_report_artifacts,
+)
 
 
 def write_report_tree(final_state: dict, ticker: str, save_path) -> Path:
@@ -95,7 +106,13 @@ def write_report_tree(final_state: dict, ticker: str, save_path) -> Path:
             (portfolio_dir / "decision.md").write_text(risk["judge_decision"], encoding="utf-8")
             sections.append(f"## V. Portfolio Manager Decision\n\n### Portfolio Manager\n{risk['judge_decision']}")
 
-    # Write consolidated report
+    # Stage 2: shared quality/debate/run artifacts (redacted, structured only).
+    artifact_paths = write_report_artifacts(final_state, ticker, save_path)
+
+    # Write consolidated report (with the concise Data Quality and Run Summary
+    # sections appended so the complete report mirrors the shared artifacts).
     header = f"# Trading Analysis Report: {ticker}\n\nGenerated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+    sections.append(build_data_quality_section(final_state))
+    sections.append(build_run_summary_section(final_state, ticker, artifact_paths))
     (save_path / "complete_report.md").write_text(header + "\n\n".join(sections), encoding="utf-8")
     return save_path / "complete_report.md"

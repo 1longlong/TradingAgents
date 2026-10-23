@@ -1,16 +1,20 @@
 from tradingagents.agents.utils.agent_utils import (
+    get_data_quality_context_from_state,
     get_instrument_context_from_state,
     get_language_instruction,
     opponent_argument_or_opening,
     report_or_absent,
 )
+from tradingagents.debate.budget import record_call_usage
+from tradingagents.debate.evidence_manifest import build_citation_allowlist
+from tradingagents.debate.state import append_debate_turn
+from tradingagents.debate.turn import METADATA_INSTRUCTION, parse_turn_metadata
 
 
 def create_bear_researcher(llm):
     def bear_node(state) -> dict:
         investment_debate_state = state["investment_debate_state"]
         history = investment_debate_state.get("history", "")
-        bear_history = investment_debate_state.get("bear_history", "")
 
         current_response = opponent_argument_or_opening(
             investment_debate_state.get("current_response", ""), "bull analyst"
@@ -20,6 +24,11 @@ def create_bear_researcher(llm):
         news_report = report_or_absent(state["news_report"], "news")
         fundamentals_report = report_or_absent(state["fundamentals_report"], "fundamentals")
         instrument_context = get_instrument_context_from_state(state)
+        data_quality_context = get_data_quality_context_from_state(state)
+        data_quality_allowlist = build_citation_allowlist(
+            state.get("data_quality_evidence_records"), state.get("trade_date")
+        )
+        data_quality_verdict = state.get("data_quality_verdict")
         asset_type = state.get("asset_type", "stock")
         target_label = "stock" if asset_type == "stock" else "asset"
         fundamentals_label = (
@@ -41,6 +50,8 @@ Key points to focus on:
 Resources available:
 
 {instrument_context}
+{data_quality_context}
+{data_quality_allowlist}
 Market research report: {market_research_report}
 Social media sentiment report: {sentiment_report}
 Latest world affairs news: {news_report}
@@ -50,18 +61,33 @@ Last bull argument: {current_response}
 Use this information to deliver a compelling bear argument, refute the bull's claims, and engage in a dynamic debate that demonstrates the risks and weaknesses of investing in the {target_label}.
 """ + get_language_instruction()
 
+        if data_quality_verdict == "degraded":
+            prompt += (
+                "\n\nData quality is degraded: low-evidence claims cannot be "
+                "decisive, cite only the evidence IDs listed above, and cap your "
+                "confidence accordingly."
+            )
+
+        prompt += METADATA_INSTRUCTION
+
         response = llm.invoke(prompt)
 
-        argument = f"Bear Analyst: {response.content}"
+        content = response.content
+        turn = parse_turn_metadata(speaker="Bear", content=content)
 
-        new_investment_debate_state = {
-            "history": history + "\n" + argument,
-            "bear_history": bear_history + "\n" + argument,
-            "bull_history": investment_debate_state.get("bull_history", ""),
-            "current_response": argument,
-            "count": investment_debate_state["count"] + 1,
+        new_investment_debate_state = append_debate_turn(
+            investment_debate_state, turn
+        )
+
+        usage = record_call_usage(
+            state.get("debate_usage"),
+            prompt_chars=len(prompt),
+            response_chars=len(content),
+        )
+
+        return {
+            "investment_debate_state": new_investment_debate_state,
+            "debate_usage": usage,
         }
-
-        return {"investment_debate_state": new_investment_debate_state}
 
     return bear_node

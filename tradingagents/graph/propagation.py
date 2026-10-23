@@ -68,6 +68,16 @@ class Propagator:
             "fundamentals_report": "",
             "sentiment_report": "",
             "news_report": "",
+            # Data Quality Gate (Phase 3A). Default to a fail-closed blank so a
+            # checkpoint/caller that predates the gate still routes blocked rather
+            # than silently continuing as normal; see graph/data_quality_gate.py.
+            "data_quality_verdict": "blocked",
+            "data_quality_evidence_records": [],
+            "data_quality_validation_results": {},
+            "data_quality_group_statuses": [],
+            "data_quality_gate_decision": {},
+            "data_quality_context": "",
+            "data_quality_error": "gate not run",
         }
 
     def get_graph_args(self, callbacks: list | None = None) -> dict[str, Any]:

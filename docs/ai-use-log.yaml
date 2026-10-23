@@ -1,0 +1,165 @@
+# AI-use log.
+#
+# Records each AI-tool use and each human review for the CS5351 course project.
+# Never copy secrets (API keys, tokens, Bearer/sk- strings) into this file.
+#
+# Fields:
+#   id:       stable local log id (AUL-XXX)
+#   date:     ISO date
+#   tool:     OpenCode, Codex, or equivalent
+#   phase:    analysis | contract | implementation | verification
+#   scope:    short description of what the tool did
+#   outcome:  result (evidence, key output, or review decision)
+#   human_review: one of: none | requested | approved | rejected | noted
+
+- id: AUL-001
+  date: "2026-10-19"
+  tool: "OpenCode"
+  phase: "analysis"
+  scope: "Read-only analysis of the repository; inventory source and test trees; identify candidate improvements."
+  outcome: "Analysis of the inherited TradingAgents fork; requirements frozen for Phase 2 contract."
+  human_review: approved
+
+- id: AUL-002
+  date: "2026-10-20"
+  tool: "OpenCode"
+  phase: "contract"
+  scope: "Design and implement the deterministic evidence model and the Data Quality Gate core (models, adapter, validate, policy, quality, gate)."
+  outcome: "Step 1 evidence foundation + Step 2 deterministic gate core; decimal-math cleanup. Debate-focused tests passing."
+  human_review: approved
+
+- id: AUL-003
+  date: "2026-10-21"
+  tool: "OpenCode"
+  phase: "implementation"
+  scope: "Phase 3A gate graph integration: data_quality_gate node + router and gate-aware AgentState fields."
+  outcome: "Gate integrated into the graph with fail-closed routing and deterministic identifiers."
+  human_review: requested
+
+- id: AUL-004
+  date: "2026-10-21"
+  tool: "OpenCode"
+  phase: "implementation"
+  scope: "Phase 3B dynamic debate termination: debate package (config, models, turn, budget, evidence_manifest, state, evaluator, evaluator_node) plus researchers' verdict gate and research-manager hold contract."
+  outcome: "Debate-focused suite 333 passed (current tree)."
+  human_review: requested
+
+- id: AUL-005
+  date: "2026-10-21"
+  tool: "Codex (review)"
+  phase: "verification"
+  scope: "Human/Codex review of the Phase 3B implementation; detect defects, request corrections."
+  outcome: "Defects detected and corrected (see docs/bug-diary.md); verification outcomes recorded in docs/architecture/evaluation-logbook.md."
+  human_review: approved
+
+- id: AUL-006
+  date: "2026-10-21"
+  tool: "OpenCode"
+  phase: "verification"
+  scope: "Create and validate the first-version CS5351 governance/document scaffold; run doc/schema validators, git diff --check, and secret scan."
+  outcome: "Documentation scaffold created and validated; no secrets found; exact outcomes in docs/architecture/evaluation-logbook.md."
+  human_review: requested
+
+- id: AUL-007
+  date: "2026-10-21"
+  tool: "OpenCode"
+  phase: "implementation"
+  scope: "Stage 2: extend the gate with the multi-category engine and shared deterministic redacted report artifacts wired into the CLI/API report writer."
+  outcome: "tests/test_stage2_multicategory_gate.py 26 passed; tests/test_report_artifacts_stage2.py 16 passed; Stage-2 relevant suite 402 passed. Redaction regex corrected to preserve field labels."
+  human_review: requested
+
+- id: AUL-008
+  date: "2026-10-21"
+  tool: "OpenCode"
+  phase: "verification"
+  scope: "Re-run governance validator, governance unit tests, Ruff, git diff --check, and the offline Stage-2/evidence/debate/report suite; record outcomes in docs/architecture/evaluation-logbook.md."
+  outcome: "Governance validation PASS; Stage-2 relevant suite 402 passed; full offline suite has pre-existing date-sensitive failures recorded separately."
+  human_review: requested
+
+- id: AUL-009
+  date: "2026-10-21"
+  tool: "OpenCode"
+  phase: "implementation"
+  scope: "Stage 2 runtime integration: make the LangGraph default gate node delegate to the multi-category engine (market + fundamentals + news + sentiment); accept optional-category evidence only through the explicit data_quality_optional_evidence state contract (never parsed from analyst prose); eliminate the evidence->graph import (circular-import removal); add graph-level tests for routing, optional evidence, legacy compatibility, point-in-time rejection, and deterministic serialization."
+  outcome: "RISK-009 / DEBT-009 resolved. Stage-2 relevant suite 442 passed (logbook 043); full offline suite unchanged known baseline failures (logbook 044); Ruff + git diff --check + governance validator clean (logbook 045)."
+  human_review: requested
+
+- id: AUL-010
+  date: "2026-10-21"
+  tool: "OpenCode"
+  phase: "implementation"
+  scope: "Deterministic ConflictRecord runtime lifecycle (FR-DDT-005): a pure, LLM-free conflict tracker (tradingagents/debate/conflicts.py) creating/observing/resolving/escalating ConflictRecord objects from structured conflict_assertions only; evaluator-node persistence of the derived conflicts plus a safe prose-free ConflictSummary; Research Manager safe summary injection; turn.py conflict_a parsing; public exports."
+  outcome: "tests/test_debate_conflicts.py 39 passed; conflict/debate/graph/Stage-2 relevant suite 490 passed (logbook 046). Full offline suite 3 date-sensitive failures unchanged (logbook 047); Ruff + git diff --check + governance validator + governance tests clean (logbook 048). No Phase 4 or live-provider work."
+  human_review: requested
+
+- id: AUL-011
+  date: "2026-10-21"
+  tool: "OpenCode"
+  phase: "verification"
+  scope: "Finish the governance documentation and final verification for the already-implemented ConflictRecord runtime automation; record only verified behavior (no Phase 4 / live-provider claims)."
+  outcome: "Governance docs updated to verified outcomes; logbook 046-048 recorded; FR-DDT-005 trace corrected to measured 490/39 values; full offline suite distinguished as 3 known date-sensitive failures (1391 passed, 2 skipped, 88 subtests)."
+  human_review: requested
+
+- id: AUL-012
+  date: "2026-10-21"
+  tool: "OpenCode"
+  phase: "implementation"
+  scope: "Phase 4A deterministic offline baseline comparison: pure LLM-free comparison model/runner (schemas, metric_formulas, runner, fixtures, report) and scripts/run_phase4a_comparison.py; scenarios D (no-new-evidence early stop), E (new-evidence extension), F (budget_exhausted summary reserve / hard cap); tests/test_comparison_schemas.py + tests/test_comparison_runner.py. Fixed three real issues: filter valid cited IDs through the manifest; make scenario F genuinely stop on budget_exhausted while preserving the summary reserve; relax the Markdown assertion to verify the live-provider disclaimer."
+  outcome: "Comparison unit tests 47 passed (17 runner + 30 schemas); comparison script wrote 3 scripted cases to evaluation-output/. Scenario F verified to route=SUMMARIZE/stop_reason=BUDGET_EXHAUSTED with reserve preserved (9000+8000 <= 20000; fixed spends 27000 > 20000). Phase 4A only; results are offline scripted fixtures, human traceability pending, no production thresholds tuned, no Phase 4B, no live providers, no commit/push."
+  human_review: requested
+
+- id: AUL-014
+  date: "2026-10-21"
+  tool: "OpenCode"
+  phase: "implementation"
+  scope: "Fix the Phase 4A reporting gap found by independent review: the raw CaseResult stored estimated and tool_calls but the comparison_results.json paired aggregates/sums and comparison_report.md did not visibly preserve/report the estimated-vs-measured status and omitted tool-call counts. Add CaseAggregate.tool_usage_estimated (per-case usage provenance), ComparisonReport.fixed/dynamic_total_tool_calls and fixed/dynamic_estimated_cases (honest aggregate status); propagate estimated through compute_case_aggregate; sum tool calls and count estimated cases in pair_and_aggregate; add Tool calls + Source (estimated/measured) to the Markdown per-case table and Total tool calls + Estimated (not measured) cases to the aggregate table; add serialization/aggregation/report/zero-case tests; regenerate evaluation-output."
+  outcome: "Comparison unit tests 47 passed (17 runner + 30 schemas); comparison script regenerated evaluation-output (JSON + Markdown) now reporting Total tool calls, per-case Tool calls / Source, and Estimated (not measured) cases = 3/3 (all scripted fixtures estimated, tool_calls=0). An estimated value is never presented as measured. Governance validator PASS; governance tests 16 passed; Ruff clean; git diff --check clean (logbook 053). No Phase 4B, no live providers, no commit/push."
+  human_review: requested
+
+- id: AUL-013
+  date: "2026-10-21"
+  tool: "OpenCode"
+  phase: "verification"
+  scope: "Complete the Phase 4A governance records and verification: requirements, trace matrix, ADR-003, evaluation logbook/table, review memo, Report.md, ai-use-log, transcript; run governance validator, governance tests, Ruff, git diff --check, and the full offline suite (separating the known date-sensitive failures)."
+  outcome: "Governance validator PASS; governance tests 16 passed; Ruff clean; git diff --check clean; full offline suite recorded separately with pre-existing date-sensitive failures. Phase 4A marked review-requested; honest status (scripted fixtures, pending human traceability, no production threshold tuning) stated throughout."
+  human_review: requested
+
+- id: AUL-015
+  date: "2026-10-22"
+  tool: "OpenCode"
+  phase: "verification"
+  scope: "Recorded the human review decisions for Stage 2 runtime multi-category gate integration, ConflictRecord runtime lifecycle / dynamic debate termination, and Phase 4A offline comparison in docs/review-memo.md under human direction (reviewer WANG Yiwen, Student ID 60536848). Documentation-only edit; no feature code, tests, or traceability scores changed."
+  outcome: "Human review decisions recorded verbatim: Stage 2 approved with limitations; ConflictRecord/dynamic debate termination approved with limitations; Phase 4A changes requested (not approved/complete) with required corrections. No commit, push, merge, or PR. No traceability scores entered."
+  human_review: noted
+
+- id: AUL-016
+  date: "2026-10-23"
+  tool: "OpenCode"
+  phase: "verification"
+  scope: "Implemented and documented the Phase 4A correction round requested by the human review (docs/review-memo.md, WANG Yiwen 60536848): strict four-non-null SCORED traceability validation in TRACEABILITY_DIMENSIONS order; input_exhausted distinct from a dynamic early stop; the actual dynamic stop_reason preserved in results/JSON/aggregates/Markdown; regression coverage added. Documentation-only edits (no feature code or tests changed); regenerated the gitignored evaluation-output; updated requirements, trace matrix, ADR-003, evaluation logbook/table, Report.md, review-memo, and this log; recorded exact verification facts."
+  outcome: "Focused comparison tests 73 passed; governance validator PASS (34/34, no secrets); governance scaffold tests 16 passed; Ruff (full repo) clean; git diff --check clean (logbook 054). Full offline suite: 4 failed, 1463 passed, 2 skipped, 22 warnings, 88 subtests — all four the documented pre-existing baselines (3 date-sensitive cache tests + network-reachability baseline), no new regression; full suite NOT claimed green. Phase 4A remains Changes requested / pending human re-review (not approved, not complete); human traceability scores remain pending. No commit, push, merge, PR, no live providers, no traceability scores entered."
+  human_review: requested
+
+- id: AUL-017
+  date: "2026-10-23"
+  tool: "OpenCode"
+  phase: "verification"
+  scope: "Phase 4A narrow fail-closed correction (short re-review): added consistency validation to CaseResult.__post_init__ so a contradictory strategy/early_stopped/stop_reason combination is rejected — FIXED is never early-stopped; an early-stopped DYNAMIC result must carry a genuine _DYNAMIC_STOP_REASONS reason (empty/input_exhausted/max_rounds_reached/unknown rejected) — reusing the existing allowlist (no duplicate). Added regression tests (direct construction, from_dict/JSON deserialization, aggregate/report propagation, valid genuine early stops and fixed/non-early/input-exhaustion still work)."
+  outcome: "Focused comparison tests 90 passed (was 73); governance validator PASS (34/34, no secrets); governance scaffold tests 16 passed; Ruff (full repo) clean; git diff --check clean (logbook 055). Full offline suite: 3 failed, 1481 passed, 2 skipped, 22 warnings, 88 subtests — all three the documented pre-existing date-sensitive cache tests (RISK-001); the network-reachability baseline (RISK-002) did not fail on this run; no new regression; full suite NOT claimed green. Phase 4A remains Changes requested / pending human re-review (not approved, not complete); human traceability scores remain pending. No commit, push, merge, PR, no live providers, no traceability scores entered."
+  human_review: requested
+
+- id: AUL-018
+  date: "2026-10-23"
+  tool: "OpenCode"
+  phase: "verification"
+  scope: "Recorded the explicit human review decision approving Phase 4A with limitations (reviewer WANG Yiwen, Student ID 60536848, 2026-10-23) in docs/review-memo.md and updated the governance/status records (evaluation logbook/table, trace matrix, requirements verification evidence, Report.md, transcript) for internal consistency. Documentation-only; no feature code, tests, or traceability scores changed."
+  outcome: "Phase 4A approved with limitations (human review decision recorded; supersedes the prior Changes requested decision for current status while preserving it as historical evidence). Four limitations accepted (offline-only verification; three known date-sensitive cache failures remain so the suite is not completely green; human traceability scores remain pending and were not entered; no final production threshold tuning). No commit, push, merge, PR; no live providers; no traceability scores entered."
+  human_review: approved
+
+- id: AUL-019
+  date: "2026-10-23"
+  tool: "OpenCode"
+  phase: "verification"
+  scope: "Pre-commit governance correction (documentation-only): created the authoritative v1.2 static startup prompt (prompts/prompt_v1.2.yaml) from v1.1 with a version-change log whose only rule change is scope discipline (Phase 4A offline comparison completed and human-approved with limitations; Phase 4B, production threshold tuning, and unrequested features remain prohibited without separate explicit human authorization). Made v1.2 authoritative in Prompt.md and applied the same truthful current scope to AGENTS.md, .agent/rules.md, .opencode/rules.md, architecture-blueprint.md, and docs/architecture/permission-model.md, plus the current/authoritative startup-prompt reference in README.md (Report.md's v1.0 reference is a genuinely historical Phase 1 description and was preserved). Also updated the governance validator (scripts/validate/validate_requirements.py) to include prompts/prompt_v1.2.yaml in REQUIRED_FILES and YAML_FILES (artifact count 34 -> 35, so v1.2 is a required artifact and is YAML-parsed) and in SCAN_FILES (so the authoritative prompt is included in the deterministic secret scan); the existing test_required_files_exist_and_nonempty loops REQUIRED_FILES so no test change was required. prompt_v1.0.yaml and prompt_v1.1.yaml were not modified (SHA-256 unchanged). No feature code, tests, or traceability scores changed; no commit/push/PR."
+  outcome: "Authoritative prompt marker advanced to v1.2 with only the scope rule updated; stale blanket Phase-4 prohibition removed from current operational files while historical/versioned records (v1.0/v1.1, prior decisions) retained verbatim. Current/authoritative README.md prompt reference updated to v1.2 (v1.1 retained as prior author-reference; v1.0 historical). Verification: v1.0/v1.1 SHA-256 unchanged; requirements validator PASS (35/35 artifacts, no secrets — v1.2 required, YAML-parsed, and included in the secret scan); governance scaffold tests and comparison tests (106 combined) passed; full-repo Ruff clean; git diff --check clean; stale-authoritative-reference search clean. No human decision or scores invented. No commit, push, merge, PR."
+  human_review: approved

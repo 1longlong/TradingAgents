@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://localhost/req-schema.json",
+  "title": "CS5351 project requirements schema",
+  "description": "Validation schema for docs/req/requirements.yaml. Enforced by scripts/validate/validate_requirements.py, which uses the real draft-2020-12 JSON Schema (jsonschema.Draft202012Validator) when jsonschema is installed (as in CI); the deterministic subset validator is only a clearly-reported local fallback when jsonschema is unavailable.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project", "requirements"],
+  "properties": {
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "branch", "deliverable_slide_sources", "canonical_source_trees", "schema_version"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "branch": { "type": "string", "minLength": 1 },
+        "deliverable_slide_sources": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "canonical_source_trees": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "schema_version": { "type": "string", "pattern": "^v[0-9]+\\.[0-9]+$" }
+      }
+    },
+    "requirements": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/requirement" }
+    }
+  },
+  "$defs": {
+    "requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "title", "description", "priority", "source_files", "design_artifacts", "tests", "verification_evidence"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^(FR-(DQG|DDT)|NFR-[A-Z]+)-[0-9]{3}$" },
+        "type": { "enum": ["Feature", "NonFunctional"] },
+        "title": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "priority": { "enum": ["Must", "Should", "Could"] },
+        "source_files": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "design_artifacts": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "tests": { "type": "array", "items": { "type": "string" }, "minItems": 0 },
+        "verification_evidence": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "status": { "enum": ["Implemented", "Partially"] },
+        "owner": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

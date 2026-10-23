@@ -287,6 +287,11 @@ class TestTraderAgent:
 def _make_rm_state():
     return {
         "company_of_interest": "NVDA",
+        # The structured-output rendering tests exercise the un-gated path; a
+        # normal verdict keeps the LLM's directional output uncoerced (a blocked
+        # run is authoritatively pinned to non-directional Hold, Phase 3A).
+        "data_quality_verdict": "normal",
+        "data_quality_gate_decision": {"decision": "normal", "decided_at": "2026-05-13T12:00:00Z"},
         "investment_debate_state": {
             "history": "Bull and bear arguments here.",
             "bull_history": "Bull says...",

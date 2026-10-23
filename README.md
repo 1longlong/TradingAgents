@@ -381,3 +381,83 @@ Please reference our work if you find *TradingAgents* provides you with some hel
       url={https://arxiv.org/abs/2412.20138}, 
 }
 ```
+
+---
+
+## CS5351 Course Project Section (Downstream Student Fork)
+
+> The content above is the upstream (TauricResearch) product guide, preserved
+> verbatim for attribution and reference. The sections below are the CS5351
+> course-project governance overlay maintained by the student fork.
+
+### Purpose
+
+This repository is a downstream fork of the upstream `TradingAgents` framework
+used as the vehicle for the **CS5351** graduate course project that extends the
+framework with two deterministic, governance-driven improvements:
+
+- **Deterministic Data Quality Gate (FR-DQG-001)** — an LLM-free gate that
+  validates market evidence against five deterministic classes and fails closed
+  on missing or low-quality evidence before the Bull/Bear debate opens.
+- **Dynamic, evidence-aware debate termination (FR-DDT-001)** — a deterministic
+  Debate Evaluator that ends the debate on evidence/model conflict staleness or
+  budget exhaustion instead of always running a fixed number of rounds.
+
+Full course-metadata and requirement/layout details live under [`docs/`](docs/).
+
+### Branch and Deliverable Status (do not assume)
+
+- Current working branch: `feature/data-quality-debate-control`
+- This is **Phase 3B verification complete**; no Phase 4 work has been started.
+- Work is **uncommitted and unpushed** on this branch as this document is
+  written. See [`docs/review-memo.md`](docs/review-memo.md) and
+  [`docs/architecture/risk-list.md`](docs/architecture/risk-list.md).
+- **Nothing here has been submitted, presented, or graded.** Student identity is
+  confirmed as **WANG Yiwen**, CS5351 student ID **60536848** (see
+  [`transcripts/`](transcripts/) and [`docs/debt-register.md`](docs/debt-register.md)).
+
+### Artifact Index
+
+| Path | Type | Description |
+| --- | --- | --- |
+| [`AGENTS.md`](AGENTS.md) | Governance | Coding-agent governance rules. |
+| [`architecture-blueprint.md`](architecture-blueprint.md) | Design | Master constraint/design document. |
+| [`Prompt.md`](Prompt.md) | Prompt | Static startup prompt for coding agents. |
+| [`Report.md`](Report.md) | Process | Phase progress report + student reflection. |
+| [`docs/req/requirements.yaml`](docs/req/requirements.yaml) | Requirements | Machine-readable PRD (validated against schema). |
+| [`docs/req/req-schema.json`](docs/req/req-schema.json) | Schema | CI validation schema for requirements. |
+| [`docs/architecture/adr/001-data-quality-gate.md`](docs/architecture/adr/001-data-quality-gate.md) | ADR | Deterministic Data Quality Gate decision. |
+| [`docs/architecture/adr/002-dynamic-debate-termination.md`](docs/architecture/adr/002-dynamic-debate-termination.md) | ADR | Dynamic debate-termination decision. |
+| [`docs/architecture/invariants.md`](docs/architecture/invariants.md) | Design | Non-negotiable system invariants. |
+| [`docs/architecture/trace-matrix.md`](docs/architecture/trace-matrix.md) | Trace | Requirement → artifact/source/test/evidence map. |
+| [`docs/architecture/memory-design.md`](docs/architecture/memory-design.md) | Design | Point-in-time / memory design notes. |
+| [`docs/architecture/option-ledger.md`](docs/architecture/option-ledger.md) | Decisions | Alternatives considered and why. |
+| [`docs/architecture/permission-model.md`](docs/architecture/permission-model.md) | Governance | Agent/permission model. |
+| [`docs/architecture/evaluation-logbook.md`](docs/architecture/evaluation-logbook.md) | Evidence | Per-verification evidence log. |
+| [`docs/architecture/risk-list.md`](docs/architecture/risk-list.md) | Risk | Known risks and mitigations. |
+| [`docs/architecture/evaluation-table.md`](docs/architecture/evaluation-table.md) | Evidence | Test/verification summary table. |
+| [`docs/architecture/runtime-policy-catalog.md`](docs/architecture/runtime-policy-catalog.md) | Policy | Runtime policy / config catalog. |
+| [`docs/code-governance/structural-constraints.md`](docs/code-governance/structural-constraints.md) | Governance | Module/structural constraints. |
+| [`docs/code-governance/verification-constraints.md`](docs/code-governance/verification-constraints.md) | Governance | How code must be verified. |
+| [`docs/code-governance/mcp-tool-manifest.md`](docs/code-governance/mcp-tool-manifest.md) | Governance | MCP tool manifest / usage policy. |
+| [`docs/ai-use-log.yaml`](docs/ai-use-log.yaml) | Governance | AI-tool use log (deterministic YAML upstream). |
+| [`docs/review-memo.md`](docs/review-memo.md) | Governance | Human review memo across phases. |
+| [`docs/debt-register.md`](docs/debt-register.md) | Debt | Known technical debt + uncertainty. |
+| [`docs/bug-diary.md`](docs/bug-diary.md) | Evidence | Detected defects & fixes. |
+| [`.opencode/permissions.jsonc`](.opencode/permissions.jsonc) | Governance | OpenCode permission config. |
+| [`.opencode/rules.md`](.opencode/rules.md) | Governance | OpenCode agent rules. |
+| [`.agent/rules.md`](.agent/rules.md) | Governance | Shared coding-agent rules. |
+| [`prompts/prompt_v1.0.yaml`](prompts/prompt_v1.0.yaml) | Prompt | v1.0 read-only analysis/frozen requirements (historical). |
+| [`prompts/prompt_v1.1.yaml`](prompts/prompt_v1.1.yaml) | Prompt | v1.1 implementation + verification + governance (prior authoritative; historical). |
+| [`prompts/prompt_v1.2.yaml`](prompts/prompt_v1.2.yaml) | Prompt | v1.2 implementation + verification + governance (current authoritative). |
+| [`transcripts/60536848-WANG-Yiwen.md`](transcripts/60536848-WANG-Yiwen.md) | Transcript | Annotated human-supervision record. |
+| [`src/README.md`](src/README.md) | Mapping | Maps deliverable D8 to canonical `tradingagents/`/`cli/`. |
+| [`test/offline/README.md`](test/offline/README.md) | Mapping | Indexes offline deterministic tests in `tests/`. |
+| [`test/live/README.md`](test/live/README.md) | Mapping | Documents `integration`-marker live tests (opt-in). |
+
+### Deliverable-to-repo mapping (this fork)
+
+The authoritative project slide lists `src/`, `test/offline/`, and `test/live/`.
+This inherited repository uses `tradingagents/` and `cli/` as canonical source
+trees and `tests/` for all tests. The three `README` pointers above document
+that mapping explicitly; **no** code is duplicated or relocated.

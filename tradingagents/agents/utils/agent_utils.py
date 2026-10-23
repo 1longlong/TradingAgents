@@ -42,6 +42,7 @@ __all__ = [
     "build_instrument_context",
     "resolve_instrument_identity",
     "get_instrument_context_from_state",
+    "get_data_quality_context_from_state",
     "get_language_instruction",
     "create_msg_delete",
 ]
@@ -228,6 +229,37 @@ def report_or_absent(text: str, source: str) -> str:
     if text:
         return text
     return f"(No {source} report in this run: it is not available, not an empty finding.)"
+
+
+def get_data_quality_context_from_state(state: Mapping[str, Any]) -> str:
+    """Return the Data Quality Gate's human-readable constraint/context string.
+
+    Prefers the gate context stored on the state by the Data Quality Gate node.
+    When the field is absent (a bare programmatic state or a legacy checkpoint
+    that predates Phase 3A), it returns a fail-closed block notice rather than an
+    empty string, so the downstream Bull/Bear/Research Manager prompt always
+    states that the debate is restricted — never silently unrestricted (#1088).
+
+    Existing direct unit tests that build minimal state dicts keep working: the
+    gate context simply reads as a block, and the prompt remains safe to render.
+    """
+    context = state.get("data_quality_context")
+    if isinstance(context, str) and context.strip():
+        return context
+    verdict = state.get("data_quality_verdict")
+    if verdict == "normal":
+        return (
+            "[Data Quality Gate] Verdict: normal. Market quality is adequate: "
+            "the standard bull/bear debate may proceed with normal confidence, "
+            "citing the validated evidence."
+        )
+    # Absent or non-normal gate state fails closed: never present as unrestricted.
+    return (
+        "[Data Quality Gate] Verdict: blocked. Critical market data is missing or "
+        "conflicting; the standard bull/bear debate was skipped. Only an "
+        "evidence-insufficient conclusion may be produced. No directional Buy or "
+        "Sell is permitted."
+    )
 
 
 def get_portfolio_context_from_state(state: Mapping[str, Any]) -> str:

@@ -1,0 +1,572 @@
+# CS5351 project requirements (machine-readable PRD).
+# Validated against docs/req/req-schema.json by scripts/validate/validate_requirements.py.
+# Stable IDs are reused in docs/architecture/trace-matrix.md. Do not reuse or reuse IDs out of band.
+
+project:
+  name: "TradingAgents downstream fork — deterministic Data Quality Gate and dynamic debate termination"
+  branch: "feature/data-quality-debate-control"
+  deliverable_slide_sources:
+    - "src/"
+    - "test/offline/"
+    - "test/live/"
+  canonical_source_trees:
+    - "tradingagents/"
+    - "cli/"
+  schema_version: "v1.0"
+
+requirements:
+  # ---- Deterministic Data Quality Gate (FR-DQG-*) ----
+  - id: FR-DQG-001
+    type: Feature
+    title: Deterministic Data Quality Gate
+    description: >
+      Provide an LLM-free, pure node that validates the verified market snapshot
+      against the five deterministic validation classes (completeness, format,
+      freshness, look-ahead, cross-source consistency) and emits a GateDecision
+      before the Bull/Bear debate opens.
+    priority: Must
+    status: Implemented
+    source_files:
+      - tradingagents/graph/data_quality_gate.py
+      - tradingagents/evidence/gate.py
+      - tradingagents/evidence/models.py
+      - tradingagents/evidence/validate.py
+      - tradingagents/evidence/quality.py
+      - tradingagents/evidence/adapter.py
+      - tradingagents/evidence/policy.py
+    design_artifacts:
+      - docs/architecture/adr/001-data-quality-gate.md
+      - docs/architecture/invariants.md
+    tests:
+      - tests/test_data_quality_gate_graph.py
+      - tests/test_market_evidence_gate.py
+      - tests/test_evidence_models.py
+      - tests/test_market_data_validator_structured.py
+    verification_evidence:
+      - "Stage-2 relevant suite: 402 passed (current tree)."
+      - "OpenCode-related suite: 420 passed (supplied)."
+    owner: 60536848-WANG-Yiwen
+
+  - id: FR-DQG-002
+    type: Feature
+    title: Fail-closed gate verdict precedence
+    description: >
+      The gate must rank decisions blocked > degraded > normal, convert any
+      internal exception into a blocked decision, and never silently return
+      normal on missing evidence or error.
+    priority: Must
+    status: Implemented
+    source_files:
+      - tradingagents/evidence/gate.py
+      - tradingagents/graph/data_quality_gate.py
+      - tradingagents/graph/conditional_logic.py
+    design_artifacts:
+      - docs/architecture/adr/001-data-quality-gate.md
+      - docs/architecture/invariants.md
+    tests:
+      - tests/test_data_quality_gate_graph.py
+      - tests/test_market_evidence_gate.py
+    verification_evidence:
+      - "Stage-2 relevant suite: 402 passed (current tree)."
+    owner: 60536848-WANG-Yiwen
+
+  - id: FR-DQG-003
+    type: Feature
+    title: Deterministic gate identifiers and serialization
+    description: >
+      The run_id must be derived from (trade_date, normalized symbol) and the
+      gate output must be JSON/checkpoint-serializable with deterministic
+      ordering and ISO-8601 decided_at validation.
+    priority: Should
+    status: Implemented
+    source_files:
+      - tradingagents/evidence/models.py
+      - tradingagents/evidence/adapter.py
+      - tradingagents/graph/data_quality_gate.py
+    design_artifacts:
+      - docs/architecture/adr/001-data-quality-gate.md
+      - docs/architecture/memory-design.md
+    tests:
+      - tests/test_evidence_models.py
+      - tests/test_evidence_step2_regressions.py
+    verification_evidence:
+      - "Stage-2 relevant suite: 402 passed (current tree)."
+    owner: 60536848-WANG-Yiwen
+
+  - id: FR-DQG-004
+    type: Feature
+    title: Multi-category data-quality gate engine
+    description: >
+      Extend the gate to evaluate exactly one critical market group plus the
+      optional categories (fundamentals, news, sentiment). Optional categories
+      without a trustworthy structured source produce an explicit deterministic
+      unavailable/insufficient result with stable reason codes (fabrication of
+      source/date/unit and analyst-prose parsing are prohibited); under a
+      versioned multi-category policy they may degrade the verdict but never
+      block, while a missing/blocked market category always fails closed to
+      blocked. Output is JSON-safe and deterministic (run_id from
+      (trade_date, normalized symbol)).
+    priority: Must
+    status: Implemented
+    source_files:
+      - tradingagents/evidence/multi_category_gate.py
+      - tradingagents/evidence/gate.py
+      - tradingagents/evidence/policy.py
+      - tradingagents/graph/data_quality_gate.py
+    design_artifacts:
+      - docs/architecture/adr/001-data-quality-gate.md
+      - docs/architecture/invariants.md
+    tests:
+      - tests/test_stage2_multicategory_gate.py
+    verification_evidence:
+      - "tests/test_stage2_multicategory_gate.py: 26 passed (current tree)."
+    owner: 60536848-WANG-Yiwen
+
+  - id: FR-DQG-005
+    type: Feature
+    title: Shared deterministic redacted report artifacts
+    description: >
+      The shared CLI/API report writer (write_report_tree) must emit, for a
+      completed run, deterministic redacted artifacts derived only from
+      structured run state: 0_quality/evidence_manifest.json,
+      0_quality/gate_summary.md, 2_research/debate_trace.json, and
+      run_summary.json, plus concise Data Quality / Run Summary sections in
+      complete_report.md. No analyst prose (chain-of-thought / hidden prompts)
+      is persisted and every value is passed through secret redaction; absent
+      gate/debate state (legacy or empty) yields safe defaults, not invented
+      values. CLI and programmatic save_reports produce identical output.
+    priority: Must
+    status: Implemented
+    source_files:
+      - tradingagents/report_artifacts.py
+      - tradingagents/reporting.py
+      - tradingagents/graph/trading_graph.py
+      - cli/main.py
+    design_artifacts:
+      - docs/architecture/adr/001-data-quality-gate.md
+      - docs/architecture/adr/002-dynamic-debate-termination.md
+      - docs/code-governance/verification-constraints.md
+    tests:
+      - tests/test_report_artifacts_stage2.py
+      - tests/test_reporting.py
+    verification_evidence:
+      - "tests/test_report_artifacts_stage2.py: 16 passed (current tree)."
+    owner: 60536848-WANG-Yiwen
+
+  # ---- Dynamic debate termination (FR-DDT-*) ----
+  - id: FR-DDT-001
+    type: Feature
+    title: Dynamic evidence-aware debate termination
+    description: >
+      Provide a deterministic Debate Evaluator that runs after each completed
+      Bull+Bear round and routes to continue/summarize using the authoritative
+      rule ordering (gate blocked, budget exhaustion, max rounds, no new
+      evidence, consensus, new evidence, material change, diminishing returns).
+    priority: Must
+    status: Implemented
+    source_files:
+      - tradingagents/debate/evaluator.py
+      - tradingagents/debate/evaluator_node.py
+      - tradingagents/debate/config.py
+      - tradingagents/debate/models.py
+      - tradingagents/graph/setup.py
+    design_artifacts:
+      - docs/architecture/adr/002-dynamic-debate-termination.md
+      - docs/architecture/invariants.md
+    tests:
+      - tests/test_debate_evaluator.py
+      - tests/test_debate_graph.py
+      - tests/test_debate_turn.py
+    verification_evidence:
+      - "Stage-2 relevant suite: 402 passed (current tree)."
+      - "OpenCode-related suite: 420 passed (supplied)."
+    owner: 60536848-WANG-Yiwen
+
+  - id: FR-DDT-002
+    type: Feature
+    title: Valid-new-evidence manifest and citation allowlist
+    description: >
+      Debate turns may only cite evidence IDs allowed by the gate/manifest;
+      turns with no valid new evidence (respecting patience) terminate the
+      debate and a metadata parse failure never extends it.
+    priority: Must
+    status: Implemented
+    source_files:
+      - tradingagents/debate/evidence_manifest.py
+      - tradingagents/debate/turn.py
+      - tradingagents/agents/researchers/bull_researcher.py
+      - tradingagents/agents/researchers/bear_researcher.py
+    design_artifacts:
+      - docs/architecture/adr/002-dynamic-debate-termination.md
+    tests:
+      - tests/test_debate_evidence_manifest.py
+      - tests/test_debate_turn.py
+      - tests/test_researchers_verdict_gate.py
+    verification_evidence:
+      - "Stage-2 relevant suite: 402 passed (current tree)."
+    owner: 60536848-WANG-Yiwen
+
+  - id: FR-DDT-003
+    type: Feature
+    title: Budget-safe debate termination with summary reserve
+    description: >
+      The evaluator must reserve summary tokens/time and enforce max
+      tokens/time/calls so a run never exhausts budget mid-debate without a
+      report, and must emit an explicit decision trace.
+    priority: Must
+    status: Implemented
+    source_files:
+      - tradingagents/debate/budget.py
+      - tradingagents/debate/config.py
+      - tradingagents/debate/evaluator.py
+    design_artifacts:
+      - docs/architecture/adr/002-dynamic-debate-termination.md
+      - docs/architecture/runtime-policy-catalog.md
+    tests:
+      - tests/test_debate_budget.py
+      - tests/test_debate_config.py
+      - tests/test_debate_evaluator.py
+    verification_evidence:
+      - "Stage-2 relevant suite: 402 passed (current tree)."
+    owner: 60536848-WANG-Yiwen
+
+  - id: FR-DDT-004
+    type: Feature
+    title: Backward-compatible debate termination configuration
+    description: >
+      debate_termination.enabled=False must reproduce the legacy
+      fixed-max_debate_rounds routing, and the config group must validate types
+      and cross-constraints before graph execution.
+    priority: Should
+    status: Implemented
+    source_files:
+      - tradingagents/debate/config.py
+      - tradingagents/graph/setup.py
+    design_artifacts:
+      - docs/architecture/adr/002-dynamic-debate-termination.md
+    tests:
+      - tests/test_debate_config.py
+    verification_evidence:
+      - "Stage-2 relevant suite: 402 passed (current tree)."
+    owner: 60536848-WANG-Yiwen
+
+  - id: FR-DDT-005
+    type: Feature
+    title: Deterministic ConflictRecord runtime lifecycle
+    description: >
+      A pure, LLM-free conflict tracker (tradingagents/debate/conflicts.py) must
+      create, observe (deduplicate/merge), resolve, and escalate ConflictRecord
+      objects deriving conflicts ONLY from the structured conflict_assertions a
+      DebateTurn carries (parsed by turn.py from the DEBATE_METADATA conflict_a
+      marker). Stable deterministic conflict IDs derive from (normalized topic,
+      kind). Evidence validation fails closed: an assert citing an unknown, Low,
+      or future evidence ID never creates a conflict, and a re-observation that
+      cites such an ID drops the otherwise-open conflict (never kept on
+      unverifiable footing). Empty evidence on a new factual/interpretive
+      conflict does not create it; a turn with no assertions (missing metadata)
+      contributes no conflict. Action-only disagreement is tracked (so the
+      Research Manager can weigh it) but never blocks debate termination. A
+      resolve/escalate closes or promotes an open conflict and records the
+      human-readable reason; resolving a non-open conflict is a no-op (no second
+      misleading reason). Malformed assertions/under-defined state are skipped,
+      never guessed. The evaluator node persists the derived conflicts and a
+      safe, structured, prose-free ConflictSummary (with the resolve/escalate
+      resolution notes and an authoritative open-blocking count) to the debate
+      state, and the Research Manager injects that summary safely (empty when no
+      tracked conflict, so a bare action-only divergence is not presented as a
+      fabricated disagreement).
+    priority: Must
+    status: Implemented
+    source_files:
+      - tradingagents/debate/conflicts.py
+      - tradingagents/debate/turn.py
+      - tradingagents/debate/models.py
+      - tradingagents/debate/evaluator_node.py
+      - tradingagents/agents/managers/research_manager.py
+    design_artifacts:
+      - docs/architecture/adr/002-dynamic-debate-termination.md
+      - docs/architecture/invariants.md
+    tests:
+      - tests/test_debate_conflicts.py
+      - tests/test_debate_turn.py
+      - tests/test_debate_evaluator.py
+      - tests/test_debate_graph.py
+    verification_evidence:
+      - "Conflict/debate/graph/Stage-2 relevant suite: 490 passed (current tree, logbook 046)."
+      - "tests/test_debate_conflicts.py: 39 passed (logbook 046)."
+    owner: 60536848-WANG-Yiwen
+
+  # ---- Non-functional requirements (NFR-*) ----
+  - id: NFR-DET-001
+    type: NonFunctional
+    title: Determinism of gate and debate logic
+    description: >
+      The evidence gate and debate evaluator must be pure and LLM-free;
+      identical inputs produce identical outputs independent of insertion order,
+      clock, or environment. Only validated ISO-8601 decided_at is injected.
+    priority: Must
+    status: Implemented
+    source_files:
+      - tradingagents/evidence/quality.py
+      - tradingagents/evidence/gate.py
+      - tradingagents/debate/evaluator.py
+    design_artifacts:
+      - docs/architecture/invariants.md
+    tests:
+      - tests/test_evidence_models.py
+      - tests/test_debate_evaluator.py
+    verification_evidence:
+      - "Stage-2 relevant suite: 402 passed (current tree)."
+    owner: 60536848-WANG-Yiwen
+
+  - id: NFR-FC-001
+    type: NonFunctional
+    title: Fail closed
+    description: >
+      Any internal error or missing evidence must fail closed (gate -> blocked;
+      evaluator -> summarize/insufficient_evidence). A low-quality run must
+      never proceed as normal or continue the debate.
+    priority: Must
+    status: Implemented
+    source_files:
+      - tradingagents/evidence/gate.py
+      - tradingagents/graph/data_quality_gate.py
+      - tradingagents/debate/evaluator.py
+    design_artifacts:
+      - docs/architecture/invariants.md
+    tests:
+      - tests/test_market_evidence_gate.py
+      - tests/test_debate_evaluator.py
+    verification_evidence:
+      - "Stage-2 relevant suite: 402 passed (current tree)."
+    owner: 60536848-WANG-Yiwen
+
+  - id: NFR-PIT-001
+    type: NonFunctional
+    title: Point-in-time integrity
+    description: >
+      No future (look-ahead) data may reach a decision; every dated market,
+      news, macro, and social path is evaluated as of the requested trade date.
+    priority: Must
+    status: Implemented
+    source_files:
+      - tradingagents/evidence/validate.py
+      - tradingagents/dataflows/market_data_validator.py
+    design_artifacts:
+      - docs/architecture/memory-design.md
+      - docs/architecture/invariants.md
+    tests:
+      - tests/test_fundamentals_lookahead.py
+      - tests/test_news_lookahead.py
+      - tests/test_social_lookahead.py
+      - tests/test_memory_pointintime.py
+    verification_evidence:
+      - "Existing point-in-time tests pass within the offline suite (re-run is date-sensitive)."
+    owner: 60536848-WANG-Yiwen
+
+  - id: NFR-AUD-001
+    type: NonFunctional
+    title: Auditability
+    description: >
+      Gate verdicts and debate decisions carry stable reason codes, policy
+      version, critical evidence IDs, a human-readable reason, and an explicit
+      decision trace so any run can be audited.
+    priority: Must
+    status: Implemented
+    source_files:
+      - tradingagents/evidence/models.py
+      - tradingagents/debate/models.py
+      - tradingagents/debate/evaluator.py
+    design_artifacts:
+      - docs/architecture/invariants.md
+    tests:
+      - tests/test_evidence_models.py
+      - tests/test_debate_evaluator.py
+    verification_evidence:
+      - "Stage-2 relevant suite: 402 passed (current tree)."
+    owner: 60536848-WANG-Yiwen
+
+  - id: NFR-BUD-001
+    type: NonFunctional
+    title: Budget safety
+    description: >
+      Debate termination must reserve summary tokens/time and enforce
+      max tokens/time/calls so a run cannot exhaust budget mid-debate and lose
+      its report.
+    priority: Must
+    status: Implemented
+    source_files:
+      - tradingagents/debate/budget.py
+      - tradingagents/debate/config.py
+    design_artifacts:
+      - docs/architecture/runtime-policy-catalog.md
+    tests:
+      - tests/test_debate_budget.py
+    verification_evidence:
+      - "Stage-2 relevant suite: 402 passed (current tree)."
+    owner: 60536848-WANG-Yiwen
+
+  - id: NFR-BC-001
+    type: NonFunctional
+    title: Backward compatibility
+    description: >
+      New config groups default to safe values and preserve legacy routing when
+      disabled; no regression to existing default `pytest -q` behavior.
+    priority: Should
+    status: Implemented
+    source_files:
+      - tradingagents/debate/config.py
+      - tradingagents/graph/setup.py
+    design_artifacts:
+      - docs/architecture/runtime-policy-catalog.md
+    tests:
+      - tests/test_debate_config.py
+      - tests/test_debate_graph.py
+    verification_evidence:
+      - "Stage-2 relevant suite: 402 passed (current tree)."
+    owner: 60536848-WANG-Yiwen
+
+  - id: NFR-OFF-001
+    type: NonFunctional
+    title: Offline testability
+    description: >
+      The default `pytest -q` run must require no network or paid API. Vendor and
+      live tests are marked `@pytest.mark.integration` and are opt-in.
+    priority: Must
+    status: Implemented
+    source_files:
+      - tests/conftest.py
+    design_artifacts:
+      - docs/code-governance/verification-constraints.md
+    tests:
+      - tests/test_data_quality_gate_graph.py
+      - tests/test_debate_evaluator.py
+    verification_evidence:
+      - "Stage-2 relevant suite: 402 passed offline (current tree)."
+    owner: 60536848-WANG-Yiwen
+
+  - id: NFR-SEC-001
+    type: NonFunctional
+    title: Secret safety
+    description: >
+      No API key, token, or Bearer/sk- string may appear in committed files;
+      secrets stay in environment variables or gitignored .env.
+    priority: Must
+    status: Implemented
+    source_files:
+      - .env.example
+      - AGENTS.md
+      - .opencode/permissions.jsonc
+    design_artifacts:
+      - docs/code-governance/verification-constraints.md
+    tests: []
+    verification_evidence:
+      - "Deterministic secret scan of new files found no secrets (see scripts/validate)."
+    owner: 60536848-WANG-Yiwen
+
+  # ---- Phase 4A offline baseline comparison (NFR-CMP-*) ----
+  - id: NFR-CMP-001
+    type: NonFunctional
+    title: Deterministic offline baseline comparison
+    description: >
+      Provide a pure, LLM-free, network-free comparison model/runner that
+      contrasts the legacy fixed-round debate-termination baseline with the
+      dynamic policy over identical scripted case identity (ticker, target_date,
+      evidence_snapshot_id, policy_version) and identical scripted Bull/Bear
+      turn sequences. Both strategies are replayed over the same evidence
+      snapshot; any identity mismatch, missing strategy partner, or duplicate
+      result fails closed with PairingError so the two strategies are never
+      compared on an unequal footing. No live provider, wall clock, or paid API
+      is involved. A replayed run records the ACTUAL deterministic stop reason
+      (e.g. no_new_evidence, budget_exhausted, max_rounds_reached) and must
+      distinguish a genuinely early-stopped dynamic run from a scripted input
+      that simply ran out of rounds (input_exhausted): the latter is never a
+      dynamic-policy early stop and is never mislabelled as one.
+    priority: Must
+    status: Implemented
+    source_files:
+      - tradingagents/comparison/runner.py
+      - tradingagents/comparison/schemas.py
+      - tradingagents/comparison/fixtures.py
+      - scripts/run_phase4a_comparison.py
+    design_artifacts:
+      - docs/architecture/adr/003-phase4a-offline-comparison.md
+      - docs/architecture/invariants.md
+    tests:
+      - tests/test_comparison_runner.py
+      - tests/test_comparison_schemas.py
+    verification_evidence:
+      - "tests/test_comparison_runner.py + tests/test_comparison_schemas.py: 90 passed (current tree; correction round 73 logbook 054; narrow fail-closed correction 90 logbook 055)."
+      - "scripts/run_phase4a_comparison.py: 3 scripted cases written to evaluation-output/ (logbook 049); stop_reason now preserved (no_new_evidence / budget_exhausted / max_rounds_reached) in results, JSON/aggregates, and Markdown (correction round, logbook 054)."
+      - "Narrow fail-closed correction: CaseResult.__post_init__ rejects a contradictory strategy/early_stopped/stop_reason combination (FIXED is never early-stopped; an early-stopped DYNAMIC result must carry a genuine _DYNAMIC_STOP_REASONS reason) so an inconsistent result can never reach the aggregate/report (logbook 055)."
+      - "Human review decision: Phase 4A approved with limitations (WANG Yiwen 60536848, 2026-10-23; logbook 056; docs/review-memo.md). Subject to the four recorded limitations (offline-only, cache baselines remain, traceability pending, no production threshold tuning)."
+    owner: 60536848-WANG-Yiwen
+
+  - id: NFR-CMP-002
+    type: NonFunctional
+    title: Machine-readable measured-vs-estimated comparison metrics
+    description: >
+      Comparison metrics must be derived deterministically from explicit
+      numerators and denominators with documented zero-denominator behavior
+      (returns None, never raises or fabricates). Measured provider-reported
+      values are separated from deterministic char-based estimates via an
+      explicit estimated flag; evidence-citation coverage is derived from valid
+      cited evidence IDs (known, High/Medium, on-or-before target, linked to a
+      claim) over the snapshot's eligible IDs; false-strong-conclusion rate is
+      computed from an explicit strong_conclusion flag plus the gate/quality
+      outcome, never inferred from prose; and aggregate sums/rates must be
+      derived deterministically and reproducible across runs. Tool-call counts
+      (per case and aggregate) and the estimated/measured usage provenance must
+      be preserved in the aggregate and surfaced in both the JSON and Markdown
+      reports so an estimated value is never presented as measured.
+    priority: Must
+    status: Implemented
+    source_files:
+      - tradingagents/comparison/metric_formulas.py
+      - tradingagents/comparison/schemas.py
+      - tradingagents/comparison/runner.py
+      - tradingagents/comparison/report.py
+    design_artifacts:
+      - docs/architecture/adr/003-phase4a-offline-comparison.md
+    tests:
+      - tests/test_comparison_schemas.py
+      - tests/test_comparison_runner.py
+    verification_evidence:
+      - "tests/test_comparison_schemas.py + tests/test_comparison_runner.py: 90 passed (correction round 73 logbook 054; narrow fail-closed correction 90 logbook 055)."
+      - "evaluation-output/comparison_results.json + comparison_report.md include Total tool calls, per-case Tool calls/Source, Estimated (not measured) cases, and the actual stop reason per case and in the stop-reason aggregate."
+      - "Narrow fail-closed correction: early_stop_rate / the early-stop label can never be produced for a contradictory strategy/early_stopped/stop_reason combination (logbook 055)."
+      - "Human review decision: Phase 4A approved with limitations (WANG Yiwen 60536848, 2026-10-23; logbook 056; docs/review-memo.md)."
+    owner: 60536848-WANG-Yiwen
+
+  - id: NFR-CMP-003
+    type: NonFunctional
+    title: Human traceability rubric and honest scripted-result labeling
+    description: >
+      Human traceability uses a documented rubric with human-entered
+      per-dimension scores in [0, 1]; an unscored case stays pending with None
+      scores rather than fabricating a rating. A SCORED traceability result
+      requires exactly four non-null scores, one for each
+      TRACEABILITY_DIMENSIONS dimension, in that exact positional order; a
+      missing, extra, null, duplicate, or reordered dimension set fails closed
+      rather than silently mis-reporting a rating. The Phase 4A comparison output and
+      reports must be labeled clearly as deterministic offline scripted-fixture
+      results, not live-provider measurements, and must state that no production
+      thresholds were tuned and that human score-based traceability is pending a
+      human.
+    priority: Should
+    status: Implemented
+    source_files:
+      - tradingagents/comparison/schemas.py
+      - tradingagents/comparison/report.py
+      - tradingagents/comparison/runner.py
+    design_artifacts:
+      - docs/architecture/adr/003-phase4a-offline-comparison.md
+    tests:
+      - tests/test_comparison_schemas.py
+      - tests/test_comparison_runner.py
+    verification_evidence:
+      - "evaluation-output/comparison_report.md states offline/scripted scope, not a live-provider result; traceability reported as pending (logbook 049)."
+      - "tests/test_comparison_schemas.py proves a SCORED result requires exactly four non-null scores in TRACEABILITY_DIMENSIONS order and rejects missing/extra/null/reordered sets; PENDING results stay pending (correction round; logbook 054)."
+      - "tests/test_comparison_schemas.py + tests/test_comparison_runner.py: 90 passed incl. fail-closed strategy/early_stopped/stop_reason consistency (narrow correction, logbook 055)."
+      - "Human review decision: Phase 4A approved with limitations (WANG Yiwen 60536848, 2026-10-23; logbook 056; docs/review-memo.md); human traceability scores remain pending, not entered."
+    owner: 60536848-WANG-Yiwen
