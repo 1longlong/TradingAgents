@@ -1,6 +1,6 @@
 """Tests for structured-output agents (Trader, Research Manager, Sentiment Analyst).
 
-The Portfolio Manager has its own coverage in tests/test_memory_log.py
+The Portfolio Manager has its own coverage in test/offline/test_memory_log.py
 (which exercises the full memory-log → PM injection cycle).  This file
 covers the parallel schemas, render functions, and graceful-fallback
 behavior we added for the Trader, Research Manager, and Sentiment Analyst

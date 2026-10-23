@@ -1,0 +1,464 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:tradingagents:requirements:1.0",
+  "title": "TradingAgents consolidated requirements registry",
+  "description": "Validate the JSON-compatible structure of docs/req/requirements.yaml, including product scope, baseline, requirement sources, MoSCoW tradeoffs, and executable acceptance contracts.",
+  "$comment": "Safely load YAML before Draft202012Validator validation. Never execute verification.command automatically. test/ci_gates.py additionally checks duplicate YAML keys, unique IDs, dependency references/cycles, explicit file references, and implemented evidence paths. Complete runtime traceability, actual measurement implementations, human approval, and approval chronology require their dedicated checks and review. uniqueItems only detects identical array items.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "project",
+    "requirements"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "purpose",
+        "baseline_ref",
+        "baseline_commit",
+        "scope",
+        "out_of_scope"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "purpose": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "baseline_ref": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "baseline_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "scope": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "out_of_scope": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "minItems": 0,
+          "uniqueItems": true
+        }
+      }
+    },
+    "requirements": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/requirement"
+      }
+    }
+  },
+  "$defs": {
+    "requirementId": {
+      "type": "string",
+      "pattern": "^REQ-[A-Z][A-Z0-9]*-?[0-9]{2,4}$"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "reference",
+        "locator",
+        "rationale"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "process_document",
+            "repository",
+            "human_decision"
+          ]
+        },
+        "reference": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S",
+          "description": "A project process document, repository-relative path, or auditable human-decision reference. Must not contain secrets."
+        },
+        "locator": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S",
+          "description": "A section, function/line, or precise conversation/pull-request location."
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "method",
+        "mode",
+        "command",
+        "evidence"
+      ],
+      "properties": {
+        "method": {
+          "enum": [
+            "pytest",
+            "json_schema",
+            "static_analysis",
+            "dependency_check",
+            "contract_check",
+            "security_check",
+            "permission_check",
+            "semantic_evaluation",
+            "ci_check"
+          ]
+        },
+        "mode": {
+          "enum": [
+            "offline",
+            "live"
+          ]
+        },
+        "command": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S",
+          "description": "An executable verification entry point. Obtain human approval and check tool permissions before running it; never automatically execute arbitrary YAML commands through a shell."
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "Expected or existing test nodes and evidence paths. Semantic checks and verification records establish their existence and results."
+        }
+      }
+    },
+    "fitCriterion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "metric",
+        "unit",
+        "comparison",
+        "threshold",
+        "verification"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^FC-[A-Z0-9]+(?:-[A-Z0-9]+)*$"
+        },
+        "metric": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S",
+          "description": "A metric computed by a verification program. A natural-language judgment is not a measurement implementation."
+        },
+        "unit": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "comparison": {
+          "enum": [
+            "eq",
+            "ne",
+            "lt",
+            "lte",
+            "gt",
+            "gte",
+            "in",
+            "not_in"
+          ]
+        },
+        "threshold": {
+          "oneOf": [
+            {
+              "type": [
+                "number",
+                "string",
+                "boolean"
+              ]
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": [
+                  "number",
+                  "string",
+                  "boolean"
+                ]
+              }
+            }
+          ]
+        },
+        "verification": {
+          "$ref": "#/$defs/verification"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "comparison": {
+                "enum": [
+                  "in",
+                  "not_in"
+                ]
+              }
+            },
+            "required": [
+              "comparison"
+            ]
+          },
+          "then": {
+            "properties": {
+              "threshold": {
+                "type": "array"
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "threshold": {
+                "type": [
+                  "number",
+                  "string",
+                  "boolean"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "comparison": {
+                "enum": [
+                  "lt",
+                  "lte",
+                  "gt",
+                  "gte"
+                ]
+              }
+            },
+            "required": [
+              "comparison"
+            ]
+          },
+          "then": {
+            "properties": {
+              "threshold": {
+                "type": "number"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "statement",
+        "priority",
+        "priority_tradeoff",
+        "origin",
+        "sources",
+        "status",
+        "fit_criteria"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/requirementId"
+        },
+        "type": {
+          "enum": [
+            "functional",
+            "invariant",
+            "quality",
+            "performance",
+            "cost",
+            "governance",
+            "security"
+          ]
+        },
+        "statement": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "priority": {
+          "enum": [
+            "must",
+            "should",
+            "could",
+            "wont"
+          ],
+          "description": "MoSCoW; wont means excluded from the current iteration."
+        },
+        "priority_tradeoff": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S",
+          "description": "State the priority rationale, deferral cost, and tradeoffs against other objectives. Tradeoffs must not relax invariants."
+        },
+        "origin": {
+          "enum": [
+            "baseline",
+            "extension",
+            "governance"
+          ]
+        },
+        "sources": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/source"
+          }
+        },
+        "status": {
+          "enum": [
+            "draft",
+            "approved",
+            "implemented",
+            "verified",
+            "deferred"
+          ]
+        },
+        "fit_criteria": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/fitCriterion"
+          }
+        },
+        "depends_on": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/requirementId"
+          }
+        },
+        "architecture_refs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "minItems": 0,
+          "uniqueItems": true
+        },
+        "invariant_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^INV-[A-Z0-9]+(?:-[A-Z0-9]+)*$"
+          }
+        },
+        "owner": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "invariant"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "priority": {
+                "const": "must"
+              },
+              "fit_criteria": {
+                "items": {
+                  "properties": {
+                    "unit": {
+                      "const": "violations"
+                    },
+                    "comparison": {
+                      "const": "eq"
+                    },
+                    "threshold": {
+                      "const": 0
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "priority": {
+                "const": "wont"
+              }
+            },
+            "required": [
+              "priority"
+            ]
+          },
+          "then": {
+            "properties": {
+              "status": {
+                "const": "deferred"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

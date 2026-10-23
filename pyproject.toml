@@ -32,6 +32,14 @@ dev = [
     "ruff>=0.15",
     "pytest>=8.0",
     "pytest-subtests>=0.13",
+    "PyYAML>=6.0,<7",
+    "jsonschema>=4.23,<5",
+    "json5>=0.9,<1",
+    "mypy>=1.11,<3",
+    "pip-audit>=2.9,<3",
+    "bandit>=1.8,<2",
+    "pytest-socket>=0.7,<1",
+    "tomli>=2.0; python_version < '3.11'",
 ]
 # Amazon Bedrock support (AWS SigV4 auth + boto3). Optional so the core install
 # stays lean: pip install "tradingagents[bedrock]".
@@ -43,13 +51,15 @@ bedrock = [
 tradingagents = "cli.main:app"
 
 [tool.setuptools.packages.find]
+where = ["src"]
 include = ["tradingagents*", "cli*"]
 
 [tool.setuptools.package-data]
 cli = ["static/*"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["test"]
+pythonpath = ["src"]
 addopts = "-ra --strict-markers"
 markers = [
     "unit: fast isolated unit tests",
@@ -80,3 +90,17 @@ ignore = ["E501"]
 # Keep multiple aliased names from one module in a single combined import block
 # (e.g. the vendor re-exports in interface.py) instead of one statement per name.
 combine-as-imports = true
+
+[tool.mypy]
+python_version = "3.10"
+mypy_path = "src"
+explicit_package_bases = true
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = true
+show_error_codes = true
+
+[tool.tradingagents.ci]
+# Runtime evaluation must be approved on the PR base before a prompt/model change.
+# No evaluator, fixed dataset, or quality thresholds have been approved yet.
+semantic_evaluation = {}

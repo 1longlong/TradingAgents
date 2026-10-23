@@ -1,0 +1,65 @@
+schema_version: '1.0'
+entries:
+  - id: AI-20261024-001
+    date: '2026-10-24'
+    tool: Codex API assistant
+    model: Not exposed by the host
+    purpose: >-
+      Implement user-authorized preparation improvements and CI blocking gates;
+      record earlier layout/governance preparation retrospectively without
+      backdating approvals or claiming product implementation.
+    source: Current user conversation
+    human_review: pending
+    paths:
+      - .github/workflows/ci.yml
+      - pyproject.toml
+      - .gitignore
+      - AGENTS.md
+      - Prompt.md
+      - README.md
+      - .agent/rules.md
+      - .opencode/permissions.jsonc
+      - .opencode/rules.md
+      - docs/req/req-schema.json
+      - docs/code-governance/structural-constraints.md
+      - docs/code-governance/verification-constraints.md
+      - docs/code-governance/mcp-tool-manifest.md
+      - docs/review-memo.md
+      - docs/bug-diary.md
+      - docs/debt-register.md
+      - docs/ai-use-log.yaml
+      - test/ci_gates.py
+      - test/offline/test_ci_gates.py
+      - test/offline/test_deepseek_reasoning.py
+      - test/live/test_deepseek_live.py
+      - test/offline/test_i18n_coverage.py
+      - test/offline/test_structured_agents.py
+    notes:
+      - Earlier source files were relocated without changing product implementations.
+      - Product requirements and architecture placeholders remain unfilled.
+      - Historical baseline failures are not treated as passes.
+      - At the time of this preparation entry, no Git commit, push, merge, deployment, or human approval had been performed by this agent.
+      - No real model API or user session export is claimed by this record.
+  - id: AI-20261024-002
+    date: '2026-10-24'
+    tool: Codex API assistant
+    model: Not exposed by the host
+    purpose: >-
+      Clean generated intermediate files and caches, organize preparation records,
+      and create one user-authorized Git commit without running further tests.
+    source: Current user conversation
+    human_review: pending
+    paths:
+      - .gitignore
+      - AGENTS.md
+      - README.md
+      - .opencode/permissions.jsonc
+      - docs/review-memo.md
+      - docs/debt-register.md
+      - docs/ai-use-log.yaml
+    notes:
+      - Removed rebuildable local environments, caches, installation metadata, and task-specific temporary outputs.
+      - Preserved source, CI implementation, existing tests, intentional placeholders, and the existing CHANGELOG.md deletion.
+      - No tests were run for cleanup, as explicitly requested by the user.
+      - The user authorized one local preparation commit; this is not a final human governance review.
+      - No push, merge, deployment, or remote configuration change is authorized by this cleanup request.

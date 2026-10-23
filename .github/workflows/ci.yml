@@ -2,60 +2,240 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: ['**']
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: tests (py${{ matrix.python-version }})
+  context:
+    name: change-context
+    runs-on: ubuntu-latest
+    outputs:
+      base: ${{ steps.context.outputs.base }}
+      head: ${{ steps.context.outputs.head }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - id: context
+        name: Resolve explicit comparison commits
+        run: |
+          python - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          event = json.loads(Path(os.environ['GITHUB_EVENT_PATH']).read_text())
+          pr = event.get('pull_request')
+          head = pr['head']['sha'] if pr else os.environ['GITHUB_SHA']
+          base = pr['base']['sha'] if pr else event.get('before', '')
+          if not base or set(base) == {'0'}:
+              result = subprocess.run(['git', 'rev-parse', f'{head}^'], capture_output=True, text=True)
+              if result.returncode:
+                  raise SystemExit('No previous commit is available; establish a reviewed baseline first')
+              base = result.stdout.strip()
+          for ref in [base, head]:
+              subprocess.run(['git', 'rev-parse', '--verify', f'{ref}^{{commit}}'], check=True)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'base={base}\nhead={head}\n')
+          PY
+
+  regression:
+    name: regression (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12", "3.13"]
+        python-version: ['3.10', '3.11', '3.12', '3.13']
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Install (with dev extras)
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
-      - name: Run test suite
-        run: pytest -q
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install -e '.[dev]'
+      - name: Run every test with Python socket access disabled
+        # No provider secrets are exposed to pull-request code. Credential-dependent
+        # tests may skip; this is not evidence of successful live API verification.
+        run: python -m pytest -q --disable-socket --allow-unix-socket --junitxml="${RUNNER_TEMP}/regression.xml"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: regression-python-${{ matrix.python-version }}
+          path: ${{ runner.temp }}/regression.xml
+          retention-days: 14
+
+  static-analysis:
+    name: static-analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - run: python -m pip install -e '.[dev]'
+      - name: Lint
+        if: always()
+        run: python -m ruff check .
+      - name: Type check the complete application source
+        if: always()
+        run: python -m mypy src
+      - name: Check dependency consistency
+        if: always()
+        run: python -m pip check
+      - name: Audit installed dependencies
+        if: always()
+        run: python -m test.ci_gates dependencies
+
+  architecture-security:
+    name: architecture-security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e '.[dev]'
+      - name: Layout, dependency direction, and permission boundaries
+        run: python -m test.ci_gates structure
+      - name: Security analysis of all source paths
+        if: always()
+        run: python -m bandit -r src -ll
+      - name: Deterministic API, safety, and prompt contracts
+        if: always()
+        run: >-
+          python -m pytest -q --disable-socket --allow-unix-socket
+          test/offline/test_ci_gates.py test/offline/test_cli_commands.py
+          test/offline/test_portfolio_context.py test/offline/test_rating_integrity.py
+          test/offline/test_tool_date_enforcement.py test/offline/test_prompt_integrity.py
+          test/offline/test_structured_agent_prompts.py
+
+  requirements:
+    name: requirements-schema
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e '.[dev]'
+      - run: python -m test.ci_gates schema
+
+  review-and-log:
+    name: review-and-ai-log
+    needs: context
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.context.outputs.head }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e '.[dev]'
+      - name: Require meaningful new AI-use records for changed code and prompts
+        env:
+          BASE_SHA: ${{ needs.context.outputs.base }}
+          HEAD_SHA: ${{ needs.context.outputs.head }}
+        run: python -m test.ci_gates ai-log --base "$BASE_SHA" --head "$HEAD_SHA"
+      - name: Verify prior tests, current safety reviews, and ADR evidence
+        if: always()
+        env:
+          BASE_SHA: ${{ needs.context.outputs.base }}
+          HEAD_SHA: ${{ needs.context.outputs.head }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python -m test.ci_gates approval --base "$BASE_SHA" --head "$HEAD_SHA"
+
+  semantic-evaluation:
+    name: semantic-evaluation
+    needs: context
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.context.outputs.head }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -e '.[dev]'
+      - name: Replay a base-approved evaluator and fixed dataset when required
+        env:
+          BASE_SHA: ${{ needs.context.outputs.base }}
+          HEAD_SHA: ${{ needs.context.outputs.head }}
+        run: python -m test.ci_gates semantic --base "$BASE_SHA" --head "$HEAD_SHA"
 
   smoke-install:
-    name: clean-install smoke
+    name: clean-install-smoke
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-      - name: Fresh install (no dev extras) and import
+          python-version: '3.12'
+      - run: python -m pip install .
+      - name: Import and verify packaged CLI resources outside the checkout
+        working-directory: ${{ runner.temp }}
         run: |
-          python -m pip install --upgrade pip
-          pip install .
-          # Catches undeclared runtime deps (e.g. #994 python-dotenv): a bare
-          # install must import the package and the CLI module.
-          python -c "import tradingagents, cli.main; print('clean-install import OK')"
+          python - <<'PY'
+          import importlib.resources
+          import tradingagents
+          import cli.main
+          assert importlib.resources.files('cli').joinpath('static/welcome.txt').is_file()
+          print('Clean-install imports and packaged CLI resource verified')
+          PY
+          tradingagents --help
 
-  lint:
-    name: ruff (strict, full repo)
+  blocking-gate:
+    # Push/manual runs cannot satisfy the merge gate or overwrite a PR verdict.
+    name: ${{ (github.event_name == 'pull_request' || github.event_name == 'pull_request_review') && 'blocking-gate' || 'branch-checks' }}
+    if: always()
+    needs: [context, regression, static-analysis, architecture-security, requirements, review-and-log, semantic-evaluation, smoke-install]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Install ruff
-        run: pip install "ruff>=0.15"
-      - name: Lint the repository
-        # The repo is fully clean under the strict select, so we lint everything
-        # (generated results/ is excluded via pyproject extend-exclude).
-        run: ruff check .
+      - name: Reject failed, cancelled, or skipped prerequisites
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          python - <<'PY'
+          import json, os
+          checks = json.loads(os.environ['NEEDS_JSON'])
+          blocked = {name: item['result'] for name, item in checks.items() if item['result'] != 'success'}
+          if blocked:
+              raise SystemExit(f'Blocking prerequisites: {blocked}')
+          print('All blocking prerequisites succeeded')
+          PY

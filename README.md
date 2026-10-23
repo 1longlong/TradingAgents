@@ -30,7 +30,7 @@
 # TradingAgents: Multi-Agents LLM Financial Trading Framework
 
 ## News
-- [2026-09] **TradingAgents v0.5.0** released with point-in-time integrity across every dated path, SEC EDGAR fundamentals served as filed, backtesting over a ticker and date grid, portfolio-aware runs, and current model lineups across every provider. See [CHANGELOG.md](CHANGELOG.md) for the full list.
+- [2026-09] **TradingAgents v0.5.0** released with point-in-time integrity across every dated path, SEC EDGAR fundamentals served as filed, backtesting over a ticker and date grid, portfolio-aware runs, and current model lineups across every provider.
 - [2026-08] **TradingAgents v0.4.0** released with look-ahead / point-in-time fixes across FRED macro, social sentiment, and the decision-log memory; clearer decision signals; working CLI checkpoint resume; Trader price grounding; and the GPT-5.6 and GLM-5.3 models.
 - [2026-07] **TradingAgents v0.3.1** released with correctness and stability fixes: Alpha Vantage look-ahead filtering, graph-router crash-safety, graph-shape-aware checkpoint resume, working crypto sentiment sources, a configurable LLM retry budget, Bedrock API-key auth, and Claude Sonnet 5 / Fable 5 support.
 
@@ -186,7 +186,7 @@ cp .env.example .env
 Launch the interactive CLI:
 ```bash
 tradingagents          # installed command
-python -m cli.main     # alternative: run directly from source
+PYTHONPATH=src python -m cli.main     # alternative: run directly from source
 ```
 You will see a screen where you can select your desired tickers, analysis date, LLM provider, research depth, and more. Your previous run's answers come back as the defaults, so pressing Enter accepts them. The `TRADINGAGENTS_*` variables in `.env` still skip their step entirely.
 
@@ -222,7 +222,7 @@ We built TradingAgents with LangGraph to ensure flexibility and modularity. The 
 
 ### Python Usage
 
-To use TradingAgents inside your code, you can import the `tradingagents` module and initialize a `TradingAgentsGraph()` object. The `.propagate()` function will return a decision. You can run `main.py`, here's also a quick example:
+To use TradingAgents inside your code, you can import the `tradingagents` module and initialize a `TradingAgentsGraph()` object. The `.propagate()` function will return a decision. You can run `src/main.py`, here's also a quick example:
 
 ```python
 from tradingagents.graph.trading_graph import TradingAgentsGraph
@@ -252,7 +252,7 @@ _, decision = ta.propagate("NVDA", "2026-09-01")
 print(decision)
 ```
 
-See `tradingagents/default_config.py` for all configuration options.
+See `src/tradingagents/default_config.py` for all configuration options.
 
 ### Fundamentals as filed
 
@@ -364,7 +364,7 @@ Backtest results are not guaranteed to match any published figure. Returns depen
 
 ## Contributing
 
-Contributions are welcome: bug fixes, documentation, and feature ideas; past contributions are credited per release in [`CHANGELOG.md`](CHANGELOG.md).
+Contributions are welcome: bug fixes, documentation, and feature ideas.
 
 ## Citation
 
@@ -381,3 +381,54 @@ Please reference our work if you find *TradingAgents* provides you with some hel
       url={https://arxiv.org/abs/2412.20138}, 
 }
 ```
+
+## Development preparation and OpenCode
+
+The preparation branch is `feature/webui`, based on TradingAgents v0.5.0. Product source is under `src/`; deterministic and external-service tests are under `test/offline/` and `test/live/`. The WebUI requirements and architecture are intentionally left for the requirements/design process. Do not treat empty documents as approval to implement features.
+
+Create an ignored persistent virtual environment, then install the declared development tools:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e '.[dev]'
+python -m test.ci_gates permissions
+python -m test.ci_gates structure
+OPENCODE_CONFIG=.opencode/permissions.jsonc opencode --agent plan
+```
+
+The permission configuration targets OpenCode 1.18.29. Configure the coding assistant's provider/model separately from TradingAgents runtime providers. Plan is read-only; use Docs to persist agreed requirements and architecture drafts, Build after plan/test approval, and Verify for independent checks. Docs can run the listed data validators. Empty requirements/design files do not block discussion, but block dependent implementation and schema acceptance.
+
+```bash
+python -m test.ci_gates schema
+python -m ruff check .
+python -m mypy src
+python -m pip check
+python -m test.ci_gates dependencies
+python -m bandit -r src -ll
+python -m pytest -q test/offline --disable-socket --allow-unix-socket
+python -m pytest -q test/live
+python -m pytest -q --disable-socket --allow-unix-socket
+```
+
+Live tests need explicit external-service/cost authorization and appropriate credentials. The network-isolated complete suite is the CI regression command; skipped credential-dependent tests do not establish successful live verification. Historical baseline failures are recorded in `docs/bug-diary.md` and remain blockers, rather than being ignored or converted into passes.
+
+Start authentic AI-use and review records from the first requirements conversation. After explicitly identifying a session, export it with the following command, replacing the placeholders:
+
+```bash
+python -m test.ci_gates transcript --session SESSION_ID --output transcripts/STUDENT_ID-STUDENT_NAME.md
+```
+
+The exporter writes a new Markdown file containing the complete native sanitized JSON, not a reconstructed summary. Annotate real interventions and approvals afterward. It refuses to overwrite existing transcripts or write outside `transcripts/`. No sessions have been exported as part of preparation.
+
+### CI blocking checks
+
+The actual team repository is [1longlong/TradingAgents](https://github.com/1longlong/TradingAgents). CI checks source layout, architecture/permission boundaries, lint, full-source typing, dependency consistency/advisories, security, a fixed deterministic contract suite, complete network-isolated regression on Python 3.10–3.13, and clean installation. Requirements validation checks both JSON Schema and explicit semantic references. Changes to code, prompts, tests, or CI/developer tooling require a new AI-use entry covering the exact paths.
+
+Human review gates use actual GitHub review records, not local approval claims. A prior `[test-plan-approved]` review binds the test/design revision before implementation. Safety changes need an accompanying ADR and a current-head `[safety-approved]` review. Governance/checker/configuration changes need current-head `[governance-approved]` review. See `docs/review-memo.md` for identity checks, history constraints, first-adoption handling, and limitations.
+
+Runtime prompt/model changes require replay against an evaluator, fixed dataset, and thresholds already approved on the PR base. The policy belongs in `[tool.tradingagents.ci.semantic_evaluation]` in `pyproject.toml`. It is currently empty: such changes fail closed until a real evaluation design is approved. Prompt-contract tests alone are not model-quality evaluation.
+
+Configure GitHub branch protection/rulesets to require the stable **`blocking-gate`** status, human reviews, and dismissal of stale approvals. Only PR/review events report that merge status; push/manual runs report `branch-checks`, so they cannot satisfy or overwrite a PR approval verdict. The aggregation rejects failed, cancelled, or skipped jobs. Workflow files alone do not configure remote branch protection, and no remote setting or passing hosted run is implied. Merge-queue integration is not configured. There is no deployment or automatic release workflow.
+
+Local virtual environments, caches, build outputs, and OpenCode-generated plugin dependencies are rebuildable runtime artifacts ignored by Git. Create the development environment with the commands above when needed.
