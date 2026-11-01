@@ -221,3 +221,19 @@ __marimo__/
 # Enterprise env file (secrets) and generated run reports
 .env.enterprise
 reports/
+
+# Token-benchmark artifacts. Only reviewed, de-identified reports are
+# versionable: experiment.json, notes.md, and the summary set written by
+# ``scripts/token_benchmark.py`` (which records telemetry locations as paths
+# relative to the experiment directory, never host absolute paths). Raw run
+# evidence (runs/, cases/), caches, and the environment-specific code_state.json
+# stay local — they are large, machine-specific, and not needed to read a report.
+token_benchmarks/*/runs/
+token_benchmarks/*/cases/
+token_benchmarks/*/code_state.json
+token_benchmarks/*/summary_index.json
+
+# One-command measurements (scripts/run_token_benchmark.sh). Every invocation
+# writes a fresh timestamped archive here; these are local evidence, so they are
+# never tracked and a new measurement never dirties the working tree.
+token_benchmarks/measurements/

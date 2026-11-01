@@ -19,10 +19,13 @@ all three agents log the same warnings when fallback fires.
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable
 from typing import Any, TypeVar
 
 from pydantic import BaseModel
+
+from tradingagents.observability import record_structured_attempt
 
 logger = logging.getLogger(__name__)
 
@@ -46,14 +49,17 @@ def bind_structured(llm: Any, schema: type[T], agent_name: str) -> Any | None:
     will use free-text generation for every call instead of one-shot fallback.
     """
     try:
-        return llm.with_structured_output(schema)
+        llm_with_schema = llm.with_structured_output(schema)
     except (NotImplementedError, AttributeError) as exc:
         logger.warning(
             "%s: provider does not support with_structured_output (%s); "
             "falling back to free-text generation",
             agent_name, exc,
         )
+        record_structured_attempt(agent_name, kind="unsupported", error=exc)
         return None
+    record_structured_attempt(agent_name, kind="success")
+    return llm_with_schema
 
 
 def invoke_structured_or_freetext(
@@ -70,6 +76,7 @@ def invoke_structured_or_freetext(
     shape). The same value is forwarded to the free-text path so the
     fallback sees the same input the structured call did.
     """
+    started_at = time.monotonic()
     if structured_llm is not None:
         try:
             result = structured_llm.invoke(prompt)
@@ -78,12 +85,30 @@ def invoke_structured_or_freetext(
                 # the tool, leaving the parser with nothing to return. Treat it
                 # as a structured miss and fall back, with a clear reason.
                 raise ValueError("structured output returned no parsed result")
+            record_structured_attempt(
+                agent_name, kind="success", started_at=started_at, ended_at=time.monotonic()
+            )
             return render(result)
         except Exception as exc:
             logger.warning(
                 "%s: structured-output invocation failed (%s); retrying once as free text",
                 agent_name, exc,
             )
+            record_structured_attempt(
+                agent_name, kind="failure", used_fallback=True, error=exc,
+                started_at=started_at, ended_at=time.monotonic(),
+            )
+
+    # ``structured_llm`` is None only when the provider reported it does not
+    # support structured output (see ``bind_structured``). Record that the
+    # resulting free-text fallback was used at the invocation/runtime scope so
+    # the unsupported status is observable in real run telemetry (the
+    # construction-time event in bind_structured fires outside a run scope).
+    if structured_llm is None:
+        record_structured_attempt(
+            agent_name, kind="unsupported", used_fallback=True,
+            started_at=started_at, ended_at=time.monotonic(),
+        )
 
     response = plain_llm.invoke(prompt)
     return response.content

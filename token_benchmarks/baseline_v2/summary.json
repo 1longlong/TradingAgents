@@ -1,0 +1,1958 @@
+{
+  "analysts": [
+    "market",
+    "social",
+    "news",
+    "fundamentals"
+  ],
+  "cache_policy": "preserve_existing",
+  "case": "NVDA / 2026-09-23",
+  "case_id": "nvda_2026_09_23",
+  "deep_model": "CS5351/DeepSeek-V4-Flash",
+  "experiment_id": "baseline_v2",
+  "measured_target": 5,
+  "measured_valid": 5,
+  "output_language": "English",
+  "per_agent": {
+    "aggressive_analyst": {
+      "input_tokens": {
+        "max": 15506.0,
+        "mean": 13473.8,
+        "median": 13390.0,
+        "min": 11980.0,
+        "n": 5,
+        "stdev": 1355.4926
+      },
+      "llm_calls": {
+        "max": 1.0,
+        "mean": 1.0,
+        "median": 1.0,
+        "min": 1.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "output_tokens": {
+        "max": 1663.0,
+        "mean": 1407.2,
+        "median": 1383.0,
+        "min": 1202.0,
+        "n": 5,
+        "stdev": 176.0418
+      },
+      "prompt_bytes": {
+        "max": 52434.0,
+        "mean": 46391.4,
+        "median": 46923.0,
+        "min": 42419.0,
+        "n": 5,
+        "stdev": 4090.4004
+      },
+      "tool_calls": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "tool_message_bytes": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "tool_result_bytes": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "tool_rounds": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "total_tokens": {
+        "max": 16988.0,
+        "mean": 14881.0,
+        "median": 14696.0,
+        "min": 13182.0,
+        "n": 5,
+        "stdev": 1408.1151
+      }
+    },
+    "bear_researcher": {
+      "input_tokens": {
+        "max": 18273.0,
+        "mean": 16493.8,
+        "median": 16682.0,
+        "min": 14333.0,
+        "n": 5,
+        "stdev": 1413.6894
+      },
+      "llm_calls": {
+        "max": 1.0,
+        "mean": 1.0,
+        "median": 1.0,
+        "min": 1.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "output_tokens": {
+        "max": 2965.0,
+        "mean": 2789.0,
+        "median": 2878.0,
+        "min": 2540.0,
+        "n": 5,
+        "stdev": 183.9484
+      },
+      "prompt_bytes": {
+        "max": 64586.0,
+        "mean": 58295.4,
+        "median": 59220.0,
+        "min": 49093.0,
+        "n": 5,
+        "stdev": 5770.6842
+      },
+      "tool_calls": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "tool_message_bytes": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "tool_result_bytes": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "tool_rounds": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "total_tokens": {
+        "max": 21238.0,
+        "mean": 19282.8,
+        "median": 19239.0,
+        "min": 16983.0,
+        "n": 5,
+        "stdev": 1526.375
+      }
+    },
+    "bull_researcher": {
+      "input_tokens": {
+        "max": 14576.0,
+        "mean": 12710.0,
+        "median": 12557.0,
+        "min": 11412.0,
+        "n": 5,
+        "stdev": 1299.7309
+      },
+      "llm_calls": {
+        "max": 1.0,
+        "mean": 1.0,
+        "median": 1.0,
+        "min": 1.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "output_tokens": {
+        "max": 2473.0,
+        "mean": 1889.8,
+        "median": 1847.0,
+        "min": 1343.0,
+        "n": 5,
+        "stdev": 433.6925
+      },
+      "prompt_bytes": {
+        "max": 48859.0,
+        "mean": 43373.6,
+        "median": 44135.0,
+        "min": 38598.0,
+        "n": 5,
+        "stdev": 3988.2075
+      },
+      "tool_calls": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "tool_message_bytes": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "tool_result_bytes": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "tool_rounds": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "total_tokens": {
+        "max": 16423.0,
+        "mean": 14599.8,
+        "median": 14686.0,
+        "min": 12985.0,
+        "n": 5,
+        "stdev": 1287.1067
+      }
+    },
+    "conservative_analyst": {
+      "input_tokens": {
+        "max": 18439.0,
+        "mean": 16257.2,
+        "median": 15971.0,
+        "min": 14353.0,
+        "n": 5,
+        "stdev": 1479.9315
+      },
+      "llm_calls": {
+        "max": 1.0,
+        "mean": 1.0,
+        "median": 1.0,
+        "min": 1.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "output_tokens": {
+        "max": 1727.0,
+        "mean": 1557.6,
+        "median": 1540.0,
+        "min": 1466.0,
+        "n": 5,
+        "stdev": 99.9615
+      },
+      "prompt_bytes": {
+        "max": 63995.0,
+        "mean": 58244.4,
+        "median": 58417.0,
+        "min": 53188.0,
+        "n": 5,
+        "stdev": 3868.9176
+      },
+      "tool_calls": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "tool_message_bytes": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "tool_result_bytes": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "tool_rounds": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "total_tokens": {
+        "max": 19947.0,
+        "mean": 17814.8,
+        "median": 17437.0,
+        "min": 15893.0,
+        "n": 5,
+        "stdev": 1486.8464
+      }
+    },
+    "fundamentals_analyst": {
+      "input_tokens": {
+        "max": 38274.0,
+        "mean": 25778.8,
+        "median": 24812.0,
+        "min": 16183.0,
+        "n": 5,
+        "stdev": 7921.6773
+      },
+      "llm_calls": {
+        "max": 4.0,
+        "mean": 3.0,
+        "median": 3.0,
+        "min": 2.0,
+        "n": 5,
+        "stdev": 0.7071
+      },
+      "output_tokens": {
+        "max": 7157.0,
+        "mean": 5843.4,
+        "median": 6076.0,
+        "min": 4152.0,
+        "n": 5,
+        "stdev": 1099.5289
+      },
+      "prompt_bytes": {
+        "max": 11036.0,
+        "mean": 8185.6,
+        "median": 8114.0,
+        "min": 5430.0,
+        "n": 5,
+        "stdev": 1983.6201
+      },
+      "tool_calls": {
+        "max": 8.0,
+        "mean": 7.2,
+        "median": 7.0,
+        "min": 7.0,
+        "n": 5,
+        "stdev": 0.4472
+      },
+      "tool_message_bytes": {
+        "max": 74380.0,
+        "mean": 49054.2,
+        "median": 46800.0,
+        "min": 30491.0,
+        "n": 5,
+        "stdev": 15821.1314
+      },
+      "tool_result_bytes": {
+        "max": 31933.0,
+        "mean": 31628.2,
+        "median": 31552.0,
+        "min": 31552.0,
+        "n": 5,
+        "stdev": 170.3884
+      },
+      "tool_rounds": {
+        "max": 3.0,
+        "mean": 2.0,
+        "median": 2.0,
+        "min": 1.0,
+        "n": 5,
+        "stdev": 0.7071
+      },
+      "total_tokens": {
+        "max": 45431.0,
+        "mean": 31622.2,
+        "median": 30901.0,
+        "min": 20335.0,
+        "n": 5,
+        "stdev": 8950.0962
+      }
+    },
+    "market_analyst": {
+      "input_tokens": {
+        "max": 70524.0,
+        "mean": 41154.6,
+        "median": 35020.0,
+        "min": 26363.0,
+        "n": 5,
+        "stdev": 18225.349
+      },
+      "llm_calls": {
+        "max": 5.0,
+        "mean": 3.6,
+        "median": 3.0,
+        "min": 3.0,
+        "n": 5,
+        "stdev": 0.8944
+      },
+      "output_tokens": {
+        "max": 6097.0,
+        "mean": 5624.6,
+        "median": 5780.0,
+        "min": 5055.0,
+        "n": 5,
+        "stdev": 477.5231
+      },
+      "prompt_bytes": {
+        "max": 28327.0,
+        "mean": 20225.4,
+        "median": 16780.0,
+        "min": 16755.0,
+        "n": 5,
+        "stdev": 5164.472
+      },
+      "tool_calls": {
+        "max": 14.0,
+        "mean": 13.0,
+        "median": 13.0,
+        "min": 12.0,
+        "n": 5,
+        "stdev": 1.0
+      },
+      "tool_message_bytes": {
+        "max": 106979.0,
+        "mean": 61987.8,
+        "median": 55997.0,
+        "min": 38634.0,
+        "n": 5,
+        "stdev": 28100.1348
+      },
+      "tool_result_bytes": {
+        "max": 48398.0,
+        "mean": 37557.6,
+        "median": 35660.0,
+        "min": 33009.0,
+        "n": 5,
+        "stdev": 6319.6931
+      },
+      "tool_rounds": {
+        "max": 4.0,
+        "mean": 2.6,
+        "median": 2.0,
+        "min": 2.0,
+        "n": 5,
+        "stdev": 0.8944
+      },
+      "total_tokens": {
+        "max": 76621.0,
+        "mean": 46779.2,
+        "median": 40204.0,
+        "min": 32143.0,
+        "n": 5,
+        "stdev": 18316.2656
+      }
+    },
+    "neutral_analyst": {
+      "input_tokens": {
+        "max": 21422.0,
+        "mean": 19339.4,
+        "median": 18940.0,
+        "min": 17400.0,
+        "n": 5,
+        "stdev": 1500.4039
+      },
+      "llm_calls": {
+        "max": 1.0,
+        "mean": 1.0,
+        "median": 1.0,
+        "min": 1.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "output_tokens": {
+        "max": 2047.0,
+        "mean": 1789.8,
+        "median": 1826.0,
+        "min": 1482.0,
+        "n": 5,
+        "stdev": 222.3088
+      },
+      "prompt_bytes": {
+        "max": 76937.0,
+        "mean": 71579.6,
+        "median": 70605.0,
+        "min": 66554.0,
+        "n": 5,
+        "stdev": 3891.222
+      },
+      "tool_calls": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "tool_message_bytes": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "tool_result_bytes": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "tool_rounds": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "total_tokens": {
+        "max": 23469.0,
+        "mean": 21129.2,
+        "median": 20534.0,
+        "min": 19226.0,
+        "n": 5,
+        "stdev": 1635.6068
+      }
+    },
+    "news_analyst": {
+      "input_tokens": {
+        "max": 11754.0,
+        "mean": 7833.8,
+        "median": 7821.0,
+        "min": 5019.0,
+        "n": 5,
+        "stdev": 2883.8732
+      },
+      "llm_calls": {
+        "max": 4.0,
+        "mean": 2.8,
+        "median": 3.0,
+        "min": 2.0,
+        "n": 5,
+        "stdev": 0.8367
+      },
+      "output_tokens": {
+        "max": 2533.0,
+        "mean": 2184.6,
+        "median": 2249.0,
+        "min": 1788.0,
+        "n": 5,
+        "stdev": 293.4933
+      },
+      "prompt_bytes": {
+        "max": 12141.0,
+        "mean": 8264.6,
+        "median": 8794.0,
+        "min": 5754.0,
+        "n": 5,
+        "stdev": 2656.2734
+      },
+      "tool_calls": {
+        "max": 15.0,
+        "mean": 11.2,
+        "median": 10.0,
+        "min": 9.0,
+        "n": 5,
+        "stdev": 2.6833
+      },
+      "tool_message_bytes": {
+        "max": 6369.0,
+        "mean": 3939.2,
+        "median": 3268.0,
+        "min": 1860.0,
+        "n": 5,
+        "stdev": 2178.0015
+      },
+      "tool_result_bytes": {
+        "max": 5078.0,
+        "mean": 3552.0,
+        "median": 3068.0,
+        "min": 2756.0,
+        "n": 5,
+        "stdev": 958.9129
+      },
+      "tool_rounds": {
+        "max": 3.0,
+        "mean": 1.8,
+        "median": 2.0,
+        "min": 1.0,
+        "n": 5,
+        "stdev": 0.8367
+      },
+      "total_tokens": {
+        "max": 14106.0,
+        "mean": 10018.4,
+        "median": 9822.0,
+        "min": 6807.0,
+        "n": 5,
+        "stdev": 3079.7854
+      }
+    },
+    "portfolio_manager": {
+      "input_tokens": {
+        "max": 14140.0,
+        "mean": 9005.8,
+        "median": 7726.0,
+        "min": 7478.0,
+        "n": 5,
+        "stdev": 2876.9526
+      },
+      "llm_calls": {
+        "max": 2.0,
+        "mean": 1.2,
+        "median": 1.0,
+        "min": 1.0,
+        "n": 5,
+        "stdev": 0.4472
+      },
+      "output_tokens": {
+        "max": 2888.0,
+        "mean": 2035.0,
+        "median": 2100.0,
+        "min": 1271.0,
+        "n": 5,
+        "stdev": 726.0575
+      },
+      "prompt_bytes": {
+        "max": 57906.0,
+        "mean": 36025.8,
+        "median": 30571.0,
+        "min": 29896.0,
+        "n": 5,
+        "stdev": 12240.4345
+      },
+      "tool_calls": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "tool_message_bytes": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "tool_result_bytes": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "tool_rounds": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "total_tokens": {
+        "max": 16240.0,
+        "mean": 11040.8,
+        "median": 10061.0,
+        "min": 8928.0,
+        "n": 5,
+        "stdev": 3016.5675
+      }
+    },
+    "research_manager": {
+      "input_tokens": {
+        "max": 12134.0,
+        "mean": 10789.2,
+        "median": 11054.0,
+        "min": 9418.0,
+        "n": 5,
+        "stdev": 1141.4776
+      },
+      "llm_calls": {
+        "max": 2.0,
+        "mean": 2.0,
+        "median": 2.0,
+        "min": 2.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "output_tokens": {
+        "max": 3002.0,
+        "mean": 2728.8,
+        "median": 2736.0,
+        "min": 2452.0,
+        "n": 5,
+        "stdev": 199.8529
+      },
+      "prompt_bytes": {
+        "max": 46044.0,
+        "mean": 41498.8,
+        "median": 44044.0,
+        "min": 35446.0,
+        "n": 5,
+        "stdev": 4669.435
+      },
+      "tool_calls": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "tool_message_bytes": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "tool_result_bytes": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "tool_rounds": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "total_tokens": {
+        "max": 15136.0,
+        "mean": 13518.0,
+        "median": 13506.0,
+        "min": 12080.0,
+        "n": 5,
+        "stdev": 1247.0758
+      }
+    },
+    "sentiment_analyst": {
+      "input_tokens": {
+        "max": 2116.0,
+        "mean": 2116.0,
+        "median": 2116.0,
+        "min": 2116.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "llm_calls": {
+        "max": 1.0,
+        "mean": 1.0,
+        "median": 1.0,
+        "min": 1.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "output_tokens": {
+        "max": 1485.0,
+        "mean": 1327.4,
+        "median": 1343.0,
+        "min": 1185.0,
+        "n": 5,
+        "stdev": 134.4277
+      },
+      "prompt_bytes": {
+        "max": 5603.0,
+        "mean": 5603.0,
+        "median": 5603.0,
+        "min": 5603.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "tool_calls": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "tool_message_bytes": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "tool_result_bytes": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "tool_rounds": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "total_tokens": {
+        "max": 3601.0,
+        "mean": 3443.4,
+        "median": 3459.0,
+        "min": 3301.0,
+        "n": 5,
+        "stdev": 134.4277
+      }
+    },
+    "trader": {
+      "input_tokens": {
+        "max": 13567.0,
+        "mean": 10129.6,
+        "median": 11557.0,
+        "min": 6732.0,
+        "n": 5,
+        "stdev": 3026.684
+      },
+      "llm_calls": {
+        "max": 2.0,
+        "mean": 1.6,
+        "median": 2.0,
+        "min": 1.0,
+        "n": 5,
+        "stdev": 0.5477
+      },
+      "output_tokens": {
+        "max": 1371.0,
+        "mean": 978.8,
+        "median": 1261.0,
+        "min": 475.0,
+        "n": 5,
+        "stdev": 453.4933
+      },
+      "prompt_bytes": {
+        "max": 45288.0,
+        "mean": 34288.6,
+        "median": 38830.0,
+        "min": 22140.0,
+        "n": 5,
+        "stdev": 10558.1535
+      },
+      "tool_calls": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "tool_message_bytes": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "tool_result_bytes": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "tool_rounds": {
+        "max": 0.0,
+        "mean": 0.0,
+        "median": 0.0,
+        "min": 0.0,
+        "n": 5,
+        "stdev": 0.0
+      },
+      "total_tokens": {
+        "max": 14861.0,
+        "mean": 11108.4,
+        "median": 12912.0,
+        "min": 7207.0,
+        "n": 5,
+        "stdev": 3461.8745
+      }
+    }
+  },
+  "provider": "openai_compatible",
+  "quality": {
+    "attribution_complete": 5,
+    "measured": 5,
+    "telemetry_complete": 5,
+    "usage_complete": 5,
+    "valid": 5
+  },
+  "quick_model": "CS5351/DeepSeek-V4-Flash",
+  "research_rounds": 1,
+  "risk_rounds": 1,
+  "run_totals": {
+    "cached_input_tokens": {
+      "max": 88960.0,
+      "mean": 47948.8,
+      "median": 38528.0,
+      "min": 24448.0,
+      "n": 5,
+      "stdev": 25273.6964
+    },
+    "input_tokens": {
+      "max": 239600.0,
+      "mean": 185082.0,
+      "median": 169923.0,
+      "min": 149285.0,
+      "n": 5,
+      "stdev": 34988.8243
+    },
+    "llm_calls": {
+      "max": 23.0,
+      "mean": 20.2,
+      "median": 20.0,
+      "min": 17.0,
+      "n": 5,
+      "stdev": 2.3875
+    },
+    "output_tokens": {
+      "max": 33223.0,
+      "mean": 30156.0,
+      "median": 29590.0,
+      "min": 27832.0,
+      "n": 5,
+      "stdev": 1986.9667
+    },
+    "runtime_ms": {
+      "max": 843741.484,
+      "mean": 572041.3342,
+      "median": 541537.601,
+      "min": 422603.359,
+      "n": 5,
+      "stdev": 161490.7244
+    },
+    "tool_calls": {
+      "max": 34.0,
+      "mean": 31.4,
+      "median": 31.0,
+      "min": 29.0,
+      "n": 5,
+      "stdev": 2.0736
+    },
+    "tool_rounds": {
+      "max": 9.0,
+      "mean": 6.4,
+      "median": 7.0,
+      "min": 4.0,
+      "n": 5,
+      "stdev": 1.9494
+    },
+    "total_tokens": {
+      "max": 272823.0,
+      "mean": 215238.0,
+      "median": 199421.0,
+      "min": 178875.0,
+      "n": 5,
+      "stdev": 36722.4419
+    }
+  },
+  "runs": [
+    {
+      "agents": {
+        "aggressive_analyst": {
+          "cached_input_tokens": 0,
+          "input_tokens": 12584,
+          "llm_calls": 1,
+          "output_tokens": 1663,
+          "prompt_utf8_bytes_sum": 42419,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 14247
+        },
+        "bear_researcher": {
+          "cached_input_tokens": 128,
+          "input_tokens": 14333,
+          "llm_calls": 1,
+          "output_tokens": 2650,
+          "prompt_utf8_bytes_sum": 49093,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 16983
+        },
+        "bull_researcher": {
+          "cached_input_tokens": 128,
+          "input_tokens": 11642,
+          "llm_calls": 1,
+          "output_tokens": 1343,
+          "prompt_utf8_bytes_sum": 38598,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 12985
+        },
+        "conservative_analyst": {
+          "cached_input_tokens": 0,
+          "input_tokens": 15879,
+          "llm_calls": 1,
+          "output_tokens": 1547,
+          "prompt_utf8_bytes_sum": 57166,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 17426
+        },
+        "fundamentals_analyst": {
+          "cached_input_tokens": 12032,
+          "input_tokens": 24800,
+          "llm_calls": 3,
+          "output_tokens": 5612,
+          "prompt_utf8_bytes_sum": 8114,
+          "reasoning_tokens": 0,
+          "tool_calls": 7,
+          "tool_message_utf8_bytes_sum": 46800,
+          "tool_result_utf8_bytes_sum": 31552,
+          "tool_rounds": 2,
+          "total_tokens": 30412
+        },
+        "market_analyst": {
+          "cached_input_tokens": 13184,
+          "input_tokens": 35020,
+          "llm_calls": 3,
+          "output_tokens": 5184,
+          "prompt_utf8_bytes_sum": 16766,
+          "reasoning_tokens": 0,
+          "tool_calls": 14,
+          "tool_message_utf8_bytes_sum": 55997,
+          "tool_result_utf8_bytes_sum": 48398,
+          "tool_rounds": 2,
+          "total_tokens": 40204
+        },
+        "neutral_analyst": {
+          "cached_input_tokens": 0,
+          "input_tokens": 18940,
+          "llm_calls": 1,
+          "output_tokens": 1482,
+          "prompt_utf8_bytes_sum": 70250,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 20422
+        },
+        "news_analyst": {
+          "cached_input_tokens": 4224,
+          "input_tokens": 5019,
+          "llm_calls": 2,
+          "output_tokens": 1788,
+          "prompt_utf8_bytes_sum": 5765,
+          "reasoning_tokens": 0,
+          "tool_calls": 9,
+          "tool_message_utf8_bytes_sum": 1860,
+          "tool_result_utf8_bytes_sum": 2756,
+          "tool_rounds": 1,
+          "total_tokens": 6807
+        },
+        "portfolio_manager": {
+          "cached_input_tokens": 640,
+          "input_tokens": 7726,
+          "llm_calls": 1,
+          "output_tokens": 1333,
+          "prompt_utf8_bytes_sum": 30571,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 9059
+        },
+        "research_manager": {
+          "cached_input_tokens": 768,
+          "input_tokens": 9418,
+          "llm_calls": 2,
+          "output_tokens": 2662,
+          "prompt_utf8_bytes_sum": 35446,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 12080
+        },
+        "sentiment_analyst": {
+          "cached_input_tokens": 1920,
+          "input_tokens": 2116,
+          "llm_calls": 1,
+          "output_tokens": 1197,
+          "prompt_utf8_bytes_sum": 5603,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 3313
+        },
+        "trader": {
+          "cached_input_tokens": 896,
+          "input_tokens": 11557,
+          "llm_calls": 2,
+          "output_tokens": 1371,
+          "prompt_utf8_bytes_sum": 38830,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 12928
+        }
+      },
+      "attempt": "attempt_01",
+      "attribution_complete": true,
+      "duplicate_tool_call_count": 0,
+      "duration_ms": 422603.359,
+      "event_counts": {
+        "llm_call_events": 19,
+        "node_context_events": 17,
+        "prefetch_events": 3,
+        "structured_events": 4,
+        "tool_call_events": 30,
+        "tool_round_events": 5
+      },
+      "failure_type": null,
+      "invalid_reason": null,
+      "llm_calls": 19,
+      "llm_error_count": 0,
+      "prefetched_data_calls": 3,
+      "reported_cached_input_tokens_sum": 33920,
+      "reported_input_tokens_sum": 169034,
+      "reported_output_tokens_sum": 27832,
+      "reported_reasoning_tokens_sum": 0,
+      "run_index": 1,
+      "run_status": "completed",
+      "telemetry_complete": true,
+      "telemetry_path": "runs/run_01/attempt_01/telemetry.json",
+      "telemetry_run_id": "run-bbdeacad135a46f2aa6699cdf6385307-1",
+      "ticker": "NVDA",
+      "tool_calls": 30,
+      "tool_rounds": 5,
+      "total_tokens": 196866,
+      "trade_date": "2026-09-23",
+      "usage_complete": true,
+      "usage_coverage_complete": true,
+      "valid": true
+    },
+    {
+      "agents": {
+        "aggressive_analyst": {
+          "cached_input_tokens": 0,
+          "input_tokens": 13909,
+          "llm_calls": 1,
+          "output_tokens": 1383,
+          "prompt_utf8_bytes_sum": 46923,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 15292
+        },
+        "bear_researcher": {
+          "cached_input_tokens": 128,
+          "input_tokens": 16682,
+          "llm_calls": 1,
+          "output_tokens": 2540,
+          "prompt_utf8_bytes_sum": 57540,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 19222
+        },
+        "bull_researcher": {
+          "cached_input_tokens": 128,
+          "input_tokens": 13363,
+          "llm_calls": 1,
+          "output_tokens": 1657,
+          "prompt_utf8_bytes_sum": 44767,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 15020
+        },
+        "conservative_analyst": {
+          "cached_input_tokens": 0,
+          "input_tokens": 16644,
+          "llm_calls": 1,
+          "output_tokens": 1727,
+          "prompt_utf8_bytes_sum": 58456,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 18371
+        },
+        "fundamentals_analyst": {
+          "cached_input_tokens": 12032,
+          "input_tokens": 24812,
+          "llm_calls": 3,
+          "output_tokens": 6220,
+          "prompt_utf8_bytes_sum": 8086,
+          "reasoning_tokens": 0,
+          "tool_calls": 7,
+          "tool_message_utf8_bytes_sum": 46800,
+          "tool_result_utf8_bytes_sum": 31552,
+          "tool_rounds": 2,
+          "total_tokens": 31032
+        },
+        "market_analyst": {
+          "cached_input_tokens": 11648,
+          "input_tokens": 26363,
+          "llm_calls": 3,
+          "output_tokens": 5780,
+          "prompt_utf8_bytes_sum": 16780,
+          "reasoning_tokens": 0,
+          "tool_calls": 13,
+          "tool_message_utf8_bytes_sum": 38634,
+          "tool_result_utf8_bytes_sum": 33009,
+          "tool_rounds": 2,
+          "total_tokens": 32143
+        },
+        "neutral_analyst": {
+          "cached_input_tokens": 0,
+          "input_tokens": 20065,
+          "llm_calls": 1,
+          "output_tokens": 1930,
+          "prompt_utf8_bytes_sum": 73552,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 21995
+        },
+        "news_analyst": {
+          "cached_input_tokens": 10496,
+          "input_tokens": 11754,
+          "llm_calls": 4,
+          "output_tokens": 2352,
+          "prompt_utf8_bytes_sum": 12141,
+          "reasoning_tokens": 0,
+          "tool_calls": 13,
+          "tool_message_utf8_bytes_sum": 6130,
+          "tool_result_utf8_bytes_sum": 3904,
+          "tool_rounds": 3,
+          "total_tokens": 14106
+        },
+        "portfolio_manager": {
+          "cached_input_tokens": 640,
+          "input_tokens": 7657,
+          "llm_calls": 1,
+          "output_tokens": 1271,
+          "prompt_utf8_bytes_sum": 30531,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 8928
+        },
+        "research_manager": {
+          "cached_input_tokens": 768,
+          "input_tokens": 9826,
+          "llm_calls": 2,
+          "output_tokens": 2736,
+          "prompt_utf8_bytes_sum": 37596,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 12562
+        },
+        "sentiment_analyst": {
+          "cached_input_tokens": 1920,
+          "input_tokens": 2116,
+          "llm_calls": 1,
+          "output_tokens": 1427,
+          "prompt_utf8_bytes_sum": 5603,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 3543
+        },
+        "trader": {
+          "cached_input_tokens": 768,
+          "input_tokens": 6732,
+          "llm_calls": 1,
+          "output_tokens": 475,
+          "prompt_utf8_bytes_sum": 22140,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 7207
+        }
+      },
+      "attempt": "attempt_02",
+      "attribution_complete": true,
+      "duplicate_tool_call_count": 0,
+      "duration_ms": 541537.601,
+      "event_counts": {
+        "llm_call_events": 20,
+        "node_context_events": 19,
+        "prefetch_events": 3,
+        "structured_events": 4,
+        "tool_call_events": 33,
+        "tool_round_events": 7
+      },
+      "failure_type": null,
+      "invalid_reason": null,
+      "llm_calls": 20,
+      "llm_error_count": 0,
+      "prefetched_data_calls": 3,
+      "reported_cached_input_tokens_sum": 38528,
+      "reported_input_tokens_sum": 169923,
+      "reported_output_tokens_sum": 29498,
+      "reported_reasoning_tokens_sum": 0,
+      "run_index": 2,
+      "run_status": "completed",
+      "telemetry_complete": true,
+      "telemetry_path": "runs/run_02/attempt_02/telemetry.json",
+      "telemetry_run_id": "run-6a44562874f14a2481256611c1e62334-1",
+      "ticker": "NVDA",
+      "tool_calls": 33,
+      "tool_rounds": 7,
+      "total_tokens": 199421,
+      "trade_date": "2026-09-23",
+      "usage_complete": true,
+      "usage_coverage_complete": true,
+      "valid": true
+    },
+    {
+      "agents": {
+        "aggressive_analyst": {
+          "cached_input_tokens": 0,
+          "input_tokens": 15506,
+          "llm_calls": 1,
+          "output_tokens": 1482,
+          "prompt_utf8_bytes_sum": 52434,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 16988
+        },
+        "bear_researcher": {
+          "cached_input_tokens": 128,
+          "input_tokens": 18273,
+          "llm_calls": 1,
+          "output_tokens": 2965,
+          "prompt_utf8_bytes_sum": 64586,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 21238
+        },
+        "bull_researcher": {
+          "cached_input_tokens": 128,
+          "input_tokens": 14576,
+          "llm_calls": 1,
+          "output_tokens": 1847,
+          "prompt_utf8_bytes_sum": 48859,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 16423
+        },
+        "conservative_analyst": {
+          "cached_input_tokens": 0,
+          "input_tokens": 18439,
+          "llm_calls": 1,
+          "output_tokens": 1508,
+          "prompt_utf8_bytes_sum": 63995,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 19947
+        },
+        "fundamentals_analyst": {
+          "cached_input_tokens": 25344,
+          "input_tokens": 38274,
+          "llm_calls": 4,
+          "output_tokens": 7157,
+          "prompt_utf8_bytes_sum": 11036,
+          "reasoning_tokens": 0,
+          "tool_calls": 8,
+          "tool_message_utf8_bytes_sum": 74380,
+          "tool_result_utf8_bytes_sum": 31933,
+          "tool_rounds": 3,
+          "total_tokens": 45431
+        },
+        "market_analyst": {
+          "cached_input_tokens": 52224,
+          "input_tokens": 70524,
+          "llm_calls": 5,
+          "output_tokens": 6097,
+          "prompt_utf8_bytes_sum": 28327,
+          "reasoning_tokens": 0,
+          "tool_calls": 12,
+          "tool_message_utf8_bytes_sum": 106979,
+          "tool_result_utf8_bytes_sum": 37397,
+          "tool_rounds": 4,
+          "total_tokens": 76621
+        },
+        "neutral_analyst": {
+          "cached_input_tokens": 0,
+          "input_tokens": 21422,
+          "llm_calls": 1,
+          "output_tokens": 2047,
+          "prompt_utf8_bytes_sum": 76937,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 23469
+        },
+        "news_analyst": {
+          "cached_input_tokens": 6912,
+          "input_tokens": 7821,
+          "llm_calls": 3,
+          "output_tokens": 2001,
+          "prompt_utf8_bytes_sum": 8869,
+          "reasoning_tokens": 0,
+          "tool_calls": 9,
+          "tool_message_utf8_bytes_sum": 3268,
+          "tool_result_utf8_bytes_sum": 2954,
+          "tool_rounds": 2,
+          "total_tokens": 9822
+        },
+        "portfolio_manager": {
+          "cached_input_tokens": 640,
+          "input_tokens": 8028,
+          "llm_calls": 1,
+          "output_tokens": 2888,
+          "prompt_utf8_bytes_sum": 31225,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 10916
+        },
+        "research_manager": {
+          "cached_input_tokens": 768,
+          "input_tokens": 11054,
+          "llm_calls": 2,
+          "output_tokens": 2452,
+          "prompt_utf8_bytes_sum": 44044,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 13506
+        },
+        "sentiment_analyst": {
+          "cached_input_tokens": 1920,
+          "input_tokens": 2116,
+          "llm_calls": 1,
+          "output_tokens": 1485,
+          "prompt_utf8_bytes_sum": 5603,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 3601
+        },
+        "trader": {
+          "cached_input_tokens": 896,
+          "input_tokens": 13567,
+          "llm_calls": 2,
+          "output_tokens": 1294,
+          "prompt_utf8_bytes_sum": 45288,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 14861
+        }
+      },
+      "attempt": "attempt_01",
+      "attribution_complete": true,
+      "duplicate_tool_call_count": 1,
+      "duration_ms": 843741.484,
+      "event_counts": {
+        "llm_call_events": 23,
+        "node_context_events": 21,
+        "prefetch_events": 3,
+        "structured_events": 4,
+        "tool_call_events": 29,
+        "tool_round_events": 9
+      },
+      "failure_type": null,
+      "invalid_reason": null,
+      "llm_calls": 23,
+      "llm_error_count": 0,
+      "prefetched_data_calls": 3,
+      "reported_cached_input_tokens_sum": 88960,
+      "reported_input_tokens_sum": 239600,
+      "reported_output_tokens_sum": 33223,
+      "reported_reasoning_tokens_sum": 0,
+      "run_index": 3,
+      "run_status": "completed",
+      "telemetry_complete": true,
+      "telemetry_path": "runs/run_03/attempt_01/telemetry.json",
+      "telemetry_run_id": "run-9347aa7f6f364c6ca16383585249a823-1",
+      "ticker": "NVDA",
+      "tool_calls": 29,
+      "tool_rounds": 9,
+      "total_tokens": 272823,
+      "trade_date": "2026-09-23",
+      "usage_complete": true,
+      "usage_coverage_complete": true,
+      "valid": true
+    },
+    {
+      "agents": {
+        "aggressive_analyst": {
+          "cached_input_tokens": 0,
+          "input_tokens": 11980,
+          "llm_calls": 1,
+          "output_tokens": 1202,
+          "prompt_utf8_bytes_sum": 42749,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 13182
+        },
+        "bear_researcher": {
+          "cached_input_tokens": 128,
+          "input_tokens": 16361,
+          "llm_calls": 1,
+          "output_tokens": 2878,
+          "prompt_utf8_bytes_sum": 59220,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 19239
+        },
+        "bull_researcher": {
+          "cached_input_tokens": 128,
+          "input_tokens": 11412,
+          "llm_calls": 1,
+          "output_tokens": 2473,
+          "prompt_utf8_bytes_sum": 40509,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 13885
+        },
+        "conservative_analyst": {
+          "cached_input_tokens": 0,
+          "input_tokens": 14353,
+          "llm_calls": 1,
+          "output_tokens": 1540,
+          "prompt_utf8_bytes_sum": 53188,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 15893
+        },
+        "fundamentals_analyst": {
+          "cached_input_tokens": 3456,
+          "input_tokens": 16183,
+          "llm_calls": 2,
+          "output_tokens": 4152,
+          "prompt_utf8_bytes_sum": 5430,
+          "reasoning_tokens": 0,
+          "tool_calls": 7,
+          "tool_message_utf8_bytes_sum": 30491,
+          "tool_result_utf8_bytes_sum": 31552,
+          "tool_rounds": 1,
+          "total_tokens": 20335
+        },
+        "market_analyst": {
+          "cached_input_tokens": 12544,
+          "input_tokens": 27605,
+          "llm_calls": 3,
+          "output_tokens": 6007,
+          "prompt_utf8_bytes_sum": 16755,
+          "reasoning_tokens": 0,
+          "tool_calls": 14,
+          "tool_message_utf8_bytes_sum": 39492,
+          "tool_result_utf8_bytes_sum": 33324,
+          "tool_rounds": 2,
+          "total_tokens": 33612
+        },
+        "neutral_analyst": {
+          "cached_input_tokens": 0,
+          "input_tokens": 17400,
+          "llm_calls": 1,
+          "output_tokens": 1826,
+          "prompt_utf8_bytes_sum": 66554,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 19226
+        },
+        "news_analyst": {
+          "cached_input_tokens": 4224,
+          "input_tokens": 5122,
+          "llm_calls": 2,
+          "output_tokens": 2249,
+          "prompt_utf8_bytes_sum": 5754,
+          "reasoning_tokens": 0,
+          "tool_calls": 10,
+          "tool_message_utf8_bytes_sum": 2069,
+          "tool_result_utf8_bytes_sum": 3068,
+          "tool_rounds": 1,
+          "total_tokens": 7371
+        },
+        "portfolio_manager": {
+          "cached_input_tokens": 640,
+          "input_tokens": 7478,
+          "llm_calls": 1,
+          "output_tokens": 2583,
+          "prompt_utf8_bytes_sum": 29896,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 10061
+        },
+        "research_manager": {
+          "cached_input_tokens": 768,
+          "input_tokens": 12134,
+          "llm_calls": 2,
+          "output_tokens": 3002,
+          "prompt_utf8_bytes_sum": 46044,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 15136
+        },
+        "sentiment_analyst": {
+          "cached_input_tokens": 1920,
+          "input_tokens": 2116,
+          "llm_calls": 1,
+          "output_tokens": 1185,
+          "prompt_utf8_bytes_sum": 5603,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 3301
+        },
+        "trader": {
+          "cached_input_tokens": 640,
+          "input_tokens": 7141,
+          "llm_calls": 1,
+          "output_tokens": 493,
+          "prompt_utf8_bytes_sum": 23905,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 7634
+        }
+      },
+      "attempt": "attempt_01",
+      "attribution_complete": true,
+      "duplicate_tool_call_count": 0,
+      "duration_ms": 565046.898,
+      "event_counts": {
+        "llm_call_events": 17,
+        "node_context_events": 16,
+        "prefetch_events": 3,
+        "structured_events": 4,
+        "tool_call_events": 31,
+        "tool_round_events": 4
+      },
+      "failure_type": null,
+      "invalid_reason": null,
+      "llm_calls": 17,
+      "llm_error_count": 0,
+      "prefetched_data_calls": 3,
+      "reported_cached_input_tokens_sum": 24448,
+      "reported_input_tokens_sum": 149285,
+      "reported_output_tokens_sum": 29590,
+      "reported_reasoning_tokens_sum": 0,
+      "run_index": 4,
+      "run_status": "completed",
+      "telemetry_complete": true,
+      "telemetry_path": "runs/run_04/attempt_01/telemetry.json",
+      "telemetry_run_id": "run-2ca40b365ebd4f319c260a34a731f846-1",
+      "ticker": "NVDA",
+      "tool_calls": 31,
+      "tool_rounds": 4,
+      "total_tokens": 178875,
+      "trade_date": "2026-09-23",
+      "usage_complete": true,
+      "usage_coverage_complete": true,
+      "valid": true
+    },
+    {
+      "agents": {
+        "aggressive_analyst": {
+          "cached_input_tokens": 0,
+          "input_tokens": 13390,
+          "llm_calls": 1,
+          "output_tokens": 1306,
+          "prompt_utf8_bytes_sum": 47432,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 14696
+        },
+        "bear_researcher": {
+          "cached_input_tokens": 128,
+          "input_tokens": 16820,
+          "llm_calls": 1,
+          "output_tokens": 2912,
+          "prompt_utf8_bytes_sum": 61038,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 19732
+        },
+        "bull_researcher": {
+          "cached_input_tokens": 128,
+          "input_tokens": 12557,
+          "llm_calls": 1,
+          "output_tokens": 2129,
+          "prompt_utf8_bytes_sum": 44135,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 14686
+        },
+        "conservative_analyst": {
+          "cached_input_tokens": 0,
+          "input_tokens": 15971,
+          "llm_calls": 1,
+          "output_tokens": 1466,
+          "prompt_utf8_bytes_sum": 58417,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 17437
+        },
+        "fundamentals_analyst": {
+          "cached_input_tokens": 12032,
+          "input_tokens": 24825,
+          "llm_calls": 3,
+          "output_tokens": 6076,
+          "prompt_utf8_bytes_sum": 8262,
+          "reasoning_tokens": 0,
+          "tool_calls": 7,
+          "tool_message_utf8_bytes_sum": 46800,
+          "tool_result_utf8_bytes_sum": 31552,
+          "tool_rounds": 2,
+          "total_tokens": 30901
+        },
+        "market_analyst": {
+          "cached_input_tokens": 29312,
+          "input_tokens": 46261,
+          "llm_calls": 4,
+          "output_tokens": 5055,
+          "prompt_utf8_bytes_sum": 22499,
+          "reasoning_tokens": 0,
+          "tool_calls": 12,
+          "tool_message_utf8_bytes_sum": 68837,
+          "tool_result_utf8_bytes_sum": 35660,
+          "tool_rounds": 3,
+          "total_tokens": 51316
+        },
+        "neutral_analyst": {
+          "cached_input_tokens": 0,
+          "input_tokens": 18870,
+          "llm_calls": 1,
+          "output_tokens": 1664,
+          "prompt_utf8_bytes_sum": 70605,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 20534
+        },
+        "news_analyst": {
+          "cached_input_tokens": 8064,
+          "input_tokens": 9453,
+          "llm_calls": 3,
+          "output_tokens": 2533,
+          "prompt_utf8_bytes_sum": 8794,
+          "reasoning_tokens": 0,
+          "tool_calls": 15,
+          "tool_message_utf8_bytes_sum": 6369,
+          "tool_result_utf8_bytes_sum": 5078,
+          "tool_rounds": 2,
+          "total_tokens": 11986
+        },
+        "portfolio_manager": {
+          "cached_input_tokens": 640,
+          "input_tokens": 14140,
+          "llm_calls": 2,
+          "output_tokens": 2100,
+          "prompt_utf8_bytes_sum": 57906,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 16240
+        },
+        "research_manager": {
+          "cached_input_tokens": 768,
+          "input_tokens": 11514,
+          "llm_calls": 2,
+          "output_tokens": 2792,
+          "prompt_utf8_bytes_sum": 44364,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 14306
+        },
+        "sentiment_analyst": {
+          "cached_input_tokens": 1920,
+          "input_tokens": 2116,
+          "llm_calls": 1,
+          "output_tokens": 1343,
+          "prompt_utf8_bytes_sum": 5603,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 3459
+        },
+        "trader": {
+          "cached_input_tokens": 896,
+          "input_tokens": 11651,
+          "llm_calls": 2,
+          "output_tokens": 1261,
+          "prompt_utf8_bytes_sum": 41280,
+          "reasoning_tokens": 0,
+          "tool_calls": 0,
+          "tool_message_utf8_bytes_sum": 0,
+          "tool_result_utf8_bytes_sum": 0,
+          "tool_rounds": 0,
+          "total_tokens": 12912
+        }
+      },
+      "attempt": "attempt_01",
+      "attribution_complete": true,
+      "duplicate_tool_call_count": 0,
+      "duration_ms": 487277.329,
+      "event_counts": {
+        "llm_call_events": 22,
+        "node_context_events": 19,
+        "prefetch_events": 3,
+        "structured_events": 4,
+        "tool_call_events": 34,
+        "tool_round_events": 7
+      },
+      "failure_type": null,
+      "invalid_reason": null,
+      "llm_calls": 22,
+      "llm_error_count": 0,
+      "prefetched_data_calls": 3,
+      "reported_cached_input_tokens_sum": 53888,
+      "reported_input_tokens_sum": 197568,
+      "reported_output_tokens_sum": 30637,
+      "reported_reasoning_tokens_sum": 0,
+      "run_index": 5,
+      "run_status": "completed",
+      "telemetry_complete": true,
+      "telemetry_path": "runs/run_05/attempt_01/telemetry.json",
+      "telemetry_run_id": "run-49d0c57c73814829b623e3eff1cc6408-1",
+      "ticker": "NVDA",
+      "tool_calls": 34,
+      "tool_rounds": 7,
+      "total_tokens": 228205,
+      "trade_date": "2026-09-23",
+      "usage_complete": true,
+      "usage_coverage_complete": true,
+      "valid": true
+    }
+  ],
+  "schema_version": 1,
+  "ticker": "NVDA",
+  "trade_date": "2026-09-23"
+}
