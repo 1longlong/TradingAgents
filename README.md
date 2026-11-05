@@ -413,6 +413,12 @@ tradingagents-web --port 8000
 
 The server binds to `127.0.0.1` only and serves existing artifacts under the configured results directory. If static assets are missing, it starts in API-only mode and prints the build instruction. The WebUI does not accept provider keys; keys remain server-side.
 
+Playwright E2E currently targets Chromium only:
+
+```bash
+npm run e2e --prefix src/tradingagents_web/frontend
+```
+
 The permission configuration targets OpenCode 1.18.29. Configure the coding assistant's provider/model separately from TradingAgents runtime providers. Plan is read-only; use Docs to persist agreed requirements and architecture drafts, Build after plan/test approval, and Verify for independent checks. Docs can run the listed data validators. Draft requirements/design files do not block discussion, but they do not authorize dependent implementation until reviewed and approved; the schema gate must pass first.
 
 ```bash

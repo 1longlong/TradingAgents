@@ -171,9 +171,20 @@ The existing base branch does not contain these new checks. Their first introduc
   - `npm audit`: **0 vulnerabilities**.
   - Wheel includes the new Iteration-2 modules and built static assets.
 - Deviations / not run:
-  - Playwright E2E was not executed (browser binaries and a fake-backend harness are not configured).
+  - Playwright E2E was not executed at the time of implementation verification; the Chromium E2E follow-up is recorded below.
   - The real `GraphRunner` path was not exercised against a live model/data provider; automated tests use `FakeGraphRunner`. Live tests require separate credentials/cost authorization.
   - Clean install in a fresh environment, full mypy, Bandit, and pip-audit were not run.
   - Requirements registry statuses remain `draft`; no separate requirements-verification verdict is claimed.
 - Test-version delta: the approved test hash `de2193180ffd42f17e13f6adb9c2b223fb38de85663ca1432873c248db0cdfca` changed to `542fc400fb2541fb1f25220791dc5eb41873280dc940b132d48064b345660cb1` after two test-support fixes during implementation: `parse_sse` now flushes the final SSE frame, and `_collect_events` stops on a `data:` line instead of the preceding `event:` line. No assertion was weakened. This test delta requires review.
+- No commit, push, merge, deployment, or remote setting change was performed.
+
+## Iteration-2 Chromium E2E — 2026-11-06
+
+- User instruction: use Chromium only; do not use Firefox or WebKit.
+- Added `test/offline/web_e2e_server.py` (fake-backend FastAPI server with `E2ERunner`), Playwright `webServer` configuration, and `e2e/run.spec.ts` covering history, wizard → live → completed report, and cancel.
+- Fixed the live page's SSE handling: custom SSE event types were previously ignored by `onmessage`; the page now subscribes per event type and closes the stream on a terminal event.
+- Result: **4/4 Chromium E2E passed** in 7.9 s. Chromium uses the installed Google Chrome channel rather than a downloaded Playwright browser.
+- Supporting checks: frontend Vitest **10 passed**, typecheck/lint/build passed, `npm audit` **0 vulnerabilities**.
+- Not run by instruction: Firefox and WebKit E2E. The browser matrix remains partially verified.
+- Not run: real GraphRunner/live model/data path, clean install, full mypy/Bandit/pip-audit.
 - No commit, push, merge, deployment, or remote setting change was performed.

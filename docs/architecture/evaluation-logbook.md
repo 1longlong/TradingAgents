@@ -135,6 +135,16 @@ Classification:
 - **Not run:** Playwright browser execution, the real `GraphRunner` path against a live model/data provider, clean install, full mypy, Bandit, pip-audit, and live tests.
 - **Residual gaps:** the real analysis path has not been exercised with credentials; requirements statuses remain `draft`; no separate requirements-verification verdict has been issued.
 
+## 2026-11-06 — Chromium Playwright E2E
+
+- Added a fake-backend E2E server and Chromium Playwright coverage for history, wizard → live → completed report, and cancel.
+- Fixed the live page to subscribe to custom SSE event types; `onmessage` alone ignored `run.completed` and report events.
+- Result: **4/4 Chromium E2E passed** in 7.9 s.
+- Chromium uses the installed Google Chrome channel; no Playwright Chromium download is required.
+- Firefox and WebKit were **not used**, per the user's instruction. The browser matrix remains partially verified.
+- Frontend Vitest remains 10 passed; typecheck/lint/build pass; `npm audit` 0.
+- Not run: Firefox/WebKit E2E, real GraphRunner/live model path, clean install, full mypy/Bandit/pip-audit.
+
 ## Decisions and open items
 
 Resolved for documentation: framework, transport, frontend stack, UI library, package path, history source, key handling, cancellation policy, downloads, preferences.

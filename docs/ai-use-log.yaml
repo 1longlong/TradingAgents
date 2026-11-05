@@ -328,3 +328,33 @@ entries:
       - Not run: Playwright E2E, real model/data GraphRunner path, clean install, full mypy/Bandit/pip-audit, live tests.
       - The approved test hash changed from de2193180ffd42f17e13f6adb9c2b223fb38de85663ca1432873c248db0cdfca to 542fc400fb2541fb1f25220791dc5eb41873280dc940b132d48064b345660cb1 after two test-support fixes (SSE parser flush and terminal-event break); no assertion was weakened.
       - No git commit, push, merge, deployment, or remote setting change was performed.
+  - id: AI-20261106-004
+    date: '2026-11-06'
+    tool: OpenCode
+    model: deepseek-flash (DeepSeek V4.1 Flash 1017)
+    purpose: >-
+      Add and execute Chromium Playwright E2E coverage for the Iteration-2
+      WebUI, including the fake-backend server, wizard/live/report/cancel flows,
+      and the SSE custom-event fix.
+    source: Current user conversation; user approved Iteration-2 and requested Chromium E2E only
+    human_review: implementation authorized by user in conversation 2026-11-06; review pending
+    paths:
+      - src/tradingagents_web/frontend/playwright.config.ts
+      - src/tradingagents_web/frontend/package.json
+      - src/tradingagents_web/frontend/e2e/run.spec.ts
+      - src/tradingagents_web/frontend/src/pages/LiveRunPage.tsx
+      - test/offline/web_e2e_server.py
+      - README.md
+      - docs/review-memo.md
+      - docs/ai-use-log.yaml
+      - docs/architecture/evaluation-logbook.md
+      - docs/architecture/evaluation-table.md
+      - docs/architecture/invariants.md
+      - docs/architecture/trace-matrix.md
+      - docs/debt-register.md
+    notes:
+      - Chromium E2E: 4 passed; Firefox/WebKit were not used per the user's instruction.
+      - The live page now subscribes to each custom SSE event type and closes the stream on a terminal event.
+      - Frontend Vitest: 10 passed; typecheck/lint/build passed; npm audit 0.
+      - Not run: Firefox/WebKit E2E, real GraphRunner/live model path, clean install, full mypy/Bandit/pip-audit.
+      - No git commit, push, merge, deployment, or remote setting change was performed.

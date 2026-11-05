@@ -29,13 +29,36 @@ export function LiveRunPage() {
         source = new EventSource(runEventsUrl(runId, Number(snapshot.last_seq ?? 0)));
         source.onopen = () => store.getState().setConnection("live");
         source.onerror = () => store.getState().setConnection("reconnecting");
-        source.onmessage = (message) => {
+
+        const handleEvent = (message: MessageEvent) => {
           try {
-            store.getState().applyEvent(JSON.parse(message.data) as RunEvent);
+            const event = JSON.parse(message.data) as RunEvent;
+            store.getState().applyEvent(event);
+            if (["run.completed", "run.failed", "run.cancelled"].includes(event.type)) {
+              source?.close();
+              store.getState().setConnection("closed");
+            }
           } catch {
             // Ignore malformed frames; the next valid event continues the stream.
           }
         };
+
+        for (const eventType of [
+          "run.preparing",
+          "run.started",
+          "run.resumed",
+          "agent.status",
+          "message",
+          "tool_call",
+          "report.section",
+          "stats",
+          "run.completed",
+          "run.failed",
+          "run.cancelled",
+          "snapshot",
+        ]) {
+          source.addEventListener(eventType, handleEvent as EventListener);
+        }
       } catch {
         store.getState().applySnapshot({
           run_id: runId,

@@ -54,7 +54,8 @@ These are design judgments, not benchmark results. They do not replace EVAL-01 t
 | Wheel packaging | `pip wheel . --no-deps`; inspect archive | **new Iteration-2 modules and built static assets present** | 2026-11-06 |
 | Static/API smoke | TestClient with built static | **/, /history, /api/health, /api/history → 200** | 2026-11-06 |
 | Architecture experiments EVAL-01 to EVAL-10 | — | **Not run** | 2026-11-05 |
-| Playwright browser execution | — | **Not run**: browser binaries/harness not configured | 2026-11-06 |
+| Playwright Chromium E2E | `npm run e2e` | **4 passed** (history, wizard/live/report, cancel) | 2026-11-06 |
+| Playwright Firefox/WebKit | — | **Not run**: excluded by user instruction | 2026-11-06 |
 | Real GraphRunner/live model path | — | **Not run**: requires credentials/cost authorization | 2026-11-06 |
 
 The documentation validation above does not verify the architecture, the runtime, packaging, latency, browsers, or dependencies. It only checks the written registry.
