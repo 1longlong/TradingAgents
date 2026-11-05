@@ -72,16 +72,26 @@ class VendorRoutingTests(unittest.TestCase):
         self.assertEqual(result, "AV_DATA")
 
     def test_primary_error_is_logged_not_masked(self):
-        # #989: primary errors + fallback no-data -> NO_DATA, but the failure
-        # must be visible in logs (broken primary not hidden).
+        # #989: the primary failed and the fallback reported no data. The
+        # failure must be visible in logs (broken primary not hidden).
+        #
+        # CONTRACT (vendor-classification batch): core data raises. A plain
+        # ValueError is an unclassified programming error, so it is neither
+        # "temporarily unavailable" nor an absence -- and an absence from
+        # another vendor must not turn it into text the model can proceed on.
+        # #989's requirement -- the primary error is surfaced, not swallowed --
+        # is asserted below, on the raise and on the log.
         set_config({"data_vendors": {"core_stock_apis": "yfinance,alpha_vantage"}})
         with self._route({"yfinance": _raises(ValueError("boom")), "alpha_vantage": _no_data}), \
-                self.assertLogs("tradingagents.dataflows.interface", level="WARNING") as cm:
-            result = interface.route_to_vendor("get_stock_data", "AAPL", "2026-01-01", "2026-01-10")
-        self.assertIn("NO_DATA_AVAILABLE", result)
+                self.assertLogs("tradingagents.dataflows.interface", level="WARNING") as cm, \
+                self.assertRaisesRegex(ValueError, "boom"):
+            interface.route_to_vendor(
+                "get_stock_data", "AAPL", "2026-01-01", "2026-01-10"
+            )
         joined = "\n".join(cm.output)
         self.assertIn("boom", joined)            # the real error surfaced in logs
-        self.assertIn("yfinance", joined)
+        self.assertIn("yfinance", joined)        # attributable to the primary
+        self.assertIn("alpha_vantage", joined)   # the absence is not hidden either
 
     def test_unknown_configured_vendor_raises(self):
         set_config({"data_vendors": {"core_stock_apis": "bogus_vendor"}})

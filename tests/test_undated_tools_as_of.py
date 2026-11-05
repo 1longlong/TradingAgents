@@ -12,6 +12,7 @@ from unittest import mock
 
 import pandas as pd
 import pytest
+import requests
 
 from tradingagents.agents.utils import news_data_tools, prediction_markets_tools
 from tradingagents.dataflows import alpha_vantage_news, polymarket, y_finance
@@ -143,12 +144,21 @@ def test_an_indicator_that_could_not_be_read_is_not_shown_as_a_blank_value():
     table rendered a row per day with nothing after the colon: an analyst reads
     that as "no value on that day" rather than "could not be obtained"."""
     from tradingagents.dataflows import y_finance
-    from tradingagents.dataflows.errors import VendorError
+    from tradingagents.dataflows.errors import NoMarketDataError, VendorRateLimitError
 
     with mock.patch.object(y_finance.StockstatsUtils, "get_stock_stats",
-                           side_effect=RuntimeError("cache parse failed")), \
-            pytest.raises(VendorError):
+                           side_effect=requests.Timeout("slow")), \
+            pytest.raises(VendorRateLimitError):
         y_finance.get_stockstats_indicator("AAPL", "rsi", "2026-05-08")
+
+    # A cache/parse failure is not proof the vendor is down, and certainly not
+    # that the symbol has no value: it is raised with its own type, never
+    # reported as an absence.
+    with mock.patch.object(y_finance.StockstatsUtils, "get_stock_stats",
+                           side_effect=RuntimeError("cache parse failed")), \
+            pytest.raises(RuntimeError) as caught:
+        y_finance.get_stockstats_indicator("AAPL", "rsi", "2026-05-08")
+    assert not isinstance(caught.value, (NoMarketDataError, VendorRateLimitError))
 
 
 @pytest.mark.unit
@@ -164,13 +174,23 @@ def test_an_indicator_that_could_not_be_read_is_not_shown_as_a_blank_value():
 def test_a_yfinance_failure_is_a_vendor_error_not_a_report(func, args):
     """Returning the failure as text makes the router count it as an answer, so
     the chain stops and the analyst reads the error message as if it were data.
-    yfinance serves the default path, so this is the one that matters most."""
+    yfinance serves the default path, so this is the one that matters most.
+
+    A transport failure is the everyday case; an unclassified internal error is
+    still raised (never swallowed), but with its own type -- it is not proof
+    that the vendor is down."""
     from tradingagents.dataflows import y_finance
-    from tradingagents.dataflows.errors import VendorError
+    from tradingagents.dataflows.errors import VendorError, VendorRateLimitError
+
+    with mock.patch.object(y_finance.yf, "Ticker", side_effect=requests.Timeout("slow")), \
+            pytest.raises(VendorRateLimitError):
+        getattr(y_finance, func)(*args)
 
     with mock.patch.object(y_finance.yf, "Ticker", side_effect=RuntimeError("yahoo hiccup")), \
-            pytest.raises(VendorError):
+            pytest.raises(RuntimeError):
         getattr(y_finance, func)(*args)
+
+    assert issubclass(VendorRateLimitError, VendorError)
 
 
 @pytest.mark.unit
@@ -180,11 +200,15 @@ def test_a_yfinance_failure_is_a_vendor_error_not_a_report(func, args):
 ])
 def test_a_yfinance_news_failure_is_a_vendor_error_not_a_report(func, args):
     from tradingagents.dataflows import yfinance_news
-    from tradingagents.dataflows.errors import VendorError
+    from tradingagents.dataflows.errors import VendorRateLimitError
 
     target = "Ticker" if "global" not in func else "Search"
+    with mock.patch.object(yfinance_news.yf, target, side_effect=requests.Timeout("slow")), \
+            pytest.raises(VendorRateLimitError):
+        getattr(yfinance_news, func)(*args)
+
     with mock.patch.object(yfinance_news.yf, target, side_effect=RuntimeError("yahoo hiccup")), \
-            pytest.raises(VendorError):
+            pytest.raises(RuntimeError):
         getattr(yfinance_news, func)(*args)
 
 

@@ -11,6 +11,7 @@ from .errors import VendorError, VendorRateLimitError
 from .stockstats_utils import (
     StockstatsUtils,
     _assert_ohlcv_not_stale,
+    as_vendor_error,
     filter_financials_by_date,
     load_ohlcv,
     raise_for_empty,
@@ -19,9 +20,9 @@ from .stockstats_utils import (
 from .symbol_utils import NoMarketDataError, normalize_symbol
 from .utils import vendor_reachable
 
-_YAHOO_HOST = "https://query2.finance.yahoo.com"
-
 logger = logging.getLogger(__name__)
+
+_YAHOO_HOST = "https://query2.finance.yahoo.com"
 
 
 def get_YFin_data_online(
@@ -273,9 +274,14 @@ def get_stockstats_indicator(
         # An empty string renders as "2026-05-08: " in the indicator table, which
         # reads as no value that day rather than a read that failed. Raise so the
         # router can try the next vendor or report the series unavailable.
-        raise NoMarketDataError(
-            symbol, symbol, f"{indicator} could not be read for {curr_date}: {e}"
-        ) from e
+        # A vendor fault gets its typed error; an internal failure keeps its own
+        # type, because it is not evidence about the symbol.
+        error = as_vendor_error(e, "yfinance")
+        if error is None:
+            raise RuntimeError(
+                f"{indicator} could not be read for {curr_date}"
+            ) from e
+        raise error from e
 
     return str(indicator_value)
 
@@ -352,8 +358,15 @@ def get_fundamentals(
 
     except VendorError:
         raise
+    # A timeout or throttle is not evidence about the company, and neither is
+    # an internal KeyError/TypeError: the classifier names the vendor faults
+    # (unreachable, 429, 401/403, 400/404, 5xx) and every other exception keeps
+    # its own type, so a broken parser or a bug is not reported as "no data".
     except Exception as e:
-        raise NoMarketDataError(ticker, canonical, f"fundamentals unavailable: {e}") from e
+        error = as_vendor_error(e, "yfinance")
+        if error is None:
+            raise
+        raise error from e
 
 
 def get_balance_sheet(
@@ -389,7 +402,10 @@ def get_balance_sheet(
     except VendorError:
         raise
     except Exception as e:
-        raise NoMarketDataError(ticker, canonical, f"balance sheet unavailable: {e}") from e
+        error = as_vendor_error(e, "yfinance")
+        if error is None:
+            raise
+        raise error from e
 
 
 def get_cashflow(
@@ -425,7 +441,10 @@ def get_cashflow(
     except VendorError:
         raise
     except Exception as e:
-        raise NoMarketDataError(ticker, canonical, f"cash flow unavailable: {e}") from e
+        error = as_vendor_error(e, "yfinance")
+        if error is None:
+            raise
+        raise error from e
 
 
 def get_income_statement(
@@ -461,7 +480,10 @@ def get_income_statement(
     except VendorError:
         raise
     except Exception as e:
-        raise NoMarketDataError(ticker, canonical, f"income statement unavailable: {e}") from e
+        error = as_vendor_error(e, "yfinance")
+        if error is None:
+            raise
+        raise error from e
 
 
 # Rows are dated by the transaction, which is when the insider traded, not when
@@ -500,7 +522,8 @@ def get_insider_transactions(
         # so report it plainly rather than treating the symbol as invalid.
         if data is None or data.empty:
             if not vendor_reachable(_YAHOO_HOST):
-                raise VendorRateLimitError("Yahoo Finance is unreachable; insider filings were not retrieved")
+                explanation = "Yahoo Finance is unreachable; it did not answer a request"
+                raise VendorRateLimitError(f"{explanation}; insider filings were not retrieved")
             return f"No insider transactions reported for symbol '{canonical}'"
 
         if curr_date:
@@ -523,5 +546,10 @@ def get_insider_transactions(
 
         return header + csv_string
 
+    except VendorError:
+        raise  # throttle/unreachable keep their meaning; the router decides
     except Exception as e:
-        raise NoMarketDataError(ticker, canonical, f"insider transactions unavailable: {e}") from e
+        error = as_vendor_error(e, "yfinance")
+        if error is None:
+            raise
+        raise error from e

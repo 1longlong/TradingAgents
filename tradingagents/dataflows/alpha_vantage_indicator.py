@@ -215,10 +215,12 @@ def get_indicator(
         return result_str
 
     except VendorError:
-        # Unavailable vendor, throttle, or an indicator this vendor does not
-        # serve. Let it propagate so the router falls back to a vendor that can,
-        # instead of returning the failure as a successful-looking string.
+        # Unavailable vendor, throttle, a rejected key, or an indicator this
+        # vendor does not serve. Let it propagate so the router falls back to a
+        # vendor that can, instead of returning the failure as a successful string.
         raise
     except Exception as e:
+        # An internal failure (unparsable body, missing column, bug) is not
+        # evidence that the symbol has no data: keep its own type.
         logger.warning("Alpha Vantage indicator %s failed: %s", indicator, e)
-        raise NoMarketDataError(symbol, symbol, f"{indicator} unavailable: {e}") from e
+        raise

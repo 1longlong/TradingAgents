@@ -53,6 +53,11 @@ def get_scrubbed(url: str, *, params: dict, timeout: float, secret: str, passthr
     attached: no request or response (both hold the URL) and no exception chain,
     which is why this raises after the ``except`` block rather than inside it.
     Statuses in ``passthrough`` are returned for the caller to handle.
+
+    The rebuilt error keeps the HTTP status the original carried (on
+    ``.response`` and in its message prefix), so a caller can still tell a
+    throttle from a rejected key without the response—and therefore the URL
+    with the key—being re-attached.
     """
     try:
         response = requests.get(url, params=params, timeout=timeout)
@@ -60,7 +65,16 @@ def get_scrubbed(url: str, *, params: dict, timeout: float, secret: str, passthr
             response.raise_for_status()
         return response
     except requests.RequestException as exc:
-        error = type(exc)(str(exc).replace(secret, "***")) if secret else exc
+        if not secret:
+            raise
+        error = type(exc)(str(exc).replace(secret, "***"))
+        original = getattr(exc, "response", None)
+        status = getattr(original, "status_code", None)
+        if isinstance(status, int):
+            # A bare status stub, not the live response; the rebuilt error's
+            # own args already carry the status, and the URL is already scrubbed.
+            error.response = requests.models.Response()
+            error.response.status_code = status
     raise error
 
 

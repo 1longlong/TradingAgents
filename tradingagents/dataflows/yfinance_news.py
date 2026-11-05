@@ -8,8 +8,8 @@ from dateutil.relativedelta import relativedelta
 
 from .config import get_config
 from .date_window import coverage_gap, in_window
-from .errors import NoMarketDataError
-from .stockstats_utils import yf_retry
+from .errors import VendorError
+from .stockstats_utils import as_vendor_error, yf_retry
 from .symbol_utils import normalize_symbol
 
 
@@ -114,12 +114,26 @@ def get_news_yfinance(
                 (_extract_article_data(a)["pub_date"] for a in news),
                 start_date, end_date, "Yahoo Finance news", f"news for {ticker}{resolved}",
             )
-            return gap or f"No news found for {ticker}{resolved} between {start_date} and {end_date}"
+            if gap:
+                # The feed never observed this window, which is not evidence the
+                # symbol has no news. The placeholder says "could not answer",
+                # so it is already the right report: never an absence (#1126),
+                # and never a fabricated "No news found".
+                return gap
+            return f"No news found for {ticker}{resolved} between {start_date} and {end_date}"
 
         return f"## {ticker}{resolved} News, from {start_date} to {end_date}:\n\n{news_str}"
 
+    except VendorError:
+        raise  # a typed absence/throttle already means the right thing
     except Exception as e:
-        raise NoMarketDataError(ticker, ticker, f"news unavailable: {e}") from e
+        # Only a vendor fault (throttle, auth, refusal, transport) is re-labelled;
+        # an internal KeyError/TypeError or a parse failure keeps its type, so it
+        # is never reported as "this symbol has no news".
+        error = as_vendor_error(e, "yfinance")
+        if error is None:
+            raise
+        raise error from e
 
 
 def get_global_news_yfinance(
@@ -191,10 +205,17 @@ def get_global_news_yfinance(
         if not news_str:
             # Results merge several fuzzy searches, so their timestamps prove no
             # continuous coverage; judge the window against the present only.
-            gap = coverage_gap((), start_date, curr_date, "Yahoo Finance global news", "market news")
+            gap = coverage_gap(
+                (), start_date, curr_date, "Yahoo Finance global news", "market news"
+            )
             return gap or f"No global news found between {start_date} and {curr_date}"
 
         return f"## Global Market News, from {start_date} to {curr_date}:\n\n{news_str}"
 
+    except VendorError:
+        raise
     except Exception as e:
-        raise NoMarketDataError("global news", "global news", f"unavailable: {e}") from e
+        error = as_vendor_error(e, "yfinance")
+        if error is None:
+            raise
+        raise error from e

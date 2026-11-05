@@ -4,8 +4,13 @@ from datetime import datetime
 from io import StringIO
 
 import pandas as pd
+from requests.exceptions import RequestException
 
-from .errors import VendorNotConfiguredError, VendorRateLimitError
+from .errors import (
+    VendorAuthenticationError,
+    VendorNotConfiguredError,
+    VendorRateLimitError,
+)
 from .utils import get_scrubbed
 
 API_BASE_URL = "https://www.alphavantage.co/query"
@@ -64,6 +69,34 @@ class AlphaVantageRateLimitError(VendorRateLimitError):
     """Raised when the Alpha Vantage API rate limit is exceeded."""
     pass
 
+class AlphaVantageAuthenticationError(VendorAuthenticationError):
+    """Raised when Alpha Vantage rejects the supplied API key (HTTP 401/403)."""
+    pass
+
+def _raise_for_http_status(exc) -> None:
+    """Turn a scrubbed HTTP error into the vendor error its status means.
+
+    ``get_scrubbed`` detaches the response (it holds the URL with the key) but
+    keeps the status in ``response.status_code`` and in the message prefix, so
+    this reads the status, never the URL.
+    """
+    response = getattr(exc, "response", None)
+    status = getattr(response, "status_code", None)
+    if not isinstance(status, int):
+        for arg in getattr(exc, "args", ()):
+            if isinstance(arg, str) and len(arg) > 3 and arg[:3].isdigit():
+                status = int(arg[:3])
+                break
+    if status in (401, 403):
+        raise AlphaVantageAuthenticationError(
+            f"Alpha Vantage rejected the configured API key (HTTP {status})."
+        ) from None
+    if status == 429:
+        raise AlphaVantageRateLimitError(
+            "Alpha Vantage rate limit exceeded (HTTP 429)."
+        ) from None
+    # Any other status keeps its own type: not proven transient, not an absence.
+
 def _make_api_request(function_name: str, params: dict) -> dict | str:
     """Helper function to make API requests and handle responses.
 
@@ -89,9 +122,13 @@ def _make_api_request(function_name: str, params: dict) -> dict | str:
         # Remove entitlement if it's None or empty
         api_params.pop("entitlement", None)
 
-    response = get_scrubbed(
-        API_BASE_URL, params=api_params, timeout=REQUEST_TIMEOUT, secret=api_key
-    )
+    try:
+        response = get_scrubbed(
+            API_BASE_URL, params=api_params, timeout=REQUEST_TIMEOUT, secret=api_key
+        )
+    except RequestException as exc:
+        _raise_for_http_status(exc)
+        raise
 
     response_text = response.text
 
