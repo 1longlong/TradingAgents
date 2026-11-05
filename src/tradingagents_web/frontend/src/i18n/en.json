@@ -1,0 +1,38 @@
+{
+  "app": {
+    "title": "TradingAgents",
+    "subtitle": "Read-only history and reports"
+  },
+  "nav": {
+    "history": "History",
+    "language": "Language"
+  },
+  "history": {
+    "title": "Run history",
+    "empty": "No runs yet.",
+    "loading": "Loading history...",
+    "error": "Could not load history.",
+    "ticker": "Ticker",
+    "date": "Date",
+    "source": "Source",
+    "status": "Status",
+    "rating": "Rating",
+    "actions": "Actions",
+    "open": "Open"
+  },
+  "detail": {
+    "title": "Report detail",
+    "sections": "Sections",
+    "download": "Download",
+    "complete": "Complete report",
+    "archive": "Archive",
+    "back": "Back to history",
+    "missing": "Artifact not found."
+  },
+  "common": {
+    "refresh": "Refresh",
+    "review": "Review",
+    "completed": "Completed",
+    "partial": "Partial"
+  }
+}

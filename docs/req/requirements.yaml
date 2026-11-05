@@ -1,0 +1,1675 @@
+# TradingAgents WebUI requirements registry.
+# Status: draft for human review. No requirement is approved or implemented.
+# Sources of truth: AGENTS.md, Prompt.md, docs/code-governance/*, and the
+# confirmed requirements discussion of 2026-11-05.
+schema_version: '1.0'
+project:
+  name: TradingAgents WebUI
+  purpose: >-
+    Add a local, single-user, single-active-run web presentation layer over the
+    existing TradingAgents analysis, reporting, memory, checkpoint, and backtest
+    capabilities without changing the core or CLI behavior.
+  baseline_ref: release
+  baseline_commit: 2d17df8da1536c121e4d7395ac5a5dcec9e96d6f
+  scope:
+    - >-
+      An eight-step analysis parameter wizard equivalent to the CLI, with
+      server-side API-key status in place of interactive key entry.
+    - >-
+      Live run progress, messages, tool calls, current report, and footer
+      statistics equivalent to the CLI live view.
+    - >-
+      Checkpoint controls, portfolio JSON input, cancellation, and a single
+      active run.
+    - >-
+      Completion summary, the complete I-V report, fixed-directory persistence,
+      and browser downloads.
+    - >-
+      Read-only history over existing artifacts, without a new database or
+      retention policy.
+    - >-
+      Backtest launch and result views equivalent to the CLI backtest command.
+    - Chinese/English interface switching.
+    - Local loopback deployment without authentication for one user.
+  out_of_scope:
+    - Trading execution, order placement, or position changes.
+    - New data sources, model providers, agents, prompts, or rating rules.
+    - Multi-user, multi-tenant, billing, or authentication.
+    - New databases, message queues, cloud deployment, or container orchestration.
+    - PDF or Word export, and native mobile applications.
+    - Multi-ticker batch analysis outside the existing backtest capability.
+    - Cross-run comparison, scoring dashboards, or backtest charts.
+    - Changes to CLI arguments, defaults, output, exit codes, or core behavior.
+
+requirements:
+  - id: REQ-WEB-001
+    type: functional
+    statement: >-
+      The WebUI shall expose the complete eight-step analysis selection flow:
+      ticker, analysis date, output language, analyst selection, research depth,
+      LLM provider and endpoint, quick/deep models with provider thinking
+      parameters, and last-run preferences, with server-side API-key status in
+      place of interactive key entry.
+    priority: must
+    priority_tradeoff: >-
+      A complete wizard is the only way to guarantee that every analysis input
+      visible in the CLI is also visible in the WebUI. The cost is a longer form;
+      prefill, environment detection, and clear defaults mitigate it. Skipping a
+      step would hide a decision that changes analysis behavior.
+    origin: extension
+    sources:
+      - kind: human_decision
+        reference: Requirements discussion in the current session, 2026-11-05
+        locator: Batches 1-4 and final confirmation
+        rationale: The user confirmed a complete eight-step wizard aligned with the TUI.
+      - kind: repository
+        reference: src/cli/main.py
+        locator: _prompt_selections(), get_user_selections(), _build_run_config()
+        rationale: Defines the current eight-step selection flow and configuration assembly.
+      - kind: repository
+        reference: src/cli/utils.py
+        locator: get_ticker(), get_analysis_date(), select_analysts(), select_research_depth(), select_llm_provider(), _select_model()
+        rationale: Defines the validation, provider, model, and language choices to expose.
+    status: draft
+    architecture_refs:
+      - architecture-blueprint.md#w1-entry-and-parameter-surface
+      - architecture-blueprint.md#run-request
+    invariant_refs:
+      - INV-WEB-005
+    owner: webui
+    depends_on: []
+    fit_criteria:
+      - id: FC-WEB-001-01
+        metric: wizard_steps_rendered
+        unit: steps
+        comparison: eq
+        threshold: 8
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_wizard.py
+          evidence:
+            - test/offline/test_web_wizard.py::test_wizard_renders_all_eight_steps
+      - id: FC-WEB-001-02
+        metric: parameter_validation_violations
+        unit: violations
+        comparison: eq
+        threshold: 0
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_wizard.py
+          evidence:
+            - test/offline/test_web_wizard.py::test_invalid_ticker_is_rejected
+            - test/offline/test_web_wizard.py::test_future_date_is_rejected
+            - test/offline/test_web_wizard.py::test_empty_analyst_selection_is_rejected
+      - id: FC-WEB-001-03
+        metric: crypto_fundamentals_options
+        unit: options
+        comparison: eq
+        threshold: 0
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_wizard.py
+          evidence:
+            - test/offline/test_web_wizard.py::test_crypto_hides_fundamentals
+      - id: FC-WEB-001-04
+        metric: environment_source_labels
+        unit: labels
+        comparison: gte
+        threshold: 1
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_wizard.py
+          evidence:
+            - test/offline/test_web_wizard.py::test_environment_locked_values_show_source
+
+  - id: REQ-WEB-002
+    type: functional
+    statement: >-
+      The WebUI shall display live run progress equivalent to the TUI: team and
+      agent statuses, timestamped messages, tool calls, the current report
+      section, and footer statistics.
+    priority: must
+    priority_tradeoff: >-
+      Live visibility is the core interactive value of the existing TUI. Without
+      it, a long analysis becomes an opaque request. The cost is an event
+      pipeline and buffering; a bounded buffer keeps memory predictable.
+    origin: extension
+    sources:
+      - kind: human_decision
+        reference: Requirements discussion in the current session, 2026-11-05
+        locator: Batch 1 result-consumption selection and final confirmation
+        rationale: The user selected live progress and messages as required.
+      - kind: repository
+        reference: src/cli/main.py
+        locator: update_display(), MessageBuffer, update_analyst_statuses()
+        rationale: Defines the progress table, message buffer, report panel, and footer statistics.
+      - kind: repository
+        reference: src/cli/stats_handler.py
+        locator: StatsCallbackHandler
+        rationale: Defines the LLM, tool, and token statistics available to the live view.
+    status: draft
+    architecture_refs:
+      - architecture-blueprint.md#w2-run-coordinator
+      - architecture-blueprint.md#w4-event-projection
+    invariant_refs: []
+    owner: webui
+    depends_on:
+      - REQ-WEB-001
+    fit_criteria:
+      - id: FC-WEB-002-01
+        metric: progress_status_values
+        unit: states
+        comparison: eq
+        threshold: 3
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_events.py
+          evidence:
+            - test/offline/test_web_events.py::test_progress_states_are_pending_in_progress_completed
+      - id: FC-WEB-002-02
+        metric: statistics_fields
+        unit: fields
+        comparison: eq
+        threshold: 6
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_events.py
+          evidence:
+            - test/offline/test_web_events.py::test_footer_statistics_match_cli_fields
+      - id: FC-WEB-002-03
+        metric: report_section_updates
+        unit: events
+        comparison: gte
+        threshold: 1
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_events.py
+          evidence:
+            - test/offline/test_web_events.py::test_report_section_events_are_published
+      - id: FC-WEB-002-04
+        metric: tool_call_events
+        unit: events
+        comparison: gte
+        threshold: 1
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_events.py
+          evidence:
+            - test/offline/test_web_events.py::test_tool_calls_are_published
+
+  - id: REQ-WEB-003
+    type: functional
+    statement: >-
+      The WebUI shall provide a checkpoint enable/disable control, a clear-all
+      checkpoints action, and checkpoint status display, matching the CLI
+      checkpoint flags.
+    priority: must
+    priority_tradeoff: >-
+      Checkpointing is the existing recovery mechanism for long runs. Exposing
+      it is required for parity; the cost is careful destructive-action
+      confirmation. Omitting it would make crash recovery CLI-only.
+    origin: extension
+    sources:
+      - kind: human_decision
+        reference: Requirements discussion in the current session, 2026-11-05
+        locator: Batch 2 run-control selection
+        rationale: The user selected checkpoint toggle and clear-all controls.
+      - kind: repository
+        reference: src/cli/main.py
+        locator: analyze(), _build_run_config(), _announce_checkpoint_state()
+        rationale: Defines --checkpoint, --no-checkpoint, and --clear-checkpoints behavior.
+      - kind: repository
+        reference: src/tradingagents/graph/checkpointer.py
+        locator: clear_all_checkpoints(), has_checkpoint(), checkpoint_step()
+        rationale: Defines the checkpoint storage and clearing semantics.
+    status: draft
+    architecture_refs:
+      - architecture-blueprint.md#w2-run-coordinator
+      - architecture-blueprint.md#run-state
+    invariant_refs:
+      - INV-WEB-009
+    owner: webui
+    depends_on:
+      - REQ-WEB-001
+    fit_criteria:
+      - id: FC-WEB-003-01
+        metric: checkpoint_controls
+        unit: controls
+        comparison: eq
+        threshold: 3
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_runs.py
+          evidence:
+            - test/offline/test_web_runs.py::test_checkpoint_controls_are_present
+      - id: FC-WEB-003-02
+        metric: clear_confirmation_violations
+        unit: violations
+        comparison: eq
+        threshold: 0
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_runs.py
+          evidence:
+            - test/offline/test_web_runs.py::test_clear_checkpoints_requires_confirmation
+      - id: FC-WEB-003-03
+        metric: clear_during_active_run_allowed
+        unit: occurrences
+        comparison: eq
+        threshold: 0
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_runs.py
+          evidence:
+            - test/offline/test_web_runs.py::test_clear_checkpoints_disabled_while_running
+
+  - id: REQ-WEB-004
+    type: functional
+    statement: >-
+      The WebUI shall accept portfolio JSON by pasted text or uploaded file,
+      validate it before a run starts, and preserve the distinction between an
+      omitted portfolio, an empty book, and a populated book.
+    priority: must
+    priority_tradeoff: >-
+      Portfolio context changes how the trader, risk analysts, and portfolio
+      manager size a decision. Accepting it through the browser is required for
+      CLI parity; the input must not become a server-path capability.
+    origin: extension
+    sources:
+      - kind: human_decision
+        reference: Requirements discussion in the current session, 2026-11-05
+        locator: Batch 2 portfolio selection and final confirmation
+        rationale: The user selected pasted and uploaded portfolio input.
+      - kind: repository
+        reference: src/tradingagents/portfolio.py
+        locator: PortfolioContext, load_portfolio()
+        rationale: Defines validation, rendering, and fingerprinting semantics.
+      - kind: repository
+        reference: src/cli/main.py
+        locator: analyze(), run_analysis()
+        rationale: Defines the existing --portfolio behavior and three-state semantics.
+    status: draft
+    architecture_refs:
+      - architecture-blueprint.md#w1-entry-and-parameter-surface
+      - architecture-blueprint.md#run-request
+    invariant_refs:
+      - INV-WEB-006
+    owner: webui
+    depends_on:
+      - REQ-WEB-001
+    fit_criteria:
+      - id: FC-WEB-004-01
+        metric: portfolio_input_modes
+        unit: modes
+        comparison: eq
+        threshold: 2
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_portfolio.py
+          evidence:
+            - test/offline/test_web_portfolio.py::test_paste_and_upload_are_supported
+      - id: FC-WEB-004-02
+        metric: portfolio_state_violations
+        unit: violations
+        comparison: eq
+        threshold: 0
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_portfolio.py
+          evidence:
+            - test/offline/test_web_portfolio.py::test_three_portfolio_states_remain_distinct
+      - id: FC-WEB-004-03
+        metric: invalid_portfolio_runs_started
+        unit: runs
+        comparison: eq
+        threshold: 0
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_portfolio.py
+          evidence:
+            - test/offline/test_web_portfolio.py::test_invalid_portfolio_never_starts_a_run
+
+  - id: REQ-WEB-005
+    type: functional
+    statement: >-
+      The WebUI shall allow cancelling an active analysis with CLI-equivalent
+      semantics: stop execution, write no decision-log entry, clear no
+      checkpoint, preserve artifacts already written, and leave the existing
+      checkpoint resumable when checkpointing was enabled.
+    priority: must
+    priority_tradeoff: >-
+      Long analyses need a stop control, and a stop that silently records a
+      decision would corrupt the memory log. The cost is a cancellation state
+      machine and explicit partial-artifact handling.
+    origin: extension
+    sources:
+      - kind: human_decision
+        reference: Requirements discussion in the current session, 2026-11-05
+        locator: Batch 2 cancellation selection and Batch 4 cancellation confirmation
+        rationale: The user authorized cancellation with CLI-equivalent semantics.
+      - kind: repository
+        reference: src/cli/main.py
+        locator: run_analysis() stream loop, record_decision(), clear_checkpoint_on_success()
+        rationale: Defines what the CLI does and does not do when interrupted.
+    status: draft
+    architecture_refs:
+      - architecture-blueprint.md#w2-run-coordinator
+      - architecture-blueprint.md#cancellation
+    invariant_refs:
+      - INV-WEB-010
+    owner: webui
+    depends_on:
+      - REQ-WEB-001
+    fit_criteria:
+      - id: FC-WEB-005-01
+        metric: decisions_recorded_on_cancel
+        unit: entries
+        comparison: eq
+        threshold: 0
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_runs.py
+          evidence:
+            - test/offline/test_web_runs.py::test_cancel_writes_no_decision
+      - id: FC-WEB-005-02
+        metric: checkpoints_cleared_on_cancel
+        unit: checkpoints
+        comparison: eq
+        threshold: 0
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_runs.py
+          evidence:
+            - test/offline/test_web_runs.py::test_cancel_preserves_checkpoint
+      - id: FC-WEB-005-03
+        metric: partial_artifacts_preserved
+        unit: occurrences
+        comparison: eq
+        threshold: 1
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_runs.py
+          evidence:
+            - test/offline/test_web_runs.py::test_cancel_keeps_partial_reports
+      - id: FC-WEB-005-04
+        metric: cancelled_run_state
+        unit: state
+        comparison: eq
+        threshold: cancelled
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_runs.py
+          evidence:
+            - test/offline/test_web_runs.py::test_cancelled_run_is_reported_as_cancelled
+
+  - id: REQ-WEB-006
+    type: functional
+    statement: >-
+      The WebUI shall admit at most one active analysis or backtest run and
+      reject a second submission with a conflict error that identifies the
+      active run.
+    priority: must
+    priority_tradeoff: >-
+      The core uses a global configuration singleton and a read-modify-write
+      decision log. A single active run is the smallest safe synchronization
+      mechanism. The cost is no parallel analyses; that is an accepted scope
+      boundary for this iteration.
+    origin: extension
+    sources:
+      - kind: human_decision
+        reference: Requirements discussion in the current session, 2026-11-05
+        locator: Batch 3 concurrency selection
+        rationale: The user selected one active run at a time.
+      - kind: repository
+        reference: src/tradingagents/dataflows/config.py
+        locator: _config, set_config()
+        rationale: Shows that configuration is process-global and shared by graph instances.
+      - kind: repository
+        reference: src/tradingagents/agents/utils/memory.py
+        locator: update_with_outcome(), batch_update_with_outcomes()
+        rationale: Shows read-modify-write behavior that concurrent runs would race.
+    status: draft
+    architecture_refs:
+      - architecture-blueprint.md#w2-run-coordinator
+      - architecture-blueprint.md#run-state
+    invariant_refs:
+      - INV-WEB-009
+    owner: webui
+    depends_on:
+      - REQ-WEB-001
+    fit_criteria:
+      - id: FC-WEB-006-01
+        metric: concurrent_run_admissions
+        unit: runs
+        comparison: eq
+        threshold: 0
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_runs.py
+          evidence:
+            - test/offline/test_web_runs.py::test_second_run_is_rejected
+      - id: FC-WEB-006-02
+        metric: conflict_responses
+        unit: responses
+        comparison: eq
+        threshold: 1
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_runs.py
+          evidence:
+            - test/offline/test_web_runs.py::test_conflict_identifies_active_run
+
+  - id: REQ-WEB-007
+    type: functional
+    statement: >-
+      The WebUI shall continue an active run when the browser disconnects and
+      allow the browser to reattach within the lifetime of the server process;
+      after a process restart the active run is not recovered.
+    priority: must
+    priority_tradeoff: >-
+      Analyses can run for minutes. Tying them to a browser tab would waste
+      provider spend. The cost is an in-memory event buffer and a snapshot path;
+      cross-process recovery is deliberately excluded to avoid new storage.
+    origin: extension
+    sources:
+      - kind: human_decision
+        reference: Requirements discussion in the current session, 2026-11-05
+        locator: Batch 3 reconnect selection and Batch 4 lifetime confirmation
+        rationale: The user selected background continuation with process-lifetime reattachment.
+      - kind: repository
+        reference: src/cli/main.py
+        locator: run_analysis() stream loop
+        rationale: Shows that the run itself does not depend on a browser connection.
+    status: draft
+    architecture_refs:
+      - architecture-blueprint.md#w2-run-coordinator
+      - architecture-blueprint.md#reattachment
+      - architecture-blueprint.md#w4-event-projection
+    invariant_refs: []
+    owner: webui
+    depends_on:
+      - REQ-WEB-001
+    fit_criteria:
+      - id: FC-WEB-007-01
+        metric: run_survives_disconnect
+        unit: boolean
+        comparison: eq
+        threshold: true
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_events.py
+          evidence:
+            - test/offline/test_web_events.py::test_run_survives_client_disconnect
+      - id: FC-WEB-007-02
+        metric: reattachment_successes
+        unit: sessions
+        comparison: eq
+        threshold: 1
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_events.py
+          evidence:
+            - test/offline/test_web_events.py::test_client_reattaches_from_last_sequence
+      - id: FC-WEB-007-03
+        metric: cross_process_reattachments
+        unit: sessions
+        comparison: eq
+        threshold: 0
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_events.py
+          evidence:
+            - test/offline/test_web_events.py::test_restart_does_not_recover_active_run
+
+  - id: REQ-WEB-008
+    type: functional
+    statement: >-
+      The WebUI shall present the completion summary and the complete I-V
+      report, including the REVIEW warning when the rating is unreadable and
+      the analyst wall-time summary.
+    priority: must
+    priority_tradeoff: >-
+      The report is the primary artifact of a run. The completion state,
+      REVIEW warning, and wall times are the difference between a usable result
+      and an opaque one. The cost is report rendering and section mapping.
+    origin: extension
+    sources:
+      - kind: human_decision
+        reference: Requirements discussion in the current session, 2026-11-05
+        locator: Batch 1 result-consumption selection
+        rationale: The user selected the complete I-V report view.
+      - kind: repository
+        reference: src/cli/main.py
+        locator: display_complete_report(), run_analysis() completion block
+        rationale: Defines the five report sections, REVIEW warning, and wall-time summary.
+      - kind: repository
+        reference: src/tradingagents/reporting.py
+        locator: write_report_tree()
+        rationale: Defines the shared report layout and complete-report writer.
+    status: draft
+    architecture_refs:
+      - architecture-blueprint.md#w5-artifact-read-model
+      - architecture-blueprint.md#report-artifact-contract
+      - architecture-blueprint.md#w8-frontend
+    invariant_refs:
+      - INV-WEB-007
+    owner: webui
+    depends_on:
+      - REQ-WEB-002
+    fit_criteria:
+      - id: FC-WEB-008-01
+        metric: report_sections_rendered
+        unit: sections
+        comparison: eq
+        threshold: 5
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_reporting.py
+          evidence:
+            - test/offline/test_web_reporting.py::test_all_five_report_sections_render
+      - id: FC-WEB-008-02
+        metric: review_warning_shown
+        unit: boolean
+        comparison: eq
+        threshold: true
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_reporting.py
+          evidence:
+            - test/offline/test_web_reporting.py::test_review_warning_is_shown
+      - id: FC-WEB-008-03
+        metric: wall_time_entries
+        unit: entries
+        comparison: gte
+        threshold: 1
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_reporting.py
+          evidence:
+            - test/offline/test_web_reporting.py::test_wall_time_summary_is_present
+
+  - id: REQ-WEB-009
+    type: functional
+    statement: >-
+      The WebUI shall persist completed runs using the existing results directory
+      layout and offer browser downloads of the complete report and its existing
+      report artifacts, without accepting a server path from the browser.
+    priority: must
+    priority_tradeoff: >-
+      Reusing the existing layout keeps CLI and web artifacts interchangeable.
+      Replacing it would create two report formats. The cost is server-side
+      packaging for downloads and strict identifier validation.
+    origin: extension
+    sources:
+      - kind: human_decision
+        reference: Requirements discussion in the current session, 2026-11-05
+        locator: Batch 2 save/export selection
+        rationale: The user selected a fixed server directory plus browser download.
+      - kind: repository
+        reference: src/cli/main.py
+        locator: _run_directory(), save_report_to_disk(), run_analysis() save prompt
+        rationale: Defines the existing run directory and save-report behavior.
+      - kind: repository
+        reference: src/tradingagents/reporting.py
+        locator: write_report_tree()
+        rationale: Defines the existing report tree to reuse.
+    status: draft
+    architecture_refs:
+      - architecture-blueprint.md#w5-artifact-read-model
+      - architecture-blueprint.md#report-artifact-contract
+      - architecture-blueprint.md#w7-security-boundary
+    invariant_refs:
+      - INV-WEB-004
+    owner: webui
+    depends_on:
+      - REQ-WEB-008
+    fit_criteria:
+      - id: FC-WEB-009-01
+        metric: run_directory_layout_violations
+        unit: violations
+        comparison: eq
+        threshold: 0
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_reporting.py
+          evidence:
+            - test/offline/test_web_reporting.py::test_run_directory_layout_matches_cli
+      - id: FC-WEB-009-02
+        metric: download_formats
+        unit: formats
+        comparison: gte
+        threshold: 1
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_reporting.py
+          evidence:
+            - test/offline/test_web_reporting.py::test_complete_report_and_artifact_downloads
+      - id: FC-WEB-009-03
+        metric: artifacts_created
+        unit: artifacts
+        comparison: gte
+        threshold: 2
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_reporting.py
+          evidence:
+            - test/offline/test_web_reporting.py::test_message_log_and_section_reports_are_written
+
+  - id: REQ-WEB-010
+    type: functional
+    statement: >-
+      The WebUI shall provide read-only history over existing run directories,
+      saved report trees, backtest runs, and the decision memory, without
+      creating a new index or mutating any artifact.
+    priority: must
+    priority_tradeoff: >-
+      A read-only projection adds discoverability without expanding storage or
+      retention scope. A new index database would be faster but would become a
+      second source of truth and require a separate storage approval.
+    origin: extension
+    sources:
+      - kind: human_decision
+        reference: Requirements discussion in the current session, 2026-11-05
+        locator: Batch 1 history selection and Batch 2 history-source selection
+        rationale: The user selected history and a read-only projection over existing artifacts.
+      - kind: repository
+        reference: src/cli/main.py
+        locator: _run_directory(), run_analysis() report writes
+        rationale: Defines the run directory and saved report locations that history must read.
+      - kind: repository
+        reference: src/tradingagents/backtest.py
+        locator: run_backtest()
+        rationale: Defines the isolated backtest run directory and log.
+    status: draft
+    architecture_refs:
+      - architecture-blueprint.md#w5-artifact-read-model
+      - architecture-blueprint.md#history-contract
+    invariant_refs:
+      - INV-WEB-011
+    owner: webui
+    depends_on:
+      - REQ-WEB-009
+    fit_criteria:
+      - id: FC-WEB-010-01
+        metric: history_sources
+        unit: sources
+        comparison: gte
+        threshold: 3
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_history.py
+          evidence:
+            - test/offline/test_web_history.py::test_history_reads_run_saved_and_backtest_artifacts
+      - id: FC-WEB-010-02
+        metric: history_mutations
+        unit: mutations
+        comparison: eq
+        threshold: 0
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_history.py
+          evidence:
+            - test/offline/test_web_history.py::test_history_endpoints_are_read_only
+      - id: FC-WEB-010-03
+        metric: new_storage_tables
+        unit: tables
+        comparison: eq
+        threshold: 0
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_history.py
+          evidence:
+            - test/offline/test_web_history.py::test_history_creates_no_index_database
+
+  - id: REQ-WEB-011
+    type: functional
+    statement: >-
+      The WebUI shall launch the existing backtest with CLI-equivalent
+      parameters and display the existing summary fields: resolved, pending,
+      unscored, per-rating count/hit rate/mean alpha, holding window, failures,
+      settlement failures, and log path.
+    priority: must
+    priority_tradeoff: >-
+      The backtest is an existing evaluation capability, so exposing it is
+      parity rather than a new feature. The cost is another long-running task
+      shape and careful isolation from the live decision log.
+    origin: extension
+    sources:
+      - kind: human_decision
+        reference: Requirements discussion in the current session, 2026-11-05
+        locator: Batch 2 backtest selection
+        rationale: The user selected launching backtests and viewing results.
+      - kind: repository
+        reference: src/tradingagents/backtest.py
+        locator: iter_grid(), run_backtest(), summarize(), BacktestSummary.render()
+        rationale: Defines the parameters, output fields, and isolated log.
+      - kind: repository
+        reference: src/cli/main.py
+        locator: backtest()
+        rationale: Defines the CLI parameter names and display behavior.
+    status: draft
+    architecture_refs:
+      - architecture-blueprint.md#w6-backtest-surface
+      - architecture-blueprint.md#w5-artifact-read-model
+    invariant_refs:
+      - INV-WEB-008
+    owner: webui
+    depends_on:
+      - REQ-WEB-001
+    fit_criteria:
+      - id: FC-WEB-011-01
+        metric: backtest_parameters
+        unit: parameters
+        comparison: eq
+        threshold: 8
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_backtest.py
+          evidence:
+            - test/offline/test_web_backtest.py::test_backtest_parameters_match_cli
+      - id: FC-WEB-011-02
+        metric: summary_fields
+        unit: fields
+        comparison: eq
+        threshold: 8
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_backtest.py
+          evidence:
+            - test/offline/test_web_backtest.py::test_summary_fields_match_cli
+      - id: FC-WEB-011-03
+        metric: live_memory_writes
+        unit: writes
+        comparison: eq
+        threshold: 0
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_backtest.py
+          evidence:
+            - test/offline/test_web_backtest.py::test_backtest_does_not_write_live_memory
+
+  - id: REQ-WEB-012
+    type: functional
+    statement: >-
+      The WebUI shall fetch announcements server-side with TUI-equivalent
+      fallback behavior, and when require_attention is true it shall block
+      further interaction until the user acknowledges the announcement.
+    priority: must
+    priority_tradeoff: >-
+      Announcements are part of the existing CLI startup experience and were
+      explicitly retained. The cost is an external request and a blocking modal;
+      failure remains silent and must never prevent a run.
+    origin: extension
+    sources:
+      - kind: human_decision
+        reference: Requirements discussion in the current session, 2026-11-05
+        locator: Batch 2 announcement selection
+        rationale: The user selected full parity with the TUI announcement panel.
+      - kind: repository
+        reference: src/cli/announcements.py
+        locator: fetch_announcements(), display_announcements()
+        rationale: Defines the endpoint, fallback text, and require_attention behavior.
+    status: draft
+    architecture_refs:
+      - architecture-blueprint.md#w1-entry-and-parameter-surface
+      - architecture-blueprint.md#w7-security-boundary
+    invariant_refs:
+      - INV-WEB-012
+    owner: webui
+    depends_on: []
+    fit_criteria:
+      - id: FC-WEB-012-01
+        metric: announcement_fallback_on_failure
+        unit: boolean
+        comparison: eq
+        threshold: true
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_announcements.py
+          evidence:
+            - test/offline/test_web_announcements.py::test_failure_uses_safe_fallback
+      - id: FC-WEB-012-02
+        metric: require_attention_blocks
+        unit: boolean
+        comparison: eq
+        threshold: true
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_announcements.py
+          evidence:
+            - test/offline/test_web_announcements.py::test_require_attention_blocks_acknowledgement
+      - id: FC-WEB-012-03
+        metric: untrusted_rendering_violations
+        unit: violations
+        comparison: eq
+        threshold: 0
+        verification:
+          method: security_check
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_security.py
+          evidence:
+            - test/offline/test_web_security.py::test_announcement_html_is_escaped
+
+  - id: REQ-WEB-013
+    type: security
+    statement: >-
+      The WebUI shall not accept, persist, or return provider keys; it shall
+      display only configured/not-configured status and shall allow a run to
+      start when a key is missing, failing at the first provider call as the CLI
+      does.
+    priority: must
+    priority_tradeoff: >-
+      Accepting keys in the browser would transmit plaintext credentials into a
+      client surface. Server environment variables are the only approved source.
+      The cost is that the web UI cannot complete the CLI's interactive key
+      prompt; that deviation is explicit.
+    origin: extension
+    sources:
+      - kind: human_decision
+        reference: Requirements discussion in the current session, 2026-11-05
+        locator: Batch 2 key-handling selection and Batch 4 missing-key confirmation
+        rationale: The user selected server-only keys and allowing a run to start without one.
+      - kind: repository
+        reference: src/cli/utils.py
+        locator: ensure_api_key()
+        rationale: Defines the CLI behavior that the web layer deliberately does not copy.
+      - kind: process_document
+        reference: AGENTS.md
+        locator: Section 6, business semantics to preserve
+        rationale: Requires secrets to stay out of clients, events, reports, and exports.
+    status: draft
+    architecture_refs:
+      - architecture-blueprint.md#w7-security-boundary
+      - architecture-blueprint.md#w1-entry-and-parameter-surface
+    invariant_refs:
+      - INV-WEB-003
+    owner: webui
+    depends_on:
+      - REQ-WEB-001
+    fit_criteria:
+      - id: FC-WEB-013-01
+        metric: key_input_endpoints
+        unit: endpoints
+        comparison: eq
+        threshold: 0
+        verification:
+          method: security_check
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_security.py
+          evidence:
+            - test/offline/test_web_security.py::test_no_key_input_endpoint_exists
+      - id: FC-WEB-013-02
+        metric: key_material_in_responses
+        unit: occurrences
+        comparison: eq
+        threshold: 0
+        verification:
+          method: security_check
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_security.py
+          evidence:
+            - test/offline/test_web_security.py::test_key_material_never_serialized
+      - id: FC-WEB-013-03
+        metric: missing_key_run_started
+        unit: boolean
+        comparison: eq
+        threshold: true
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_wizard.py
+          evidence:
+            - test/offline/test_web_wizard.py::test_missing_key_does_not_block_start
+
+  - id: REQ-WEB-014
+    type: functional
+    statement: >-
+      The WebUI shall support Chinese/English interface switching independently
+      of the analysis output language, and shall not leave user-interface
+      strings untranslated in either language.
+    priority: must
+    priority_tradeoff: >-
+      The user explicitly selected bilingual UI. Report language remains a
+      separate existing setting, so the two must not be conflated. The cost is a
+      message catalogue and a completeness test.
+    origin: extension
+    sources:
+      - kind: human_decision
+        reference: Requirements discussion in the current session, 2026-11-05
+        locator: Batch 3 interface-language selection
+        rationale: The user selected Chinese/English interface switching.
+      - kind: repository
+        reference: src/cli/utils.py
+        locator: ask_output_language()
+        rationale: Shows that report output language is a separate existing choice.
+    status: draft
+    architecture_refs:
+      - architecture-blueprint.md#w8-frontend
+    invariant_refs: []
+    owner: webui
+    depends_on: []
+    fit_criteria:
+      - id: FC-WEB-014-01
+        metric: ui_languages
+        unit: languages
+        comparison: eq
+        threshold: 2
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_frontend_contract.py
+          evidence:
+            - test/offline/test_web_frontend_contract.py::test_chinese_and_english_catalogues_exist
+      - id: FC-WEB-014-02
+        metric: report_language_independence
+        unit: boolean
+        comparison: eq
+        threshold: true
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_frontend_contract.py
+          evidence:
+            - test/offline/test_web_frontend_contract.py::test_ui_language_does_not_change_report_language
+      - id: FC-WEB-014-03
+        metric: untranslated_ui_keys
+        unit: keys
+        comparison: eq
+        threshold: 0
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_frontend_contract.py
+          evidence:
+            - test/offline/test_web_frontend_contract.py::test_no_untranslated_ui_keys
+
+  - id: REQ-WEB-020
+    type: security
+    statement: >-
+      The WebUI shall bind only to 127.0.0.1, require no authentication, reject
+      non-loopback Host headers, and reject cross-origin state-changing requests.
+    priority: must
+    priority_tradeoff: >-
+      The confirmed deployment is a single local user. No authentication is
+      acceptable only because the listener is loopback-only and same-origin
+      checks compensate. Binding broadly without authentication would expose
+      analysis runs and artifacts to the local network.
+    origin: extension
+    sources:
+      - kind: human_decision
+        reference: Requirements discussion in the current session, 2026-11-05
+        locator: Batch 3 access-control selection
+        rationale: The user selected 127.0.0.1 without login.
+      - kind: process_document
+        reference: docs/code-governance/structural-constraints.md
+        locator: Section 4, deterministic safety boundaries
+        rationale: Requires server-only secrets and deterministic path/identity validation.
+    status: draft
+    architecture_refs:
+      - architecture-blueprint.md#w7-security-boundary
+      - architecture-blueprint.md#run-request
+    invariant_refs:
+      - INV-WEB-005
+    owner: webui
+    depends_on: []
+    fit_criteria:
+      - id: FC-WEB-020-01
+        metric: non_loopback_bind_allowed
+        unit: boolean
+        comparison: eq
+        threshold: false
+        verification:
+          method: security_check
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_security.py
+          evidence:
+            - test/offline/test_web_security.py::test_bind_address_is_loopback_only
+      - id: FC-WEB-020-02
+        metric: authentication_required
+        unit: boolean
+        comparison: eq
+        threshold: false
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_security.py
+          evidence:
+            - test/offline/test_web_security.py::test_no_authentication_layer_is_required
+      - id: FC-WEB-020-03
+        metric: non_loopback_host_accepted
+        unit: occurrences
+        comparison: eq
+        threshold: 0
+        verification:
+          method: security_check
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_security.py
+          evidence:
+            - test/offline/test_web_security.py::test_non_loopback_host_header_is_rejected
+
+  - id: REQ-WEB-021
+    type: quality
+    statement: >-
+      The WebUI shall support the current and previous stable major versions of
+      desktop Chrome, Edge, Firefox, and Safari.
+    priority: should
+    priority_tradeoff: >-
+      Desktop modern browsers cover the confirmed users. Adding mobile or
+      legacy-browser support would expand layout and testing scope without a
+      confirmed user. The cost is a documented and tested browser matrix.
+    origin: extension
+    sources:
+      - kind: human_decision
+        reference: Requirements discussion in the current session, 2026-11-05
+        locator: Batch 4 browser-support confirmation
+        rationale: The user selected desktop modern browsers.
+    status: draft
+    architecture_refs:
+      - architecture-blueprint.md#w8-frontend
+    invariant_refs: []
+    owner: webui
+    depends_on:
+      - REQ-WEB-014
+    fit_criteria:
+      - id: FC-WEB-021-01
+        metric: browser_matrix_entries
+        unit: browsers
+        comparison: gte
+        threshold: 4
+        verification:
+          method: contract_check
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_frontend_contract.py
+          evidence:
+            - test/offline/test_web_frontend_contract.py::test_browser_matrix_covers_four_desktop_browsers
+
+  - id: REQ-WEB-022
+    type: performance
+    statement: >-
+      The WebUI should deliver run events to a connected browser with a p95
+      latency of at most 1000 ms and should not drop events while the client
+      keeps up.
+    priority: should
+    priority_tradeoff: >-
+      The TUI refreshes at 4 fps, so one second is a reasonable upper bound for
+      a local presentation layer. A tighter target would add buffering and
+      transport complexity without a confirmed need. This threshold is proposed
+      and needs human approval.
+    origin: extension
+    sources:
+      - kind: human_decision
+        reference: Requirements discussion in the current session, 2026-11-05
+        locator: Batch 3 non-functional discussion; threshold recorded as proposed
+        rationale: No explicit latency value was confirmed; the TUI refresh rate is the evidence base.
+      - kind: repository
+        reference: src/cli/main.py
+        locator: update_display() and Live(refresh_per_second=4)
+        rationale: Provides the baseline refresh cadence.
+    status: draft
+    architecture_refs:
+      - architecture-blueprint.md#w4-event-projection
+      - architecture-blueprint.md#w2-run-coordinator
+    invariant_refs: []
+    owner: webui
+    depends_on:
+      - REQ-WEB-002
+    fit_criteria:
+      - id: FC-WEB-022-01
+        metric: event_latency_p95_ms
+        unit: milliseconds
+        comparison: lte
+        threshold: 1000
+        verification:
+          method: contract_check
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_events.py
+          evidence:
+            - test/offline/test_web_events.py::test_event_latency_within_local_budget
+      - id: FC-WEB-022-02
+        metric: dropped_events
+        unit: events
+        comparison: eq
+        threshold: 0
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_events.py
+          evidence:
+            - test/offline/test_web_events.py::test_sequence_has_no_gaps_for_connected_client
+
+  - id: REQ-WEB-023
+    type: security
+    statement: >-
+      The WebUI shall keep provider keys and credential-like values out of
+      browser responses, events, logs, reports, downloads, errors, and
+      snapshots.
+    priority: must
+    priority_tradeoff: >-
+      A leak would expose paid provider credentials and violate the project's
+      safety boundary. Redaction and allowlisted serialization add work but are
+      non-negotiable.
+    origin: extension
+    sources:
+      - kind: process_document
+        reference: AGENTS.md
+        locator: Section 6, business semantics to preserve
+        rationale: Requires secrets to stay out of clients, events, reports, and exports.
+      - kind: process_document
+        reference: docs/code-governance/structural-constraints.md
+        locator: Section 4, deterministic safety boundaries
+        rationale: Requires server-only secret access and redaction.
+      - kind: human_decision
+        reference: Requirements discussion in the current session, 2026-11-05
+        locator: Batch 2 key-handling selection
+        rationale: The user selected server-only key handling.
+    status: draft
+    architecture_refs:
+      - architecture-blueprint.md#w7-security-boundary
+    invariant_refs:
+      - INV-WEB-003
+    owner: webui
+    depends_on: []
+    fit_criteria:
+      - id: FC-WEB-023-01
+        metric: secret_leaks
+        unit: violations
+        comparison: eq
+        threshold: 0
+        verification:
+          method: security_check
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_security.py
+          evidence:
+            - test/offline/test_web_security.py::test_secrets_never_serialized
+      - id: FC-WEB-023-02
+        metric: redaction_failures
+        unit: violations
+        comparison: eq
+        threshold: 0
+        verification:
+          method: security_check
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_security.py
+          evidence:
+            - test/offline/test_web_security.py::test_errors_are_redacted
+
+  - id: REQ-WEB-024
+    type: security
+    statement: >-
+      The WebUI shall expose artifact identifiers instead of server filesystem
+      paths and shall resolve every identifier through a validated root
+      allowlist before reading or writing.
+    priority: must
+    priority_tradeoff: >-
+      Server paths in the browser would expose the host layout and invite path
+      traversal. Identifiers add an indirection layer but keep the boundary
+      deterministic.
+    origin: extension
+    sources:
+      - kind: human_decision
+        reference: Requirements discussion in the current session, 2026-11-05
+        locator: Batch 2 save/export selection
+        rationale: The user selected a fixed server directory and browser download.
+      - kind: repository
+        reference: src/tradingagents/dataflows/utils.py
+        locator: safe_ticker_component()
+        rationale: Provides the deterministic path-component validation to reuse.
+    status: draft
+    architecture_refs:
+      - architecture-blueprint.md#w7-security-boundary
+      - architecture-blueprint.md#w5-artifact-read-model
+    invariant_refs:
+      - INV-WEB-004
+      - INV-WEB-005
+    owner: webui
+    depends_on:
+      - REQ-WEB-010
+    fit_criteria:
+      - id: FC-WEB-024-01
+        metric: absolute_path_occurrences
+        unit: occurrences
+        comparison: eq
+        threshold: 0
+        verification:
+          method: security_check
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_security.py
+          evidence:
+            - test/offline/test_web_security.py::test_responses_contain_no_filesystem_paths
+      - id: FC-WEB-024-02
+        metric: artifact_id_validation_violations
+        unit: violations
+        comparison: eq
+        threshold: 0
+        verification:
+          method: security_check
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_security.py
+          evidence:
+            - test/offline/test_web_security.py::test_path_traversal_is_rejected
+
+  - id: REQ-WEB-025
+    type: security
+    statement: >-
+      The WebUI shall render model output, tool output, announcements, and
+      artifact text as escaped data or a sanitized Markdown subset, never as
+      executable HTML or privileged instructions.
+    priority: must
+    priority_tradeoff: >-
+      Model and external text are untrusted. Rich rendering improves reading
+      but must not create script execution or link-based exfiltration. The cost
+      is a sanitizer and a rendering contract.
+    origin: extension
+    sources:
+      - kind: process_document
+        reference: docs/code-governance/structural-constraints.md
+        locator: Section 4, deterministic safety boundaries
+        rationale: Treats external text and model output as untrusted input.
+      - kind: repository
+        reference: src/cli/announcements.py
+        locator: fetch_announcements(), display_announcements()
+        rationale: Shows that announcements are external and must be rendered safely.
+    status: draft
+    architecture_refs:
+      - architecture-blueprint.md#w7-security-boundary
+      - architecture-blueprint.md#w8-frontend
+    invariant_refs:
+      - INV-WEB-012
+    owner: webui
+    depends_on: []
+    fit_criteria:
+      - id: FC-WEB-025-01
+        metric: raw_html_injections
+        unit: violations
+        comparison: eq
+        threshold: 0
+        verification:
+          method: security_check
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_security.py
+          evidence:
+            - test/offline/test_web_security.py::test_untrusted_content_is_escaped
+      - id: FC-WEB-025-02
+        metric: unsafe_link_schemes
+        unit: violations
+        comparison: eq
+        threshold: 0
+        verification:
+          method: security_check
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_security.py
+          evidence:
+            - test/offline/test_web_security.py::test_unsafe_link_schemes_are_rejected
+
+  - id: REQ-WEB-026
+    type: governance
+    statement: >-
+      The WebUI implementation shall not modify the observable behavior, public
+      interfaces, arguments, defaults, output, exit codes, or existing tests of
+      the core and CLI.
+    priority: must
+    priority_tradeoff: >-
+      The confirmed scope is a new presentation layer, not a refactor. Keeping
+      the core and CLI untouched preserves every existing consumer and makes
+      regression attribution unambiguous.
+    origin: governance
+    sources:
+      - kind: human_decision
+        reference: Requirements discussion in the current session, 2026-11-05
+        locator: Batch 1 CLI relationship and Batch 4 backend-boundary confirmation
+        rationale: The user selected coexistence with zero core and CLI change.
+      - kind: process_document
+        reference: docs/code-governance/structural-constraints.md
+        locator: Sections 2-3, module organization and interface contracts
+        rationale: Requires preserving baseline public contracts and ownership paths.
+    status: draft
+    architecture_refs:
+      - architecture-blueprint.md#w2-run-coordinator
+      - architecture-blueprint.md#proposed-ownership-paths
+    invariant_refs:
+      - INV-WEB-001
+    owner: webui
+    depends_on: []
+    fit_criteria:
+      - id: FC-WEB-026-01
+        metric: modified_core_files
+        unit: files
+        comparison: eq
+        threshold: 0
+        verification:
+          method: static_analysis
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_contracts.py
+          evidence:
+            - test/offline/test_web_contracts.py::test_core_and_cli_surface_unchanged
+      - id: FC-WEB-026-02
+        metric: cli_contract_failures
+        unit: failures
+        comparison: eq
+        threshold: 0
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_cli_commands.py
+          evidence:
+            - test/offline/test_cli_commands.py
+
+  - id: REQ-WEB-027
+    type: governance
+    statement: >-
+      The WebUI shall not add data vendors, model providers, prompts, agents,
+      rating rules, trading execution, or multi-ticker analysis beyond the
+      existing backtest.
+    priority: must
+    priority_tradeoff: >-
+      Every added capability would expand the safety and verification surface
+      beyond the approved presentation scope. Display parity is sufficient.
+    origin: governance
+    sources:
+      - kind: human_decision
+        reference: Requirements discussion in the current session, 2026-11-05
+        locator: Batch 3 explicit exclusions and Batch 4 backend-boundary confirmation
+        rationale: The user excluded new data sources, models, and backend capability changes.
+      - kind: process_document
+        reference: AGENTS.md
+        locator: Section 1, goal and authorization
+        rationale: Requires extending the baseline without unapproved features.
+    status: draft
+    architecture_refs:
+      - architecture-blueprint.md#goals
+      - architecture-blueprint.md#non-goals
+    invariant_refs:
+      - INV-WEB-002
+    owner: webui
+    depends_on: []
+    fit_criteria:
+      - id: FC-WEB-027-01
+        metric: runtime_prompt_changes
+        unit: files
+        comparison: eq
+        threshold: 0
+        verification:
+          method: static_analysis
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_contracts.py
+          evidence:
+            - test/offline/test_web_contracts.py::test_no_runtime_prompt_or_agent_changes
+      - id: FC-WEB-027-02
+        metric: new_vendor_registrations
+        unit: registrations
+        comparison: eq
+        threshold: 0
+        verification:
+          method: static_analysis
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_contracts.py
+          evidence:
+            - test/offline/test_web_contracts.py::test_no_new_vendor_or_model_registration
+      - id: FC-WEB-027-03
+        metric: execution_endpoints
+        unit: endpoints
+        comparison: eq
+        threshold: 0
+        verification:
+          method: security_check
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_security.py
+          evidence:
+            - test/offline/test_web_security.py::test_no_execution_endpoint_exists
+
+  - id: REQ-WEB-028
+    type: invariant
+    statement: >-
+      The WebUI shall preserve the baseline distinction between an omitted
+      portfolio, an empty book, and a populated book, and shall preserve REVIEW
+      as a non-tradeable sentinel rather than converting it to Hold.
+    priority: must
+    priority_tradeoff: >-
+      These are baseline safety semantics. Relaxing either would change how a
+      decision is interpreted, which is outside the presentation scope.
+    origin: baseline
+    sources:
+      - kind: repository
+        reference: src/tradingagents/portfolio.py
+        locator: PortfolioContext, fingerprint()
+        rationale: Defines the three-state portfolio semantics.
+      - kind: repository
+        reference: src/tradingagents/agents/utils/rating.py
+        locator: RATING_REVIEW, parse_rating(), is_review()
+        rationale: Defines REVIEW and its non-tradeable meaning.
+    status: draft
+    architecture_refs:
+      - architecture-blueprint.md#deterministic-boundaries-preserved
+      - architecture-blueprint.md#run-request
+    invariant_refs:
+      - INV-WEB-006
+      - INV-WEB-007
+    owner: webui
+    depends_on:
+      - REQ-WEB-004
+      - REQ-WEB-008
+    fit_criteria:
+      - id: FC-WEB-028-01
+        metric: portfolio_state_violations
+        unit: violations
+        comparison: eq
+        threshold: 0
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_portfolio.py
+          evidence:
+            - test/offline/test_web_portfolio.py::test_three_portfolio_states_remain_distinct
+      - id: FC-WEB-028-02
+        metric: review_hold_confusions
+        unit: violations
+        comparison: eq
+        threshold: 0
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_contracts.py
+          evidence:
+            - test/offline/test_web_contracts.py::test_review_is_not_hold
+
+  - id: REQ-WEB-029
+    type: invariant
+    statement: >-
+      The WebUI shall never allow concurrent writes to the decision log,
+      checkpoints, or shared core configuration, and cancellation shall not
+      write a decision or clear a checkpoint.
+    priority: must
+    priority_tradeoff: >-
+      The baseline memory writer and global configuration are not proven safe
+      under concurrency. A single active run and explicit cancellation
+      semantics are the minimum safe boundary.
+    origin: baseline
+    sources:
+      - kind: repository
+        reference: src/tradingagents/agents/utils/memory.py
+        locator: store_decision(), update_with_outcome(), batch_update_with_outcomes()
+        rationale: Shows read-modify-write behavior and its concurrency limit.
+      - kind: repository
+        reference: src/tradingagents/dataflows/config.py
+        locator: _config, set_config()
+        rationale: Shows process-global configuration.
+    status: draft
+    architecture_refs:
+      - architecture-blueprint.md#state-ownership-and-concurrency
+      - architecture-blueprint.md#cancellation
+    invariant_refs:
+      - INV-WEB-009
+      - INV-WEB-010
+    owner: webui
+    depends_on:
+      - REQ-WEB-005
+      - REQ-WEB-006
+    fit_criteria:
+      - id: FC-WEB-029-01
+        metric: concurrent_write_violations
+        unit: violations
+        comparison: eq
+        threshold: 0
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_runs.py
+          evidence:
+            - test/offline/test_web_runs.py::test_second_run_is_rejected
+      - id: FC-WEB-029-02
+        metric: cancellation_state_violations
+        unit: violations
+        comparison: eq
+        threshold: 0
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_runs.py
+          evidence:
+            - test/offline/test_web_runs.py::test_cancel_preserves_checkpoint_and_writes_no_decision
+
+  - id: REQ-WEB-030
+    type: invariant
+    statement: >-
+      The WebUI shall keep backtest artifacts isolated from live analysis
+      artifacts, and history and backtest-history views shall remain read-only.
+    priority: must
+    priority_tradeoff: >-
+      Mixing logs would contaminate the live decision context. Mutating history
+      would turn a read model into an unapproved storage feature.
+    origin: baseline
+    sources:
+      - kind: repository
+        reference: src/tradingagents/backtest.py
+        locator: run_backtest(), summarize()
+        rationale: Defines the isolated backtest run directory and log.
+      - kind: repository
+        reference: src/cli/main.py
+        locator: backtest()
+        rationale: Shows the existing CLI isolation and display behavior.
+    status: draft
+    architecture_refs:
+      - architecture-blueprint.md#w6-backtest-surface
+      - architecture-blueprint.md#history-contract
+    invariant_refs:
+      - INV-WEB-008
+      - INV-WEB-011
+    owner: webui
+    depends_on:
+      - REQ-WEB-010
+      - REQ-WEB-011
+    fit_criteria:
+      - id: FC-WEB-030-01
+        metric: isolation_violations
+        unit: violations
+        comparison: eq
+        threshold: 0
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_backtest.py
+          evidence:
+            - test/offline/test_web_backtest.py::test_backtest_does_not_touch_live_memory
+      - id: FC-WEB-030-02
+        metric: history_mutation_violations
+        unit: violations
+        comparison: eq
+        threshold: 0
+        verification:
+          method: pytest
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_history.py
+          evidence:
+            - test/offline/test_web_history.py::test_history_endpoints_are_read_only
+
+  - id: REQ-WEB-031
+    type: invariant
+    statement: >-
+      The WebUI shall treat model output and external text as data only, never
+      as authority to execute trades, change permissions, alter architecture, or
+      run code.
+    priority: must
+    priority_tradeoff: >-
+      This is a baseline safety boundary. Displaying richer content is allowed;
+      granting it authority is not.
+    origin: baseline
+    sources:
+      - kind: process_document
+        reference: AGENTS.md
+        locator: Section 6, business semantics to preserve
+        rationale: Requires model output to remain advisory and untrusted.
+      - kind: process_document
+        reference: docs/code-governance/structural-constraints.md
+        locator: Section 4, deterministic safety boundaries
+        rationale: Requires external text to be treated as untrusted input.
+    status: draft
+    architecture_refs:
+      - architecture-blueprint.md#w7-security-boundary
+      - architecture-blueprint.md#deterministic-boundaries-preserved
+    invariant_refs:
+      - INV-WEB-002
+      - INV-WEB-012
+    owner: webui
+    depends_on:
+      - REQ-WEB-025
+      - REQ-WEB-027
+    fit_criteria:
+      - id: FC-WEB-031-01
+        metric: execution_authority_violations
+        unit: violations
+        comparison: eq
+        threshold: 0
+        verification:
+          method: security_check
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_security.py
+          evidence:
+            - test/offline/test_web_security.py::test_no_execution_endpoint_exists
+      - id: FC-WEB-031-02
+        metric: untrusted_authority_violations
+        unit: violations
+        comparison: eq
+        threshold: 0
+        verification:
+          method: security_check
+          mode: offline
+          command: python -m pytest -q test/offline/test_web_security.py
+          evidence:
+            - test/offline/test_web_security.py::test_untrusted_content_is_escaped

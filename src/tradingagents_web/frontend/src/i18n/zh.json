@@ -1,0 +1,38 @@
+{
+  "app": {
+    "title": "TradingAgents",
+    "subtitle": "只读历史与报告"
+  },
+  "nav": {
+    "history": "历史",
+    "language": "语言"
+  },
+  "history": {
+    "title": "运行历史",
+    "empty": "暂无运行记录。",
+    "loading": "正在加载历史...",
+    "error": "无法加载历史。",
+    "ticker": "标的",
+    "date": "日期",
+    "source": "来源",
+    "status": "状态",
+    "rating": "评级",
+    "actions": "操作",
+    "open": "打开"
+  },
+  "detail": {
+    "title": "报告详情",
+    "sections": "章节",
+    "download": "下载",
+    "complete": "完整报告",
+    "archive": "归档",
+    "back": "返回历史",
+    "missing": "未找到产物。"
+  },
+  "common": {
+    "refresh": "刷新",
+    "review": "待复核",
+    "completed": "已完成",
+    "partial": "部分"
+  }
+}

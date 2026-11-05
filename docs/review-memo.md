@@ -46,3 +46,98 @@ The existing base branch does not contain these new checks. Their first introduc
 - Retained source and CI implementation files, existing tests, governance documents, and intentional empty requirements/design placeholders. Preserved the existing deletion of `CHANGELOG.md` and removed its stale references.
 - No tests were run for this cleanup. No new passing-check or human-review verdict is claimed. Commit authorization does not imply final governance approval.
 - Push, merge, deployment, product development, and remote repository settings remain outside this cleanup scope.
+
+## Requirements and architecture drafting — 2026-11-05
+
+- Scope authorized by the user: discuss WebUI requirements in batches, then enter the Docs phase and write project documents in English. Product implementation, tests, commits, pushes, merges, deployments, dependency installation, and live API calls were not authorized.
+- Confirmed product baseline: local single-user WebUI on `127.0.0.1` without authentication; one active run at a time; coexist with an unchanged CLI and core; complete eight-step wizard; live progress, messages, tools, statistics, and full I–V report; read-only history over existing artifacts; backtest launch and results; checkpoint controls; portfolio JSON by paste or upload; cancellation with CLI-equivalent semantics; server-only provider keys; announcements with TUI parity; Chinese/English UI.
+- Explicit exclusions: new data sources/models, agent or prompt changes, trading execution, multi-user/tenancy/billing, new databases or message queues, cloud/container deployment, PDF/Word export, native mobile, multi-ticker analysis outside backtest, cross-run comparison/scoring, and any change to CLI or core behavior.
+- Artifacts created: `docs/req/requirements.yaml` (26 draft requirements, 69 acceptance criteria), `architecture-blueprint.md`, `docs/architecture/adr/001-choice.md`, `docs/architecture/invariants.md`, `docs/architecture/trace-matrix.md`, `docs/architecture/risk-list.md`, `docs/architecture/runtime-policy-catalog.md`, `docs/architecture/memory-design.md`, `docs/architecture/option-ledger.md`, `docs/architecture/evaluation-table.md`, and `docs/architecture/evaluation-logbook.md`. `README.md` was updated to point to the draft documents and to state that drafts do not authorize implementation.
+- Validation performed: local YAML parsing with duplicate-key detection and a targeted validator mirroring the schema and gate rules passed (26 requirements, 69 unique criteria). The official `python -m test.ci_gates schema` was not run because the host lacks `PyYAML`, `jsonschema`, and `json5`; dependency installation was not authorized. No product tests or live tests were run.
+- Human approval status: the user confirmed the discussion baseline and authorized this Docs phase in the current conversation. The written artifacts themselves have not received a review verdict. No `[test-plan-approved]`, `[safety-approved]`, or `[governance-approved]` review is claimed.
+- Open decisions: web framework, event transport, frontend stack, final package path, default UI language, preference-file writes, backtest cancellation, download packaging, and the event-latency target.
+- No implementation, dependency change, CI change, commit, push, or remote setting change was performed in this phase.
+
+## Design approval and decision recording — 2026-11-05
+
+- Human decision: the user approved the architecture design presented in the current conversation, including TypeScript + React + UI technology and the delegated backend, transport, packaging, history, security, and run-control choices. This approval covers documentation only; it is not a GitHub `[safety-approved]`, `[test-plan-approved]`, or `[governance-approved]` review.
+- Approved decisions: FastAPI + Uvicorn single worker; SSE; React 19 + TypeScript + Vite; Tailwind + shadcn/Radix + Lucide; Zustand + TanStack Query; React Hook Form + Zod; react-markdown + rehype-sanitize; react-i18next with English default and Chinese switch; `src/tradingagents_web/` with `[web]` extra and `tradingagents-web` entry point; in-memory single run; read-only hash-id history; complete Markdown + zip downloads; analysis cancellation only; no backtest cancellation; loopback without authentication with Host/Origin/CSRF/CSP controls; server-only keys; no server paths.
+- Artifacts updated: `architecture-blueprint.md`, `docs/architecture/adr/001-choice.md` (updated), `docs/architecture/adr/002-backend-framework-and-transport.md` through `007-run-controls.md` (new), `docs/architecture/invariants.md` (001–015), `docs/architecture/trace-matrix.md`, `docs/architecture/permission-model.md` (filled), `docs/architecture/memory-design.md`, `docs/architecture/runtime-policy-catalog.md`, `docs/architecture/option-ledger.md`, `docs/architecture/risk-list.md`, `docs/architecture/evaluation-table.md`, `docs/architecture/evaluation-logbook.md`, `docs/debt-register.md`, `README.md`, and `docs/ai-use-log.yaml`.
+- Validation performed: the requirements registry was unchanged; its earlier local YAML and targeted schema/gate-equivalent checks remain the only executed validation. Blueprint architecture anchors were checked locally and resolve. No architecture experiment, product test, packaging test, browser test, latency measurement, dependency audit, or live call was executed. The official `python -m test.ci_gates schema`, structure, lint, type, dependency, and security checks remain unrun because the host lacks the dev dependencies.
+- Planned versus actual: `docs/architecture/evaluation-table.md` lists EVAL-01 through EVAL-10 as planned; `docs/architecture/evaluation-logbook.md` records only the executed documentation checks. No planned result is reported as passing.
+- Remaining before implementation:
+  1. A concrete test plan with implemented test nodes and fixtures, approved via `[test-plan-approved]` on a test-only revision.
+  2. Current-head `[safety-approved]` for the new web entry point (ADR-001 through ADR-007).
+  3. Current-head `[governance-approved]` for `pyproject.toml`, CI, dependency, packaging, and permission changes.
+  4. Dependency, license, and advisory approval for FastAPI, Uvicorn, and the npm dependency tree.
+  5. Official schema, structure, lint, type, dependency, and security checks in an approved environment.
+  6. Human review of the filled permission model and the blueprint as written artifacts.
+  7. Live-test authorization before any live model/data verification.
+- No implementation, dependency installation, `pyproject.toml` change, CI change, commit, push, merge, deployment, or remote setting change was performed.
+
+## Iteration-1 test plan review request — 2026-11-05
+
+- Scope: read-only WebUI history and report browser. Requirements: `REQ-WEB-010`, `014`, `020`, `021`, `023`, `024`, `025`, `026` (18 acceptance criteria). Deferred: analysis runs, SSE, cancellation, checkpoints, portfolio, backtest launch, config/wizard, key input.
+- Test files written: `test/offline/web_fixture_app.py`, `test/offline/test_web_history.py`, `test/offline/test_web_security.py`, `test/offline/test_web_contracts.py`, `test/offline/test_web_frontend_contract.py`.
+- Test design: normal history/report/download flows; invalid IDs and traversal; missing/partial/malformed artifacts; loopback/Host/CORS/CSP; secret redaction; no server paths; read-only mutations; no execution route; core/CLI signature and import compatibility; i18n and frontend static contracts.
+- Execution status at the time of the review request: **not run**. The host lacked `pytest`, `fastapi`, `httpx`, and a runnable `tradingagents` test environment; dependency installation had not yet been authorized. Only a Python AST syntax check was executed on the five test files.
+- Expected failure class while product code is absent: `EXPECTED-UNIMPLEMENTED` from the test helper. These are expected, not passing, not skipped, and not test defects.
+- Coverage gaps requiring the frontend harness: behavioral i18n report-language independence (`FC-WEB-014-02`), browser execution (`FC-WEB-021-01`), and runtime XSS/sanitization (`FC-WEB-025-01/02`) currently have static contract checks only. They must not be marked verified until Playwright/Vitest execute them.
+- GitHub test-plan approval: **none is claimed.** To record a real `[test-plan-approved]`, commit and push this exact test-only revision (tests plus the unchanged requirements and blueprint), then have a trusted human reviewer submit a review containing `[test-plan-approved]` on that commit before any implementation commit. The reviewer decision is human-owned; this memo is only a request for review.
+- At the time of this review request, no product code, dependency installation, commit, push, merge, deployment, or remote setting change had been performed.
+
+## Iteration-1 test version approval — 2026-11-05
+
+- Reviewer: human project owner, in the current conversation.
+- Time: 2026-11-05.
+- Scope: the iteration-1 read-only history/report test version identified by content hash `0923433e9108ab8c6a2ce3f7e8505e8b8efc1b5b8848825c83df923b2c47b9e7` (five files under `test/offline/`), covering `REQ-WEB-010`, `014`, `020`, `021`, `023`, `024`, `025`, `026`.
+- Verdict: **APPROVE** for this test version only.
+- Limits: this is a conversation approval, not a GitHub `[test-plan-approved]` review, not approval to install dependencies, and not approval to start product implementation. At the time of this approval the test version had not been executed; a separate authorization was later given to install test dependencies and run it.
+- Remaining gates: dependency/license/advisory approval; a real GitHub `[test-plan-approved]` on a committed test-only revision if CI gating is used; `[safety-approved]` for the web entry point; `[governance-approved]` for `pyproject.toml`/CI/packaging.
+- No commit, push, or product implementation was performed at this stage.
+
+## Iteration-1 test execution — 2026-11-05
+
+- Authorization: the user authorized creating `.venv`, installing test dependencies, and executing the approved test version.
+- Environment: Python 3.14.3; repo-local `.venv`; `pip install -e '.[dev]' fastapi uvicorn httpx`. The `[web]` extra does not exist yet, so the equivalent runtime/test packages were installed directly. `pyproject.toml` was not changed.
+- New WebUI tests: **5 passed, 13 failed, 40 errors** in 11.36 s. All 13 failures and 40 errors are `EXPECTED-UNIMPLEMENTED` (`tradingagents_web` or frontend files absent). No unexpected failure or test defect was observed. The 5 passes are the core/CLI compatibility checks in `test_web_contracts.py`.
+- Official gates: `python -m test.ci_gates schema` **PASS**; `python -m test.ci_gates structure` **PASS**.
+- Existing compatibility: `test/offline/test_cli_commands.py` + `test/offline/test_reporting.py` **14 passed**; import smoke **OK**; ruff on the five new test files **passed**.
+- Existing regression (all tests excluding the four new WebUI test files): **984 passed, 4 failed, 2 skipped, 88 subtests passed**. The 4 failures are the documented historical baseline failures (`test/live/test_no_data_handling.py::TestLoadOhlcvNoPoison::test_empty_download_raises_and_does_not_cache`; three `test/offline/test_ohlcv_cache_freshness.py` tests). No new regression was introduced.
+- Not run: architecture experiments EVAL-01 through EVAL-10; Playwright browser execution; frontend Vitest; packaging/clean install; full mypy; Bandit; live model/data calls.
+- No product code was implemented; no commit, push, merge, deployment, or remote setting change was performed.
+
+## Iteration-1 implementation — 2026-11-06
+
+- Authorization: the user instructed the agent to start implementing Iteration 1 after approving the architecture and test version.
+- Scope implemented: read-only WebUI history/report browser only. No analysis runs, SSE, cancellation, checkpoints, portfolio, backtest launch, config/wizard, or key input.
+- Backend: `src/tradingagents_web/` with FastAPI app factory, loopback/Host/CSP middleware, safe error payloads, artifact index/readers/downloads, health and history APIs, CLI entry point.
+- Frontend: React 19 + TypeScript + Vite source under `src/tradingagents_web/frontend/`, i18n catalogues, sanitized Markdown, history/detail pages, browser matrix, Playwright config. Build output goes to `src/tradingagents_web/static/` and is ignored by Git.
+- Packaging: `pyproject.toml` adds the `[web]` extra, `tradingagents-web` entry point, `httpx` to dev, and `tradingagents_web/static/**` package data. `.gitignore` ignores frontend `node_modules`, generated `static/`, and Playwright outputs.
+- Verification (Python 3.14.3, repo-local `.venv`):
+  - WebUI tests: **58 passed**.
+  - Full regression: **1042 passed, 4 failed, 2 skipped, 88 subtests passed**. The 4 failures are the documented historical baseline failures; no new regression.
+  - `test.ci_gates schema` and `structure`: **PASS**.
+  - `mypy src/tradingagents_web`: **Success, no issues**.
+  - `ruff` on the new package and tests: **All checks passed**.
+  - CLI/reporting compatibility: **14 passed**; import smoke: **OK**.
+  - Frontend `npm run lint`, `npm run typecheck`, `npm run build`: **PASS**.
+  - `npm audit`: **0 vulnerabilities** after upgrading Vitest and overriding minimatch.
+  - Wheel inspection: `tradingagents_web/static/index.html` and the `tradingagents-web` console script are present.
+  - Static/API smoke: `/`, `/history`, `/api/health`, `/api/history` return **200**.
+- Deviations and unfinished items:
+  - Local verification uses Python 3.14.3, outside the CI 3.10–3.13 matrix; CI execution is pending.
+  - Frontend Vitest and Playwright browser execution are not implemented/run; behavioral i18n report-language independence, browser matrix, and runtime XSS criteria remain unverified.
+  - Clean-install in a fresh environment and full mypy/Bandit/pip-audit checks are not run.
+  - Requirements statuses remain `draft`; the implementation review verdict is recorded below.
+- No commit, push, merge, deployment, or remote setting change was performed.
+
+## Iteration-1 implementation approval — 2026-11-06
+
+- Reviewer: human project owner, in the current conversation.
+- Time: 2026-11-06.
+- Scope: the Iteration-1 read-only history/report implementation, including the `src/tradingagents_web/` backend, React/TypeScript frontend, `pyproject.toml`/`.gitignore` changes, tests, and verification evidence described above.
+- Verdict: **APPROVE** for the Iteration-1 implementation.
+- Evidence accepted: WebUI tests 58 passed; full regression 1042 passed with 4 documented historical failures; schema/structure gates passed; new-package mypy and ruff passed; frontend lint/typecheck/build passed; npm audit 0; wheel contains static assets and the `tradingagents-web` entry point.
+- Limits: this is a conversation approval, not a GitHub `[safety-approved]`, `[governance-approved]`, or `[test-plan-approved]` review. The frontend Vitest/Playwright behavioral gaps, clean-install check, CI 3.10–3.13 run, full mypy/Bandit/pip-audit, and live tests remain open. Requirements registry statuses remain `draft`; no separate requirements-verification verdict is claimed.
+- No commit, push, merge, deployment, or remote setting change was performed.

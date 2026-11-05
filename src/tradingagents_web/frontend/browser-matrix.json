@@ -1,0 +1,6 @@
+[
+  {"name": "chrome", "engine": "chromium", "support": "current and previous stable major"},
+  {"name": "edge", "engine": "chromium", "support": "current and previous stable major"},
+  {"name": "firefox", "engine": "firefox", "support": "current and previous stable major"},
+  {"name": "safari", "engine": "webkit", "support": "current and previous stable major"}
+]

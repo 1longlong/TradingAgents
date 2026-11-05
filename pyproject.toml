@@ -40,6 +40,13 @@ dev = [
     "bandit>=1.8,<2",
     "pytest-socket>=0.7,<1",
     "tomli>=2.0; python_version < '3.11'",
+    "httpx>=0.27,<1",
+]
+# Read-only WebUI (Iteration 1). Optional so the core install stays lean:
+# pip install "tradingagents[web]".
+web = [
+    "fastapi>=0.115,<1",
+    "uvicorn[standard]>=0.30,<1",
 ]
 # Amazon Bedrock support (AWS SigV4 auth + boto3). Optional so the core install
 # stays lean: pip install "tradingagents[bedrock]".
@@ -49,6 +56,7 @@ bedrock = [
 
 [project.scripts]
 tradingagents = "cli.main:app"
+tradingagents-web = "tradingagents_web.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -56,6 +64,7 @@ include = ["tradingagents*", "cli*"]
 
 [tool.setuptools.package-data]
 cli = ["static/*"]
+tradingagents_web = ["static/**"]
 
 [tool.pytest.ini_options]
 testpaths = ["test"]

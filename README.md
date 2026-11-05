@@ -384,7 +384,7 @@ Please reference our work if you find *TradingAgents* provides you with some hel
 
 ## Development preparation and OpenCode
 
-The preparation branch is `feature/webui`, based on TradingAgents v0.5.0. Product source is under `src/`; deterministic and external-service tests are under `test/offline/` and `test/live/`. The WebUI requirements and architecture are intentionally left for the requirements/design process. Do not treat empty documents as approval to implement features.
+The preparation branch is `feature/webui`, based on TradingAgents v0.5.0. Product source is under `src/`; deterministic and external-service tests are under `test/offline/` and `test/live/`. WebUI requirements are recorded in `docs/req/requirements.yaml`; architecture decisions are recorded in `architecture-blueprint.md` and `docs/architecture/adr/`. Iteration 1 (read-only history/report browser) is implemented; later iterations remain blocked on test-plan, safety, governance, and dependency approvals. Empty or draft documents are not approval to implement features.
 
 Create an ignored persistent virtual environment, then install the declared development tools:
 
@@ -397,7 +397,23 @@ python -m test.ci_gates structure
 OPENCODE_CONFIG=.opencode/permissions.jsonc opencode --agent plan
 ```
 
-The permission configuration targets OpenCode 1.18.29. Configure the coding assistant's provider/model separately from TradingAgents runtime providers. Plan is read-only; use Docs to persist agreed requirements and architecture drafts, Build after plan/test approval, and Verify for independent checks. Docs can run the listed data validators. Empty requirements/design files do not block discussion, but block dependent implementation and schema acceptance.
+### WebUI (Iteration 1)
+
+The read-only history/report browser is implemented. It does not run analyses, SSE, checkpoints, portfolios, or backtests yet.
+
+```bash
+python -m pip install -e '.[dev,web]'
+cd src/tradingagents_web/frontend
+npm ci
+npm run build
+cd -
+tradingagents-web --port 8000
+# or: python -m tradingagents_web --port 8000
+```
+
+The server binds to `127.0.0.1` only and serves existing artifacts under the configured results directory. If static assets are missing, it starts in API-only mode and prints the build instruction. The WebUI does not accept provider keys; keys remain server-side.
+
+The permission configuration targets OpenCode 1.18.29. Configure the coding assistant's provider/model separately from TradingAgents runtime providers. Plan is read-only; use Docs to persist agreed requirements and architecture drafts, Build after plan/test approval, and Verify for independent checks. Docs can run the listed data validators. Draft requirements/design files do not block discussion, but they do not authorize dependent implementation until reviewed and approved; the schema gate must pass first.
 
 ```bash
 python -m test.ci_gates schema

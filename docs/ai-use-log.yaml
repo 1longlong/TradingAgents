@@ -63,3 +63,174 @@ entries:
       - No tests were run for cleanup, as explicitly requested by the user.
       - The user authorized one local preparation commit; this is not a final human governance review.
       - No push, merge, deployment, or remote configuration change is authorized by this cleanup request.
+  - id: AI-20261105-001
+    date: '2026-11-05'
+    tool: OpenCode
+    model: deepseek-flash (DeepSeek V4.1 Flash 1017)
+    purpose: >-
+      Run a batched requirements discussion for the WebUI and, after explicit
+      user confirmation, draft the English requirements, architecture,
+      invariant, traceability, risk, runtime-policy, memory, option, and
+      evaluation records for the Docs phase.
+    source: Current user conversation
+    human_review: pending
+    paths:
+      - architecture-blueprint.md
+      - README.md
+      - docs/req/requirements.yaml
+      - docs/architecture/adr/001-choice.md
+      - docs/architecture/invariants.md
+      - docs/architecture/trace-matrix.md
+      - docs/architecture/risk-list.md
+      - docs/architecture/runtime-policy-catalog.md
+      - docs/architecture/memory-design.md
+      - docs/architecture/option-ledger.md
+      - docs/architecture/evaluation-table.md
+      - docs/architecture/evaluation-logbook.md
+      - docs/review-memo.md
+      - docs/debt-register.md
+      - docs/ai-use-log.yaml
+    notes:
+      - All project documents were written in English at the user's explicit request.
+      - No product source, tests, prompts, CI, permissions, or dependency files were changed.
+      - YAML syntax and a targeted schema/gate-equivalent validation passed locally (26 requirements, 69 criteria).
+      - The official schema gate was not run because PyYAML, jsonschema, and json5 are absent; dependency installation was not authorized.
+      - No implementation, commit, push, merge, deployment, or live API call was performed.
+      - Human review, test-plan approval, safety approval, and governance approval remain pending.
+  - id: AI-20261105-002
+    date: '2026-11-05'
+    tool: OpenCode
+    model: deepseek-flash (DeepSeek V4.1 Flash 1017)
+    purpose: >-
+      Record the human-approved WebUI architecture in the blueprint, ADR
+      directory, invariants, trace matrix, permission model, memory design,
+      runtime policies, option ledger, risk list, and evaluation records;
+      separate planned evaluations from executed results.
+    source: Current user conversation; user approved the presented design on 2026-11-05
+    human_review: design approved by user in conversation 2026-11-05; formal review pending
+    paths:
+      - architecture-blueprint.md
+      - README.md
+      - docs/architecture/adr/001-choice.md
+      - docs/architecture/adr/002-backend-framework-and-transport.md
+      - docs/architecture/adr/003-frontend-stack.md
+      - docs/architecture/adr/004-packaging-and-build.md
+      - docs/architecture/adr/005-history-read-model.md
+      - docs/architecture/adr/006-security-and-permission-boundary.md
+      - docs/architecture/adr/007-run-controls.md
+      - docs/architecture/invariants.md
+      - docs/architecture/trace-matrix.md
+      - docs/architecture/permission-model.md
+      - docs/architecture/memory-design.md
+      - docs/architecture/runtime-policy-catalog.md
+      - docs/architecture/option-ledger.md
+      - docs/architecture/risk-list.md
+      - docs/architecture/evaluation-table.md
+      - docs/architecture/evaluation-logbook.md
+      - docs/review-memo.md
+      - docs/debt-register.md
+      - docs/ai-use-log.yaml
+    notes:
+      - Written in English per the user's standing instruction.
+      - The user approved the architecture design; this approval is not a GitHub safety, test-plan, or governance review.
+      - No product source, test, prompt, CI, permission, dependency, or packaging file was changed.
+      - No architecture experiment, product test, packaging test, browser test, latency measurement, dependency audit, or live API call was executed.
+      - The official schema/structure/lint/type/security gates remain unrun because the host lacks the dev dependencies.
+      - Planned evaluation items are recorded as planned; no planned result is reported as passing.
+      - No implementation, dependency installation, commit, push, merge, deployment, or remote setting change was performed.
+  - id: AI-20261105-003
+    date: '2026-11-05'
+    tool: OpenCode
+    model: deepseek-flash (DeepSeek V4.1 Flash 1017)
+    purpose: >-
+      Write the approved iteration-1 WebUI tests for the read-only history and
+      report browser, including negative, permission-boundary, and CLI/Python
+      API compatibility checks, without implementing product code.
+    source: Current user conversation; user approved the iteration-1 test plan on 2026-11-05
+    human_review: approved by human in conversation 2026-11-05 for test version 0923433e9108ab8c6a2ce3f7e8505e8b8efc1b5b8848825c83df923b2c47b9e7; GitHub marker pending
+    paths:
+      - test/offline/web_fixture_app.py
+      - test/offline/test_web_history.py
+      - test/offline/test_web_security.py
+      - test/offline/test_web_contracts.py
+      - test/offline/test_web_frontend_contract.py
+      - docs/ai-use-log.yaml
+      - docs/review-memo.md
+    notes:
+      - No product code, CI, or packaging change was made; pyproject.toml is unchanged.
+      - Tests are written against the approved requirements, ADRs, and invariants, not against an implementation.
+      - Tests deliberately fail as EXPECTED-UNIMPLEMENTED while tradingagents_web is absent; they are not skipped and their assertions are not weakened.
+      - The user authorized test dependency installation; .venv was created and .[dev] plus fastapi, uvicorn, and httpx were installed. This is a test environment, not project dependency approval.
+      - Execution result: 5 passed, 13 failed, 40 errors; all failures and errors are EXPECTED-UNIMPLEMENTED, and the 5 passes are core/CLI compatibility checks.
+      - Official schema and structure gates passed; CLI/reporting compatibility ran 14 passed; import smoke passed; ruff passed on the five new test files.
+      - Existing regression excluding the four new WebUI test files: 984 passed, 4 historical baseline failures, 2 skipped, 88 subtests passed; no new regression.
+      - Not run: architecture experiments EVAL-01..EVAL-10, Playwright/Vitest, packaging/clean install, full mypy, Bandit, live model/data calls.
+      - No git commit, push, merge, deployment, or remote setting change was performed.
+  - id: AI-20261106-001
+    date: '2026-11-06'
+    tool: OpenCode
+    model: deepseek-flash (DeepSeek V4.1 Flash 1017)
+    purpose: >-
+      Implement Iteration-1 of the approved WebUI: the read-only history and
+      report browser, backend API and artifact readers, loopback security
+      boundary, React/TypeScript frontend, packaging metadata, and verification.
+    source: Current user conversation; user instructed "start implementing Iteration-1" on 2026-11-06
+    human_review: approved by human in conversation 2026-11-06 for Iteration-1 implementation; GitHub markers pending
+    paths:
+      - .gitignore
+      - README.md
+      - pyproject.toml
+      - src/tradingagents_web/__init__.py
+      - src/tradingagents_web/__main__.py
+      - src/tradingagents_web/app.py
+      - src/tradingagents_web/cli.py
+      - src/tradingagents_web/errors.py
+      - src/tradingagents_web/security.py
+      - src/tradingagents_web/settings.py
+      - src/tradingagents_web/api/__init__.py
+      - src/tradingagents_web/api/health.py
+      - src/tradingagents_web/api/history.py
+      - src/tradingagents_web/artifacts/__init__.py
+      - src/tradingagents_web/artifacts/downloads.py
+      - src/tradingagents_web/artifacts/index.py
+      - src/tradingagents_web/artifacts/readers.py
+      - src/tradingagents_web/frontend/package.json
+      - src/tradingagents_web/frontend/package-lock.json
+      - src/tradingagents_web/frontend/browser-matrix.json
+      - src/tradingagents_web/frontend/playwright.config.ts
+      - src/tradingagents_web/frontend/eslint.config.js
+      - src/tradingagents_web/frontend/vite.config.ts
+      - src/tradingagents_web/frontend/tsconfig.json
+      - src/tradingagents_web/frontend/index.html
+      - src/tradingagents_web/frontend/e2e/history.spec.ts
+      - src/tradingagents_web/frontend/src/main.tsx
+      - src/tradingagents_web/frontend/src/app/App.tsx
+      - src/tradingagents_web/frontend/src/api/client.ts
+      - src/tradingagents_web/frontend/src/components/LanguageSwitch.tsx
+      - src/tradingagents_web/frontend/src/components/Markdown.tsx
+      - src/tradingagents_web/frontend/src/i18n/en.json
+      - src/tradingagents_web/frontend/src/i18n/zh.json
+      - src/tradingagents_web/frontend/src/i18n/index.ts
+      - src/tradingagents_web/frontend/src/pages/HistoryPage.tsx
+      - src/tradingagents_web/frontend/src/pages/HistoryDetailPage.tsx
+      - src/tradingagents_web/frontend/src/styles/index.css
+      - test/offline/web_fixture_app.py
+      - test/offline/test_web_history.py
+      - test/offline/test_web_security.py
+      - test/offline/test_web_contracts.py
+      - test/offline/test_web_frontend_contract.py
+      - docs/review-memo.md
+      - docs/ai-use-log.yaml
+      - docs/architecture/evaluation-logbook.md
+      - docs/architecture/evaluation-table.md
+      - docs/architecture/invariants.md
+      - docs/architecture/trace-matrix.md
+      - docs/debt-register.md
+    notes:
+      - Core and CLI source were not modified.
+      - WebUI tests: 58 passed; full regression 1042 passed, 4 historical failures, 2 skipped, 88 subtests.
+      - Schema and structure gates passed; mypy and ruff on the new package passed.
+      - Frontend lint, typecheck, and build passed; npm audit reported 0 vulnerabilities.
+      - The wheel contains static assets and the tradingagents-web entry point.
+      - Not run: Playwright/Vitest browser execution, clean install, full mypy/Bandit/pip-audit, live model/data calls.
+      - No git commit, push, merge, deployment, or remote setting change was performed.
