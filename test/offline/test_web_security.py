@@ -8,6 +8,7 @@ configuration/wizard iteration and is not claimed here.
 
 from __future__ import annotations
 
+import json
 import re
 import zipfile
 from io import BytesIO
@@ -16,12 +17,15 @@ import pytest
 
 from test.offline.web_fixture_app import (
     SECRET,
+    FakeGraphRunner,
     build_fixture_tree,
     find_item,
     json_text,
     make_app,
     make_client,
+    make_run_client,
     require_web,
+    wait_terminal,
 )
 
 pytestmark = pytest.mark.unit
@@ -243,3 +247,78 @@ def test_history_json_contains_no_secret_after_detail(web_client):
     response = client.get(f"/api/history/{item['artifact_id']}")
     assert response.status_code == 200, response.text
     assert SECRET not in json_text(response)
+
+
+def _run_body():
+    return {
+        "client_request_id": "csrf-test",
+        "ticker": "NVDA",
+        "trade_date": "2026-11-01",
+        "analysts": ["market"],
+        "research_depth": 1,
+        "llm_provider": "openai",
+        "quick_think_llm": "gpt-5.6-luna",
+        "deep_think_llm": "gpt-5.6",
+    }
+
+
+def test_session_issues_a_csrf_token(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", SECRET)
+    tree = build_fixture_tree(tmp_path)
+    client = make_run_client(tree, runner_factory=FakeGraphRunner)
+    response = client.get("/api/session")
+    assert response.status_code == 200, response.text
+    token = response.json()["csrf_token"]
+    assert isinstance(token, str)
+    assert len(token) >= 16
+
+
+def test_post_without_csrf_is_rejected(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", SECRET)
+    tree = build_fixture_tree(tmp_path)
+    client = make_run_client(tree, runner_factory=FakeGraphRunner, csrf=False)
+    response = client.post("/api/runs", json=_run_body())
+    assert response.status_code == 403, response.text
+    assert client.get("/api/runs/active").json().get("run_id") is None
+
+
+def test_post_with_wrong_csrf_is_rejected(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", SECRET)
+    tree = build_fixture_tree(tmp_path)
+    client = make_run_client(tree, runner_factory=FakeGraphRunner, csrf=False)
+    response = client.post(
+        "/api/runs", json=_run_body(), headers={"X-CSRF-Token": "wrong"}
+    )
+    assert response.status_code == 403, response.text
+
+
+def test_cross_origin_post_is_rejected(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", SECRET)
+    tree = build_fixture_tree(tmp_path)
+    client = make_run_client(tree, runner_factory=FakeGraphRunner)
+    response = client.post(
+        "/api/runs",
+        json=_run_body(),
+        headers={"Origin": "https://evil.example"},
+    )
+    assert response.status_code == 403, response.text
+
+
+def test_checkpoint_clear_requires_csrf(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", SECRET)
+    tree = build_fixture_tree(tmp_path)
+    client = make_run_client(tree, runner_factory=FakeGraphRunner, csrf=False)
+    response = client.post("/api/checkpoints/clear", json={"confirm": "CLEAR"})
+    assert response.status_code == 403, response.text
+
+
+def test_run_snapshot_does_not_expose_secret_or_paths(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", SECRET)
+    tree = build_fixture_tree(tmp_path)
+    client = make_run_client(tree, runner_factory=FakeGraphRunner)
+    started = client.post("/api/runs", json=_run_body())
+    assert started.status_code == 201, started.text
+    text = json.dumps(started.json())
+    assert SECRET not in text
+    assert str(tree.results_dir) not in text
+    wait_terminal(client, started.json()["run_id"])

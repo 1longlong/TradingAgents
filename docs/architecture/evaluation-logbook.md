@@ -115,6 +115,26 @@ Classification:
 - **Not run:** Playwright browser execution, frontend Vitest (no test files yet), clean install in a fresh environment, full mypy, Bandit, pip-audit, live model/data calls.
 - **Residual gaps:** behavioral i18n report-language independence, browser matrix execution, and runtime XSS remain unverified beyond static contracts. The Iteration-1 implementation received a human review **APPROVE** on 2026-11-06; requirements statuses remain `draft`, and the approval is not a separate requirements-verification verdict.
 
+## 2026-11-06 — Iteration-2 implementation verification
+
+| Check | Command | Result |
+| --- | --- | --- |
+| WebUI backend suite | `pytest test/offline/test_web_*.py` | **113 passed** |
+| Full regression | `pytest --disable-socket --allow-unix-socket` | **1097 passed, 4 historical failures, 2 skipped, 88 subtests** |
+| Schema/structure gates | `python -m test.ci_gates schema`, `structure` | PASS |
+| Web package types/lint | `mypy src/tradingagents_web`; `ruff check ...` | PASS |
+| Frontend Vitest | `npm run test` | **10 passed (4 files)** |
+| Frontend lint/typecheck/build | `npm run lint`, `npm run typecheck`, `npm run build` | PASS |
+| Frontend audit | `npm audit --json` | **0 vulnerabilities** |
+| Wheel inspection | `pip wheel . --no-deps`; inspect archive | new Iteration-2 modules and static assets present |
+
+Classification:
+
+- **Passing:** the Iteration-2 backend and frontend tests, the complete regression except the four documented historical failures, schema/structure, new-package mypy/ruff, frontend checks, audit, and wheel contents.
+- **Historical failures:** the four documented baseline failures remain; no new regression.
+- **Not run:** Playwright browser execution, the real `GraphRunner` path against a live model/data provider, clean install, full mypy, Bandit, pip-audit, and live tests.
+- **Residual gaps:** the real analysis path has not been exercised with credentials; requirements statuses remain `draft`; no separate requirements-verification verdict has been issued.
+
 ## Decisions and open items
 
 Resolved for documentation: framework, transport, frontend stack, UI library, package path, history source, key handling, cancellation policy, downloads, preferences.

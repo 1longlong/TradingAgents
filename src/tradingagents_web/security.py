@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import re
 from typing import Any
+from urllib.parse import urlparse
 
 CSP = (
     "default-src 'self'; "
@@ -38,6 +39,30 @@ def host_allowed(host_header: str | None) -> bool:
     elif ":" in host:
         host = host.rsplit(":", 1)[0]
     return host.lower() in {"127.0.0.1", "localhost"}
+
+
+CSRF_HEADER = "x-csrf-token"
+_CSRF_EXACT = {"/api/runs", "/api/checkpoints/clear", "/api/portfolio/validate"}
+_CSRF_CANCEL_RE = re.compile(r"^/api/runs/[^/]+/cancel$")
+
+
+def csrf_path(path: str) -> bool:
+    """Only real state-changing endpoints require a CSRF token.
+
+    Unknown POST routes must still reach FastAPI and return 404/405; otherwise
+    a generic CSRF middleware would mask them as 403.
+    """
+    return path in _CSRF_EXACT or bool(_CSRF_CANCEL_RE.fullmatch(path))
+
+
+def origin_allowed(origin: str | None) -> bool:
+    if not origin:
+        return True
+    parsed = urlparse(origin)
+    return parsed.scheme in {"http", "https"} and parsed.hostname in {
+        "127.0.0.1",
+        "localhost",
+    }
 
 
 def security_headers() -> dict[str, str]:

@@ -1,6 +1,6 @@
 # TradingAgents WebUI Trace Matrix
 
-Status: **Approved for documentation by the human owner on 2026-11-05.** Iteration 1 is implemented. Execution on 2026-11-06 produced **58 passed** for the WebUI suite; full regression produced **1042 passed, 4 historical failures, 2 skipped, 88 subtests passed**. The `Evidence status` column remains conservative: passing local tests do not replace a human verification verdict. Behavioral frontend gaps (browser execution, runtime XSS, i18n report-language independence) remain. The module paths are the approved ownership paths from `architecture-blueprint.md` Section 7; see `docs/architecture/evaluation-logbook.md`.
+Status: **Approved for documentation by the human owner on 2026-11-05.** Iterations 1 and 2 are implemented. Execution on 2026-11-06 produced **113 passed** for the WebUI backend suite; full regression produced **1097 passed, 4 historical failures, 2 skipped, 88 subtests passed**; frontend Vitest produced **10 passed**. Playwright browser execution and the real GraphRunner/live model path remain unrun. The `Evidence status` column remains conservative: passing local tests do not replace a human verification verdict. The module paths are the approved ownership paths from `architecture-blueprint.md` Section 7; see `docs/architecture/evaluation-logbook.md`.
 
 Legend:
 - **Module**: primary implementation owner.

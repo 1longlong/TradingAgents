@@ -1,7 +1,8 @@
-"""FastAPI application factory for the read-only WebUI."""
+"""FastAPI application factory for the WebUI."""
 
 from __future__ import annotations
 
+import secrets
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -9,13 +10,34 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from tradingagents_web import __version__
-from tradingagents_web.api import health, history
+from tradingagents_web.api import (
+    checkpoints,
+    config,
+    health,
+    history,
+    portfolio,
+    runs,
+    session,
+)
 from tradingagents_web.errors import error_response
-from tradingagents_web.security import host_allowed, security_headers
+from tradingagents_web.runtime.coordinator import RunCoordinator
+from tradingagents_web.runtime.graph_runner import GraphRunner
+from tradingagents_web.security import (
+    csrf_path,
+    host_allowed,
+    origin_allowed,
+    security_headers,
+)
 from tradingagents_web.settings import WebSettings
 
 
-def create_app(settings: WebSettings) -> FastAPI:
+def _secured(response):
+    for key, value in security_headers().items():
+        response.headers[key] = value
+    return response
+
+
+def create_app(settings: WebSettings, runner_factory=None) -> FastAPI:
     app = FastAPI(
         title="TradingAgents WebUI",
         version=__version__,
@@ -23,21 +45,41 @@ def create_app(settings: WebSettings) -> FastAPI:
         redoc_url=None,
     )
     app.state.settings = settings
+    app.state.csrf_token = secrets.token_urlsafe(32)
+    app.state.coordinator = RunCoordinator(settings, runner_factory or GraphRunner)
 
     @app.middleware("http")
     async def _security_middleware(request: Request, call_next):
         if not host_allowed(request.headers.get("host")):
-            response = error_response(400, "validation", "invalid host")
-            for key, value in security_headers().items():
-                response.headers[key] = value
-            return response
-        response = await call_next(request)
-        for key, value in security_headers().items():
-            response.headers[key] = value
-        return response
+            return _secured(error_response(400, "validation", "invalid host"))
 
-    app.include_router(health.router)
-    app.include_router(history.router)
+        if request.method in {"POST", "PUT", "PATCH", "DELETE"} and csrf_path(
+            request.url.path
+        ):
+            token = request.headers.get("x-csrf-token")
+            if not token or token != app.state.csrf_token:
+                return _secured(
+                    error_response(403, "security", "missing or invalid CSRF token")
+                )
+            origin = request.headers.get("origin")
+            if origin and not origin_allowed(origin):
+                return _secured(
+                    error_response(403, "security", "cross-origin request rejected")
+                )
+
+        response = await call_next(request)
+        return _secured(response)
+
+    for router in (
+        session.router,
+        config.router,
+        portfolio.router,
+        checkpoints.router,
+        runs.router,
+        health.router,
+        history.router,
+    ):
+        app.include_router(router)
 
     static_dir = Path(settings.static_dir)
     index = static_dir / "index.html"

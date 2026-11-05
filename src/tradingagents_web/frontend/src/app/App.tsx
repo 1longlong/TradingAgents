@@ -2,6 +2,8 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 import { HistoryDetailPage } from "../pages/HistoryDetailPage";
 import { HistoryPage } from "../pages/HistoryPage";
+import { LiveRunPage } from "../pages/LiveRunPage";
+import { NewAnalysisPage } from "../pages/NewAnalysisPage";
 
 export function App() {
   return (
@@ -9,6 +11,8 @@ export function App() {
       <Route path="/" element={<Navigate to="/history" replace />} />
       <Route path="/history" element={<HistoryPage />} />
       <Route path="/history/:artifactId" element={<HistoryDetailPage />} />
+      <Route path="/new" element={<NewAnalysisPage />} />
+      <Route path="/runs/:runId" element={<LiveRunPage />} />
       <Route path="*" element={<Navigate to="/history" replace />} />
     </Routes>
   );

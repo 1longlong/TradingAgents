@@ -13,9 +13,11 @@ from pathlib import Path
 import pytest
 
 from test.offline.web_fixture_app import (
+    FakeGraphRunner,
     build_fixture_tree,
     make_app,
     make_client,
+    make_run_client,
     require_core,
     require_web,
 )
@@ -123,6 +125,28 @@ def test_history_creates_no_new_database_files(tmp_path):
     assert response.status_code == 200, response.text
     assert not list(tree.root.rglob("*.db"))
     assert not list(tree.root.rglob("*.sqlite"))
+
+
+def test_web_openapi_includes_run_control_paths_and_no_execution(tmp_path):
+    tree = build_fixture_tree(tmp_path)
+    client = make_run_client(tree, runner_factory=FakeGraphRunner)
+    response = client.get("/openapi.json")
+    assert response.status_code == 200, response.text
+    paths = response.json()["paths"]
+    assert "/api/session" in paths
+    assert "/api/config" in paths
+    assert "/api/config/models" in paths
+    assert "/api/portfolio/validate" in paths
+    assert "/api/checkpoints/clear" in paths
+    assert "/api/runs" in paths
+    assert "/api/runs/{run_id}" in paths
+    assert "/api/runs/{run_id}/events" in paths
+    assert "/api/runs/{run_id}/cancel" in paths
+    for path in paths:
+        lowered = path.lower()
+        assert "order" not in lowered
+        assert "trade" not in lowered
+        assert "execute" not in lowered
 
 
 def test_history_does_not_require_a_full_states_log(tmp_path):

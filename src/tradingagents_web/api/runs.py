@@ -1,0 +1,169 @@
+"""Start, inspect, cancel, and stream one analysis run."""
+
+from __future__ import annotations
+
+import json
+import os
+
+from fastapi import APIRouter, Query, Request
+from fastapi.responses import JSONResponse, StreamingResponse
+
+from cli.utils import _llm_provider_table
+from tradingagents.dataflows.symbol_utils import normalize_symbol
+from tradingagents.dataflows.utils import safe_ticker_component
+from tradingagents.graph.analyst_execution import ANALYST_NODE_SPECS
+from tradingagents.graph.trading_graph import _validate_trade_date
+from tradingagents.llm_clients.api_key_env import PROVIDER_API_KEY_ENV
+from tradingagents_web.api.portfolio import parse_portfolio
+from tradingagents_web.errors import error_response
+from tradingagents_web.models.requests import RunRequest
+from tradingagents_web.runtime.coordinator import RunConflict
+
+router = APIRouter(prefix="/api", tags=["runs"])
+
+_KNOWN_ANALYSTS = set(ANALYST_NODE_SPECS)
+_KNOWN_PROVIDERS = {key for _, key, _ in _llm_provider_table()} | set(
+    PROVIDER_API_KEY_ENV
+)
+
+
+def _settings(request: Request):
+    return request.app.state.settings
+
+
+def _coordinator(request: Request):
+    return request.app.state.coordinator
+
+
+def _build_config(request, req: RunRequest) -> dict:
+    from tradingagents.default_config import DEFAULT_CONFIG
+
+    config = DEFAULT_CONFIG.copy()
+    config.update(
+        {
+            "results_dir": str(request.app.state.settings.results_dir),
+            "memory_log_path": str(request.app.state.settings.memory_log_path),
+            "data_cache_dir": str(request.app.state.settings.data_cache_dir),
+            "llm_provider": req.llm_provider.lower(),
+            "backend_url": req.backend_url,
+            "quick_think_llm": req.quick_think_llm
+            or DEFAULT_CONFIG.get("quick_think_llm"),
+            "deep_think_llm": req.deep_think_llm
+            or DEFAULT_CONFIG.get("deep_think_llm"),
+            "google_thinking_level": req.google_thinking_level,
+            "openai_reasoning_effort": req.openai_reasoning_effort,
+            "anthropic_effort": req.anthropic_effort,
+            "output_language": req.output_language,
+            "checkpoint_enabled": req.checkpoint,
+        }
+    )
+    if not os.environ.get("TRADINGAGENTS_MAX_DEBATE_ROUNDS"):
+        config["max_debate_rounds"] = req.research_depth
+    if not os.environ.get("TRADINGAGENTS_MAX_RISK_ROUNDS"):
+        config["max_risk_discuss_rounds"] = req.research_depth
+    return config
+
+
+def _validated_payload(request: Request, req: RunRequest) -> dict:
+    ticker = normalize_symbol(req.ticker)
+    safe_ticker_component(ticker)
+    trade_date = _validate_trade_date(req.trade_date)
+
+    analysts = list(req.analysts)
+    if not analysts or any(name not in _KNOWN_ANALYSTS for name in analysts):
+        raise ValueError("at least one known analyst is required")
+    if req.asset_type == "crypto":
+        analysts = [name for name in analysts if name != "fundamentals"]
+        if not analysts:
+            raise ValueError("crypto analysis requires at least one non-fundamentals analyst")
+
+    if req.research_depth not in {1, 3, 5}:
+        raise ValueError("research_depth must be 1, 3, or 5")
+    if req.llm_provider.lower() not in _KNOWN_PROVIDERS:
+        raise ValueError("unknown LLM provider")
+    for model_id in (req.quick_think_llm, req.deep_think_llm):
+        if model_id is not None and not model_id.strip():
+            raise ValueError("model IDs must not be blank")
+
+    portfolio = None
+    fingerprint = None
+    if req.portfolio_json:
+        portfolio = parse_portfolio(req.portfolio_json)
+        fingerprint = portfolio.fingerprint()
+
+    config = _build_config(request, req)
+    return {
+        "ticker": ticker,
+        "trade_date": trade_date,
+        "asset_type": req.asset_type,
+        "analysts": analysts,
+        "research_depth": req.research_depth,
+        "llm_provider": req.llm_provider.lower(),
+        "quick_think_llm": req.quick_think_llm,
+        "deep_think_llm": req.deep_think_llm,
+        "checkpoint_enabled": req.checkpoint,
+        "portfolio": portfolio,
+        "portfolio_fingerprint": fingerprint,
+        "config": config,
+    }
+
+
+@router.post("/runs")
+def start_run(request: Request, body: RunRequest):
+    try:
+        payload = _validated_payload(request, body)
+    except (ValueError, json.JSONDecodeError) as exc:
+        return error_response(422, "validation", str(exc))
+    try:
+        record = _coordinator(request).start(payload, body.client_request_id)
+    except RunConflict as exc:
+        return error_response(
+            409,
+            "conflict",
+            "a run is already active",
+            active_run_id=exc.active_run_id,
+        )
+    return JSONResponse(status_code=201, content=record.to_snapshot())
+
+
+@router.get("/runs/active")
+def active_run(request: Request):
+    active = _coordinator(request).active_snapshot()
+    return active if active is not None else {"run_id": None}
+
+
+@router.get("/runs/{run_id}")
+def get_run(request: Request, run_id: str):
+    record = _coordinator(request).get(run_id)
+    if record is None:
+        return error_response(404, "not_found", "run not found")
+    return record.to_snapshot()
+
+
+@router.post("/runs/{run_id}/cancel")
+def cancel_run(request: Request, run_id: str):
+    record = _coordinator(request).cancel(run_id)
+    if record is None:
+        return error_response(404, "not_found", "run not found")
+    return record.to_snapshot()
+
+
+@router.get("/runs/{run_id}/events")
+async def run_events(
+    request: Request,
+    run_id: str,
+    after_seq: int = Query(0, ge=0),
+):
+    coordinator = _coordinator(request)
+    if coordinator.get(run_id) is None:
+        return error_response(404, "not_found", "run not found")
+
+    async def generate():
+        async for event in coordinator.stream(run_id, after_seq):
+            yield (
+                f"id: {event['seq']}\n"
+                f"event: {event['type']}\n"
+                f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+            )
+
+    return StreamingResponse(generate(), media_type="text/event-stream")

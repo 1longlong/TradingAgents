@@ -44,17 +44,18 @@ These are design judgments, not benchmark results. They do not replace EVAL-01 t
 | Blueprint anchor resolution | Local script over `architecture_refs` | Passed: all anchors resolve | 2026-11-05 |
 | Official `python -m test.ci_gates schema` | Project entry point in `.venv` | **PASS** | 2026-11-05 |
 | Official `python -m test.ci_gates structure` | Project entry point in `.venv` | **PASS** | 2026-11-05 |
-| New WebUI tests | `pytest test/offline/test_web_*.py` | **58 passed** | 2026-11-06 |
+| WebUI backend suite (Iteration 1 + 2) | `pytest test/offline/test_web_*.py` | **113 passed** | 2026-11-06 |
 | CLI/reporting compatibility | `pytest test_cli_commands.py test_reporting.py` | **14 passed** | 2026-11-06 |
 | Import smoke, web mypy, and ruff | `python -c ...`; `mypy src/tradingagents_web`; `ruff check ...` | **PASS** | 2026-11-06 |
-| Full regression | `pytest --disable-socket --allow-unix-socket` | **1042 passed, 4 historical failures, 2 skipped, 88 subtests** | 2026-11-06 |
+| Full regression | `pytest --disable-socket --allow-unix-socket` | **1097 passed, 4 historical failures, 2 skipped, 88 subtests** | 2026-11-06 |
+| Frontend Vitest | `npm run test` | **10 passed (4 files)** | 2026-11-06 |
 | Frontend lint/typecheck/build | `npm run lint`, `npm run typecheck`, `npm run build` | **PASS** | 2026-11-06 |
 | Frontend dependency audit | `npm audit --json` | **0 vulnerabilities** | 2026-11-06 |
-| Wheel packaging | `pip wheel . --no-deps`; inspect archive | **static/index.html and tradingagents-web entry point present** | 2026-11-06 |
+| Wheel packaging | `pip wheel . --no-deps`; inspect archive | **new Iteration-2 modules and built static assets present** | 2026-11-06 |
 | Static/API smoke | TestClient with built static | **/, /history, /api/health, /api/history → 200** | 2026-11-06 |
 | Architecture experiments EVAL-01 to EVAL-10 | — | **Not run** | 2026-11-05 |
-| Playwright/Vitest browser execution | — | **Not run** | 2026-11-06 |
-| Live model/data tests | — | **Not run**: no authorization | 2026-11-05 |
+| Playwright browser execution | — | **Not run**: browser binaries/harness not configured | 2026-11-06 |
+| Real GraphRunner/live model path | — | **Not run**: requires credentials/cost authorization | 2026-11-06 |
 
 The documentation validation above does not verify the architecture, the runtime, packaging, latency, browsers, or dependencies. It only checks the written registry.
 

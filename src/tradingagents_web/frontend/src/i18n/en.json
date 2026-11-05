@@ -5,6 +5,7 @@
   },
   "nav": {
     "history": "History",
+    "newAnalysis": "New Analysis",
     "language": "Language"
   },
   "history": {
@@ -28,6 +29,51 @@
     "archive": "Archive",
     "back": "Back to history",
     "missing": "Artifact not found."
+  },
+  "wizard": {
+    "title": "New Analysis",
+    "ticker": "Ticker",
+    "date": "Analysis Date",
+    "language": "Output Language",
+    "analysts": "Analysts",
+    "depth": "Research Depth",
+    "provider": "LLM Provider",
+    "models": "Models",
+    "checkpoint": "Checkpoint",
+    "portfolio": "Portfolio",
+    "next": "Next",
+    "back": "Back",
+    "submit": "Start Analysis",
+    "review": "Review",
+    "invalid": "Please fix this step.",
+    "quickModel": "Quick model",
+    "deepModel": "Deep model",
+    "pastePortfolio": "Paste portfolio JSON (optional)",
+    "shallow": "Shallow",
+    "medium": "Medium",
+    "deep": "Deep",
+    "keyConfigured": "Key configured",
+    "keyNotConfigured": "Key not configured"
+  },
+  "live": {
+    "title": "Live Run",
+    "progress": "Progress",
+    "messages": "Messages & Tools",
+    "stats": "Statistics",
+    "cancel": "Cancel",
+    "cancelling": "Cancelling...",
+    "completed": "Completed",
+    "failed": "Failed",
+    "review": "Review required: this is not a position.",
+    "connection": "Connection",
+    "runId": "Run ID",
+    "status": "Status",
+    "waiting": "Waiting for events..."
+  },
+  "report": {
+    "title": "Report",
+    "complete": "Complete report",
+    "archive": "Archive"
   },
   "common": {
     "refresh": "Refresh",

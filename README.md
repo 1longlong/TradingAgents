@@ -384,7 +384,7 @@ Please reference our work if you find *TradingAgents* provides you with some hel
 
 ## Development preparation and OpenCode
 
-The preparation branch is `feature/webui`, based on TradingAgents v0.5.0. Product source is under `src/`; deterministic and external-service tests are under `test/offline/` and `test/live/`. WebUI requirements are recorded in `docs/req/requirements.yaml`; architecture decisions are recorded in `architecture-blueprint.md` and `docs/architecture/adr/`. Iteration 1 (read-only history/report browser) is implemented; later iterations remain blocked on test-plan, safety, governance, and dependency approvals. Empty or draft documents are not approval to implement features.
+The preparation branch is `feature/webui`, based on TradingAgents v0.5.0. Product source is under `src/`; deterministic and external-service tests are under `test/offline/` and `test/live/`. WebUI requirements are recorded in `docs/req/requirements.yaml`; architecture decisions are recorded in `architecture-blueprint.md` and `docs/architecture/adr/`. Iteration 1 (read-only history/report browser) and Iteration 2 (single analysis run with wizard, SSE live view, cancellation, checkpoint toggle, and portfolio input) are implemented. Backtest launch and announcements remain for a later iteration. Later work remains blocked on test-plan, safety, governance, and dependency approvals. Empty or draft documents are not approval to implement features.
 
 Create an ignored persistent virtual environment, then install the declared development tools:
 
@@ -397,9 +397,9 @@ python -m test.ci_gates structure
 OPENCODE_CONFIG=.opencode/permissions.jsonc opencode --agent plan
 ```
 
-### WebUI (Iteration 1)
+### WebUI (Iteration 2)
 
-The read-only history/report browser is implemented. It does not run analyses, SSE, checkpoints, portfolios, or backtests yet.
+The WebUI supports the eight-step analysis wizard, one active analysis run, SSE progress/messages/report events, cancellation, checkpoint toggle/clear, portfolio JSON input, and completed-report downloads. Analysis runs use the existing CLI/core stream path; the server is loopback-only and keys remain server-side. Backtest launch and announcements are not implemented yet.
 
 ```bash
 python -m pip install -e '.[dev,web]'

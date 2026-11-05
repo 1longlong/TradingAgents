@@ -23,6 +23,12 @@ export function HistoryPage() {
             {t("history.title")}
           </h1>
           <p className="mt-2 text-sm text-slate-400">{t("app.subtitle")}</p>
+          <Link
+            className="mt-4 inline-block rounded-md bg-cyan-400 px-3 py-1.5 text-sm font-medium text-slate-950"
+            to="/new"
+          >
+            {t("nav.newAnalysis")}
+          </Link>
         </div>
         <LanguageSwitch />
       </header>

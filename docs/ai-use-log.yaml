@@ -166,6 +166,43 @@ entries:
       - Existing regression excluding the four new WebUI test files: 984 passed, 4 historical baseline failures, 2 skipped, 88 subtests passed; no new regression.
       - Not run: architecture experiments EVAL-01..EVAL-10, Playwright/Vitest, packaging/clean install, full mypy, Bandit, live model/data calls.
       - No git commit, push, merge, deployment, or remote setting change was performed.
+  - id: AI-20261106-002
+    date: '2026-11-06'
+    tool: OpenCode
+    model: deepseek-flash (DeepSeek V4.1 Flash 1017)
+    purpose: >-
+      Write the Iteration-2 test-only suite for the merged single-run vertical
+      slice: run control plane, SSE, cancellation, portfolio, checkpoints,
+      reporting, CSRF, wizard/live UI contracts, and frontend behavior tests.
+    source: Current user conversation; user approved the merged Iteration-2 plan and test plan on 2026-11-06
+    human_review: pending Iteration-2 test-plan review
+    paths:
+      - test/offline/web_fixture_app.py
+      - test/offline/test_web_config.py
+      - test/offline/test_web_runs.py
+      - test/offline/test_web_events.py
+      - test/offline/test_web_portfolio.py
+      - test/offline/test_web_checkpoints.py
+      - test/offline/test_web_reporting.py
+      - test/offline/test_web_security.py
+      - test/offline/test_web_contracts.py
+      - src/tradingagents_web/frontend/vitest.config.ts
+      - src/tradingagents_web/frontend/src/test-setup.ts
+      - src/tradingagents_web/frontend/tests/i18n.test.ts
+      - src/tradingagents_web/frontend/tests/markdown-sanitize.test.tsx
+      - src/tradingagents_web/frontend/tests/wizard-validation.test.ts
+      - src/tradingagents_web/frontend/tests/run-store.test.ts
+      - src/tradingagents_web/frontend/e2e/run.spec.ts
+      - docs/review-memo.md
+      - docs/ai-use-log.yaml
+    notes:
+      - No product code was implemented; this is a test-only change.
+      - Backend execution: 15 failed, 30 passed, 40 errors; every failure/error is EXPECTED-UNIMPLEMENTED.
+      - The separate Iteration-1 suite remains 58 passed.
+      - Frontend Vitest: 4 passed, 2 suites failed to resolve because the Iteration-2 modules do not exist; lint passed.
+      - A test-only defect in the Markdown raw-HTML fixture was fixed without weakening the sanitizer assertion.
+      - Playwright E2E and live model/data tests were not run.
+      - No git commit, push, merge, deployment, or remote setting change was performed.
   - id: AI-20261106-001
     date: '2026-11-06'
     tool: OpenCode
@@ -233,4 +270,61 @@ entries:
       - Frontend lint, typecheck, and build passed; npm audit reported 0 vulnerabilities.
       - The wheel contains static assets and the tradingagents-web entry point.
       - Not run: Playwright/Vitest browser execution, clean install, full mypy/Bandit/pip-audit, live model/data calls.
+      - No git commit, push, merge, deployment, or remote setting change was performed.
+  - id: AI-20261106-003
+    date: '2026-11-06'
+    tool: OpenCode
+    model: deepseek-flash (DeepSeek V4.1 Flash 1017)
+    purpose: >-
+      Implement Iteration-2: the eight-step analysis wizard, config projection,
+      portfolio validation, checkpoint controls, single-run coordinator, SSE
+      live view, cancellation, run artifacts, and completed report integration.
+    source: Current user conversation; user approved the merged Iteration-2 plan and test version on 2026-11-06
+    human_review: implementation authorized by user in conversation 2026-11-06; review pending
+    paths:
+      - src/tradingagents_web/api/session.py
+      - src/tradingagents_web/api/config.py
+      - src/tradingagents_web/api/portfolio.py
+      - src/tradingagents_web/api/checkpoints.py
+      - src/tradingagents_web/api/runs.py
+      - src/tradingagents_web/models/__init__.py
+      - src/tradingagents_web/models/requests.py
+      - src/tradingagents_web/runtime/__init__.py
+      - src/tradingagents_web/runtime/coordinator.py
+      - src/tradingagents_web/runtime/graph_runner.py
+      - src/tradingagents_web/runtime/projector.py
+      - src/tradingagents_web/runtime/event_buffer.py
+      - src/tradingagents_web/runtime/artifacts_writer.py
+      - src/tradingagents_web/security.py
+      - src/tradingagents_web/app.py
+      - src/tradingagents_web/frontend/package.json
+      - src/tradingagents_web/frontend/package-lock.json
+      - src/tradingagents_web/frontend/src/app/App.tsx
+      - src/tradingagents_web/frontend/src/api/runClient.ts
+      - src/tradingagents_web/frontend/src/pages/HistoryPage.tsx
+      - src/tradingagents_web/frontend/src/pages/NewAnalysisPage.tsx
+      - src/tradingagents_web/frontend/src/pages/LiveRunPage.tsx
+      - src/tradingagents_web/frontend/src/pages/NewAnalysis/validation.ts
+      - src/tradingagents_web/frontend/src/stores/runStore.ts
+      - src/tradingagents_web/frontend/src/i18n/en.json
+      - src/tradingagents_web/frontend/src/i18n/zh.json
+      - test/offline/web_fixture_app.py
+      - test/offline/test_web_events.py
+      - test/offline/test_web_reporting.py
+      - README.md
+      - docs/review-memo.md
+      - docs/ai-use-log.yaml
+      - docs/architecture/evaluation-logbook.md
+      - docs/architecture/evaluation-table.md
+      - docs/architecture/invariants.md
+      - docs/architecture/trace-matrix.md
+      - docs/debt-register.md
+    notes:
+      - Core and CLI source were not modified; `src/tradingagents_web` is the presentation/service layer.
+      - WebUI backend suite: 113 passed; full regression 1097 passed, 4 historical failures, 2 skipped, 88 subtests.
+      - Schema and structure gates passed; mypy and ruff on the new package passed.
+      - Frontend Vitest 10 passed; typecheck, lint, build passed; npm audit 0.
+      - The wheel includes the new Iteration-2 modules and built static assets.
+      - Not run: Playwright E2E, real model/data GraphRunner path, clean install, full mypy/Bandit/pip-audit, live tests.
+      - The approved test hash changed from de2193180ffd42f17e13f6adb9c2b223fb38de85663ca1432873c248db0cdfca to 542fc400fb2541fb1f25220791dc5eb41873280dc940b132d48064b345660cb1 after two test-support fixes (SSE parser flush and terminal-event break); no assertion was weakened.
       - No git commit, push, merge, deployment, or remote setting change was performed.

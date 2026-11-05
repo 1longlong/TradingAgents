@@ -13,6 +13,8 @@ Failure classification used by the WebUI tests:
 from __future__ import annotations
 
 import json
+import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -20,6 +22,97 @@ from types import SimpleNamespace
 import pytest
 
 SECRET = "sk-test-dummy-secret-1234567890"
+
+
+DEFAULT_RUN_EVENTS = [
+    {
+        "type": "run.started",
+        "payload": {"ticker": "NVDA", "trade_date": "2026-11-01"},
+    },
+    {
+        "type": "agent.status",
+        "payload": {"agent": "Market Analyst", "status": "in_progress"},
+    },
+    {
+        "type": "message",
+        "payload": {"timestamp": "12:00:00", "type": "Agent", "content": "working"},
+    },
+    {
+        "type": "tool_call",
+        "payload": {
+            "timestamp": "12:00:01",
+            "name": "get_stock_data",
+            "arguments": {"ticker": "NVDA"},
+        },
+    },
+    {
+        "type": "report.section",
+        "payload": {
+            "section": "market_report",
+            "title": "Market",
+            "content": "# Market\n\nMKT",
+        },
+    },
+    {
+        "type": "stats",
+        "payload": {
+            "agents_completed": 1,
+            "agents_total": 1,
+            "llm_calls": 1,
+            "tool_calls": 1,
+            "tokens_in": 10,
+            "tokens_out": 20,
+            "reports_completed": 1,
+            "reports_total": 1,
+            "elapsed": 0.1,
+        },
+    },
+    {
+        "type": "run.completed",
+        "payload": {
+            "signal": "Buy",
+            "review": False,
+            "wall_times": {"Market Analyst": 0.1},
+            "artifact_ids": [],
+        },
+    },
+]
+
+
+class FakeGraphRunner:
+    """Test double for the run coordinator's graph runner.
+
+    Contract expected by the tests: the object returned by ``runner_factory``
+    exposes ``run(request, emit, cancel_event)``. ``emit`` accepts a dict with
+    ``type`` and ``payload``; the coordinator owns ``seq``/``timestamp``.
+    """
+
+    def __init__(self, events=None, delay: float = 0.0, block_after: int | None = None):
+        self.events = list(DEFAULT_RUN_EVENTS if events is None else events)
+        self.delay = delay
+        self.block_after = block_after
+        self.started = threading.Event()
+        self.stopped = threading.Event()
+        self.received_request = None
+        self.emitted: list[dict] = []
+
+    def run(self, request, emit, cancel_event) -> None:
+        self.received_request = request
+        self.started.set()
+        for index, event in enumerate(self.events):
+            if cancel_event.is_set():
+                self.stopped.set()
+                return
+            emit(event)
+            self.emitted.append(event)
+            if self.delay:
+                time.sleep(self.delay)
+            if self.block_after is not None and index == self.block_after:
+                while not cancel_event.is_set():
+                    time.sleep(0.01)
+                self.stopped.set()
+                return
+        self.stopped.set()
 
 
 @dataclass(frozen=True)
@@ -272,6 +365,106 @@ def make_client(app):
     from fastapi.testclient import TestClient
 
     return TestClient(app, base_url="http://127.0.0.1:8000")
+
+
+def require_run_modules() -> None:
+    """Fail as expected-unimplemented until the Iteration-2 modules exist."""
+    try:
+        import tradingagents_web.api.checkpoints  # noqa: F401
+        import tradingagents_web.api.config  # noqa: F401
+        import tradingagents_web.api.portfolio  # noqa: F401
+        import tradingagents_web.api.runs  # noqa: F401
+        import tradingagents_web.api.session  # noqa: F401
+        import tradingagents_web.runtime.coordinator  # noqa: F401
+        import tradingagents_web.runtime.event_buffer  # noqa: F401
+        import tradingagents_web.runtime.projector  # noqa: F401
+    except ModuleNotFoundError as exc:
+        pytest.fail(
+            f"EXPECTED-UNIMPLEMENTED: {exc.name}; the Iteration-2 run control "
+            "plane is not implemented yet",
+            pytrace=False,
+        )
+
+
+def make_run_app(web, tree: FixtureTree, runner_factory=None, **settings_kwargs):
+    settings = make_settings(web, tree, **settings_kwargs)
+    try:
+        if runner_factory is None:
+            return web.create_app(settings)
+        return web.create_app(settings, runner_factory=runner_factory)
+    except TypeError as exc:
+        pytest.fail(
+            "EXPECTED-UNIMPLEMENTED: create_app must accept a runner_factory "
+            f"for the run control plane: {exc}",
+            pytrace=False,
+        )
+
+
+def make_run_client(
+    tree: FixtureTree, runner_factory=None, *, csrf: bool = True, **settings_kwargs
+):
+    web = require_web()
+    require_run_modules()
+    client = make_client(make_run_app(web, tree, runner_factory, **settings_kwargs))
+    if csrf:
+        session = client.get("/api/session")
+        if session.status_code != 200:
+            pytest.fail(
+                "EXPECTED-UNIMPLEMENTED: /api/session must issue a CSRF token",
+                pytrace=False,
+            )
+        client.headers["X-CSRF-Token"] = session.json()["csrf_token"]
+    return client
+
+
+def wait_terminal(client, run_id: str, timeout: float = 3.0) -> dict:
+    """Wait for a run to reach a terminal state in the fake-runner tests."""
+    deadline = time.monotonic() + timeout
+    last = None
+    while time.monotonic() < deadline:
+        response = client.get(f"/api/runs/{run_id}")
+        if response.status_code == 200:
+            last = response.json()
+            if last.get("status") in {"completed", "failed", "cancelled"}:
+                return last
+        time.sleep(0.01)
+    pytest.fail(f"run {run_id} did not reach a terminal state; last={last!r}", pytrace=False)
+
+
+def parse_sse(text: str) -> list[dict]:
+    """Parse SSE frames into JSON event dicts for assertions."""
+    events: list[dict] = []
+    current: dict[str, str] = {}
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            if current:
+                data = current.get("data")
+                if data:
+                    try:
+                        parsed = json.loads(data)
+                    except json.JSONDecodeError:
+                        parsed = {"raw": data}
+                    parsed["sse_event"] = current.get("event")
+                    parsed["sse_id"] = current.get("id")
+                    events.append(parsed)
+                current = {}
+            continue
+        if line.startswith("id:"):
+            current["id"] = line[3:].strip()
+        elif line.startswith("event:"):
+            current["event"] = line[6:].strip()
+        elif line.startswith("data:"):
+            current["data"] = current.get("data", "") + line[5:].strip()
+    if current and current.get("data"):
+        try:
+            parsed = json.loads(current["data"])
+        except json.JSONDecodeError:
+            parsed = {"raw": current["data"]}
+        parsed["sse_event"] = current.get("event")
+        parsed["sse_id"] = current.get("id")
+        events.append(parsed)
+    return events
 
 
 def find_item(items, source: str, ticker: str | None = None):
