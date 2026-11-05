@@ -15,7 +15,7 @@ from .settings import WebSettings
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="TradingAgents WebUI (read-only history/report browser)"
+        description="TradingAgents WebUI (analysis, backtest, and history)"
     )
     parser.add_argument("--host", default="127.0.0.1", help="Loopback host only")
     parser.add_argument("--port", type=int, default=8000)
@@ -32,7 +32,7 @@ def main(argv: list[str] | None = None) -> int:
     app = create_app(settings)
     url = f"http://{args.host}:{args.port}/"
     print(f"TradingAgents WebUI: {url}")
-    print("Serving only existing artifacts; analysis runs are not available in Iteration 1.")
+    print("Serving local analysis, backtest, and existing artifacts.")
     if args.open:
         webbrowser.open(url)
     uvicorn.run(

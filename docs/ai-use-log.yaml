@@ -441,4 +441,5 @@ entries:
       - Test-version delta is limited to the E2E fake server; the frozen 12-file hash is unchanged.
       - No new dependency was added; npm audit reports 0 vulnerabilities.
       - Not run: real backtest model/data calls, real announcement network calls, Firefox/WebKit, clean install, full mypy/Bandit/pip-audit.
+      - Startup help and banner text were corrected to describe analysis, backtest, and history instead of the Iteration-1 read-only wording.
       - No push, merge, deployment, or remote setting change was performed.
