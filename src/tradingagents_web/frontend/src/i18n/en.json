@@ -6,6 +6,7 @@
   "nav": {
     "history": "History",
     "newAnalysis": "New Analysis",
+    "backtest": "Backtest",
     "language": "Language"
   },
   "history": {
@@ -74,6 +75,36 @@
     "title": "Report",
     "complete": "Complete report",
     "archive": "Archive"
+  },
+  "backtest": {
+    "title": "Backtest",
+    "tickers": "Tickers",
+    "start": "Start",
+    "end": "End",
+    "every": "Every N days",
+    "analysts": "Analysts",
+    "assetType": "Asset type",
+    "portfolio": "Portfolio JSON (optional)",
+    "runId": "Run ID (optional)",
+    "submit": "Run Backtest",
+    "running": "Backtest running...",
+    "noCancel": "A backtest runs to completion; it cannot be cancelled. Reuse the run ID to resume.",
+    "resolved": "Resolved",
+    "pending": "Pending",
+    "unscored": "Unscored",
+    "rating": "Rating",
+    "count": "Count",
+    "hitRate": "Hit rate",
+    "meanAlpha": "Mean alpha",
+    "holding": "Holding",
+    "failures": "Failures",
+    "settlementFailures": "Settlement failures",
+    "history": "Past sweeps",
+    "log": "Download decision log"
+  },
+  "announcements": {
+    "title": "Announcements",
+    "acknowledge": "Acknowledge"
   },
   "common": {
     "refresh": "Refresh",

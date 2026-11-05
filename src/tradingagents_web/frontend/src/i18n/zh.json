@@ -6,6 +6,7 @@
   "nav": {
     "history": "历史",
     "newAnalysis": "新建分析",
+    "backtest": "回测",
     "language": "语言"
   },
   "history": {
@@ -74,6 +75,36 @@
     "title": "报告",
     "complete": "完整报告",
     "archive": "归档"
+  },
+  "backtest": {
+    "title": "回测",
+    "tickers": "标的列表",
+    "start": "开始日期",
+    "end": "结束日期",
+    "every": "间隔天数",
+    "analysts": "分析师",
+    "assetType": "资产类型",
+    "portfolio": "组合 JSON（可选）",
+    "runId": "运行 ID（可选）",
+    "submit": "运行回测",
+    "running": "回测运行中...",
+    "noCancel": "回测会运行至完成，无法取消；可使用同一运行 ID 续跑。",
+    "resolved": "已结算",
+    "pending": "待结算",
+    "unscored": "未评分",
+    "rating": "评级",
+    "count": "数量",
+    "hitRate": "命中率",
+    "meanAlpha": "平均 Alpha",
+    "holding": "持有窗口",
+    "failures": "失败项",
+    "settlementFailures": "结算失败项",
+    "history": "历史回测",
+    "log": "下载决策日志"
+  },
+  "announcements": {
+    "title": "公告",
+    "acknowledge": "确认"
   },
   "common": {
     "refresh": "刷新",

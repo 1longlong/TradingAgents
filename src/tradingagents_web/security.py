@@ -42,7 +42,12 @@ def host_allowed(host_header: str | None) -> bool:
 
 
 CSRF_HEADER = "x-csrf-token"
-_CSRF_EXACT = {"/api/runs", "/api/checkpoints/clear", "/api/portfolio/validate"}
+_CSRF_EXACT = {
+    "/api/runs",
+    "/api/backtests",
+    "/api/checkpoints/clear",
+    "/api/portfolio/validate",
+}
 _CSRF_CANCEL_RE = re.compile(r"^/api/runs/[^/]+/cancel$")
 
 

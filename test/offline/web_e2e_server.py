@@ -13,8 +13,47 @@ from pathlib import Path
 import uvicorn
 
 from test.offline.web_fixture_app import build_fixture_tree
+from tradingagents.agents.utils.memory import TradingMemoryLog
+from tradingagents.backtest import BacktestResult
 from tradingagents_web.app import create_app
 from tradingagents_web.settings import WebSettings
+
+
+def fake_run_backtest(
+    tickers,
+    dates,
+    config,
+    asset_type="stock",
+    portfolio=None,
+    selected_analysts=("market", "social", "news", "fundamentals"),
+    run_id=None,
+):
+    log = TradingMemoryLog({"memory_log_path": str(config["memory_log_path"])})
+    for ticker in tickers:
+        for date in dates:
+            log.store_decision(ticker, date, "**Rating**: Buy\n\nE2E backtest cell.\n")
+            log.update_with_outcome(
+                ticker,
+                date,
+                raw_return=0.02,
+                alpha_return=0.01,
+                holding_days=5,
+                reflection="E2E backtest reflection.",
+                resolution_date=date,
+            )
+    return BacktestResult(
+        run_id=run_id or "bt_e2e",
+        log_path=Path(config["memory_log_path"]),
+        cells_run=len(tickers) * len(dates),
+    )
+
+
+def fake_fetch_announcements(*args, **kwargs):
+    return {
+        "announcements": ["E2E announcement"],
+        "require_attention": False,
+    }
+
 
 
 class E2ERunner:
@@ -96,6 +135,13 @@ class E2ERunner:
 def create_e2e_app():
     root = Path(tempfile.mkdtemp(prefix="tradingagents-e2e-"))
     tree = build_fixture_tree(root)
+
+    import tradingagents_web.api.announcements as announcements_module
+    import tradingagents_web.runtime.backtest_runner as backtest_module
+
+    backtest_module.run_backtest = fake_run_backtest
+    announcements_module.fetch_announcements = fake_fetch_announcements
+
     settings = WebSettings(
         results_dir=tree.results_dir,
         memory_log_path=tree.memory_log_path,

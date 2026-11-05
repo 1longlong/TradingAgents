@@ -13,6 +13,7 @@ from tradingagents_web.artifacts.downloads import (
     FileTooLarge,
     archive_bytes,
     complete_report,
+    log_file,
     read_text,
     section_file,
 )
@@ -122,6 +123,16 @@ def history_download(
                 media_type="text/markdown",
                 headers={
                     "Content-Disposition": f'attachment; filename="{_filename(artifact, "section.md")}"'
+                },
+            )
+        if kind == "log":
+            path = log_file(artifact)
+            text = redact_text(read_text(path, settings.max_report_bytes), secrets)
+            return Response(
+                content=text,
+                media_type="text/markdown",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{_filename(artifact, "trading_memory.md")}"'
                 },
             )
         if kind == "archive":

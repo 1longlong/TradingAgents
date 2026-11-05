@@ -57,7 +57,7 @@ export function getHistoryDetail(artifactId: string) {
 
 export function downloadUrl(
   artifactId: string,
-  kind: "complete" | "archive" | "section",
+  kind: "complete" | "archive" | "section" | "log",
   section?: string,
 ) {
   const search = new URLSearchParams({ kind });

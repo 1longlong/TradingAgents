@@ -205,3 +205,24 @@ The existing base branch does not contain these new checks. Their first introduc
 - Not run: full regression (the new suites intentionally fail until implementation), real `run_backtest` model/data calls, real announcement network calls, Firefox/WebKit, clean install, full mypy/Bandit/pip-audit.
 - GitHub test-plan approval: **not claimed**. The local test revision is frozen for human review; implementation must not begin until this test version is approved.
 - No product code was implemented. The test-only revision is committed locally and has not been pushed; no merge, deployment, or remote setting change was performed.
+
+## Iteration-3 implementation — 2026-11-06
+
+- Authorization: the user approved the Iteration-3 plan and the test version in the current conversation.
+- Scope implemented: backtest launch/status/summary/log download, read-only backtest history, shared single-run slot with analysis, server-side announcements with fallback/cache, blocking announcement acknowledgement, and frontend Backtest/Announcements pages.
+- Backend modules: `api/backtests.py`, `api/announcements.py`, `runtime/backtest_runner.py`, `models/backtest_requests.py`; coordinator extended with `BacktestRecord` and shared-slot `start_backtest`; history download extended with `kind=log`; CSRF covers `/api/backtests`.
+- Frontend: `BacktestPage`, `BacktestRunPage`, `Backtest/validation.ts`, `Backtest/BacktestSummary.tsx`, `Announcements.tsx`, `api/backtestClient.ts`, routes, history link, and i18n strings. No new npm dependency was added.
+- Verification (Python 3.14.3; Node 24.13.0):
+  - WebUI backend suite: **147 passed**.
+  - Frontend Vitest: **25 passed** (8 files).
+  - Chromium Playwright E2E: **6 passed** (history, announcements, backtest, wizard/live/report, cancel).
+  - Full regression: **1131 passed, 4 historical failures, 2 skipped, 88 subtests passed**. The 4 failures are the documented historical baseline failures.
+  - `test.ci_gates schema` and `structure`: **PASS**.
+  - `mypy src/tradingagents_web`: **Success, 31 source files**; `ruff`: **All checks passed**.
+  - Frontend typecheck, lint, and build: **PASS**; `npm audit`: **0 vulnerabilities**.
+  - CLI help/import smoke: **PASS**.
+  - Wheel includes the new backtest/announcement modules and built static assets.
+- Test-version delta: only `test/offline/web_e2e_server.py` changed during implementation (+46 lines) to add fake backtest and announcement providers for the already-approved E2E specs. No test assertion was changed; the frozen 12-file hash `18f712b9148496d5a61f4ba25b620b257f23a44e37f1694c6971385d19cf308f` remains unchanged.
+- E2E fix: the English label for the history section was changed from "Backtest history" to "Past sweeps" because the approved locator `getByRole("heading", { name: /backtest/i })` is strict-mode and matched two headings. No test was weakened.
+- Not run: real `run_backtest` model/data calls, real announcement network calls, Firefox/WebKit, clean install, full mypy/Bandit/pip-audit, GitHub review markers.
+- No push, merge, deployment, or remote setting change was performed.

@@ -392,3 +392,53 @@ entries:
       - Chromium E2E 4 passed; 2 new specs fail as EXPECTED-UNIMPLEMENTED.
       - Python compileall, ruff, and frontend ESLint passed on the changed test files.
       - No product code was implemented; no push, merge, deployment, or remote setting change was performed.
+  - id: AI-20261106-006
+    date: '2026-11-06'
+    tool: OpenCode
+    model: deepseek-flash (DeepSeek V4.1 Flash 1017)
+    purpose: >-
+      Implement the approved Iteration-3 backtest and announcement surfaces,
+      including the shared single-run slot, isolated backtest logs, read-only
+      backtest history, server-side announcement fallback/cache, and frontend
+      Backtest/Announcements views.
+    source: Current user conversation; user approved the Iteration-3 plan and test version
+    human_review: implementation authorized by user in conversation 2026-11-06; review pending
+    paths:
+      - src/tradingagents_web/api/backtests.py
+      - src/tradingagents_web/api/announcements.py
+      - src/tradingagents_web/runtime/backtest_runner.py
+      - src/tradingagents_web/runtime/coordinator.py
+      - src/tradingagents_web/models/backtest_requests.py
+      - src/tradingagents_web/api/history.py
+      - src/tradingagents_web/artifacts/downloads.py
+      - src/tradingagents_web/app.py
+      - src/tradingagents_web/security.py
+      - src/tradingagents_web/frontend/src/api/backtestClient.ts
+      - src/tradingagents_web/frontend/src/api/client.ts
+      - src/tradingagents_web/frontend/src/app/App.tsx
+      - src/tradingagents_web/frontend/src/components/Announcements.tsx
+      - src/tradingagents_web/frontend/src/pages/Backtest/BacktestSummary.tsx
+      - src/tradingagents_web/frontend/src/pages/Backtest/validation.ts
+      - src/tradingagents_web/frontend/src/pages/BacktestPage.tsx
+      - src/tradingagents_web/frontend/src/pages/BacktestRunPage.tsx
+      - src/tradingagents_web/frontend/src/pages/HistoryPage.tsx
+      - src/tradingagents_web/frontend/src/i18n/en.json
+      - src/tradingagents_web/frontend/src/i18n/zh.json
+      - test/offline/web_e2e_server.py
+      - docs/architecture/adr/011-backtest-surface.md
+      - docs/architecture/adr/012-announcements.md
+      - README.md
+      - docs/review-memo.md
+      - docs/ai-use-log.yaml
+      - docs/architecture/evaluation-logbook.md
+      - docs/architecture/evaluation-table.md
+      - docs/architecture/invariants.md
+      - docs/architecture/trace-matrix.md
+      - docs/debt-register.md
+    notes:
+      - WebUI backend suite 147 passed; frontend Vitest 25 passed; Chromium E2E 6 passed.
+      - Full regression 1131 passed, 4 historical failures, 2 skipped, 88 subtests.
+      - Test-version delta is limited to the E2E fake server; the frozen 12-file hash is unchanged.
+      - No new dependency was added; npm audit reports 0 vulnerabilities.
+      - Not run: real backtest model/data calls, real announcement network calls, Firefox/WebKit, clean install, full mypy/Bandit/pip-audit.
+      - No push, merge, deployment, or remote setting change was performed.

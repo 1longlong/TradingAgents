@@ -155,6 +155,18 @@ Classification:
 - Test version hash: `18f712b9148496d5a61f4ba25b620b257f23a44e37f1694c6971385d19cf308f`.
 - Not run: real backtest model/data calls, real announcement network calls, full regression until implementation, Firefox/WebKit, clean install.
 
+## 2026-11-06 — Iteration-3 implementation
+
+- Implemented backtest launch/status/summary/log download, read-only backtest history, shared single-run slot, server-side announcement fallback/cache, and frontend Backtest/Announcements views.
+- WebUI backend suite: **147 passed**.
+- Frontend Vitest: **25 passed (8 files)**.
+- Chromium Playwright E2E: **6 passed**.
+- Full regression: **1131 passed, 4 historical failures, 2 skipped, 88 subtests passed**.
+- `test.ci_gates schema` and `structure`: **PASS**; `mypy src/tradingagents_web` and `ruff`: **PASS**.
+- Frontend typecheck/lint/build: **PASS**; `npm audit`: **0 vulnerabilities**; wheel contains the new modules and static assets.
+- Test-version delta: only `test/offline/web_e2e_server.py` changed to add fake backtest/announcement providers; no assertion changed.
+- Not run: real backtest model/data calls, real announcement network calls, Firefox/WebKit, clean install, full mypy/Bandit/pip-audit.
+
 ## Decisions and open items
 
 Resolved for documentation: framework, transport, frontend stack, UI library, package path, history source, key handling, cancellation policy, downloads, preferences.

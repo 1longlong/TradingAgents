@@ -76,13 +76,53 @@ class RunRecord:
         }
 
 
+@dataclass
+class BacktestRecord:
+    run_id: str
+    request: dict
+    status: str = "starting"
+    started_at: str = field(default_factory=_now)
+    finished_at: str | None = None
+    summary: dict | None = None
+    error: dict | None = None
+    cells_run: int = 0
+    skipped: int = 0
+    lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def to_snapshot(self) -> dict:
+        request = self.request
+        tickers = list(request.get("tickers") or [])
+        dates = list(request.get("dates") or [])
+        return {
+            "run_id": self.run_id,
+            "kind": "backtest",
+            "status": self.status,
+            "ticker": ",".join(tickers),
+            "tickers": tickers,
+            "dates": dates,
+            "start": request.get("start"),
+            "end": request.get("end"),
+            "every": request.get("every"),
+            "asset_type": request.get("asset_type", "stock"),
+            "analysts": request.get("selected_analysts", []),
+            "expected_cells": len(tickers) * len(dates),
+            "cells_run": self.cells_run,
+            "skipped": self.skipped,
+            "started_at": self.started_at,
+            "finished_at": self.finished_at,
+            "summary": self.summary,
+            "error": self.error,
+        }
+
+
 class RunCoordinator:
     def __init__(self, settings, runner_factory):
         self.settings = settings
         self.runner_factory = runner_factory
         self._lock = threading.Lock()
-        self._active: RunRecord | None = None
+        self._active: RunRecord | BacktestRecord | None = None
         self._records: dict[str, RunRecord] = {}
+        self._backtests: dict[str, BacktestRecord] = {}
         self._request_ids: dict[str, str] = {}
 
     def start(self, request: dict, client_request_id: str) -> RunRecord:
@@ -110,6 +150,56 @@ class RunCoordinator:
                 daemon=True,
             ).start()
             return record
+
+    def start_backtest(self, request: dict) -> BacktestRecord:
+        with self._lock:
+            if self._active is not None and self._active.status not in TERMINAL_STATUSES:
+                raise RunConflict(self._active.run_id)
+
+            run_id = str(request["run_id"])
+            record = BacktestRecord(run_id=run_id, request=request)
+            self._backtests[run_id] = record
+            self._active = record
+            threading.Thread(
+                target=self._execute_backtest,
+                args=(record,),
+                name=f"web-backtest-{run_id}",
+                daemon=True,
+            ).start()
+            return record
+
+    def _execute_backtest(self, record: BacktestRecord) -> None:
+        record.status = "running"
+        try:
+            from .backtest_runner import BacktestRunner
+
+            outcome = BacktestRunner(self.settings).execute(record.request)
+            with record.lock:
+                record.summary = outcome["summary"]
+                record.cells_run = int(outcome.get("cells_run") or 0)
+                record.skipped = int(outcome.get("skipped") or 0)
+                record.status = "completed"
+                record.finished_at = _now()
+        except Exception:
+            with record.lock:
+                record.status = "failed"
+                record.error = {
+                    "category": "internal",
+                    "message": "backtest failed; check the server log",
+                }
+                record.finished_at = _now()
+        finally:
+            with self._lock:
+                if self._active is record:
+                    self._active = None
+
+    def get_backtest(self, run_id: str) -> BacktestRecord | None:
+        with self._lock:
+            return self._backtests.get(run_id)
+
+    def backtest_snapshots(self) -> list[dict]:
+        with self._lock:
+            return [record.to_snapshot() for record in self._backtests.values()]
 
     def _execute(self, record: RunRecord) -> None:
         record.writer = RunArtifactWriter(

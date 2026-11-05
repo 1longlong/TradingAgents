@@ -43,6 +43,15 @@ def complete_report(artifact: Artifact) -> Path:
     raise ArtifactUnavailable("complete report is not available")
 
 
+def log_file(artifact: Artifact) -> Path:
+    if artifact.source != "backtest":
+        raise ArtifactUnavailable("log is not available")
+    candidate = artifact.path / "trading_memory.md"
+    if candidate.is_file() and _inside(candidate, artifact.path):
+        return candidate
+    raise ArtifactUnavailable("log is not available")
+
+
 def section_file(artifact: Artifact, section: str) -> Path:
     if not _SECTION_RE.fullmatch(section) or ".." in section.split("/"):
         raise ArtifactUnavailable("invalid section")

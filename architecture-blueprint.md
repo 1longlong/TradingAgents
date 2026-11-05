@@ -1,8 +1,8 @@
 # TradingAgents WebUI Architecture Blueprint
 
-Status: **Architecture decisions approved for documentation by the human owner on 2026-11-05.** No product implementation is approved. Implementation remains blocked until the test plan, safety review, governance review, and dependency approval listed in Section 15 are complete.
+Status: **Architecture decisions approved for documentation by the human owner on 2026-11-05.** Iterations 1–3 are implemented under conversation approvals; implementation review, safety/governance markers, and dependency approval remain pending. The selected stack is recorded in ADR-001 through ADR-012.
 
-Owner: human project owner. Prepared by the Docs role on 2026-11-05. The selected stack is recorded in ADR-001 through ADR-007.
+Owner: human project owner. Prepared by the Docs role on 2026-11-05.
 
 ## 1. Authority and scope
 

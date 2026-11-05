@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import { getHistory } from "../api/client";
+import { AnnouncementsGate } from "../components/Announcements";
 import { LanguageSwitch } from "../components/LanguageSwitch";
 
 export function HistoryPage() {
@@ -29,9 +30,17 @@ export function HistoryPage() {
           >
             {t("nav.newAnalysis")}
           </Link>
+          <Link
+            className="mt-4 ml-2 inline-block rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
+            to="/backtest"
+          >
+            {t("nav.backtest")}
+          </Link>
         </div>
         <LanguageSwitch />
       </header>
+
+      <AnnouncementsGate />
 
       {history.isLoading ? (
         <p className="text-slate-400">{t("history.loading")}</p>

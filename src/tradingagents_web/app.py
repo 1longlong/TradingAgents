@@ -11,6 +11,8 @@ from fastapi.staticfiles import StaticFiles
 
 from tradingagents_web import __version__
 from tradingagents_web.api import (
+    announcements,
+    backtests,
     checkpoints,
     config,
     health,
@@ -47,6 +49,7 @@ def create_app(settings: WebSettings, runner_factory=None) -> FastAPI:
     app.state.settings = settings
     app.state.csrf_token = secrets.token_urlsafe(32)
     app.state.coordinator = RunCoordinator(settings, runner_factory or GraphRunner)
+    app.state.announcement_cache = None
 
     @app.middleware("http")
     async def _security_middleware(request: Request, call_next):
@@ -76,6 +79,8 @@ def create_app(settings: WebSettings, runner_factory=None) -> FastAPI:
         portfolio.router,
         checkpoints.router,
         runs.router,
+        backtests.router,
+        announcements.router,
         health.router,
         history.router,
     ):

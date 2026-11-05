@@ -7,15 +7,15 @@ Status: **Approved for documentation by the human owner on 2026-11-05.** This do
 | ID | Evaluation | Method | Environment | Pass criterion | Status |
 | --- | --- | --- | --- | --- | --- |
 | EVAL-01 | Dependency and license review | Inspect `fastapi`, `uvicorn`, and npm lockfile; run advisory audit | Approved dev/CI environment | No unapproved license; no unresolved high/critical advisory | Partially run: npm audit 0; pip-audit and license review pending |
-| EVAL-02 | Backend contract | pytest + httpx/TestClient with fake graph runner | Offline, temp dirs | All API/event/error contracts pass | Executed: 58 passed |
-| EVAL-03 | Security boundary | Host/Origin/CSRF, path traversal, secret scan, XSS payloads | Offline | Zero violations in the defined suite | Executed: 58 passed (backend/static contract suite) |
+| EVAL-02 | Backend contract | pytest + httpx/TestClient with fake graph runner | Offline, temp dirs | All API/event/error contracts pass | Executed: 147 passed |
+| EVAL-03 | Security boundary | Host/Origin/CSRF, path traversal, secret scan, XSS payloads | Offline | Zero violations in the defined suite | Executed: 147 passed (backend/static contract suite) |
 | EVAL-04 | Event latency | Local harness publishing N events; measure p95 delivery | Loopback, no model calls | p95 ≤ 1000 ms; no sequence gaps | Not run: no SSE in Iteration 1 |
 | EVAL-05 | Packaging | Build wheel; inspect contents; install in clean venv; health check | Clean temp environment | `static/index.html` present; `/api/health` succeeds | Partially run: wheel contents verified; clean install pending |
-| EVAL-06 | Browser matrix | Playwright on Chromium/Firefox/WebKit | Desktop, latest two stable majors | Core flows pass; no console errors | Not run: browser binaries/harness not executed |
-| EVAL-07 | CLI/core regression | Existing offline suite + CLI help/import | Network-isolated | No new regression; inherited failures reported honestly | Executed: 1042 passed, 4 historical failures |
+| EVAL-06 | Browser matrix | Playwright on Chromium/Firefox/WebKit | Desktop, latest two stable majors | Core flows pass; no console errors | Partially run: Chromium 6 passed; Firefox/WebKit excluded by user instruction |
+| EVAL-07 | CLI/core regression | Existing offline suite + CLI help/import | Network-isolated | No new regression; inherited failures reported honestly | Executed: 1131 passed, 4 historical failures |
 | EVAL-08 | Artifact parity | Compare web-written `message_tool.log`/section files with CLI layout | Temp `results_dir` | Same names and formats; no `full_states_log` | Partially run: read-only fixtures use CLI/API formats; write parity belongs to the run iteration |
-| EVAL-09 | Backtest parity | Compare structured summary fields with `summarize()` | Fake/temp backtest | All fields match; live log untouched | Partially run: read-only summary test passed; launch/isolation not exercised |
-| EVAL-10 | Frontend contract | `tsc --noEmit`, OpenAPI type drift, i18n key parity | CI | No drift; no missing keys | Partially run: typecheck/build/lint passed; Vitest/Playwright and OpenAPI generation pending |
+| EVAL-09 | Backtest parity | Compare structured summary fields with `summarize()` | Fake/temp backtest | All fields match; live log untouched | Executed offline: launch, summary, log download, and live-log isolation; real model run pending |
+| EVAL-10 | Frontend contract | `tsc --noEmit`, OpenAPI type drift, i18n key parity | CI | No drift; no missing keys | Executed: typecheck/lint/build, Vitest 25, Chromium E2E 6; OpenAPI type generation pending |
 
 ## 2. Decision rationale (qualitative, not measured)
 
@@ -44,21 +44,24 @@ These are design judgments, not benchmark results. They do not replace EVAL-01 t
 | Blueprint anchor resolution | Local script over `architecture_refs` | Passed: all anchors resolve | 2026-11-05 |
 | Official `python -m test.ci_gates schema` | Project entry point in `.venv` | **PASS** | 2026-11-05 |
 | Official `python -m test.ci_gates structure` | Project entry point in `.venv` | **PASS** | 2026-11-05 |
-| WebUI backend suite (Iteration 1 + 2) | `pytest test/offline/test_web_*.py` | **113 passed** | 2026-11-06 |
+| WebUI backend suite (Iteration 1–3) | `pytest test/offline/test_web_*.py` | **147 passed** | 2026-11-06 |
 | CLI/reporting compatibility | `pytest test_cli_commands.py test_reporting.py` | **14 passed** | 2026-11-06 |
 | Import smoke, web mypy, and ruff | `python -c ...`; `mypy src/tradingagents_web`; `ruff check ...` | **PASS** | 2026-11-06 |
-| Full regression | `pytest --disable-socket --allow-unix-socket` | **1097 passed, 4 historical failures, 2 skipped, 88 subtests** | 2026-11-06 |
-| Frontend Vitest | `npm run test` | **10 passed (4 files)** | 2026-11-06 |
+| Full regression | `pytest --disable-socket --allow-unix-socket` | **1131 passed, 4 historical failures, 2 skipped, 88 subtests** | 2026-11-06 |
+| Frontend Vitest | `npm run test` | **25 passed (8 files)** | 2026-11-06 |
 | Frontend lint/typecheck/build | `npm run lint`, `npm run typecheck`, `npm run build` | **PASS** | 2026-11-06 |
 | Frontend dependency audit | `npm audit --json` | **0 vulnerabilities** | 2026-11-06 |
-| Wheel packaging | `pip wheel . --no-deps`; inspect archive | **new Iteration-2 modules and built static assets present** | 2026-11-06 |
+| Wheel packaging | `pip wheel . --no-deps`; inspect archive | **Iteration-3 modules and built static assets present** | 2026-11-06 |
 | Static/API smoke | TestClient with built static | **/, /history, /api/health, /api/history → 200** | 2026-11-06 |
-| Architecture experiments EVAL-01 to EVAL-10 | — | **Not run** | 2026-11-05 |
-| Playwright Chromium E2E | `npm run e2e` | **4 passed** (history, wizard/live/report, cancel) | 2026-11-06 |
+| Architecture experiments EVAL-01 to EVAL-10 | — | **Partially run; see the individual rows and the logbook** | 2026-11-06 |
+| Playwright Chromium E2E | `npm run e2e` | **6 passed** (history, announcements, backtest, wizard/live/report, cancel) | 2026-11-06 |
 | Playwright Firefox/WebKit | — | **Not run**: excluded by user instruction | 2026-11-06 |
 | Iteration-3 backend test version | `pytest test/offline/test_web_*.py` | **113 passed, 6 failed, 28 errors**; all 34 are `EXPECTED-UNIMPLEMENTED` | 2026-11-06 |
 | Iteration-3 frontend test version | `npm run test` | **10 passed, 15 failed**; all 15 are `EXPECTED-UNIMPLEMENTED` | 2026-11-06 |
-| Iteration-3 Chromium E2E | `npm run e2e` | **4 passed, 2 failed**; both failures are `EXPECTED-UNIMPLEMENTED` | 2026-11-06 |
+| Iteration-3 Chromium E2E | `npm run e2e` | **4 passed, 2 failed**; both failures were `EXPECTED-UNIMPLEMENTED` at review time | 2026-11-06 |
+| Iteration-3 implementation backend | `pytest test/offline/test_web_*.py` | **147 passed** | 2026-11-06 |
+| Iteration-3 implementation frontend | `npm run test` | **25 passed** | 2026-11-06 |
+| Iteration-3 implementation E2E | `npm run e2e` | **6 passed** | 2026-11-06 |
 | Real GraphRunner/live model path | — | **Not run**: requires credentials/cost authorization | 2026-11-06 |
 
 The documentation validation above does not verify the architecture, the runtime, packaging, latency, browsers, or dependencies. It only checks the written registry.
