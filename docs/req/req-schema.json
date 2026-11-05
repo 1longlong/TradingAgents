@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TradingAgents Requirements Registry",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["id", "type", "statement", "priority", "owner"],
+    "properties": {
+      "id": { "type": "string" },
+      "owner": { "type": "string" },
+      "type": {
+        "type": "string",
+        "enum": ["functional", "invariant", "quality", "performance", "cost", "governance", "security"]
+      },
+      "statement": { "type": "string" },
+      "fit_criterion": { "type": "string" },
+      "metric": { "type": "string" },
+      "threshold": { "type": "string" },
+      "verification": { "type": "string" },
+      "priority": {
+        "type": "string",
+        "enum": ["Must", "Should", "Could", "Won't"]
+      }
+    },
+    "additionalProperties": true
+  }
+}
