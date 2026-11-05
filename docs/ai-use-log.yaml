@@ -358,3 +358,37 @@ entries:
       - Frontend Vitest: 10 passed; typecheck/lint/build passed; npm audit 0.
       - Not run: Firefox/WebKit E2E, real GraphRunner/live model path, clean install, full mypy/Bandit/pip-audit.
       - No git commit, push, merge, deployment, or remote setting change was performed.
+  - id: AI-20261106-005
+    date: '2026-11-06'
+    tool: OpenCode
+    model: deepseek-flash (DeepSeek V4.1 Flash 1017)
+    purpose: >-
+      Write and execute the Iteration-3 test-only revision for backtest launch,
+      announcement handling, and backtest/live isolation, without implementing
+      product code.
+    source: Current user conversation; user approved the Iteration-3 plan and test plan
+    human_review: test version pending human review; implementation not authorized yet
+    paths:
+      - test/offline/web_fixture_app.py
+      - test/offline/test_web_backtest.py
+      - test/offline/test_web_announcements.py
+      - test/offline/test_web_contracts.py
+      - test/offline/test_web_security.py
+      - src/tradingagents_web/frontend/tests/iteration3-support.ts
+      - src/tradingagents_web/frontend/tests/backtest-validation.test.ts
+      - src/tradingagents_web/frontend/tests/backtest-summary.test.tsx
+      - src/tradingagents_web/frontend/tests/announcements.test.tsx
+      - src/tradingagents_web/frontend/tests/backtest-i18n.test.ts
+      - src/tradingagents_web/frontend/e2e/backtest.spec.ts
+      - src/tradingagents_web/frontend/e2e/announcements.spec.ts
+      - docs/review-memo.md
+      - docs/ai-use-log.yaml
+      - docs/architecture/evaluation-logbook.md
+      - docs/architecture/evaluation-table.md
+    notes:
+      - Test version hash 18f712b9148496d5a61f4ba25b620b257f23a44e37f1694c6971385d19cf308f is SHA-256 over the 12 files as path, NUL, content, NUL in sorted order.
+      - Backend WebUI suite 113 passed; 6 failed and 28 errors are all EXPECTED-UNIMPLEMENTED.
+      - Frontend Vitest 10 passed; 15 failures are all EXPECTED-UNIMPLEMENTED.
+      - Chromium E2E 4 passed; 2 new specs fail as EXPECTED-UNIMPLEMENTED.
+      - Python compileall, ruff, and frontend ESLint passed on the changed test files.
+      - No product code was implemented; no push, merge, deployment, or remote setting change was performed.

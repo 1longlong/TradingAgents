@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import json
 import re
+import time
 import zipfile
 from io import BytesIO
+from pathlib import Path
 
 import pytest
 
@@ -23,6 +25,7 @@ from test.offline.web_fixture_app import (
     json_text,
     make_app,
     make_client,
+    make_iteration3_client,
     make_run_client,
     require_web,
     wait_terminal,
@@ -322,3 +325,121 @@ def test_run_snapshot_does_not_expose_secret_or_paths(tmp_path, monkeypatch):
     assert SECRET not in text
     assert str(tree.results_dir) not in text
     wait_terminal(client, started.json()["run_id"])
+
+
+def _backtest_body():
+    return {
+        "tickers": ["NVDA"],
+        "start": "2026-06-01",
+        "end": "2026-06-01",
+        "every": 7,
+        "analysts": ["market"],
+        "asset_type": "stock",
+        "portfolio_json": None,
+        "run_id": None,
+    }
+
+
+def _install_backtest_fake(monkeypatch):
+    import tradingagents_web.runtime.backtest_runner as module
+
+    from tradingagents.agents.utils.memory import TradingMemoryLog
+    from tradingagents.backtest import BacktestResult
+
+    def fake(tickers, dates, config, **kwargs):
+        log = TradingMemoryLog({"memory_log_path": str(config["memory_log_path"])})
+        for ticker in tickers:
+            for date in dates:
+                log.store_decision(ticker, date, "**Rating**: Buy\n\nSecurity cell.\n")
+                log.update_with_outcome(
+                    ticker,
+                    date,
+                    raw_return=0.02,
+                    alpha_return=0.01,
+                    holding_days=5,
+                    reflection="Security reflection.",
+                    resolution_date="2026-06-08",
+                )
+        return BacktestResult(run_id="bt_security", log_path=config["memory_log_path"])
+
+    monkeypatch.setattr(module, "run_backtest", fake)
+
+
+def test_backtest_post_requires_csrf(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", SECRET)
+    tree = build_fixture_tree(tmp_path)
+    client = make_iteration3_client(tree, csrf=False)
+    response = client.post("/api/backtests", json=_backtest_body())
+    assert response.status_code == 403, response.text
+    assert client.get("/api/backtests").status_code == 200
+
+
+def test_backtest_cross_origin_post_is_rejected(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", SECRET)
+    tree = build_fixture_tree(tmp_path)
+    client = make_iteration3_client(tree)
+    response = client.post(
+        "/api/backtests",
+        json=_backtest_body(),
+        headers={"Origin": "https://evil.example"},
+    )
+    assert response.status_code == 403, response.text
+
+
+def test_backtest_snapshot_does_not_expose_secret_or_paths(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", SECRET)
+    tree = build_fixture_tree(tmp_path)
+    client = make_iteration3_client(tree)
+    _install_backtest_fake(monkeypatch)
+    started = client.post("/api/backtests", json=_backtest_body())
+    assert started.status_code in {201, 202}, started.text
+    run_id = started.json().get("run_id") or started.json().get("backtest_id")
+
+    deadline = time.monotonic() + 5
+    terminal = None
+    while time.monotonic() < deadline:
+        response = client.get(f"/api/backtests/{run_id}")
+        if response.status_code == 200:
+            terminal = response.json()
+            if terminal.get("status") in {"completed", "failed"}:
+                break
+        time.sleep(0.02)
+    assert terminal and terminal["status"] == "completed"
+    text = started.text + json.dumps(terminal)
+    assert SECRET not in text
+    assert str(tree.results_dir) not in text
+    assert "/Users/" not in text
+
+
+def test_announcement_html_is_escaped(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENAI_API_KEY", SECRET)
+    tree = build_fixture_tree(tmp_path)
+    client = make_iteration3_client(tree)
+    import tradingagents_web.api.announcements as module
+
+    monkeypatch.setattr(
+        module,
+        "fetch_announcements",
+        lambda *args, **kwargs: {
+            "announcements": ["<script>alert(1)</script>", "<img src=x onerror=1>"],
+            "require_attention": False,
+        },
+    )
+    response = client.get("/api/announcements")
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith("application/json")
+    assert "text/html" not in response.headers["content-type"]
+
+    component = (
+        Path(__file__).resolve().parents[2]
+        / "src"
+        / "tradingagents_web"
+        / "frontend"
+        / "src"
+        / "components"
+        / "Announcements.tsx"
+    )
+    assert component.is_file(), "EXPECTED-UNIMPLEMENTED: Announcements.tsx is missing"
+    source = component.read_text(encoding="utf-8")
+    assert "dangerouslySetInnerHTML" not in source
+    assert "<script" not in source.lower()

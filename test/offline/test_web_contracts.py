@@ -17,6 +17,7 @@ from test.offline.web_fixture_app import (
     build_fixture_tree,
     make_app,
     make_client,
+    make_iteration3_client,
     make_run_client,
     require_core,
     require_web,
@@ -146,6 +147,24 @@ def test_web_openapi_includes_run_control_paths_and_no_execution(tmp_path):
         lowered = path.lower()
         assert "order" not in lowered
         assert "trade" not in lowered
+        assert "execute" not in lowered
+
+
+def test_web_openapi_includes_backtest_and_announcement_paths_without_cancel(tmp_path):
+    tree = build_fixture_tree(tmp_path)
+    client = make_iteration3_client(tree, runner_factory=FakeGraphRunner)
+    response = client.get("/openapi.json")
+    assert response.status_code == 200, response.text
+    paths = response.json()["paths"]
+    assert "/api/backtests" in paths
+    assert "/api/backtests/{run_id}" in paths
+    assert "/api/announcements" in paths
+    assert not any(
+        "cancel" in path.lower() for path in paths if "backtest" in path.lower()
+    )
+    for path in paths:
+        lowered = path.lower()
+        assert "order" not in lowered
         assert "execute" not in lowered
 
 

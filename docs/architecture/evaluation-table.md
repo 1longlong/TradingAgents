@@ -56,6 +56,9 @@ These are design judgments, not benchmark results. They do not replace EVAL-01 t
 | Architecture experiments EVAL-01 to EVAL-10 | — | **Not run** | 2026-11-05 |
 | Playwright Chromium E2E | `npm run e2e` | **4 passed** (history, wizard/live/report, cancel) | 2026-11-06 |
 | Playwright Firefox/WebKit | — | **Not run**: excluded by user instruction | 2026-11-06 |
+| Iteration-3 backend test version | `pytest test/offline/test_web_*.py` | **113 passed, 6 failed, 28 errors**; all 34 are `EXPECTED-UNIMPLEMENTED` | 2026-11-06 |
+| Iteration-3 frontend test version | `npm run test` | **10 passed, 15 failed**; all 15 are `EXPECTED-UNIMPLEMENTED` | 2026-11-06 |
+| Iteration-3 Chromium E2E | `npm run e2e` | **4 passed, 2 failed**; both failures are `EXPECTED-UNIMPLEMENTED` | 2026-11-06 |
 | Real GraphRunner/live model path | — | **Not run**: requires credentials/cost authorization | 2026-11-06 |
 
 The documentation validation above does not verify the architecture, the runtime, packaging, latency, browsers, or dependencies. It only checks the written registry.

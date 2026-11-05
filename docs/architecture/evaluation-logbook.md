@@ -145,6 +145,16 @@ Classification:
 - Frontend Vitest remains 10 passed; typecheck/lint/build pass; `npm audit` 0.
 - Not run: Firefox/WebKit E2E, real GraphRunner/live model path, clean install, full mypy/Bandit/pip-audit.
 
+## 2026-11-06 — Iteration-3 test version
+
+- Added backend and frontend tests for backtest launch/results, announcement handling, CSRF/Origin enforcement, path/secret redaction, and backtest/live isolation.
+- Backend WebUI suite: **113 passed, 6 failed, 28 errors**; all 34 failed/error items are `EXPECTED-UNIMPLEMENTED` (Iteration-3 modules absent).
+- Frontend Vitest: **10 passed, 15 failed**; all 15 failures are `EXPECTED-UNIMPLEMENTED`.
+- Chromium E2E: **4 passed, 2 failed**; the two new specs are `EXPECTED-UNIMPLEMENTED`.
+- Static checks: Python compileall, ruff, and frontend ESLint passed on the changed test files.
+- Test version hash: `18f712b9148496d5a61f4ba25b620b257f23a44e37f1694c6971385d19cf308f`.
+- Not run: real backtest model/data calls, real announcement network calls, full regression until implementation, Firefox/WebKit, clean install.
+
 ## Decisions and open items
 
 Resolved for documentation: framework, transport, frontend stack, UI library, package path, history source, key handling, cancellation policy, downloads, preferences.

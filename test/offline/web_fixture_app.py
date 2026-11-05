@@ -367,6 +367,26 @@ def make_client(app):
     return TestClient(app, base_url="http://127.0.0.1:8000")
 
 
+def require_iteration3_modules() -> None:
+    """Fail as expected-unimplemented until backtest/announcement modules exist."""
+    try:
+        import tradingagents_web.api.announcements  # noqa: F401
+        import tradingagents_web.api.backtests  # noqa: F401
+        import tradingagents_web.models.backtest_requests  # noqa: F401
+        import tradingagents_web.runtime.backtest_runner  # noqa: F401
+    except ModuleNotFoundError as exc:
+        pytest.fail(
+            f"EXPECTED-UNIMPLEMENTED: {exc.name}; the Iteration-3 backtest/"
+            "announcement modules are not implemented yet",
+            pytrace=False,
+        )
+
+
+def make_iteration3_client(tree: FixtureTree, runner_factory=None, **settings_kwargs):
+    require_iteration3_modules()
+    return make_run_client(tree, runner_factory=runner_factory, **settings_kwargs)
+
+
 def require_run_modules() -> None:
     """Fail as expected-unimplemented until the Iteration-2 modules exist."""
     try:

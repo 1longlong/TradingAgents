@@ -188,3 +188,20 @@ The existing base branch does not contain these new checks. Their first introduc
 - Not run by instruction: Firefox and WebKit E2E. The browser matrix remains partially verified.
 - Not run: real GraphRunner/live model/data path, clean install, full mypy/Bandit/pip-audit.
 - No commit, push, merge, deployment, or remote setting change was performed.
+
+## Iteration-3 test version review request — 2026-11-06
+
+- Scope: `REQ-WEB-011` (backtest launch/results), `REQ-WEB-012` (announcements), and `REQ-WEB-030` (backtest/live isolation and read-only history). No product code was implemented.
+- Authorization: the user approved the Iteration-3 plan and test plan in the current conversation and instructed test-first work.
+- Test version hash: `18f712b9148496d5a61f4ba25b620b257f23a44e37f1694c6971385d19cf308f`.
+- Hash method: SHA-256 over the 12 changed/new test files, sorted by repository path, hashing `path`, NUL, file bytes, NUL for each file. This method is stated explicitly because earlier hashes were recorded without a reproducible command.
+- Backend files: `test/offline/web_fixture_app.py`, `test_web_backtest.py`, `test_web_announcements.py`, `test_web_contracts.py`, `test_web_security.py`.
+- Frontend files: `tests/iteration3-support.ts`, `backtest-validation.test.ts`, `backtest-summary.test.tsx`, `announcements.test.tsx`, `backtest-i18n.test.ts`, `e2e/backtest.spec.ts`, `e2e/announcements.spec.ts`.
+- Backend execution (Python 3.14.3, `.venv`): **113 passed, 6 failed, 28 errors** for `test/offline/test_web_*.py`. All 34 new failed/error items are `EXPECTED-UNIMPLEMENTED` because `tradingagents_web.api.backtests`, `api.announcements`, `models.backtest_requests`, and `runtime.backtest_runner` do not exist. No unexpected failure or test defect was observed.
+- Frontend execution (`vitest`, jsdom): **10 passed, 15 failed**. All 15 failures are `EXPECTED-UNIMPLEMENTED`: the backtest validation/summary/announcement components and the new i18n keys are absent. The 10 existing Iteration-1/2 frontend tests still pass.
+- Chromium Playwright: **4 passed, 2 failed**. The two new specs report `EXPECTED-UNIMPLEMENTED` because `/api/backtests` and `/api/announcements` return 404. The four existing history/wizard/cancel specs still pass.
+- Static checks: Python compileall and ruff on the changed test files **passed**; frontend ESLint on `tests` and `e2e` **passed**.
+- Test coverage added: CLI-equivalent backtest parameters, summary fields, log artifact download, `run_id` resume, single-slot conflict with analysis, isolated live memory, failure isolation, no backtest cancel route, read-only backtest history, invalid requests, CSRF/Origin enforcement, secret/path redaction, announcement success/fallback/malformed payload/cache/no-path, unsafe announcement rendering, frontend validation, summary rendering, no cancel control, blocking acknowledgement, and i18n key presence.
+- Not run: full regression (the new suites intentionally fail until implementation), real `run_backtest` model/data calls, real announcement network calls, Firefox/WebKit, clean install, full mypy/Bandit/pip-audit.
+- GitHub test-plan approval: **not claimed**. The local test revision is frozen for human review; implementation must not begin until this test version is approved.
+- No product code was implemented. The test-only revision is committed locally and has not been pushed; no merge, deployment, or remote setting change was performed.
