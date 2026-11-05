@@ -14,8 +14,9 @@ from datetime import datetime, timedelta
 
 import pytz
 
-from .errors import VendorNotConfiguredError
-from .utils import get_scrubbed
+from .errors import VendorNotConfiguredError, VendorRateLimitError
+from .retry_session import request_timeout, stop_before_request
+from .utils import get_scrubbed, retry_after_seconds
 
 logger = logging.getLogger(__name__)
 
@@ -133,14 +134,33 @@ def _fred_today() -> str:
 
 
 def _request(path: str, params: dict) -> dict:
-    """GET a FRED endpoint, surfacing FRED's JSON error body on a bad request."""
+    """GET a FRED endpoint, surfacing FRED's JSON error body on a bad request.
+
+    Exactly one HTTP request per call: retries belong to the router, which owns
+    the chain's shared budget and decides whether to repeat the vendor call.
+    A nested loop here would multiply the router's attempts and could not be
+    audited (the router would count one invocation while this made several).
+    The failure is scrubbed by ``get_scrubbed`` (no key ever rides along) and
+    keeps its ``Retry-After`` so the router can honour it. Because
+    ``get_macro_data`` makes two requests, each checks the budget before it
+    starts: once the time left cannot cover a valid request, the second is not
+    made.
+    """
     api_key = get_api_key()
+    url = f"{FRED_API_BASE}/{path}"
+    what = f"FRED {path}"
+    timeout = request_timeout(REQUEST_TIMEOUT, what)
+    if timeout is None:
+        stop_before_request(what, VendorRateLimitError)
     response = get_scrubbed(
-        f"{FRED_API_BASE}/{path}",
+        url,
         params={**params, "api_key": api_key, "file_type": "json"},
-        timeout=REQUEST_TIMEOUT,
+        timeout=timeout,
         secret=api_key,
         passthrough=(400,),
+        extra_metadata=lambda original: {
+            "retry_after": retry_after_seconds(getattr(original, "headers", None))
+        },
     )
     # FRED returns 400 with a JSON {"error_message": ...} for unknown series IDs
     # or malformed params; turn that into a clear, actionable error.

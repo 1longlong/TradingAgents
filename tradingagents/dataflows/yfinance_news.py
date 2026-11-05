@@ -9,6 +9,12 @@ from dateutil.relativedelta import relativedelta
 from .config import get_config
 from .date_window import coverage_gap, in_window
 from .errors import VendorError
+from .retry_session import (
+    budget_check_before_uncontrolled_call,
+    note_uncontrolled_overrun,
+    request_timeout,
+    routed_yfin_session,
+)
 from .stockstats_utils import as_vendor_error, yf_retry
 from .symbol_utils import normalize_symbol
 
@@ -84,8 +90,10 @@ def get_news_yfinance(
     canonical = normalize_symbol(ticker)
     resolved = "" if canonical == ticker else f" (resolved to {canonical})"
     try:
-        stock = yf.Ticker(canonical)
+        budget_check_before_uncontrolled_call(f"{canonical} news")
+        stock = yf.Ticker(canonical, **routed_yfin_session())
         news = yf_retry(lambda: stock.get_news(count=article_limit)) or []
+        note_uncontrolled_overrun(f"{canonical} news")
 
         # Parse date range for filtering
         start_dt = datetime.strptime(start_date, "%Y-%m-%d")
@@ -170,11 +178,23 @@ def get_global_news_yfinance(
 
     try:
         for query in search_queries:
-            search = yf_retry(lambda q=query: yf.Search(
-                query=q,
-                news_count=limit,
-                enable_fuzzy_query=True,
-            ))
+            # Search accepts a session and timeout, but it also merges searches
+            # internally: cap each request at the budget left, and let one query
+            # that finds nothing cost less than one that does (existing rule).
+            # The budget is re-read here, before every query: once it cannot
+            # cover a valid request, the remaining queries are not started.
+            budget_check_before_uncontrolled_call("global news search")
+            timeout = request_timeout(30, f"a Yahoo global-news search for {query!r}")
+            if timeout is None:
+                break
+            search_kwargs = {
+                "query": query,
+                "news_count": limit,
+                "enable_fuzzy_query": True,
+                "timeout": timeout,
+                **routed_yfin_session(),
+            }
+            search = yf_retry(lambda kw=search_kwargs: yf.Search(**kw))
 
             for article in search.news or []:
                 # Window first: the limit counts what the run may read, so an

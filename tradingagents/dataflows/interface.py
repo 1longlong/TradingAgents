@@ -19,9 +19,16 @@ from .errors import (
     VendorNotConfiguredError,
     VendorRateLimitError,
     VendorRequestRejectedError,
+    retryable_status,
 )
 from .fred import get_macro_data as get_fred_macro_data
 from .polymarket import get_prediction_markets as get_polymarket_prediction_markets
+from .retry_session import (
+    RetryBudget,
+    RetrySession,
+    retry_budget_from_config,
+    retry_session,
+)
 from .sec_edgar import (
     get_balance_sheet as get_sec_edgar_balance_sheet,
     get_cashflow as get_sec_edgar_cashflow,
@@ -247,6 +254,52 @@ def _combination(
     return f"{lead} ({parts})."
 
 
+def _retry_budget() -> RetryBudget:
+    """The retry allowance for one tool call, from ``data_vendor_retry``.
+
+    Defaults mirror ``DEFAULT_CONFIG``; a partially configured section is
+    completed from them, so a user who set only one key still gets sane bounds.
+    Every value is validated: a wrong one raises ``RetryConfigError`` rather than
+    being clamped. Zero semantics are defined with the validator (see
+    ``retry_session.retry_budget_from_config``): a zero time budget means no
+    call -- first, retry or fall-through -- is ever started.
+    """
+    cfg = get_config().get("data_vendor_retry", {})
+    return retry_budget_from_config(cfg)
+
+
+def _retry_metadata(exc: BaseException) -> tuple[bool, float | None] | None:
+    """Read a failure's own recoverability metadata: (recoverable, Retry-After).
+
+    None means the exception carries none and is therefore not retried. An
+    explicit ``exc.retry`` (set by a vendor or by ``as_vendor_error``) wins over
+    the generic status/transport rules; a ``VendorRateLimitError`` raised from
+    scratch carries neither, so it is *not* assumed transient just because of
+    its class -- the first batch's own wording (a throttle is one class) does
+    not by itself say that waiting helps.
+    """
+    explicit = getattr(exc, "retry", None)
+    status = getattr(exc, "status", None)
+    retry_after = getattr(exc, "retry_after", None)
+    if explicit is None:
+        explicit = retryable_status(status, retry_after)
+    if explicit is None:
+        return None
+    if not isinstance(retry_after, (int, float)) or isinstance(retry_after, bool):
+        retry_after = None
+    return bool(explicit), retry_after
+
+
+def _backoff_seconds(budget: RetryBudget, failed_attempts: int) -> float:
+    """Wait before attempt ``failed_attempts + 1`` when the vendor said nothing.
+
+    Exponential and jittered *downward* only (``RetryBudget.backoff_seconds``),
+    so concurrent callers do not retry in lockstep. A server-specified
+    ``Retry-After`` never passes through here and is therefore never shortened.
+    """
+    return budget.backoff_seconds(failed_attempts)
+
+
 def _others(failures, primary_exc) -> list[tuple[str, BaseException]]:
     """Every failure except the one being raised (compared by identity)."""
     return [(vendor, exc) for vendor, exc in failures if exc is not primary_exc]
@@ -372,78 +425,184 @@ def route_to_vendor(method: str, *args, **kwargs):
             primary.with_vendor(next(v for v, exc in failures if exc is primary))
         raise primary
 
-    for vendor in vendor_chain:
-        vendor_impl = VENDOR_METHODS[method][vendor]
-        impl_func = vendor_impl[0] if isinstance(vendor_impl, list) else vendor_impl
+    # --- Bounded retries, shared by the whole chain ------------------------
+    # A retry repeats the SAME vendor function; a different vendor is a
+    # fall-through, not a retry. Both spend one shared budget (attempts and
+    # wall-clock) so switching vendors cannot reset it, and the decision to
+    # retry is made only from the error's own metadata (HTTP status, transport
+    # type, Retry-After) -- never from its message text. Authentication, a
+    # refused request, missing configuration, an absence, a stale frame, a
+    # parse failure and an internal error are never retried: the chain moves on
+    # exactly as in the first batch, whose verdicts below are unchanged.
+    budget = _retry_budget()
+    session = RetrySession(budget)
 
-        try:
-            return impl_func(*args, **kwargs)
-        except VendorRateLimitError as e:
-            logger.warning(
-                "Vendor %r unavailable for %s: %s; trying next vendor.", vendor, method, e
-            )
-            # Kept so an all-unavailable chain can say the vendor was the
-            # problem, rather than reporting nothing about the symbol.
-            last_unavailable = e.with_vendor(vendor)
-            record(vendor, last_unavailable)
-            continue
-        except VendorAuthenticationError as e:
+    def handle(vendor, exc) -> BaseException:
+        """Record one vendor failure the batch-1 way; return the error to report.
+
+        The returned object is what "the last failure of this kind" becomes; a
+        raw exception the router could not classify is returned unchanged so it
+        still surfaces as an internal error, not as a vendor condition.
+        """
+        nonlocal last_no_data, last_unavailable, last_not_configured
+        nonlocal last_auth, last_rejected, first_error
+        if isinstance(exc, VendorAuthenticationError):
             logger.warning(
                 "Vendor %r rejected the configured credentials for %s; trying next vendor.",
                 vendor, method,
             )
-            last_auth = e.with_vendor(vendor)
+            last_auth = exc.with_vendor(vendor)
             record(vendor, last_auth)
-            continue
-        except VendorRequestRejectedError as e:
+            return last_auth
+        if isinstance(exc, VendorRequestRejectedError):
             logger.warning(
                 "Vendor %r refused the request for %s: %s; trying next vendor.",
-                vendor, method, type(e).__name__,
+                vendor, method, type(exc).__name__,
             )
-            last_rejected = e.with_vendor(vendor)
+            last_rejected = exc.with_vendor(vendor)
             record(vendor, last_rejected)
-            continue
-        except VendorNotConfiguredError as e:
+            return last_rejected
+        if isinstance(exc, VendorNotConfiguredError):
             logger.warning("Vendor %r not configured for %s; trying next vendor.", vendor, method)
-            last_not_configured = e.with_vendor(vendor)
+            last_not_configured = exc.with_vendor(vendor)
             record(vendor, last_not_configured)
             if first_error is None:
-                first_error = e  # Surface it if no other vendor can serve the call.
-            continue
-        except NoMarketDataError as e:
+                first_error = exc  # Surface it if no other vendor can serve the call.
+            return last_not_configured
+        if isinstance(exc, NoMarketDataError):
             no_data_vendors.append(vendor)
             # No data here; another configured vendor may have it. Not a
             # failure: it is the one outcome that speaks about the symbol.
-            last_no_data = e.with_vendor(vendor)
-            continue
-        except Exception as e:
-            # Don't let one vendor's failure crash the call when another can
-            # serve it, but never swallow silently: a broken primary must be
-            # visible in the logs (#989), not hidden behind a fallback's verdict.
-            logger.warning("Vendor %r failed for %s: %s", vendor, method, e)
-            # A transport error a vendor did not classify still describes the
-            # vendor, not the symbol. The classifier is backend-neutral and is
-            # given this vendor's name, so a non-Yahoo timeout is never
-            # reported as a Yahoo one.
-            classified = as_vendor_error(e, vendor)
-            if isinstance(classified, VendorRateLimitError):
-                last_unavailable = classified
-                record(vendor, classified)
-            elif isinstance(classified, VendorAuthenticationError):
-                last_auth = classified
-                record(vendor, classified)
-            elif isinstance(classified, VendorRequestRejectedError):
-                last_rejected = classified
-                record(vendor, classified)
-            else:
-                record(vendor, e)
-                # Only an *unclassified* error is a real surprise (a bug or an
-                # unknown status). A timeout/429 that we just classified is not,
-                # or it would masquerade as an internal error and be reported
-                # twice with the wrong category.
-                if first_error is None:
-                    first_error = e
-            continue
+            last_no_data = exc.with_vendor(vendor)
+            return last_no_data
+        if isinstance(exc, VendorRateLimitError):
+            logger.warning(
+                "Vendor %r unavailable for %s: %s; trying next vendor.", vendor, method, exc
+            )
+            # Kept so an all-unavailable chain can say the vendor was the
+            # problem, rather than reporting nothing about the symbol.
+            last_unavailable = exc.with_vendor(vendor)
+            record(vendor, last_unavailable)
+            return last_unavailable
+        # Don't let one vendor's failure crash the call when another can
+        # serve it, but never swallow silently: a broken primary must be
+        # visible in the logs (#989), not hidden behind a fallback's verdict.
+        logger.warning("Vendor %r failed for %s: %s", vendor, method, exc)
+        # A transport error a vendor did not classify still describes the
+        # vendor, not the symbol. The classifier is backend-neutral and is
+        # given this vendor's name, so a non-Yahoo timeout is never
+        # reported as a Yahoo one.
+        classified = as_vendor_error(exc, vendor)
+        if isinstance(classified, VendorRateLimitError):
+            last_unavailable = classified
+            record(vendor, classified)
+            return classified
+        if isinstance(classified, VendorAuthenticationError):
+            last_auth = classified
+            record(vendor, classified)
+            return classified
+        if isinstance(classified, VendorRequestRejectedError):
+            last_rejected = classified
+            record(vendor, classified)
+            return classified
+        record(vendor, exc)
+        # Only an *unclassified* error is a real surprise (a bug or an
+        # unknown status). A timeout/429 that we just classified is not,
+        # or it would masquerade as an internal error and be reported
+        # twice with the wrong category.
+        if first_error is None:
+            first_error = exc
+        return first_error
+
+    def retry_verdict(vendor: str, exc: BaseException) -> tuple[bool, str]:
+        """Whether one more invocation of ``vendor`` may fix ``exc``, and the wait.
+
+        Unclassified exceptions never qualify: an internal bug is not a
+        transient condition, and a vendor that did not say "come back" is not
+        assumed to want that. A vendor that set ``retry`` explicitly wins over
+        the generic rule (e.g. an exhausted daily quota is a throttle that
+        waiting cannot lift).
+        """
+        if isinstance(exc, NoMarketDataError):
+            return False, "no usable data (an absence, not an outage)"
+        meta = _retry_metadata(exc)
+        if meta is None:
+            return False, "not a retryable vendor condition"
+        recoverable, retry_after = meta
+        if not recoverable:
+            return False, "not transient"
+        if retry_after is not None and retry_after > budget.max_retry_after_seconds:
+            return False, (
+                f"vendor asked to wait {retry_after:g}s, beyond the "
+                f"{budget.max_retry_after_seconds:g}s per-wait limit"
+            )
+        fits, why = session.precheck(vendor)
+        if not fits:
+            return False, why
+        wait = retry_after if retry_after is not None else _backoff_seconds(
+            budget, session.vendor_attempts.get(vendor, 0)
+        )
+        if wait >= session.remaining():
+            return False, (
+                f"the {wait:g}s wait does not fit the {session.remaining():.1f}s left"
+            )
+        if wait > session.wait_allowance():
+            return False, (
+                f"the {wait:g}s wait exceeds the {session.wait_allowance():.1f}s "
+                f"left of the chain's cumulative wait cap"
+            )
+        return True, wait
+
+    for vendor in vendor_chain:
+        vendor_impl = VENDOR_METHODS[method][vendor]
+        impl_func = vendor_impl[0] if isinstance(vendor_impl, list) else vendor_impl
+
+        while True:
+            # One gate for every start -- first call, retry and fall-through --
+            # checked immediately before the call and again after any wait.
+            allowed, why = session.precheck(vendor)
+            if not allowed:
+                session.stop_reason = why
+                logger.warning(
+                    "Skipping vendor %r for %s: %s (vendor calls so far: %d, "
+                    "HTTP requests: %d, waited: %.1fs).",
+                    vendor, method, why, session.attempts,
+                    session.http_requests, session.waited,
+                )
+                spent = VendorRateLimitError(
+                    f"the data budget ran out before this vendor was tried ({why})"
+                ).with_retry_evidence(retry=False)
+                last_unavailable = spent.with_vendor(vendor)
+                record(vendor, last_unavailable)
+                break
+            session.note_attempt(vendor)
+            try:
+                with retry_session(session):
+                    return impl_func(*args, **kwargs)
+            except Exception as exc:
+                error = handle(vendor, exc)
+
+                retry, wait = retry_verdict(vendor, error)
+                if not retry:
+                    logger.info(
+                        "Vendor %r for %s will not be retried: %s.", vendor, method, wait
+                    )
+                    break
+                logger.warning(
+                    "Retrying vendor %r for %s in %.1fs (vendor attempt %d/%d, "
+                    "chain attempt %d/%d, waited so far %.1fs of %gs).",
+                    vendor, method, wait,
+                    session.vendor_attempts.get(vendor, 0), budget.attempts_for(vendor),
+                    session.attempts, budget.max_attempts,
+                    session.waited, budget.max_cumulative_wait_seconds,
+                )
+                # The failed attempt is superseded by the retry: drop it from the
+                # failure picture so the final verdict names what is still true.
+                failures[:] = [entry for entry in failures if entry[1] is not error]
+                if not session.pause(wait):
+                    break
+                # The wait is over: the deadline is checked again by precheck at
+                # the top of this loop, before the retry starts.
 
     # Only an absence every configured vendor confirmed is a fact about the
     # symbol. One vendor's empty result next to another's outage, throttle or

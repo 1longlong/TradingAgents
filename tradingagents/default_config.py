@@ -1,3 +1,4 @@
+import math
 import os
 
 _TRADINGAGENTS_HOME = os.path.join(os.path.expanduser("~"), ".tradingagents")
@@ -20,6 +21,19 @@ _ENV_OVERRIDES = {
     "TRADINGAGENTS_TEMPERATURE":          "temperature",
     "TRADINGAGENTS_LLM_MAX_RETRIES":      "llm_max_retries",
     "TRADINGAGENTS_MAX_TOKENS":           "max_tokens",
+    # Vendor-retry budget, merged into the nested dict. Every value is checked by
+    # dataflows.retry_session when a tool call routes: negatives, booleans,
+    # NaN/Infinity and fractional attempts are refused, never clamped.
+    "TRADINGAGENTS_VENDOR_RETRY_MAX_SECONDS": "data_vendor_retry.max_total_seconds",
+    "TRADINGAGENTS_VENDOR_RETRY_MAX_REQUEST_SECONDS": "data_vendor_retry.max_request_seconds",
+    "TRADINGAGENTS_VENDOR_RETRY_MAX_WAIT_SECONDS":
+        "data_vendor_retry.max_cumulative_wait_seconds",
+    "TRADINGAGENTS_VENDOR_RETRY_MAX_ATTEMPTS": "data_vendor_retry.max_attempts",
+    "TRADINGAGENTS_VENDOR_RETRY_MAX_TOTAL_ATTEMPTS": "data_vendor_retry.max_total_attempts",
+    "TRADINGAGENTS_VENDOR_RETRY_BASE_DELAY_SECONDS": "data_vendor_retry.base_delay_seconds",
+    "TRADINGAGENTS_VENDOR_RETRY_MAX_RETRY_AFTER_SECONDS":
+        "data_vendor_retry.max_retry_after_seconds",
+    "TRADINGAGENTS_VENDOR_RETRY_JITTER_FRACTION": "data_vendor_retry.jitter_fraction",
     # Provider-specific reasoning/thinking knobs (None = each provider's own
     # default). Settable here for non-interactive runs; the CLI also offers an
     # interactive choice, which is skipped when the matching var is set.
@@ -38,7 +52,10 @@ def _coerce(value: str, reference):
 
     Invalid values raise ``ValueError`` rather than silently falling back to a
     default — a misspelled boolean (e.g. ``treu``) or non-numeric int should fail
-    loudly at startup, not quietly misconfigure an unattended run.
+    loudly at startup, not quietly misconfigure an unattended run. Numeric
+    strings must be finite: ``nan`` and ``inf`` (and a float where an attempt
+    count is expected) are refused here, and again when the retry budget is
+    built.
     """
     if isinstance(reference, bool):
         normalized = value.strip().lower()
@@ -50,22 +67,47 @@ def _coerce(value: str, reference):
             f"expected a boolean ({'/'.join(_BOOL_TRUE + _BOOL_FALSE)}), got {value!r}"
         )
     if isinstance(reference, int) and not isinstance(reference, bool):
-        return int(value)
+        text = value.strip()
+        if not (text.isascii() and text.lstrip("+-").isdigit()):
+            raise ValueError(f"expected a whole number, got {value!r}")
+        return int(text)
     if isinstance(reference, float):
-        return float(value)
+        try:
+            parsed = float(value)
+        except ValueError:
+            raise ValueError(f"expected a number, got {value!r}") from None
+        if not math.isfinite(parsed):
+            raise ValueError(f"expected a finite number, got {value!r}")
+        return parsed
     return value
 
 
 def _apply_env_overrides(config: dict) -> dict:
-    """Apply TRADINGAGENTS_* env vars to the config dict in-place."""
+    """Apply TRADINGAGENTS_* env vars to the config dict in-place.
+
+    A key may address one level of a nested dict ("outer.inner"). An unknown
+    nested key is added rather than rejected, because the overrides run while
+    the very dict that defines those keys is being built; the type is then the
+    one the same setting's flat siblings use.
+    """
     for env_var, key in _ENV_OVERRIDES.items():
         raw = os.environ.get(env_var)
         if raw is None or raw == "":
             continue
+        outer, _, inner = key.partition(".")
+        if inner:
+            section = config.setdefault(outer, {})
+            reference = section.get(inner, 1.0)
+        else:
+            reference = config.get(key)
         try:
-            config[key] = _coerce(raw, config.get(key))
+            value = _coerce(raw, reference)
         except ValueError as exc:
             raise ValueError(f"Invalid value for {env_var}: {exc}") from exc
+        if inner:
+            section[inner] = value
+        else:
+            config[key] = value
     return config
 
 
@@ -143,6 +185,52 @@ DEFAULT_CONFIG = _apply_env_overrides({
         "news_data": "yfinance",             # Options: alpha_vantage, yfinance
         "macro_data": "fred",                # Options: fred (needs FRED_API_KEY)
         "prediction_markets": "polymarket",  # Options: polymarket (keyless)
+    },
+    # Bounded retries owned by the routing layer (dataflows.interface). One tool
+    # call shares these across its whole vendor chain; switching vendors does
+    # not reset them. Counts are VENDOR-FUNCTION invocations, not HTTP requests:
+    # one invocation may issue several (e.g. one per global-news query). Every
+    # value is validated strictly -- a negative, boolean, fractional, NaN or
+    # infinite value raises instead of being clamped.
+    "data_vendor_retry": {
+        # Max invocations of one vendor per tool call, first attempt included:
+        # 1 means "never retry this vendor" (the total is exactly 1 request
+        # attempt); 2 means "one retry" (2 attempts in total).
+        "max_attempts": 2,
+        # Optional per-vendor overrides of the above. Alpha Vantage is pinned to
+        # a single attempt by default because its free tier is a narrow quota
+        # and a failed call may still be metered; a retry is opt-in.
+        "vendor_max_attempts": {"alpha_vantage": 1},
+        # Max invocations of ALL vendors combined for one tool call.
+        "max_total_attempts": 4,
+        # Wall-clock budget for the whole chain, shared across vendors. Checked
+        # before every start (first call, retry, vendor switch) and after every
+        # wait; when it is spent no new request is started. Every
+        # timeout-capable request gets the time left, never more. It is a
+        # budget, not a hard promise: a client that accepts no timeout (e.g.
+        # some yfinance attributes) can only be bounded by its own default.
+        "max_total_seconds": 45.0,
+        # Cap on any single HTTP request. A request's timeout is the time left
+        # capped by this, and it never falls below it because of the cap alone;
+        # when less than the minimum for a valid request is left, the request
+        # is not started at all.
+        "max_request_seconds": 15.0,
+        # Cumulative cap on the retry waits the chain may take (sum of every
+        # backoff/Retry-After wait). Distinct from max_retry_after_seconds,
+        # which only decides whether ONE asked-for wait is worth taking.
+        "max_cumulative_wait_seconds": 20.0,
+        # Wait before a retry the vendor gave no Retry-After for, doubled each
+        # attempt and reduced by up to jitter_fraction (never lengthened).
+        "base_delay_seconds": 1.0,
+        # A throttle that asks for a longer pause than this is not waited out:
+        # the chain moves to the next vendor instead of stalling the run.
+        # This is a per-wait threshold, not a cap on the total: the total is
+        # max_cumulative_wait_seconds.
+        "max_retry_after_seconds": 10.0,
+        # Fraction of a self-chosen backoff that may be shaved off at random, to
+        # spread concurrent retries (0 = deterministic). A server's Retry-After
+        # is honoured exactly and is never shortened by jitter.
+        "jitter_fraction": 0.2,
     },
     # Tool-level configuration (takes precedence over category-level)
     "tool_vendors": {

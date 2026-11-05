@@ -17,9 +17,16 @@ from .errors import (
     VendorError,
     VendorRateLimitError,
     VendorRequestRejectedError,
+    http_status,
+    retryable_status,
+    retryable_transport_error,
+)
+from .retry_session import (
+    get_active_retry_session,
+    request_timeout,
 )
 from .symbol_utils import NoMarketDataError, normalize_symbol
-from .utils import safe_ticker_component, vendor_reachable
+from .utils import retry_after_seconds, safe_ticker_component, vendor_reachable
 
 logger = logging.getLogger(__name__)
 
@@ -78,34 +85,7 @@ def _http_status(exc: BaseException) -> int | None:
     keeps only its message in ``.args``. Read both, so a credential-scrubbed
     exception can still be classified without re-attaching the request URL.
     """
-    response = getattr(exc, "response", None)
-    status = getattr(response, "status_code", None)
-    if isinstance(status, int):
-        return status
-    # Only an HTTP client error's own message is trusted for the status (e.g.
-    # "403 Client Error: Forbidden for url: ..."). Any other exception may
-    # merely begin with digits ("404 pages were not found"), which is not a
-    # status and must not be read as one.
-    if not isinstance(exc, _http_error_types()):
-        return None
-    for arg in getattr(exc, "args", ()):
-        if not isinstance(arg, str):
-            continue
-        # Require the client library's own template ("NNN Client Error: ..." /
-        # "HTTP Error NNN: ..."), so free text that merely begins with digits is
-        # never mistaken for a status.
-        prefix = arg[:15]
-        client_error = (
-            len(arg) >= 5
-            and arg[:3].isdigit()
-            and arg[3] == " "
-            and arg[4:].startswith(("Client Error:", "Server Error:"))
-        )
-        if client_error:
-            return int(arg[:3])
-        if prefix.startswith("HTTP Error ") and arg[11:14].isdigit():
-            return int(arg[11:14])
-    return None
+    return http_status(exc, _http_error_types())
 
 
 def _client_errors() -> tuple[type[BaseException], ...]:
@@ -181,15 +161,22 @@ def as_vendor_error(exc: BaseException, vendor: str | None = None) -> VendorErro
     vendor's own (already scrubbed) wording and no exception chain, so a URL
     carrying a key cannot ride along. The label is attached with
     ``with_vendor``, so a raiser that already knows its identity keeps it.
+
+    A classified error also carries the *retry decision input*: its HTTP
+    ``status`` and any ``Retry-After`` delay, never read from the message. A
+    transport failure has no status; for one, ``retry`` is True (a fresh
+    connection is the remedy), while for a 429 it is left open for the router,
+    which combines the delay with its budget.
     """
     if isinstance(exc, VendorError):
         return exc if vendor is None else exc.with_vendor(vendor)
     if isinstance(exc, YFRateLimitError):
         # The one vendor-specific class: only yfinance raises it, so it names
-        # itself regardless of the label passed in.
+        # itself regardless of the label passed in. It is raised after yfinance
+        # gave up on a 429 and carries neither a status nor a wait.
         return VendorRateLimitError(
             "Yahoo Finance rate limit exceeded (HTTP 429); it was not retrieved"
-        )
+        ).with_retry_evidence(status=429)
     error = _classify_http_or_transport(exc, vendor or _YAHOO_DISPLAY_NAME)
     if error is not None and vendor is not None:
         error.with_vendor(vendor)
@@ -200,26 +187,41 @@ def _classify_http_or_transport(exc: BaseException, name: str) -> VendorError | 
     """The shared status/transport rules, phrased with the caller's display name."""
     if isinstance(exc, _http_error_types()):
         status = _http_status(exc)
+        retry_after = _retry_after_of(exc)
+        retry = retryable_status(status, retry_after)
         if status == 429:
             return VendorRateLimitError(
                 f"{name} rate limit exceeded (HTTP 429); it was not retrieved"
-            )
+            ).with_retry_evidence(status=status, retry_after=retry_after, retry=retry)
         if status in (401, 403):
             return VendorAuthenticationError(
                 f"{name} rejected the configured credentials (HTTP {status}): {exc}"
-            )
+            ).with_retry_evidence(status=status, retry=False)
         if status in (400, 404):
             return VendorRequestRejectedError(
                 f"{name} refused the request (HTTP {status}): {exc}"
-            )
+            ).with_retry_evidence(status=status, retry=False)
         if status is not None and 500 <= status < 600:
             return VendorRateLimitError(
                 f"{name} service error (HTTP {status}); it was not retrieved"
-            )
+            ).with_retry_evidence(status=status, retry_after=retry_after, retry=retry)
         return None
     if is_transport_error(exc):
-        return VendorRateLimitError(f"{name} is unreachable; it was not retrieved ({exc})")
+        return VendorRateLimitError(
+            f"{name} is unreachable; it was not retrieved ({exc})"
+        ).with_retry_evidence(retry=retryable_transport_error(exc))
     return None
+
+
+def _retry_after_of(exc: BaseException) -> float | None:
+    """A ``Retry-After`` delay stated by the response, when it is still attached.
+
+    The response object itself holds the request URL, so only the delay is kept
+    here; callers that detach the response (``get_scrubbed``) copy the value
+    onto the error explicitly instead.
+    """
+    response = getattr(exc, "response", None)
+    return retry_after_seconds(getattr(response, "headers", None))
 
 
 def raise_for_unreachable(what: str, vendor: str | None = None) -> VendorRateLimitError:
@@ -227,7 +229,7 @@ def raise_for_unreachable(what: str, vendor: str | None = None) -> VendorRateLim
     name = vendor or _YAHOO_DISPLAY_NAME
     return VendorRateLimitError(
         f"{name} is unreachable; it did not answer a request; {what} was not retrieved"
-    )
+    ).with_retry_evidence(retry=True)
 
 
 # A vendor's latest OHLCV row this many calendar days before the requested date
@@ -275,7 +277,15 @@ def yf_retry(func, max_retries=3, base_delay=2.0):
     yfinance raises YFRateLimitError on HTTP 429 responses but does not
     retry them internally. This wrapper adds retry logic specifically
     for rate limits. Other exceptions propagate immediately.
+
+    When the routing layer is driving the call (a ``retry_session`` is in
+    flight), the retry loop belongs to the router's shared budget: this wrapper
+    then makes exactly one attempt and re-raises, so an outer and an inner loop
+    cannot multiply attempts or wait twice for the same throttle. Called on its
+    own (no router in flight), it keeps the behaviour and signature above.
     """
+    if get_active_retry_session() is not None:
+        return func()
     for attempt in range(max_retries + 1):
         try:
             return func()
@@ -509,14 +519,23 @@ def load_ohlcv(symbol: str, curr_date: str, fill_gaps: bool = True) -> pd.DataFr
             data = cached
 
     if data is None:
-        downloaded = yf_retry(lambda: yf.download(
-            canonical,
-            start=start_str,
-            end=end_str,
-            multi_level_index=False,
-            progress=False,
-            auto_adjust=True,
-        ))
+        download_args = {
+            "start": start_str,
+            "end": end_str,
+            "multi_level_index": False,
+            "progress": False,
+            "auto_adjust": True,
+        }
+        # yfinance accepts a per-request timeout here, so a routed call spends
+        # the budget left (capped, never more) instead of the client's default.
+        # When the budget cannot cover a valid request, it is not started.
+        timeout = request_timeout(30, f"a Yahoo price download for {canonical}")
+        if timeout is None:
+            raise VendorRateLimitError(
+                f"the data budget cannot cover a price download for {canonical}"
+            ).with_retry_evidence(retry=False)
+        download_args["timeout"] = timeout
+        downloaded = yf_retry(lambda: yf.download(canonical, **download_args))
         downloaded = _ensure_date_column(downloaded.reset_index())
         # Only cache real data — never persist an empty frame. An empty download
         # on a dead host is an outage, not an absence; the reachability check

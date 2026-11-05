@@ -11,7 +11,8 @@ from .errors import (
     VendorNotConfiguredError,
     VendorRateLimitError,
 )
-from .utils import get_scrubbed
+from .retry_session import request_timeout, stop_before_request
+from .utils import get_scrubbed, retry_after_seconds
 
 API_BASE_URL = "https://www.alphavantage.co/query"
 
@@ -67,19 +68,47 @@ def format_datetime_for_api(date_input, end_of_day: bool = False) -> str:
 
 class AlphaVantageRateLimitError(VendorRateLimitError):
     """Raised when the Alpha Vantage API rate limit is exceeded."""
-    pass
+
+
+class AlphaVantageQuotaExhaustedError(AlphaVantageRateLimitError):
+    """A throttle the vendor will not lift within a budget: the daily quota or plan.
+
+    Still a ``VendorRateLimitError`` (the family the router reports as "throttled
+    or unreachable"), but with ``retry=False``: waiting out a per-day allowance or
+    an entitlement does not restore it, and every attempt may still be counted
+    against the quota. The router moves on to the next vendor instead.
+    """
+
+    def __init__(self, *args):
+        super().__init__(*args)
+        self.retry = False
+
 
 class AlphaVantageAuthenticationError(VendorAuthenticationError):
     """Raised when Alpha Vantage rejects the supplied API key (HTTP 401/403)."""
     pass
 
+
 def _raise_for_http_status(exc) -> None:
     """Turn a scrubbed HTTP error into the vendor error its status means.
 
     ``get_scrubbed`` detaches the response (it holds the URL with the key) but
-    keeps the status in ``response.status_code`` and in the message prefix, so
-    this reads the status, never the URL.
+    keeps the status in ``response.status_code`` and in the message prefix, and
+    copies any ``Retry-After`` delay onto the error as ``.retry_after``, so this
+    reads the status, never the URL.
+
+    The typed error is scrubbed of the key by construction, so it is raised
+    with both links back to the client error dropped: an explicit cause would
+    only repeat the scrubbed message, and an implicit context would keep the
+    client's own exception (and its request) reachable.
     """
+    error = _http_status_error(exc)
+    if error is not None:
+        raise error
+
+
+def _http_status_error(exc):
+    """The typed error a scrubbed HTTP status means, or None to keep the original."""
     response = getattr(exc, "response", None)
     status = getattr(response, "status_code", None)
     if not isinstance(status, int):
@@ -87,15 +116,22 @@ def _raise_for_http_status(exc) -> None:
             if isinstance(arg, str) and len(arg) > 3 and arg[:3].isdigit():
                 status = int(arg[:3])
                 break
+    retry_after = getattr(exc, "retry_after", None)
     if status in (401, 403):
-        raise AlphaVantageAuthenticationError(
+        return AlphaVantageAuthenticationError(
             f"Alpha Vantage rejected the configured API key (HTTP {status})."
-        ) from None
+        ).with_retry_evidence(status=status, retry=False)
     if status == 429:
-        raise AlphaVantageRateLimitError(
+        return AlphaVantageRateLimitError(
             "Alpha Vantage rate limit exceeded (HTTP 429)."
-        ) from None
+        ).with_retry_evidence(
+            status=status,
+            retry_after=retry_after if isinstance(retry_after, (int, float)) else None,
+            retry=True,
+        )
     # Any other status keeps its own type: not proven transient, not an absence.
+    return None
+
 
 def _make_api_request(function_name: str, params: dict) -> dict | str:
     """Helper function to make API requests and handle responses.
@@ -124,11 +160,26 @@ def _make_api_request(function_name: str, params: dict) -> dict | str:
 
     try:
         response = get_scrubbed(
-            API_BASE_URL, params=api_params, timeout=REQUEST_TIMEOUT, secret=api_key
+            API_BASE_URL,
+            params=api_params,
+            timeout=_request_timeout(),
+            secret=api_key,
+            extra_metadata=_retry_metadata,
         )
     except RequestException as exc:
-        _raise_for_http_status(exc)
-        raise
+        # ``error`` stays None for a status that is not permission/credential,
+        # which then keeps the client error's own type.
+        error = _http_status_error(exc)
+        if error is None:
+            raise
+        # The typed error is scrubbed of the key by construction, so the two
+        # links back to the client error are dropped: an explicit cause would
+        # only repeat the scrubbed message, and an implicit context would keep
+        # the client's own exception (and its request) reachable. Set both
+        # because the raise machinery re-links a fresh exception's context.
+        error.__cause__ = None
+        error.__suppress_context__ = True
+        raise error from None  # the linter wants the clause stated; the two lines above set it
 
     response_text = response.text
 
@@ -146,14 +197,47 @@ def _make_api_request(function_name: str, params: dict) -> dict | str:
     notice = response_json.get("Information") or response_json.get("Note")
     if notice:
         low = notice.lower()
+        # A notice saying the *daily* allowance or the plan's entitlement is gone
+        # is not a wait-and-retry throttle: no short pause restores it, and each
+        # attempt may still be metered. A plain call-frequency notice is.
+        if any(m in low for m in ("per day", "daily", "premium", "entitlement", "plan")):
+            raise AlphaVantageQuotaExhaustedError(notice)
         if any(m in low for m in ("rate limit", "requests per day", "call frequency", "premium")):
-            raise AlphaVantageRateLimitError(f"Alpha Vantage rate limit exceeded: {notice}")
+            # A call-frequency notice is a short throttle: "come back shortly",
+            # with no status or Retry-After, so a bounded wait is the remedy.
+            raise AlphaVantageRateLimitError(
+                f"Alpha Vantage rate limit exceeded: {notice}"
+            ).with_retry_evidence(retry=True)
         if "api key" in low or "apikey" in low:
             # Reuse the existing "not configured" error so a bad key surfaces as
             # a real, actionable failure rather than a mislabeled rate limit (#991).
             raise AlphaVantageNotConfiguredError(f"Alpha Vantage API key invalid or missing: {notice}")
 
     return response_text
+
+
+def _request_timeout() -> float:
+    """The request timeout: the routed budget left (capped), else the vendor default.
+
+    Called immediately before each HTTP request of this vendor. When the chain's
+    budget cannot cover another valid request the request is refused with
+    ``VendorRateLimitError`` (retry=False), so no request is started that the
+    budget could only cut off mid-flight.
+    """
+    what = "an Alpha Vantage request"
+    timeout = request_timeout(REQUEST_TIMEOUT, what)
+    if timeout is None:
+        stop_before_request(what, VendorRateLimitError)
+    return timeout
+
+
+def _retry_metadata(response) -> dict:
+    """The retention facts to keep from a response we must not re-attach.
+
+    Only a scrubbed, scalar copy of ``Retry-After`` -- the response and its URL
+    (which carries the key) stay behind.
+    """
+    return {"retry_after": retry_after_seconds(getattr(response, "headers", None))}
 
 
 

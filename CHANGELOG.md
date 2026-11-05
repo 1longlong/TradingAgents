@@ -6,6 +6,85 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Breaking changes within the 0.x line are called out explicitly.
 
+## [Unreleased]
+
+### Changed
+
+- **Bounded data-vendor retries.** A vendor that fails for a *momentary*
+  reason — HTTP 429, 502/503/504, a 500 that carries `Retry-After`, or a
+  connection/read timeout or reset — is retried once on the same vendor before
+  the chain moves on. Auth (401/403), a refused request (400/404), missing
+  configuration, an absence or stale frame, an unreadable body, an internal
+  error, and a TLS/URL misconfiguration are never retried. Every failure still
+  lets the next configured vendor serve, and an exhausted chain keeps the
+  existing verdict (degraded text for core categories, typed auth/refusal
+  errors raised, a no-data sentinel for optional enrichment).
+- **One budget for the whole chain.** `data_vendor_retry` (defaults:
+  `max_attempts: 2` per vendor including the first, `max_total_attempts: 4`
+  across all vendors, `max_total_seconds: 45`, `max_request_seconds: 15`,
+  `max_cumulative_wait_seconds: 20`, `max_retry_after_seconds: 10` per wait,
+  `base_delay_seconds: 1`, `jitter_fraction: 0.2`) is shared by every vendor in
+  one tool call, so switching vendor does not reset it. Two limits hold at every
+  layer: a request's timeout is the time left capped by 15 s, and it is never
+  rounded up — when less than 0.5 s is left no request starts and the reason is
+  logged. Counts include the first attempt, so `1` means "one attempt, never
+  retried". `TRADINGAGENTS_VENDOR_RETRY_*` env vars override each value. Alpha
+  Vantage defaults to a single attempt (its free tier is a narrow, possibly
+  metered quota) and can be raised via `vendor_max_attempts`.
+- **Deadline checked before every start.** The 45 s chain budget is checked
+  immediately before the first call, every retry and every vendor switch, and
+  again after any wait: once it is spent no new request is made (a call already
+  in flight may still return). A 2 s budget with a first vendor that takes 5 s
+  therefore never reaches the second vendor.
+- **Strict configuration.** A negative, boolean-as-int, fractional attempt
+  count, NaN, Infinity, non-numeric string or wrongly typed
+  `vendor_max_attempts` raises `RetryConfigError` instead of being silently
+  clamped; env-var overrides reject the same values at startup. Zero semantics
+  are explicit: a `max_total_seconds` of 0 means no call starts at all,
+  `max_cumulative_wait_seconds: 0` means no wait is taken, and
+  `jitter_fraction: 0` means deterministic backoff.
+- **A throttle the vendor says is permanent is not retried.** An Alpha Vantage
+  notice about the daily allowance or the plan/entitlement is reported as
+  exhausted rather than waited out; only a confirmed, short-lived,
+  call-frequency throttle within the budget is retried. `Retry-After` is read
+  from the response header (never from message text), kept as a scalar on the
+  error, and consumed without the response, request or keyed URL riding along.
+  `max_retry_after_seconds` is a *per-wait* threshold (a longer request is
+  refused and the chain moves on); the total is capped by
+  `max_cumulative_wait_seconds`. A server's `Retry-After` is honoured exactly
+  and is never shortened by jitter; only a self-chosen backoff is jittered, and
+  only downward, through an injectable RNG.
+- **No nested retry loops.** Inside a routed call `yf_retry` makes a single
+  attempt and the router owns the loop (previously a routed yfinance 429 could
+  cost 4 requests and ~14 s of backoff); yfinance is pinned to zero internal
+  retries on the session the router installs (its process-wide `YfConfig` is
+  never mutated), and the Polymarket client to `max_retries=0`. `yf_retry`
+  keeps its standalone behaviour when called directly. FRED makes exactly one
+  HTTP request per vendor call — its old independent in-call retry loop is
+  gone — and `get_macro_data` re-checks the budget before its second request,
+  so vendor-function calls and the HTTP requests they issue are counted
+  separately. yfinance's timeout-less attributes (`info`, financials, news) are
+  declared as not cuttable by the budget rather than presented as bounded.
+- **A vendor's own status and headers reach the router unchanged.** No session
+  method is wrapped to cap yfinance's requests: a 400/401/403/404/500/503 stays
+  that status, its `Retry-After` is kept, and only a real 429 becomes
+  yfinance's rate-limit error. yfinance issues one extra, unschedulable request
+  after any response ≥ 400 (cookie-strategy fallback) plus cookie/crumb
+  fetches; these are bounded by the chain deadline where they start, recorded
+  by `count_uncontrollable_requests` and logged, and documented as a known
+  limitation rather than hidden by a synthetic response or a changed error
+  type.
+
+### Fixed
+
+- A Polymarket failure is raised as a typed vendor error instead of being
+  returned as prose, so it can no longer end the chain at the vendor that
+  failed; the router still reports an optional category's failure as
+  unavailable text.
+- `TRADINGAGENTS_VENDOR_RETRY_*` numeric overrides must be finite and an attempt
+  count must be written as a whole number (`"2"`, not `"2.5"` or `"2.0"`);
+  a wrong value fails at startup instead of silently becoming a default.
+
 ## [0.5.0] — 2026-09-18
 
 Point-in-time integrity across every dated path, decisions that are recorded as
