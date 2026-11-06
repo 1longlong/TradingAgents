@@ -1,0 +1,71 @@
+- id: FR-01
+  owner: Duan
+  type: functional
+  statement: The system shall pass every LLM trading decision through a deterministic safety rule engine before any simulated execution.
+  fit_criterion: Given an LLM decision that violates any safety rule, the rule engine returns REJECT and writes an audit log entry.
+  priority: Must
+
+- id: FR-02
+  owner: Duan
+  type: functional
+  statement: The system shall provide a simulated order executor that executes only APPROVED decisions and updates simulated positions and cash.
+  fit_criterion: Given an APPROVED BUY decision, after execution the position quantity increases, cash decreases by trade value plus fee.
+  priority: Must
+
+- id: FR-03
+  owner: Duan
+  type: functional
+  statement: The system shall maintain simulated portfolio state including cash, positions, average cost, and realized and unrealized PnL.
+  fit_criterion: After any simulated trade, portfolio state is queryable and matches expected values within a defined tolerance.
+  priority: Must
+
+- id: FR-04
+  owner: Duan
+  type: functional
+  statement: The system shall write an append-only audit log for every decision, rule evaluation, execution, and human approval.
+  fit_criterion: Audit log entries cannot be modified or deleted; each entry contains run_id, timestamp, event_type, and payload.
+  priority: Must
+
+- id: FR-05
+  owner: Duan
+  type: functional
+  statement: The system shall support a historical walk-forward simulation over a specified date range.
+  fit_criterion: Given a start date and an end date, the system iterates day by day. On each day, it evaluates a decision based on the simulated date, executes the trade, and advances the simulation clock to the next trading day. Real-world wall-clock time is ignored.
+  priority: Must
+
+- id: FR-06
+  owner: Duan
+  type: functional
+  statement: The system shall persist portfolio state (cash, positions) across sessions and support a manual reset option. If total equity drops to zero or below, the system enters a BANKRUPT state and rejects all further trades until manually reset.
+  fit_criterion: Restarting the program restores the last saved portfolio state. Manual reset clears the state to initial cash. If equity <= 0, any trade decision returns REJECTED with reason BANKRUPT.
+  priority: Must
+
+- id: INV-01
+  owner: Duan
+  type: invariant
+  statement: LLM outputs must never directly trigger trade execution. All execution must pass through the deterministic rule engine.
+  fit_criterion: In all tests, the number of executions without rule engine approval must be zero.
+  priority: Must
+
+- id: INV-02
+  owner: Duan
+  type: invariant
+  statement: The rule engine must be the only entry point to the simulated executor.
+  fit_criterion: Static analysis finds no direct calls to the executor from any module other than the rule engine.
+  priority: Must
+
+- id: INV-03
+  owner: Duan
+  type: invariant
+  statement: The audit log must be append-only.
+  fit_criterion: Any attempt to modify or delete an existing audit log entry must fail.
+  priority: Must
+
+- id: NFR-01
+  owner: Duan
+  type: security
+  statement: The rule engine must reject 100% of decisions that violate any safety rule.
+  metric: Violation rejection rate
+  threshold: 100%
+  verification: Negative tests construct decisions that trigger each safety rule and assert REJECT.
+  priority: Must

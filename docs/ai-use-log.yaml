@@ -1,0 +1,679 @@
+version: 1
+entries:
+  - date: "2026-10-20"
+    actor: "opencode"
+    model: "deepseek/deepseek-flash"
+    phase: "execution-plan-step-1"
+    summary: >-
+      Created the trading subsystem skeleton: shared models, typed errors,
+      deterministic Decimal handling, safety configuration, fee model,
+      SystemClock, SimulationClock, and offline test harness.
+    prompt: >-
+      Human-approved Revision 2 execution plan. Step 1 only.
+    requirement_ids:
+      - FR-01
+      - FR-03
+      - FR-04
+      - FR-05
+      - FR-06
+    files:
+      - src/trading/__init__.py
+      - src/trading/models.py
+      - src/trading/clock.py
+      - test/offline/conftest.py
+      - test/offline/test_models.py
+      - test/offline/test_clock.py
+      - docs/ai-use-log.yaml
+    verification:
+      status: passed
+      commands:
+        - "python -m pytest test/offline -q"
+        - "TZ=UTC python -m pytest -q"
+        - "python -m ruff check src test"
+      results:
+        offline: "25 passed"
+        regression: "946 passed, 2 skipped, 88 subtests passed"
+        lint: "All checks passed"
+      notes: >-
+        The default shell timezone is not UTC; the upstream OHLCV freshness
+        tests were run under TZ=UTC, matching GitHub Actions. No upstream test
+        was modified.
+    review_status: "approved"
+  - date: "2026-10-20"
+    actor: "opencode"
+    model: "deepseek/deepseek-flash"
+    phase: "execution-plan-step-2"
+    summary: >-
+      Implemented the append-only hash-chained JSONL audit log with canonical
+      payload serialisation, an exclusive-append file lock, frozen events, and
+      a .head anchor that detects deletion of the final entry.
+    prompt: >-
+      Human-approved Revision 2 execution plan. Step 2 only.
+    requirement_ids:
+      - FR-04
+      - INV-03
+    files:
+      - src/trading/audit.py
+      - test/offline/test_audit.py
+      - docs/ai-use-log.yaml
+    verification:
+      status: passed
+      commands:
+        - "python -m pytest test/offline/test_audit.py -q"
+        - "python -m pytest test/offline -q"
+        - "TZ=UTC python -m pytest -q"
+        - "python -m ruff check src test"
+      results:
+        targeted: "17 passed"
+        offline: "42 passed"
+        regression: "946 passed, 2 skipped, 88 subtests passed"
+        lint: "All checks passed"
+      notes: >-
+        The audit file is opened only with O_APPEND. The .head sidecar is
+        metadata and is never part of the event stream. Tests cover payload
+        tampering, tail truncation, missing/corrupt head, corrupt JSON, extra
+        fields, append-after-tamper rejection, and concurrent appends.
+    review_status: "approved"
+  - date: "2026-10-20"
+    actor: "opencode"
+    model: "deepseek/deepseek-flash"
+    phase: "execution-plan-step-3"
+    summary: >-
+      Implemented the simulated portfolio ledger: long-only Decimal cash and
+      positions, fee-inclusive average cost, realized and unrealized PnL,
+      mark-to-market snapshots, PortfolioContext seeding/rendering, duplicate
+      fill protection, and sticky BANKRUPT state on equity <= 0.
+    prompt: >-
+      Human-approved Revision 2 execution plan. Step 3 only.
+    requirement_ids:
+      - FR-02
+      - FR-03
+      - FR-06
+    files:
+      - src/trading/portfolio.py
+      - test/offline/test_portfolio.py
+      - test/offline/test_bankruptcy.py
+      - docs/ai-use-log.yaml
+    verification:
+      status: passed
+      commands:
+        - "python -m pytest test/offline/test_portfolio.py test/offline/test_bankruptcy.py -q"
+        - "python -m pytest test/offline -q"
+        - "TZ=UTC python -m pytest -q"
+        - "python -m ruff check src test"
+      results:
+        targeted: "24 passed"
+        offline: "66 passed"
+        regression: "946 passed, 2 skipped, 88 subtests passed"
+        lint: "All checks passed"
+      notes: >-
+        PortfolioContext float fields are converted to Decimal only at the
+        read-only integration boundary. Apply-fill validates quantity scale,
+        price, notional, and fee before mutating, and bankruptcy is sticky until
+        a future reset operation clears it.
+    review_status: "approved"
+  - date: "2026-10-20"
+    actor: "opencode"
+    model: "deepseek/deepseek-flash"
+    phase: "execution-plan-step-4"
+    summary: >-
+      Implemented the deterministic hard safety catalogue SR-01 through SR-10
+      and soft approval policies AP-01 and AP-02. SR-03 is simulation-clock
+      aware, SR-09 rejects with exact reason BANKRUPT, and rule/policy wrappers
+      fail closed on unexpected evaluation errors.
+    prompt: >-
+      Human-approved Revision 2 execution plan. Step 4 only, with explicit
+      human_approval and architecture_decision for src/safety/**.
+    requirement_ids:
+      - FR-01
+      - FR-02
+      - FR-05
+      - FR-06
+      - NFR-01
+    files:
+      - src/safety/__init__.py
+      - src/safety/rules.py
+      - src/trading/models.py
+      - src/trading/portfolio.py
+      - test/offline/test_rules.py
+      - docs/ai-use-log.yaml
+    verification:
+      status: passed
+      commands:
+        - "python -m pytest test/offline/test_rules.py -q"
+        - "python -m pytest test/offline -q"
+        - "TZ=UTC python -m pytest -q"
+        - "python -m ruff check src test"
+      results:
+        targeted: "55 passed"
+        offline: "121 passed"
+        regression: "946 passed, 2 skipped, 88 subtests passed"
+        lint: "All checks passed"
+      notes: >-
+        RuleContext now carries order_id and applied_order_ids so SR-08 can
+        reject replay deterministically; Portfolio exposes applied_order_ids for
+        the engine and later persistence steps. SR-09 is intentionally checked
+        before the other rules by the future engine to short-circuit BANKRUPT.
+    review_status: "approved"
+  - date: "2026-10-20"
+    actor: "opencode"
+    model: "deepseek/deepseek-flash"
+    phase: "execution-plan-step-5"
+    summary: >-
+      Implemented the deterministic simulated executor. It validates
+      ExecutionAuthorization and the order envelope, rejects stale, bankrupt,
+      replayed, and malformed executions before mutation, writes
+      EXECUTION_STARTED before applying the fill, writes ORDER_EXECUTED after,
+      and records INVARIANT_VIOLATION if the post-mutation audit write fails.
+    prompt: >-
+      Human-approved Revision 2 execution plan. Step 5 only. INV-02 provenance
+      enforcement is explicitly deferred to Step 6.
+    requirement_ids:
+      - FR-02
+      - INV-01
+    files:
+      - src/trading/models.py
+      - src/trading/executor.py
+      - test/offline/test_executor.py
+      - docs/ai-use-log.yaml
+    verification:
+      status: passed
+      commands:
+        - "python -m pytest test/offline/test_executor.py -q"
+        - "python -m pytest test/offline -q"
+        - "TZ=UTC python -m pytest -q"
+        - "python -m ruff check src test"
+      results:
+        targeted: "26 passed"
+        offline: "147 passed"
+        regression: "946 passed, 2 skipped, 88 subtests passed"
+        lint: "All checks passed"
+      notes: >-
+        ExecutionAuthorization is a new frozen model containing evaluation_id,
+        decision, order_intent, and portfolio_version. The executor uses the
+        deterministic order id ord-{decision_id} and relies on
+        Portfolio.has_applied for replay protection. First-audit failure leaves
+        the portfolio untouched; post-mutation audit failure raises
+        ExecutionAuditError and attempts an INVARIANT_VIOLATION event.
+    review_status: "approved"
+  - date: "2026-10-20"
+    actor: "opencode"
+    model: "deepseek/deepseek-flash"
+    phase: "execution-plan-step-6"
+    summary: >-
+      Implemented SafetyEngine orchestration: evaluate/approve/reject/no-action
+      state machine, full SR-01..SR-10 then AP-01/AP-02 evaluation, one-shot
+      human approval transitions, APPROVED-only execution, stale-version guard,
+      required audit events, and INV-02 provenance enforcement through a
+      module-private token carried by an engine-issued authorization.
+    prompt: >-
+      Human-approved Revision 2 execution plan plus explicit permission to make
+      a minimal src/trading/executor.py change for INV-02 token verification.
+      Step 6 only; Step 7 remains out of scope.
+    requirement_ids:
+      - FR-01
+      - FR-02
+      - FR-04
+      - FR-06
+      - INV-01
+      - INV-02
+    files:
+      - src/safety/engine.py
+      - src/trading/executor.py
+      - test/offline/test_engine.py
+      - test/offline/test_executor.py
+      - docs/ai-use-log.yaml
+    verification:
+      status: passed
+      commands:
+        - "python -m pytest test/offline/test_engine.py test/offline/test_executor.py -q"
+        - "python -m pytest test/offline -q"
+        - "TZ=UTC python -m pytest -q"
+        - "python -m ruff check src test"
+      results:
+        targeted: "41 passed"
+        offline: "162 passed"
+        regression: "946 passed, 2 skipped, 88 subtests passed"
+        lint: "All checks passed"
+      notes: >-
+        The engine owns the SimulatedExecutor and is the only production caller
+        of execute(). Authorization provenance uses a private token subclass;
+        forged base authorizations and wrong-token authorizations raise
+        ExecutionNotAuthorizedError. SR-09 is evaluated first, while all hard
+        rules are still recorded before a REJECTED result. Approvals are
+        decision-bound, expiry-checked, and one-shot per evaluation.
+    review_status: "approved"
+  - date: "2026-10-20"
+    actor: "opencode"
+    model: "deepseek/deepseek-flash"
+    phase: "execution-plan-step-7"
+    summary: >-
+      Implemented HumanApprovalGate: TTL-bound ApprovalRequest creation for
+      PENDING_APPROVAL evaluations, one-shot approve/deny decisions, expiry and
+      request/decision binding checks, HUMAN_APPROVAL_REQUESTED and
+      HUMAN_APPROVAL audit events, and compatibility with
+      SafetyEngine.apply_approval().
+    prompt: >-
+      Human-approved Revision 2 execution plan. Step 7 only. Core engine and
+      executor were not modified.
+    requirement_ids:
+      - FR-01
+      - FR-04
+    files:
+      - src/trading/approval.py
+      - test/offline/test_approval.py
+      - docs/ai-use-log.yaml
+    verification:
+      status: passed
+      commands:
+        - "python -m pytest test/offline/test_approval.py -q"
+        - "python -m pytest test/offline -q"
+        - "TZ=UTC python -m pytest -q"
+        - "python -m ruff check src test"
+      results:
+        targeted: "9 passed"
+        offline: "171 passed"
+        regression: "946 passed, 2 skipped, 88 subtests passed"
+        lint: "All checks passed"
+      notes: >-
+        Requests are bound to one evaluation, expire using
+        SafetyConfig.approval_ttl_seconds, and cannot be re-requested or
+        decided twice. Audit writes occur before requests/decisions become
+        visible so audit failure cannot silently create an approval. Approved
+        and denied HumanApproval objects were verified end-to-end with the
+        engine.
+    review_status: "approved"
+  - date: "2026-10-20"
+    actor: "opencode"
+    model: "deepseek/deepseek-flash"
+    phase: "execution-plan-step-8"
+    summary: >-
+      Implemented the graph adapter, deterministic SizingPolicy, and
+      TradingPipeline. Ratings map to advisory direction only; LLM quantities
+      and prices are discarded. Sizing uses 5% of total equity by default,
+      caps at SafetyConfig.hard_max_order_notional, and floors to six decimal
+      places. The pipeline routes APPROVED to execution, PENDING_APPROVAL to
+      HumanApprovalGate without execution, and leaves REJECTED/NO_ACTION inert.
+    prompt: >-
+      Human-approved Revision 2 execution plan. Step 8 only. No files under
+      tradingagents/ were modified; extract_rating was imported read-only.
+    requirement_ids:
+      - FR-01
+      - FR-02
+    files:
+      - src/trading/pipeline.py
+      - test/offline/test_pipeline.py
+      - docs/ai-use-log.yaml
+    verification:
+      status: passed
+      commands:
+        - "python -m pytest test/offline/test_pipeline.py -q"
+        - "python -m pytest test/offline -q"
+        - "TZ=UTC python -m pytest -q"
+        - "python -m ruff check src test"
+      results:
+        targeted: "23 passed"
+        offline: "194 passed"
+        regression: "946 passed, 2 skipped, 88 subtests passed"
+        lint: "All checks passed"
+      notes: >-
+        decision_id is deterministic from run_id, symbol, and trade_date when
+        present. The adapter always sets quantity=None and MARKET order type, so
+        any LLM numeric output is structurally unable to reach execution. The
+        pipeline was verified for approved execution, pending approval without
+        execution, allowlist rejection, HOLD/REVIEW no-action, hard-cap sizing,
+        and ignored LLM quantities.
+    review_status: "approved"
+  - date: "2026-10-20"
+    actor: "opencode"
+    model: "deepseek/deepseek-flash"
+    phase: "execution-plan-step-9"
+    summary: >-
+      Implemented the walk-forward calendar and provider layer: WeekdayCalendar
+      with optional holidays, SimulationDay, DecisionProvider/QuoteProvider
+      protocols, deterministic MockDecisionProvider and MockQuoteProvider,
+      lazy-factory RealDecisionProvider using the Step 8 adapter, and
+      HistoricalQuoteProvider backed by an injected date-only close function.
+    prompt: >-
+      Human-approved Revision 2 execution plan. Step 9 only. No real graph,
+      LLM, network, or market data call is made by the offline tests.
+    requirement_ids:
+      - FR-01
+      - FR-05
+    files:
+      - src/trading/backtest.py
+      - test/offline/test_providers.py
+      - docs/ai-use-log.yaml
+    verification:
+      status: passed
+      commands:
+        - "python -m pytest test/offline/test_providers.py -q"
+        - "python -m pytest test/offline -q"
+        - "TZ=UTC python -m pytest -q"
+        - "python -m ruff check src test"
+      results:
+        targeted: "10 passed"
+        offline: "204 passed"
+        regression: "946 passed, 2 skipped, 88 subtests passed"
+        lint: "All checks passed"
+      notes: >-
+        Quote providers require the SimulationClock to already be set to the
+        requested date and stamp quotes with clock.now(), which was verified
+        against SR-03. HistoricalQuoteProvider calls the injected function only
+        with (symbol, requested_date), and tests assert no future/extra calls.
+        RealDecisionProvider is exercised only with a fake graph and verifies
+        the simulated date and current PortfolioContext are passed to propagate.
+    review_status: "approved"
+  - date: "2026-10-20"
+    actor: "opencode"
+    model: "deepseek/deepseek-flash"
+    phase: "execution-plan-step-10"
+    summary: >-
+      Implemented atomic JSON StateStore persistence and the resumable
+      BacktestRunner. StateStore persists cash, positions, realized PnL, fees,
+      marks, replay ids, bankruptcy, and a BacktestCursor; it loads fresh on a
+      missing file, fails closed on corruption, and resets through an appended
+      STATE_RESET audit event. BacktestRunner walks the calendar, marks to each
+      quote, skips missing quotes, runs the pipeline, handles pending approvals
+      via an optional handler, persists a cursor after every day, resumes after
+      the last completed date, and reports summary statistics.
+    prompt: >-
+      Human-approved Revision 2 execution plan. Step 10 only. No Step 11 runtime
+      or CLI work was started.
+    requirement_ids:
+      - FR-05
+      - FR-06
+    files:
+      - src/trading/persistence.py
+      - src/trading/backtest.py
+      - test/offline/test_persistence.py
+      - test/offline/test_backtest.py
+      - docs/ai-use-log.yaml
+    verification:
+      status: passed
+      commands:
+        - "python -m pytest test/offline/test_persistence.py test/offline/test_backtest.py -q"
+        - "python -m pytest test/offline -q"
+        - "TZ=UTC python -m pytest -q"
+        - "python -m ruff check src test"
+      results:
+        targeted: "12 passed"
+        offline: "216 passed"
+        regression: "946 passed, 2 skipped, 88 subtests passed"
+        lint: "All checks passed"
+      notes: >-
+        StateStore writes via temp file + fsync + os.replace and restores into an
+        existing Portfolio when a target is supplied, keeping the engine and
+        executor bound to the same live instance across resume. The runner
+        synthesizes the Step 8 graph-state shape from the provider's advisory
+        action so the existing TradingPipeline API remains unchanged. The
+        100-day mock run, interruption/resume, missing-quote skip, and
+        equity-at-zero bankruptcy paths are covered offline.
+    review_status: "approved"
+  - date: "2026-10-20"
+    actor: "opencode"
+    model: "deepseek/deepseek-flash"
+    phase: "execution-plan-step-11"
+    summary: >-
+      Implemented RuntimeConfig/TradingRuntime/build_runtime startup
+      composition and a standalone argparse CLI. The runtime wires AuditLog,
+      StateStore, Portfolio, SafetyEngine, HumanApprovalGate, and
+      TradingPipeline, loading persisted state or resetting through the audited
+      StateStore path. The CLI supports --state, --audit, --initial-cash, and
+      --reset, prints cash/equity/bankruptcy, and never trades.
+    prompt: >-
+      Human-approved Revision 2 execution plan. Step 11 only. The frozen main
+      CLI was not modified; the standalone entry point lives at trading.cli.
+    requirement_ids:
+      - FR-01
+      - FR-06
+    files:
+      - src/trading/runtime.py
+      - src/trading/cli.py
+      - test/offline/test_runtime.py
+      - test/offline/test_cli_reset.py
+      - docs/ai-use-log.yaml
+    verification:
+      status: passed
+      commands:
+        - "python -m pytest test/offline/test_runtime.py test/offline/test_cli_reset.py -q"
+        - "python -m pytest test/offline -q"
+        - "TZ=UTC python -m pytest -q"
+        - "python -m ruff check src test"
+      results:
+        targeted: "9 passed"
+        offline: "225 passed"
+        regression: "946 passed, 2 skipped, 88 subtests passed"
+        lint: "All checks passed"
+      notes: >-
+        DEFAULT_INITIAL_CASH is 100000.00. build_runtime(reset=True) clears the
+        state and preserves prior audit entries, appending STATE_RESET. CLI
+        inspection and reset use temporary paths in tests; corrupt state returns
+        a non-zero exit with an error instead of silently resetting. No frozen
+        cli/main.py or tradingagents file was touched.
+    review_status: "approved"
+  - date: "2026-10-20"
+    actor: "opencode"
+    model: "deepseek/deepseek-flash"
+    phase: "execution-plan-step-12"
+    summary: >-
+      Added the ultimate negative, invariant, structural, and traceability
+      suites. AST checks enforce the executor import boundary, absence of
+      wall-clock calls outside clock.py, and absence of network/broker imports.
+      Invariant tests prove zero execution without APPROVED, forged-token
+      rejection with no state mutation, and audit tamper detection. Traceability
+      dynamically maps every requirements.yaml ID to a test function reference.
+    prompt: >-
+      Human-approved Revision 2 execution plan plus explicit permission to
+      clean up default clock factories in approval.py, audit.py, executor.py,
+      and portfolio.py so the strict wall-clock AST rule can be enforced.
+      Step 12 only.
+    requirement_ids:
+      - FR-01
+      - FR-05
+      - INV-01
+      - INV-02
+      - INV-03
+      - NFR-01
+    files:
+      - test/offline/test_negative.py
+      - test/offline/test_invariants.py
+      - test/offline/test_structure.py
+      - test/offline/test_traceability.py
+      - src/trading/approval.py
+      - src/trading/audit.py
+      - src/trading/executor.py
+      - src/trading/portfolio.py
+      - docs/ai-use-log.yaml
+    verification:
+      status: passed
+      commands:
+        - "python -m pytest test/offline/test_negative.py test/offline/test_invariants.py test/offline/test_structure.py test/offline/test_traceability.py -q"
+        - "python -m pytest test/offline -q"
+        - "TZ=UTC python -m pytest -q"
+        - "python -m ruff check src test"
+      results:
+        targeted: "19 passed"
+        offline: "244 passed"
+        regression: "946 passed, 2 skipped, 88 subtests passed"
+        lint: "All checks passed"
+      notes: >-
+        Source cleanup replaced direct datetime.now() default-clock helpers with
+        SystemClock().now(); no business logic, signatures, or hash chaining
+        changed. The AST wall-clock test now passes with clock.py as the sole
+        direct wall-clock reader. Traceability found coverage for FR-01 through
+        FR-06, INV-01 through INV-03, and NFR-01.
+    review_status: "approved"
+  - date: "2026-10-20"
+    actor: "opencode"
+    model: "deepseek/deepseek-flash"
+    phase: "execution-plan-step-13"
+    summary: >-
+      Added opt-in live-test support: test/live/conftest.py gates the suite on
+      RUN_LIVE_TRADING_TESTS=1, loads the repository .env, and adds src to the
+      offline path. The live smoke test wires RealDecisionProvider over the
+      actual TradingAgentsGraph, HistoricalQuoteProvider over a read-only
+      date-specific close fetch, a 3-day WeekdayCalendar window, and the
+      simulated runtime; it asserts run completion, audit integrity, and a
+      persisted cursor.
+    prompt: >-
+      Human-approved Revision 2 execution plan. Step 13 only. No real broker
+      integration and no live test execution without the opt-in flag.
+    requirement_ids:
+      - FR-05
+      - FR-06
+    files:
+      - test/live/conftest.py
+      - test/live/test_live_backtest.py
+      - docs/ai-use-log.yaml
+    verification:
+      status: passed
+      commands:
+        - "pytest test/live -q"
+        - "RUN_LIVE_TRADING_TESTS=0 TRADINGAGENTS_LLM_PROVIDER=deepseek DEEPSEEK_API_KEY=fake-key pytest test/live -q"
+        - "pytest test/offline -q"
+        - "TZ=UTC pytest -q"
+        - "python -m ruff check src test"
+      results:
+        live_default: "1 skipped (opt-in/key gating)"
+        offline: "244 passed"
+        regression: "947 passed, 1 skipped, 88 subtests passed"
+        lint: "All checks passed"
+      notes: >-
+        No live trading test was executed. The full upstream run now shows one
+        additional pass because the workspace .env exposes a real DeepSeek key
+        to the pre-existing tests/test_deepseek_reasoning.py live API test; the
+        offline suite remains unchanged at 244 passed. Live API configuration is
+        provider-specific: set TRADINGAGENTS_LLM_PROVIDER and the matching key
+        (e.g. DEEPSEEK_API_KEY or OPENAI_API_KEY), then set
+        RUN_LIVE_TRADING_TESTS=1. The executor remains simulated throughout.
+    review_status: "approved"
+  - date: "2026-10-20"
+    actor: "opencode"
+    model: "deepseek/deepseek-flash"
+    phase: "execution-plan-step-13-env-proxy"
+    summary: >-
+      Fixed live-test environment loading and WSL proxy handling. The live
+      conftest now loads the repository .env before test imports, infers
+      TRADINGAGENTS_LLM_PROVIDER from the first available provider key when the
+      env var is absent, and sets deepseek-chat defaults for the DeepSeek
+      fallback. The live test also loads .env itself and configures yfinance's
+      process-local proxy to http://127.0.0.1:7897 (overrideable via
+      TRADINGAGENTS_LIVE_PROXY). Neither setting is loaded by offline tests or
+      core business logic.
+    prompt: >-
+      Human follow-up before Step 14: auto-load .env and proxy for live tests,
+      then run the live smoke test without manual shell exports.
+    requirement_ids:
+      - FR-05
+    files:
+      - test/live/conftest.py
+      - test/live/test_live_backtest.py
+      - docs/ai-use-log.yaml
+    verification:
+      status: passed
+      commands:
+        - "RUN_LIVE_TRADING_TESTS=1 pytest test/live -q -s"
+        - "pytest test/live -q"
+        - "pytest test/offline -q"
+        - "python -m ruff check src test"
+      results:
+        live: "1 passed in 260.34s"
+        live_default: "1 skipped (opt-in flag gating)"
+        offline: "244 passed"
+        lint: "All checks passed"
+      notes: >-
+        The live run used the .env DeepSeek key with no manual exports. The
+        yfinance proxy is set only when the live test module is imported; the
+        offline suite does not import it. The executor remained simulated and no
+        broker API was used.
+    review_status: "approved"
+  - date: "2026-10-20"
+    actor: "opencode"
+    model: "deepseek/deepseek-flash"
+    phase: "execution-plan-step-14"
+    summary: >-
+      Replaced the five architecture/governance stubs with implemented
+      documentation: end-to-end blueprint and authority boundary, accepted
+      ADR-001 covering simulated execution/provenance token/clocks/atomic
+      persistence, permission model mirroring permissions.jsonc, full
+      requirement trace matrix, and module/dependency structural constraints.
+    prompt: >-
+      Human-approved Revision 2 execution plan. Step 14 only. Documentation
+      writes were explicitly authorized even though docs/** is normally
+      read-only.
+    requirement_ids:
+      - FR-01
+      - FR-02
+      - FR-03
+      - FR-04
+      - FR-05
+      - FR-06
+      - INV-01
+      - INV-02
+      - INV-03
+      - NFR-01
+    files:
+      - architecture-blueprint.md
+      - docs/architecture/adr/001-simulated-trading-system.md
+      - docs/architecture/permission-model.md
+      - docs/architecture/trace-matrix.md
+      - docs/code-governance/structural-constraints.md
+      - docs/ai-use-log.yaml
+    verification:
+      status: passed
+      commands:
+        - "pytest test/offline -q"
+        - "python -m ruff check src test"
+      results:
+        offline: "244 passed"
+        lint: "All checks passed"
+      notes: >-
+        Documents describe only implemented behavior. No source or test files
+        were changed in this step. The trace matrix names concrete test
+        functions for every requirement ID, and test_traceability.py remains the
+        automated guard for missing coverage.
+    review_status: "approved"
+  - date: "2026-10-20"
+    actor: "opencode"
+    model: "deepseek/deepseek-flash"
+    phase: "execution-plan-step-15"
+    summary: >-
+      Final verification and PR preparation. Re-ran the offline suite, the
+      complete suite under UTC, and lint; validated the AI-use log; confirmed
+      the 100-day mock backtest and 3-day live smoke evidence; and prepared the
+      PR summary in the response without creating a new document file.
+    prompt: >-
+      Final Step 15 verification and PR preparation. No code changes.
+    requirement_ids:
+      - FR-01
+      - FR-02
+      - FR-03
+      - FR-04
+      - FR-05
+      - FR-06
+      - INV-01
+      - INV-02
+      - INV-03
+      - NFR-01
+    files:
+      - docs/ai-use-log.yaml
+    verification:
+      status: passed
+      commands:
+        - "pytest test/offline -q"
+        - "TZ=UTC pytest -q"
+        - "DEEPSEEK_API_KEY=placeholder TZ=UTC pytest -q"
+        - "python -m ruff check src test"
+      results:
+        offline: "244 passed"
+        full_suite_with_workspace_env: "947 passed, 1 skipped, 88 subtests passed"
+        full_suite_without_live_key: "946 passed, 2 skipped, 88 subtests passed"
+        lint: "All checks passed"
+        ai_use_log: "valid YAML, 15 entries before this entry"
+      notes: >-
+        The workspace .env now exposes a real DeepSeek key, so the pre-existing
+        tests/test_deepseek_reasoning.py live API test runs and passes, adding
+        one pass and removing one skip versus the historical 946/2 baseline.
+        No project test regressed. No review_status field was modified.
+    review_status: "approved"

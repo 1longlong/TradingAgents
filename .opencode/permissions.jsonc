@@ -1,0 +1,26 @@
+{
+  "version": "1.0",
+  "default": { "read": false, "write": false },
+  "paths": {
+    "read": [
+      "AGENTS.md", "Prompt.md", "baseline.md", "architecture-blueprint.md",
+      "docs/**", "src/**", "test/**"
+    ],
+    "write": [
+      "src/trading/**", "src/safety/**", "test/offline/**", "test/live/**", "docs/ai-use-log.yaml"
+    ],
+    "readonly": ["docs/**"],
+    "frozen": [
+      "tradingagents/agents/**", "tradingagents/graph/**", "tradingagents/dataflows/**",
+      "tradingagents/llm_clients/**", ".opencode/rules.md", ".agent/rules.md"
+    ]
+  },
+  "guards": [
+    {
+      "id": "safety-write-requires-approval",
+      "when": "write to src/safety/**",
+      "require": ["human_approval", "architecture_decision"]
+    }
+  ],
+  "enforcement": { "ci": true, "block_on_violation": true }
+}
