@@ -59,6 +59,7 @@ Write these sections, in this order, starting with the recommendation on its own
             prompt,
             render_research_plan,
             "Research Manager",
+            schema=ResearchPlan,
         )
 
         new_investment_debate_state = {

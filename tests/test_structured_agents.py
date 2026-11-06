@@ -11,6 +11,7 @@ import inspect
 from unittest.mock import MagicMock
 
 import pytest
+from langchain_core.exceptions import OutputParserException
 from pydantic import ValidationError
 
 from tradingagents.agents.analysts.sentiment_analyst import create_sentiment_analyst
@@ -194,21 +195,26 @@ def _structured_trader_llm(captured: dict, proposal: TraderProposal | None = Non
 
 
 @pytest.mark.unit
-def test_invoke_structured_falls_back_when_result_is_none():
-    # A thinking model can answer in plain text, leaving the parser with None.
-    # That must fall back to free text, not crash on render(None) (#1051).
-    from tradingagents.agents.utils.structured import invoke_structured_or_freetext
+def test_invoke_structured_raises_when_parser_returns_none():
+    # #1051: a thinking model can answer in plain text, leaving the parser with
+    # None. Without a raw response this is indistinct from an empty answer, so
+    # it fails loudly instead of spending a second generation; render(None)
+    # must never be reached.
+    from tradingagents.agents.utils.structured import (
+        StructuredResponseTruncated,
+        invoke_structured_or_freetext,
+    )
 
     structured = MagicMock()
     structured.invoke.return_value = None
     plain = MagicMock()
     plain.invoke.return_value = MagicMock(content="FREETEXT")
 
-    out = invoke_structured_or_freetext(
-        structured, plain, "prompt", render=lambda r: r.rating, agent_name="t"
-    )
-    assert out == "FREETEXT"
-    plain.invoke.assert_called_once()
+    with pytest.raises(StructuredResponseTruncated):
+        invoke_structured_or_freetext(
+            structured, plain, "prompt", render=lambda r: r.rating, agent_name="t"
+        )
+    plain.invoke.assert_not_called()
 
 
 @pytest.mark.unit
@@ -482,7 +488,9 @@ class TestSentimentAnalystAgent:
     def test_falls_back_to_freetext_when_structured_call_fails(self):
         plain = "Fallback free-text sentiment."
         structured = MagicMock()
-        structured.invoke.side_effect = ValueError("bad JSON from model")
+        # A parse/validation miss (not a bare ValueError, which is an unknown
+        # internal error and now propagates) still reaches the one free-text call.
+        structured.invoke.side_effect = OutputParserException("bad JSON from model")
         llm = MagicMock()
         llm.with_structured_output.return_value = structured
         llm.invoke.return_value = MagicMock(content=plain)

@@ -120,6 +120,7 @@ def create_sentiment_analyst(llm):
             formatted_messages,
             render_sentiment_report,
             "Sentiment Analyst",
+            schema=SentimentReport,
         )
 
         return {

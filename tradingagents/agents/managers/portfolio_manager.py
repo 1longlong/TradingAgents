@@ -84,6 +84,7 @@ Write these sections, in this order, starting with the rating on its own line:
             prompt,
             render_pm_decision,
             "Portfolio Manager",
+            schema=PortfolioDecision,
         )
 
         new_risk_debate_state = {
