@@ -34,6 +34,16 @@ _ENV_OVERRIDES = {
     "TRADINGAGENTS_VENDOR_RETRY_MAX_RETRY_AFTER_SECONDS":
         "data_vendor_retry.max_retry_after_seconds",
     "TRADINGAGENTS_VENDOR_RETRY_JITTER_FRACTION": "data_vendor_retry.jitter_fraction",
+    # Vendor circuit breaker. The section is validated by
+    # dataflows.vendor_breaker on every route, so an enabled value that is not
+    # a boolean, an unknown key or a non-positive threshold fails loudly there.
+    "TRADINGAGENTS_VENDOR_BREAKER_ENABLED": "data_vendor_breaker.enabled",
+    "TRADINGAGENTS_VENDOR_BREAKER_FAILURE_THRESHOLD": (
+        "data_vendor_breaker.failure_threshold"
+    ),
+    "TRADINGAGENTS_VENDOR_BREAKER_COOLDOWN_SECONDS": (
+        "data_vendor_breaker.cooldown_seconds"
+    ),
     # Provider-specific reasoning/thinking knobs (None = each provider's own
     # default). Settable here for non-interactive runs; the CLI also offers an
     # interactive choice, which is skipped when the matching var is set.
@@ -231,6 +241,27 @@ DEFAULT_CONFIG = _apply_env_overrides({
         # spread concurrent retries (0 = deterministic). A server's Retry-After
         # is honoured exactly and is never shortened by jitter.
         "jitter_fraction": 0.2,
+    },
+    # Per-vendor circuit breaker, owned by the routing layer. Disabled by
+    # default: with ``enabled: false`` nothing is acquired, no state is created
+    # and routing behaves exactly as before. When enabled, a vendor that fails
+    # for a *proven-momentary* reason on ``failure_threshold`` consecutive
+    # logical calls is skipped for ``cooldown_seconds`` (not started, no HTTP
+    # request, no attempt), then one probe decides whether it recovers.
+    #
+    # What counts as a failure is read from error metadata only: a short
+    # throttle (429/502/503/504/timeout within ``max_retry_after_seconds``)
+    # that the call did not recover from. Auth, refused requests, missing keys,
+    # daily/monthly quotas, TLS/URL problems, parse bugs and the local retry
+    # budget running out do *not* count. Keyed by vendor *and* endpoint *and*
+    # these two settings, so all symbols of one endpoint share protection
+    # while a different endpoint or policy keeps separate state. State is
+    # in-process memory: it is kept across tool calls and never shared between
+    # processes, and a restart clears it.
+    "data_vendor_breaker": {
+        "enabled": False,
+        "failure_threshold": 3,
+        "cooldown_seconds": 60.0,
     },
     # Tool-level configuration (takes precedence over category-level)
     "tool_vendors": {

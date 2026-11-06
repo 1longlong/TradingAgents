@@ -74,6 +74,27 @@ Breaking changes within the 0.x line are called out explicitly.
   by `count_uncontrollable_requests` and logged, and documented as a known
   limitation rather than hidden by a synthetic response or a changed error
   type.
+- **Per-vendor circuit breaker (off by default).** `data_vendor_breaker`
+  (`enabled: false`, `failure_threshold: 3`, `cooldown_seconds: 60`) lets the
+  routing layer stop calling a vendor that keeps failing for a *proven
+  momentary* reason. While disabled, nothing is acquired, no state exists and
+  routing is unchanged. When enabled, `failure_threshold` consecutive logical
+  calls that ended in a short transient failure open the breaker for
+  `cooldown_seconds`; afterwards exactly one probe is allowed, and its success
+  closes the breaker while its failure reopens it. A skipped vendor starts no
+  attempt, issues no HTTP request, takes no wait and is never retried: the
+  chain simply moves to the next configured vendor, and the reason
+  (`circuit_open` or `probe_in_progress`) is logged. Only a finished *call*
+  reports a verdict: success and a completed "no data" clear the streak; auth,
+  refused requests, missing keys, daily/monthly quotas, TLS/URL errors, parse
+  failures, internal errors, cancellations and a spent local retry budget never
+  count. One ticket covers a vendor's whole logical call, including its
+  internal retries, so retry-then-success counts once as a success. State is
+  keyed by vendor **and** endpoint **and** the two settings, so all symbols of
+  one service share protection while a different endpoint or policy does not.
+  It lives in process memory: it survives tool calls but is never shared
+  between processes and a restart clears it. Override via
+  `TRADINGAGENTS_VENDOR_BREAKER_*` env vars.
 
 ### Fixed
 

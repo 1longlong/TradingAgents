@@ -1,4 +1,6 @@
+import contextlib
 import logging
+import threading
 
 from .alpha_vantage import (
     get_balance_sheet as get_alpha_vantage_balance_sheet,
@@ -21,8 +23,8 @@ from .errors import (
     VendorRequestRejectedError,
     retryable_status,
 )
-from .fred import get_macro_data as get_fred_macro_data
-from .polymarket import get_prediction_markets as get_polymarket_prediction_markets
+from .fred import FRED_API_BASE, get_macro_data as get_fred_macro_data
+from .polymarket import GAMMA_BASE, get_prediction_markets as get_polymarket_prediction_markets
 from .retry_session import (
     RetryBudget,
     RetrySession,
@@ -30,11 +32,22 @@ from .retry_session import (
     retry_session,
 )
 from .sec_edgar import (
+    _FACTS_URL as _SEC_FACTS_URL,
     get_balance_sheet as get_sec_edgar_balance_sheet,
     get_cashflow as get_sec_edgar_cashflow,
     get_income_statement as get_sec_edgar_income_statement,
 )
 from .stockstats_utils import as_vendor_error
+from .vendor_breaker import (
+    ABSENT,
+    NEUTRAL,
+    SUCCESS,
+    TRANSIENT_FAILURE,
+    BreakerPolicy,
+    BreakerRegistry,
+    breaker_policy_from_config,
+    breaker_scope,
+)
 from .y_finance import (
     get_balance_sheet as get_yfinance_balance_sheet,
     get_cashflow as get_yfinance_cashflow,
@@ -166,6 +179,20 @@ VENDOR_METHODS = {
     },
 }
 
+# The base URL each vendor serves from, used only to keep circuit-breaker state
+# apart: two vendors (or the same vendor on a moved endpoint) must not share a
+# verdict about availability. A constant, never a request URL -- request URLs
+# carry the symbol, dates and sometimes a key, and state keyed by those would
+# stop protecting anything. Omitted vendors fall back to "(no endpoint)".
+VENDOR_ENDPOINTS = {
+    "yfinance": "https://query2.finance.yahoo.com",
+    "alpha_vantage": "https://www.alphavantage.co/query",
+    "sec_edgar": _SEC_FACTS_URL,
+    "fred": FRED_API_BASE,
+    "polymarket": GAMMA_BASE,
+}
+
+
 def get_category_for_method(method: str) -> str:
     """Get the category that contains the specified method."""
     for category, info in TOOLS_CATEGORIES.items():
@@ -268,6 +295,175 @@ def _retry_budget() -> RetryBudget:
     return retry_budget_from_config(cfg)
 
 
+# --- Data-vendor circuit breaker -------------------------------------------
+#
+# The breaker decides whether a vendor logical call may start, across tool
+# calls. It lives at module level so its state survives them; it is re-created
+# only when the *breaker policy* changes, never per call. The key is
+# ``(vendor, breaker_scope(endpoint, policy))``: the same vendor on two
+# endpoints or under two policies keeps separate state, while every symbol,
+# date and method served by one endpoint shares the same protection.
+#
+# Disabled (the default) means: no registry, no ticket, no state -- exactly
+# the behaviour before this feature existed.
+_BREAKER_LOCK = threading.Lock()
+_BREAKER_REGISTRY: BreakerRegistry | None = None
+_BREAKER_POLICY: BreakerPolicy | None = None
+
+
+_TICKETLESS = contextlib.nullcontext()
+
+
+def _breaker_policy() -> BreakerPolicy | None:
+    """The configured policy, or None when the breaker is disabled/absent."""
+    return breaker_policy_from_config(get_config().get("data_vendor_breaker"))
+
+
+def _breaker_registry(policy: BreakerPolicy | None) -> BreakerRegistry | None:
+    """The process-wide registry for ``policy``, or None when disabled.
+
+    Kept across ``route_to_vendor`` calls. A policy change (threshold or
+    cooldown) builds a new registry, because old counts were earned under other
+    rules; nothing else -- not a symbol, not a retry-budget change, not an
+    unrelated setting -- resets it.
+    """
+    global _BREAKER_REGISTRY, _BREAKER_POLICY
+    if policy is None:
+        return None
+    with _BREAKER_LOCK:
+        if _BREAKER_REGISTRY is None or policy != _BREAKER_POLICY:
+            _BREAKER_REGISTRY = BreakerRegistry(policy, on_event=_log_breaker_event)
+            _BREAKER_POLICY = policy
+        return _BREAKER_REGISTRY
+
+
+def reset_vendor_breaker_state() -> None:
+    """Forget all breaker state (policy change hook, and tests).
+
+    Not called on every request: the registry must survive tool calls.
+    """
+    global _BREAKER_REGISTRY, _BREAKER_POLICY
+    with _BREAKER_LOCK:
+        _BREAKER_REGISTRY = None
+        _BREAKER_POLICY = None
+
+
+class _VendorCall:
+    """The per-vendor half of the ticket bookkeeping.
+
+    A fresh instance per iteration of the vendor loop, so the closure that
+    completes the ticket always reads and writes the state of *its own* vendor.
+    ``ticket`` is the admitted ticket (None until the breaker says yes), and
+    ``recorded`` makes completion one-shot: a verdict, whether a success or a
+    proven failure, is never overwritten and never counted twice.
+    """
+
+    __slots__ = ("ticket", "recorded")
+
+    def __init__(self) -> None:
+        self.ticket = None
+        self.recorded = False
+
+
+def _log_breaker_event(event) -> None:
+    """Record one breaker event. Flat, credential-free, and outside the lock."""
+    if event.action == "finish":
+        logger.info(
+            "Vendor breaker %s/%s: %s -> %s (result=%s, probe=%s).",
+            event.vendor, event.scope, event.previous_state, event.state,
+            event.result, event.probe,
+        )
+    else:
+        logger.info(
+            "Vendor breaker %s/%s: %s -> %s (action=%s, skip=%s, called=%s).",
+            event.vendor, event.scope, event.previous_state, event.state,
+            event.action, event.skip_reason, event.called,
+        )
+
+
+def _is_short_vendor_failure(exc: BaseException, budget: RetryBudget) -> bool:
+    """Did the vendor itself say "come back shortly" for this failure?
+
+    True for a typed throttle/service failure carrying ``retry`` evidence whose
+    ``Retry-After`` (if any) fits the per-wait cap. This is the vendor-side
+    half of ``retry_verdict``, deliberately *without* its local checks (deadline
+    left, attempt allowance, cumulative wait): those say whether *we* may retry,
+    not whether the vendor is unhealthy. A daily/monthly quota is ``retry=False``
+    and therefore never matches; neither does a sign of credential or config
+    trouble, whatever evidence was attached.
+    """
+    if not isinstance(exc, VendorRateLimitError):
+        return False
+    metadata = _retry_metadata(exc)
+    if metadata is None:
+        return False
+    recoverable, retry_after = metadata
+    if not recoverable:
+        return False
+    return retry_after is None or retry_after <= budget.max_retry_after_seconds
+
+
+def _classified_vendor_failure(
+    exc: BaseException, classified: BaseException, budget: RetryBudget
+) -> bool:
+    """Is this failure a *proven* momentary vendor failure?
+
+    ``classified`` is what ``handle`` returned for the original ``exc``: a
+    vendor's own typed error, or the copy ``as_vendor_error`` built when the
+    vendor raised an unclassified transport/HTTP error. The classification is
+    what carries the status and ``retry``/``Retry-After`` evidence, so it -- not
+    the raw ``requests.Timeout`` or ``HTTPError`` -- is what proves the outage.
+
+    The comparison is deliberately strict: only the categories that are a real
+    throttle/service failure count. Auth, refused requests, missing config and
+    absences are never transient, whatever a copy's class alone might suggest.
+
+    Unknown exceptions are never transient by default: a *copy* is accepted
+    only when the original was itself classifiable -- that is, the classifier
+    turned the raw exception into a vendor error rather than passing it through
+    unchanged. When the original carries its own evidence, that evidence must
+    agree; when it carries none (a bare ``requests.Timeout``), the classifier's
+    verdict for that original is the proof.
+    """
+    if not _is_short_vendor_failure(classified, budget):
+        return False
+    if classified is exc:
+        return True
+    # If the raw original already states its own recoverability, it must agree.
+    own = _retry_metadata(exc)
+    return own is None or own[0]
+
+
+def _breaker_result(
+    exc: BaseException, provable: bool = False, classified: BaseException | None = None
+) -> str:
+    """Map one final vendor failure to a breaker category, from its metadata only.
+
+    ``provable`` is true only when this vendor function itself proved the
+    condition was momentary: its error carried ``retry``/a short ``Retry-After``
+    (short 429/502/503/504, timeout, reset) and the call still ended on that
+    error. A local limit (attempt allowance, wall-clock deadline, wait cap) is
+    never ``provable``: stopping because *our* budget ran out says nothing
+    about the vendor, and must not replace its last real result.
+
+    ``classified`` is ``handle``'s result for ``exc`` (see
+    ``_classified_vendor_failure``); it lets a *completed absence* be recognised
+    even when it arrived as a raw exception and was wrapped for reporting.
+
+    Everything else -- daily/monthly quota, entitlement, auth, refused request,
+    missing config, TLS/URL, unparseable body, internal error, cancellation --
+    is NEUTRAL. The class alone is never enough: a bare
+    ``VendorRateLimitError`` (no status, no ``retry``) or a
+    ``_kind() == "unavailable"`` label says only "this failed", not "asking
+    again soon would help".
+    """
+    if isinstance(exc, NoMarketDataError) or isinstance(classified, NoMarketDataError):
+        return ABSENT
+    if provable:
+        return TRANSIENT_FAILURE
+    return NEUTRAL
+
+
 def _retry_metadata(exc: BaseException) -> tuple[bool, float | None] | None:
     """Read a failure's own recoverability metadata: (recoverable, Retry-After).
 
@@ -368,7 +564,7 @@ def route_to_vendor(method: str, *args, **kwargs):
     all_available_vendors = list(VENDOR_METHODS[method].keys())
 
     # The configured vendor list IS the chain: we do NOT silently fall back to
-    # vendors the user did not choose (#988/#289) — that returned data from an
+    # vendors the user did not choose (#988/#289) �?that returned data from an
     # unexpected source and caused cross-vendor inconsistencies. For multi-vendor
     # fallback, list them in order, e.g. data_vendors="yfinance,alpha_vantage".
     # The "default" sentinel (no explicit config) uses all available vendors.
@@ -436,6 +632,8 @@ def route_to_vendor(method: str, *args, **kwargs):
     # exactly as in the first batch, whose verdicts below are unchanged.
     budget = _retry_budget()
     session = RetrySession(budget)
+    breaker_policy = _breaker_policy()
+    breakers = _breaker_registry(breaker_policy)
 
     def handle(vendor, exc) -> BaseException:
         """Record one vendor failure the batch-1 way; return the error to report.
@@ -557,52 +755,159 @@ def route_to_vendor(method: str, *args, **kwargs):
         vendor_impl = VENDOR_METHODS[method][vendor]
         impl_func = vendor_impl[0] if isinstance(vendor_impl, list) else vendor_impl
 
-        while True:
-            # One gate for every start -- first call, retry and fall-through --
-            # checked immediately before the call and again after any wait.
-            allowed, why = session.precheck(vendor)
-            if not allowed:
-                session.stop_reason = why
-                logger.warning(
-                    "Skipping vendor %r for %s: %s (vendor calls so far: %d, "
-                    "HTTP requests: %d, waited: %.1fs).",
-                    vendor, method, why, session.attempts,
-                    session.http_requests, session.waited,
-                )
-                spent = VendorRateLimitError(
-                    f"the data budget ran out before this vendor was tried ({why})"
-                ).with_retry_evidence(retry=False)
-                last_unavailable = spent.with_vendor(vendor)
-                record(vendor, last_unavailable)
-                break
-            session.note_attempt(vendor)
-            try:
-                with retry_session(session):
-                    return impl_func(*args, **kwargs)
-            except Exception as exc:
-                error = handle(vendor, exc)
+        # One ticket covers this vendor's whole logical call -- first attempt
+        # and every retry -- so the breaker counts one final outcome, not each
+        # attempt. It is taken *after* the budget gate below (a call the budget
+        # already refuses never acquires one) and once per vendor.
+        #
+        # Everything a closure needs lives on this per-vendor object, *not* in
+        # function-scope locals: ``nonlocal`` would bind every iteration of the
+        # loop to the same cell, so the previous vendor's "already recorded"
+        # flag could suppress this vendor's release (or vice versa).
+        state = _VendorCall()
+        ticket = None
+        pending = None             # last proven vendor result awaiting a retry
+        # The category a *guaranteed* release (the finally below) uses when the
+        # vendor's verdict was never delivered: NEUTRAL, so an interruption or
+        # an unexpected exit can never count for or against the vendor. It is
+        # only ever used when no verdict was recorded; a real result is never
+        # overwritten.
+        ticket_category = NEUTRAL
 
-                retry, wait = retry_verdict(vendor, error)
-                if not retry:
-                    logger.info(
-                        "Vendor %r for %s will not be retried: %s.", vendor, method, wait
+        def release(category, state=state):
+            """Complete this vendor's ticket exactly once, with ``category``.
+
+            Only the first call has an effect: a recorded verdict is never
+            replaced, so the retry loop, the ``finally`` and any handler that
+            races to release cannot count a result twice.
+            """
+            if state.ticket is None or state.recorded:
+                return
+            state.recorded = True
+            state.ticket.finish(category)
+
+        # The whole logical call -- retry decision, logging, waiting, the budget
+        # gate and the handling of its result -- runs inside this guard. A
+        # ``finally`` is the only construct that also runs when one of those
+        # steps itself raises (an ``except`` block raising is not re-entered by
+        # a sibling ``except BaseException``), so a probe can never be left
+        # outstanding by a KeyboardInterrupt during a backoff wait or by a bug
+        # in the retry bookkeeping.
+        try:
+            while True:
+                # One gate for every start -- first call, retry and
+                # fall-through -- checked immediately before the call and again
+                # after any wait.
+                allowed, why = session.precheck(vendor)
+                if not allowed:
+                    session.stop_reason = why
+                    logger.warning(
+                        "Skipping vendor %r for %s: %s (vendor calls so far: %d, "
+                        "HTTP requests: %d, waited: %.1fs).",
+                        vendor, method, why, session.attempts,
+                        session.http_requests, session.waited,
                     )
+                    spent = VendorRateLimitError(
+                        f"the data budget ran out before this vendor was tried ({why})"
+                    ).with_retry_evidence(retry=False)
+                    last_unavailable = spent.with_vendor(vendor)
+                    record(vendor, last_unavailable)
+                    # A retry the budget refused does not erase what the vendor
+                    # already proved; a vendor never reached at all is NEUTRAL.
+                    if pending is not None:
+                        ticket_category = pending
+                    release(ticket_category)
                     break
-                logger.warning(
-                    "Retrying vendor %r for %s in %.1fs (vendor attempt %d/%d, "
-                    "chain attempt %d/%d, waited so far %.1fs of %gs).",
-                    vendor, method, wait,
-                    session.vendor_attempts.get(vendor, 0), budget.attempts_for(vendor),
-                    session.attempts, budget.max_attempts,
-                    session.waited, budget.max_cumulative_wait_seconds,
-                )
-                # The failed attempt is superseded by the retry: drop it from the
-                # failure picture so the final verdict names what is still true.
-                failures[:] = [entry for entry in failures if entry[1] is not error]
-                if not session.pause(wait):
-                    break
-                # The wait is over: the deadline is checked again by precheck at
-                # the top of this loop, before the retry starts.
+
+                # The breaker is asked only when a call could actually start, so
+                # a spent budget is never reported as a breaker skip and a
+                # breaker skip never consumes an attempt or a request.
+                if ticket is None and breakers is not None:
+                    skip_reason: list[str] = []
+                    acquired = breakers.try_acquire(
+                        vendor,
+                        scope=breaker_scope(VENDOR_ENDPOINTS.get(vendor, ""), breaker_policy),
+                        reason_out=skip_reason,
+                    )
+                    if acquired is None:
+                        reason = skip_reason[0] if skip_reason else "circuit_open"
+                        logger.warning(
+                            "Skipping vendor %r for %s: circuit breaker %s "
+                            "(no attempt, no HTTP request spent).",
+                            vendor, method, reason,
+                        )
+                        skipped = VendorRateLimitError(
+                            f"the vendor call was not started by the circuit breaker "
+                            f"({reason})"
+                        ).with_retry_evidence(retry=False)
+                        last_unavailable = skipped.with_vendor(vendor)
+                        record(vendor, last_unavailable)
+                        break
+                    ticket = acquired
+                    state.ticket = acquired
+
+                session.note_attempt(vendor)
+                try:
+                    with retry_session(session):
+                        result = impl_func(*args, **kwargs)
+                except Exception as exc:
+                    # ``handle`` classifies the original -- a bare ``requests.Timeout``
+                    # becomes a typed vendor error carrying status/retry evidence.
+                    # The breaker reads *that* proof, with the original as witness,
+                    # never the raw exception's class.
+                    error = handle(vendor, exc)
+
+                    retry, wait = retry_verdict(vendor, error)
+                    # The vendor itself proved the condition momentary: its error
+                    # said so, and the call ended on it -- our own limits (attempt
+                    # allowance, deadline) never make a failure "the vendor's".
+                    provable = _classified_vendor_failure(exc, error, budget)
+                    breaker_category = _breaker_result(exc, provable=provable, classified=error)
+                    if not retry:
+                        logger.info(
+                            "Vendor %r for %s will not be retried: %s.", vendor, method, wait
+                        )
+                        release(breaker_category)
+                        break
+                    logger.warning(
+                        "Retrying vendor %r for %s in %.1fs (vendor attempt %d/%d, "
+                        "chain attempt %d/%d, waited so far %.1fs of %gs).",
+                        vendor, method, wait,
+                        session.vendor_attempts.get(vendor, 0), budget.attempts_for(vendor),
+                        session.attempts, budget.max_attempts,
+                        session.waited, budget.max_cumulative_wait_seconds,
+                    )
+                    # The failed attempt is superseded by the retry: drop it from the
+                    # failure picture so the final verdict names what is still true.
+                    failures[:] = [entry for entry in failures if entry[1] is not error]
+                    if not session.pause(wait):
+                        # The wait did not fit. The vendor *did* say the condition
+                        # was momentary, so this is a real vendor failure (the
+                        # vendor-side evidence, not our own limit, decides).
+                        release(breaker_category)
+                        break
+                    # The wait is over: the deadline is checked again by precheck at
+                    # the top of this loop, before the retry starts. If it refuses,
+                    # the vendor's last real result for this call was the failure
+                    # above; it is reported then, as a budget stop, not as a new
+                    # vendor failure, so nothing must overwrite it with NEUTRAL.
+                    pending = breaker_category
+                else:
+                    # A retry that finally succeeded (or a first success) is a
+                    # SUCCESS for the whole logical call: intermediate failures are
+                    # not counted.
+                    release(SUCCESS)
+                    return result
+        finally:
+            # The one guaranteed exit for every path -- normal break, return,
+            # an exception handled above, and an interruption or bug *inside*
+            # that handling (a KeyboardInterrupt during the backoff wait, a
+            # failing log call, a bug in the retry bookkeeping). Idempotent: a
+            # verdict already recorded by ``release`` is never replaced, and a
+            # vendor that was never admitted has nothing to finish. Whatever is
+            # still outstanding is unfinished work, so it leaves as NEUTRAL --
+            # a probe is freed and no success or failure is invented.
+            release(ticket_category)
 
     # Only an absence every configured vendor confirmed is a fact about the
     # symbol. One vendor's empty result next to another's outage, throttle or
@@ -620,15 +925,15 @@ def route_to_vendor(method: str, *args, **kwargs):
         canonical = last_no_data.canonical
         resolved = "" if canonical == sym else f" (resolved to '{canonical}')"
         # Surface the typed error's detail (e.g. "latest row is 2025-06-11 ...
-        # stale") so the agent sees the specific reason — invalid symbol, no
-        # coverage, or stale data — not just a generic "unavailable".
+        # stale") so the agent sees the specific reason �?invalid symbol, no
+        # coverage, or stale data �?not just a generic "unavailable".
         reason = f" ({last_no_data.detail})" if last_no_data.detail else ""
         searched = ", ".join(no_data_vendors) if no_data_vendors else "the configured vendor"
         return (
             f"NO_DATA_AVAILABLE: No usable market data for '{sym}'{resolved} from "
             f"the configured vendor(s) ({searched}){reason}. The symbol may be invalid, "
             f"delisted, not covered, or the vendor returned stale data. Do not estimate or "
-            f"fabricate values — report that data is unavailable for this symbol."
+            f"fabricate values �?report that data is unavailable for this symbol."
         )
 
     # Decide what *must be raised* before building any absence or degraded

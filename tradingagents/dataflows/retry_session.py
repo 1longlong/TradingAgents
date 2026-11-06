@@ -25,11 +25,21 @@ The budget is a bound, not a promise. A client that accepts no timeout (some
 ``yfinance`` attributes) can only be started within the budget, never cut short;
 such calls go through ``budget_check_before_uncontrolled_call`` and
 ``note_uncontrolled_overrun`` so the limitation is logged, not hidden.
+
+The active session belongs to one execution context (a ``ContextVar``): two
+threads, or two asyncio tasks in one thread, that interleave vendor calls never
+see each other's budget, and the session is restored on every way out of the
+block. An asyncio task that inherits the parent context (``asyncio.run`` /
+``create_task`` copy it) sees the same session -- and the same, mutable budget.
+``copy_context`` copies the context, not the ``RetrySession``: copying is not a
+way to share one budget safely between concurrent writers. A new thread starts
+with no session at all; the budget is never guessed or copied into it.
 """
 
 from __future__ import annotations
 
 import contextlib
+import contextvars
 import logging
 import math
 import os
@@ -42,8 +52,19 @@ from .errors import VendorRateLimitError
 
 logger = logging.getLogger(__name__)
 
-# The active session for the current tool call; nested vendor scopes inherit it.
-_ACTIVE: list[RetrySession] = []
+# The active session(s) for the current tool call; nested vendor scopes inherit
+# the one below them. A ``ContextVar`` holding an immutable tuple, not a shared
+# list: the value belongs to the current execution context, so two threads (or
+# two asyncio tasks in one thread) that interleave ``retry_session`` blocks each
+# read their own session instead of whichever entered last. ``Token.reset``
+# restores the outer value on every exit path -- normal return, exception,
+# cancellation and interruption -- so a block can never leave a session behind.
+# A new thread starts with no session (no budget is guessed or copied into it);
+# an asyncio task that inherits the parent context sees the same session object
+# (see ``retry_session``), which is inheritance, not a second budget.
+_ACTIVE: contextvars.ContextVar[tuple[RetrySession, ...]] = contextvars.ContextVar(
+    "tradingagents_retry_session", default=()
+)
 
 # A request shorter than this is not worth starting: the client could only be
 # cut off before it answers, which spends the budget and returns nothing.
@@ -54,23 +75,39 @@ def get_active_retry_session() -> RetrySession | None:
     """The session of the routed call in progress, or None when standalone.
 
     Vendors use this to tell a routed call (the router owns the retry loop)
-    from a direct one (the vendor keeps its own behaviour).
+    from a direct one (the vendor keeps its own behaviour). The answer is the
+    innermost session of *this* execution context only; a thread that was not
+    given one sees None, while a task inheriting the parent context sees the
+    parent's session (and thus the same, mutable budget).
     """
-    return _ACTIVE[-1] if _ACTIVE else None
+    stack = _ACTIVE.get()
+    return stack[-1] if stack else None
 
 
 @contextlib.contextmanager
 def retry_session(session: RetrySession):
     """Make ``session`` active for the block, restoring whatever was active.
 
-    Re-entrant on purpose: a vendor that itself calls a routed helper must
-    inherit the same budget instead of opening a second one.
+    Re-entrant on purpose: a vendor that itself calls a routed helper inherits
+    the same budget instead of opening a second one. The previous value is
+    restored from a ``ContextVar`` token in a ``finally``, so the outer session
+    (or none) is back after a normal return, an exception, a cancellation or an
+    interruption.
+
+    The scope is this execution context only. Code run in another thread starts
+    with no active session and is not handed this one: propagation is the
+    caller's explicit decision, never an inference from "someone started a
+    thread". An asyncio task created by ``asyncio.run``/``create_task`` copies
+    the parent context and so *does* see this session -- that sharing is
+    inheritance, not a second budget. ``copy_context()`` is a shallow copy of
+    the context: the ``RetrySession`` object inside it is the same object, so
+    copied contexts are not a safe way to mutate one budget concurrently.
     """
-    _ACTIVE.append(session)
+    token = _ACTIVE.set(_ACTIVE.get() + (session,))
     try:
         yield session
     finally:
-        _ACTIVE.pop()
+        _ACTIVE.reset(token)
 
 
 # --- time helpers -----------------------------------------------------------
