@@ -20,11 +20,13 @@ The section is a small, flat dict so it can be validated on its own::
         "max_calls": 8,
     }
 
-Every value is checked strictly; an unknown key, a misspelled boolean, a
-negative or fractional cap -- or an explicit ``None`` cap while enabled -- is
-refused rather than clamped, in the same spirit as the rest of
-``default_config``. Omit a cap to use its default; you cannot switch governance
-on without a finite limit.
+Every value is checked strictly (see
+:mod:`tradingagents.graph.analyst_tool_governance`): an unknown key, a
+misspelled boolean, a negative or fractional cap -- or an explicit ``None`` cap
+while enabled -- is refused rather than clamped, in the same spirit as the rest
+of ``default_config``. Omit a cap to use its default; you cannot switch
+governance on without a finite limit. The market and fundamentals sections are
+independent: each is enabled and capped on its own.
 """
 
 from __future__ import annotations
@@ -35,10 +37,10 @@ from typing import Any
 
 from tradingagents.agents.utils.tool_governance import ToolLimits
 
+from .analyst_tool_governance import is_int, parse_tool_governance
+
 #: The config key holding the section (``config["market_tool_governance"]``).
 SECTION_KEY = "market_tool_governance"
-
-_ALLOWED_KEYS = frozenset({"enabled", "max_rounds", "max_calls"})
 
 #: Defaults used when the switch is on but a cap is not given. Deliberately
 #: generous enough for a normal market analysis (get_stock_data, a handful of
@@ -64,7 +66,7 @@ class MarketToolGovernance:
         if self.enabled:
             for name in ("max_rounds", "max_calls"):
                 value = getattr(self, name)
-                if not _is_int(value) or value <= 0:
+                if not is_int(value) or value <= 0:
                     raise ValueError(
                         f"{SECTION_KEY}.{name} must be a positive int when "
                         f"enabled, got {value!r}"
@@ -75,60 +77,25 @@ class MarketToolGovernance:
         return ToolLimits(max_rounds=self.max_rounds, max_calls=self.max_calls)
 
 
-def _is_int(value: Any) -> bool:
-    return isinstance(value, int) and not isinstance(value, bool)
-
-
-def _check_cap(name: str, value: Any) -> int:
-    if not _is_int(value) or value <= 0:
-        raise ValueError(
-            f"{SECTION_KEY}.{name} must be a positive int, got {value!r}"
-        )
-    return value
-
-
 def parse_market_tool_governance(
     config: Mapping[str, Any] | None,
 ) -> MarketToolGovernance:
     """Read and strictly validate ``config["market_tool_governance"]``.
 
-    Absent section, or ``enabled`` absent/False -> disabled (the default).
-
-    When enabled, both caps must be **finite**: the section always yields a
-    positive int for each one. Only *omitting* the key uses
-    :data:`DEFAULT_MAX_ROUNDS` / :data:`DEFAULT_MAX_CALLS`; an explicit value
-    must be a positive int, and an explicit ``None`` is refused, because under
-    the positive-int contract it means "no cap" -- governance that cannot stop
-    is not governance. A user who wants the defaults leaves the keys out.
+    Absent section, or ``enabled`` absent/False -> disabled (the default). See
+    :func:`tradingagents.graph.analyst_tool_governance.parse_tool_governance`
+    for the exact rules shared with the fundamentals section.
     """
-    section = (config or {}).get(SECTION_KEY)
-    if section is None:
-        return MarketToolGovernance()
-    if not isinstance(section, Mapping):
-        raise ValueError(f"{SECTION_KEY} must be a mapping, got {section!r}")
-    unknown = sorted(set(section) - _ALLOWED_KEYS)
-    if unknown:
-        raise ValueError(
-            f"unknown {SECTION_KEY} key(s): {', '.join(unknown)}"
-        )
-    enabled = section.get("enabled", False)
-    if not isinstance(enabled, bool):
-        raise ValueError(
-            f"{SECTION_KEY}.enabled must be a boolean, got {enabled!r}"
-        )
-    if not enabled:
-        # Disabled: caps are irrelevant and never read, but a nonsensical value
-        # left in the file is still worth refusing loudly. ``None`` here is the
-        # "not set" marker, not an unbounded cap.
-        if section.get("max_rounds") is not None:
-            _check_cap("max_rounds", section["max_rounds"])
-        if section.get("max_calls") is not None:
-            _check_cap("max_calls", section["max_calls"])
-        return MarketToolGovernance(enabled=False)
+    parsed = parse_tool_governance(
+        config,
+        SECTION_KEY,
+        default_max_rounds=DEFAULT_MAX_ROUNDS,
+        default_max_calls=DEFAULT_MAX_CALLS,
+    )
     return MarketToolGovernance(
-        enabled=True,
-        max_rounds=_check_cap("max_rounds", section.get("max_rounds", DEFAULT_MAX_ROUNDS)),
-        max_calls=_check_cap("max_calls", section.get("max_calls", DEFAULT_MAX_CALLS)),
+        enabled=parsed.enabled,
+        max_rounds=parsed.max_rounds,
+        max_calls=parsed.max_calls,
     )
 
 

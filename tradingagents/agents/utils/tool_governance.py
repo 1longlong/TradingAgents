@@ -1779,19 +1779,23 @@ class _NodeHostState(TypedDict, total=False):
     trade_date: str
 
 
-class _MarketHostState(AgentState, total=False):
-    """State of the host graph for the market runner.
+class _AnalystHostState(AgentState, total=False):
+    """State of the host graph for an analyst runner (market, fundamentals).
 
     Every field of ``AgentState`` (so a tool may read any field the run carries,
     not only ``trade_date``), except ``messages``: that one is redeclared as a
     plain list, so the ``ToolNode``'s own output *replaces* the calls it was
     given instead of being appended to them. ``result`` carries the node's
     answer out. (The run's real graph keeps ``add_messages``; this host is only
-    the place the market ``ToolNode`` runs for one round.)
+    the place an analyst's ``ToolNode`` runs for one round.)
     """
 
     messages: list
     result: Any
+
+
+# Kept for the original market runner's name; both names are the same class.
+_MarketHostState = _AnalystHostState
 
 
 def run_tool_node_in_graph(
@@ -1859,11 +1863,28 @@ def run_market_tool_node(
     The executor checks required injected fields against the run state before
     anything is dispatched, so a missing one is refused there, not here.
     """
+    return run_analyst_tool_node(node, calls, state=state, config=config)
+
+
+def run_analyst_tool_node(
+    node: Any,
+    calls: list[dict[str, Any]],
+    *,
+    state: Mapping[str, Any] | None = None,
+    config: dict[str, Any] | None = None,
+) -> Any:
+    """Run an analyst's ``ToolNode`` in a graph carrying the **real run state**.
+
+    The shared implementation behind :func:`run_market_tool_node` and the
+    fundamentals runner: exactly the same protocol and host graph, so an
+    analyst's own ``ToolNode`` sees the same run state whichever analyst
+    dispatches through it.
+    """
     from langchain_core.messages import AIMessage
     from langgraph.graph import END, START, StateGraph
 
     # The node runs as the graph's node, so it gets graph state
-    # (``InjectedState``) and the runtime from langgraph. ``_MarketHostState``
+    # (``InjectedState``) and the runtime from langgraph. ``_AnalystHostState``
     # replaces ``messages`` with the tool results, so ``finish`` sees exactly
     # one message per call.
     ai_message = AIMessage(content="", tool_calls=[dict(call) for call in calls])
@@ -1873,7 +1894,7 @@ def run_market_tool_node(
 
     initial: dict[str, Any] = dict(state or {})
     initial["messages"] = [ai_message]
-    graph = StateGraph(_MarketHostState)
+    graph = StateGraph(_AnalystHostState)
     graph.add_node("tools", node)
     graph.add_node("finish", finish)
     graph.add_edge(START, "tools")
@@ -2484,3 +2505,99 @@ def _message_dict(message: Any) -> dict[str, Any]:
     else:
         payload.pop("status", None)
     return payload
+
+
+# ---------------------------------------------------------------------------
+# Bounded wrap-up: what an analyst answer may become a report
+# ---------------------------------------------------------------------------
+#
+# Shared by every governed analyst (market, fundamentals) so both exits -- the
+# analyst's own text and the single wrap-up generation -- are held to exactly
+# the same rules.
+
+
+def message_calls(message: Any) -> list[dict[str, Any]]:
+    """The model's tool calls on ``message``, as plain dicts (graph-safe)."""
+    calls = getattr(message, "tool_calls", None) or []
+    return [dict(call) for call in calls]
+
+
+def message_text(content: Any) -> str:
+    """The text of a message content (a string or a list of text blocks)."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "\n".join(
+            block.get("text", "")
+            for block in content
+            if isinstance(block, Mapping) and isinstance(block.get("text"), str)
+        )
+    return ""
+
+
+def unusable_response_reason(message: Any) -> str | None:
+    """Why ``message`` cannot become a report, or ``None`` if it can.
+
+    Uses the project's existing structured-response rules rather than a new
+    heuristic: :func:`structured._refusal_text` for an explicit refusal (the
+    Chat Completions field, a ``refusal`` content block, ``content_blocks``)
+    and :func:`structured._finish_reason` for an explicit token-limit stop. The
+    blank check follows the free-text path of
+    :func:`structured.invoke_structured_or_freetext`: no text at all is not an
+    answer.
+    """
+    from tradingagents.agents.utils import structured
+
+    refusal = structured._refusal_text(message)
+    if refusal is not None:
+        return f"the model refused: {refusal.strip()[:200]}"
+    finish = structured._finish_reason(message)
+    if finish in structured._TRUNCATED_FINISH_REASONS:
+        return f"the provider stopped at its token limit ({finish}): the text is partial"
+    if not structured._message_content(message).strip():
+        return "the model returned no content"
+    return None
+
+
+def analyst_report(message: Any) -> str:
+    """The analyst's own final text, if it wrote one (else ``""``).
+
+    An analyst that answers with plain text -- no tool calls -- has written its
+    report itself. That text is the report; the governed path must not send it
+    through the wrap-up and replace it with a second generation.
+
+    An unusable answer is not a report: a refusal, an answer the provider cut
+    off, or a blank body returns ``""`` so the caller fails instead of saving
+    it as the report (see :func:`reject_unusable_response`).
+    """
+    from langchain_core.messages import AIMessage
+
+    if not isinstance(message, AIMessage):
+        return ""
+    if getattr(message, "tool_calls", None):
+        return ""
+    if unusable_response_reason(message) is not None:
+        return ""
+    return message_text(message.content).strip()
+
+
+def reject_unusable_response(message: Any, what: str, error: type[Exception]) -> None:
+    """Raise ``error`` if ``message`` cannot be a report.
+
+    Called on **both** exits -- the analyst's own text and the single wrap-up
+    generation -- so a refusal, a truncated answer, an empty body or a request
+    for (now closed) tools fails the run: it is never stored as the report,
+    never marks the analyst finished, and never triggers a second generation.
+    """
+    from langchain_core.messages import AIMessage
+
+    if not isinstance(message, AIMessage):
+        raise error(f"{what} returned {type(message).__name__}, not a message")
+    if getattr(message, "tool_calls", None):
+        raise error(
+            f"{what} asked for tools after its allowance was spent; the tools "
+            "are closed and no report was fabricated"
+        )
+    problem = unusable_response_reason(message)
+    if problem is not None:
+        raise error(f"{what} did not produce a report: {problem}")

@@ -38,6 +38,7 @@ from tradingagents.reporting import write_report_tree
 
 from .checkpointer import checkpoint_step, clear_checkpoint, get_checkpointer, thread_id
 from .conditional_logic import ConditionalLogic
+from .fundamentals_governance import parse_fundamentals_tool_governance
 from .market_governance import parse_market_tool_governance
 from .propagation import Propagator
 from .reflection import Reflector
@@ -432,10 +433,14 @@ class TradingAgentsGraph:
             f"debate={self.config['max_debate_rounds']}",
             f"risk={self.config['max_risk_discuss_rounds']}",
             f"asset={asset_type}",
-            # The market governance switch adds/removes graph nodes, so a resume
-            # must not continue a thread built with the other shape.
+            # The analyst tool-governance switches add/remove graph nodes, so a
+            # resume must not continue a thread built with another shape. Each
+            # switch is named on its own: the two are independent config.
             "market_gov=" + str(
                 parse_market_tool_governance(self.config).enabled
+            ),
+            "fundamentals_gov=" + str(
+                parse_fundamentals_tool_governance(self.config).enabled
             ),
             # None, an empty book and a changed book are three different runs.
             f"portfolio={portfolio.fingerprint() if portfolio is not None else 'none'}",

@@ -25,6 +25,8 @@ from tradingagents.dataflows.config import get_config
 
 from .analyst_execution import build_analyst_execution_plan
 from .conditional_logic import ConditionalLogic
+from .fundamentals_governance import parse_fundamentals_tool_governance
+from .fundamentals_tool_governance import create_fundamentals_governance_nodes
 from .market_governance import parse_market_tool_governance
 from .market_tool_governance import create_market_governance_nodes
 
@@ -79,16 +81,25 @@ class GraphSetup:
         """
         plan = build_analyst_execution_plan(selected_analysts)
 
-        # Market tool governance is opt-in (default off). With it on, the market
-        # analyst routes through its own prepare/execute/wrap-up nodes; nothing
-        # else in the graph changes. Off leaves every analyst on today's path.
-        governed_market = parse_market_tool_governance(
-            get_config() if self.config is None else self.config
-        ).enabled and any(spec.key == "market" for spec in plan.specs)
-        market_governance_nodes: dict[str, Any] = {}
-        if governed_market:
-            market_governance_nodes = create_market_governance_nodes(
+        # Analyst tool governance is opt-in per analyst (default off), each with
+        # its own config section. With one on, that analyst routes through its
+        # own prepare/execute/wrap-up nodes; nothing else in the graph changes,
+        # and the other analysts stay on today's path.
+        run_config = get_config() if self.config is None else self.config
+        governed = {
+            "market": parse_market_tool_governance(run_config).enabled
+            and any(spec.key == "market" for spec in plan.specs),
+            "fundamentals": parse_fundamentals_tool_governance(run_config).enabled
+            and any(spec.key == "fundamentals" for spec in plan.specs),
+        }
+        governance_nodes: dict[str, dict[str, Any]] = {}
+        if governed["market"]:
+            governance_nodes["market"] = create_market_governance_nodes(
                 llm=self.quick_thinking_llm, tool_node=self.tool_nodes["market"]
+            )
+        if governed["fundamentals"]:
+            governance_nodes["fundamentals"] = create_fundamentals_governance_nodes(
+                llm=self.quick_thinking_llm, tool_node=self.tool_nodes["fundamentals"]
             )
 
         analyst_factories = {
@@ -118,11 +129,12 @@ class GraphSetup:
             workflow.add_node(spec.agent_node, analyst_factories[spec.key]())
             workflow.add_node(spec.clear_node, create_msg_delete())
             workflow.add_node(spec.tool_node, self.tool_nodes[spec.key])
-            if governed_market and spec.key == "market":
-                workflow.add_node("market_tool_prepare", market_governance_nodes["prepare"])
-                workflow.add_node("market_tool_execute", market_governance_nodes["execute"])
-                workflow.add_node("market_finish", market_governance_nodes["finish"])
-                workflow.add_node("market_wrap_up", market_governance_nodes["wrap_up"])
+            if spec.key in governance_nodes:
+                prefix = spec.key
+                workflow.add_node(f"{prefix}_tool_prepare", governance_nodes[spec.key]["prepare"])
+                workflow.add_node(f"{prefix}_tool_execute", governance_nodes[spec.key]["execute"])
+                workflow.add_node(f"{prefix}_finish", governance_nodes[spec.key]["finish"])
+                workflow.add_node(f"{prefix}_wrap_up", governance_nodes[spec.key]["wrap_up"])
 
         # Add other nodes
         workflow.add_node("Bull Researcher", bull_researcher_node)
@@ -144,32 +156,44 @@ class GraphSetup:
             current_tools = spec.tool_node
             current_clear = spec.clear_node
 
-            if governed_market and spec.key == "market":
-                # Market analyst under tool governance. The analyst either asked
-                # for tools (prepare registers the round) or stopped (wrap-up).
-                # The prepare node then either lets it run or, once the
-                # allowance is spent, sends it to the single wrap-up. The path
-                # never re-enters ``tools_market``.
+            if spec.key in governed and governed[spec.key]:
+                # A governed analyst. The analyst either asked for tools
+                # (prepare registers the round) or stopped (wrap-up). The
+                # prepare node then either lets it run or, once the allowance is
+                # spent, sends it to the single wrap-up. The path never
+                # re-enters the analyst's plain tool node.
+                prefix = spec.key
                 workflow.add_conditional_edges(
                     current_analyst,
-                    self.conditional_logic.should_continue_market_governed,
-                    ["market_tool_prepare", "market_wrap_up", "market_finish"],
+                    getattr(
+                        self.conditional_logic, f"should_continue_{prefix}_governed"
+                    ),
+                    [
+                        f"{prefix}_tool_prepare",
+                        f"{prefix}_wrap_up",
+                        f"{prefix}_finish",
+                    ],
                 )
                 workflow.add_conditional_edges(
-                    "market_tool_prepare",
-                    self.conditional_logic.should_execute_market_prepared,
-                    ["market_tool_execute", "market_wrap_up", "Market Analyst"],
+                    f"{prefix}_tool_prepare",
+                    getattr(
+                        self.conditional_logic, f"should_execute_{prefix}_prepared"
+                    ),
+                    [f"{prefix}_tool_execute", f"{prefix}_wrap_up", current_analyst],
                 )
                 # After execute the batch is complete and paired; only now is
                 # the next step decided. A spent allowance wraps up directly
                 # instead of asking the analyst again.
                 workflow.add_conditional_edges(
-                    "market_tool_execute",
-                    self.conditional_logic.should_continue_market_after_execute,
-                    ["Market Analyst", "market_wrap_up"],
+                    f"{prefix}_tool_execute",
+                    getattr(
+                        self.conditional_logic,
+                        f"should_continue_{prefix}_after_execute",
+                    ),
+                    [current_analyst, f"{prefix}_wrap_up"],
                 )
-                workflow.add_edge("market_finish", current_clear)
-                workflow.add_edge("market_wrap_up", current_clear)
+                workflow.add_edge(f"{prefix}_finish", current_clear)
+                workflow.add_edge(f"{prefix}_wrap_up", current_clear)
             else:
                 # Add conditional edges for current analyst
                 workflow.add_conditional_edges(

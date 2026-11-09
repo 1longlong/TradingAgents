@@ -27,6 +27,14 @@ _ENV_OVERRIDES = {
     "TRADINGAGENTS_MARKET_TOOL_GOVERNANCE_ENABLED": "market_tool_governance.enabled",
     "TRADINGAGENTS_MARKET_TOOL_GOVERNANCE_MAX_ROUNDS": "market_tool_governance.max_rounds",
     "TRADINGAGENTS_MARKET_TOOL_GOVERNANCE_MAX_CALLS": "market_tool_governance.max_calls",
+    # Fundamentals-analyst tool governance (opt-in, independent of the market
+    # section). Same allowance rules; off unless explicitly enabled.
+    "TRADINGAGENTS_FUNDAMENTALS_TOOL_GOVERNANCE_ENABLED":
+        "fundamentals_tool_governance.enabled",
+    "TRADINGAGENTS_FUNDAMENTALS_TOOL_GOVERNANCE_MAX_ROUNDS":
+        "fundamentals_tool_governance.max_rounds",
+    "TRADINGAGENTS_FUNDAMENTALS_TOOL_GOVERNANCE_MAX_CALLS":
+        "fundamentals_tool_governance.max_calls",
     # Vendor-retry budget, merged into the nested dict. Every value is checked by
     # dataflows.retry_session when a tool call routes: negatives, booleans,
     # NaN/Infinity and fractional attempts are refused, never clamped.
@@ -281,6 +289,15 @@ DEFAULT_CONFIG = _apply_env_overrides({
         "enabled": False,
         "max_rounds": 4,   # model->tools->model cycles for the market analyst
         "max_calls": 10,   # calls actually executed for the market analyst
+    },
+    # Fundamentals-analyst tool governance (opt-in, default OFF, independent of
+    # the market section above). Same allowance rules; once the allowance is
+    # spent a single unbound wrap-up call writes ``fundamentals_report`` from
+    # the fundamental evidence already collected. Validated strictly.
+    "fundamentals_tool_governance": {
+        "enabled": False,
+        "max_rounds": 4,   # model->tools->model cycles for the fundamentals analyst
+        "max_calls": 8,    # calls actually executed for the fundamentals analyst
     },
     # Tool-level configuration (takes precedence over category-level)
     "tool_vendors": {        # Example: "get_stock_data": "alpha_vantage",  # Override category default

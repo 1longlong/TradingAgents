@@ -58,19 +58,23 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
-from tradingagents.agents.utils import structured
 from tradingagents.agents.utils.agent_utils import get_language_instruction
 from tradingagents.agents.utils.tool_governance import (
     GOVERNANCE_STATE_KEY,
     GovernanceBatchError,
     ToolContext,
     ToolExecutor,
+    analyst_report,
     get_scope,
+    message_calls,
+    message_text,
     new_state,
+    reject_unusable_response,
     run_market_tool_node,
     saved_plan,
 )
@@ -98,6 +102,14 @@ _BLOCK_NOTE = (
 )
 
 
+@dataclass(frozen=True)
+class _Refusal:
+    """A refused batch: the saved governance record and one message per call."""
+
+    state: dict[str, Any]
+    messages: list[ToolMessage]
+
+
 class MarketGovernanceError(RuntimeError):
     """The governed market flow could not finish honestly.
 
@@ -123,7 +135,7 @@ def market_run_id(state: Mapping[str, Any]) -> str:
     inner = (state.get(GOVERNANCE_STATE_KEY) or {}).get("run_id")
     if isinstance(inner, str) and inner:
         return inner
-    return f"market-{uuid.uuid4().hex}"
+    return run_id_of(state, "market")
 
 
 def governance_state_of(state: Mapping[str, Any]) -> dict[str, Any]:
@@ -199,93 +211,53 @@ def confirms_success(call: Mapping[str, Any], message: Mapping[str, Any]) -> boo
 
 def _calls_of(message: Any) -> list[dict[str, Any]]:
     """The model's tool calls on ``message``, as plain dicts (graph-safe)."""
-    calls = getattr(message, "tool_calls", None) or []
-    return [dict(call) for call in calls]
+    return message_calls(message)
 
 
 def _text_of(content: Any) -> str:
-    if isinstance(content, str):
-        return content
-    if isinstance(content, list):
-        return "\n".join(
-            block.get("text", "")
-            for block in content
-            if isinstance(block, Mapping) and isinstance(block.get("text"), str)
-        )
-    return ""
+    return message_text(content)
 
 
-def scope_of(governance: Mapping[str, Any]) -> dict[str, Any]:
-    """The market analyst's record inside a ``tool_governance`` value."""
-    record = (governance.get("analysts") or {}).get(ANALYST)
+def _reject(message: Any, what: str) -> None:
+    """Raise :class:`MarketGovernanceError` for an answer that is not a report."""
+    reject_unusable_response(message, what, MarketGovernanceError)
+
+
+def scope_of(
+    governance: Mapping[str, Any], *, analyst: str = ANALYST
+) -> dict[str, Any]:
+    """The ``analyst``'s record inside a ``tool_governance`` value.
+
+    Defaults to the market analyst; the governed analysts pass their own name
+    so a router always reads its analyst's counters, never another's.
+    """
+    record = (governance.get("analysts") or {}).get(analyst)
     return dict(record) if isinstance(record, Mapping) else {}
 
 
-def analyst_report(message: Any) -> str:
-    """The analyst's own final text, if it wrote one (else ``""``).
+# ---------------------------------------------------------------------------
+# Run ids are per graph, not per analyst
+# ---------------------------------------------------------------------------
 
-    A market analyst that answers with plain text -- no tool calls -- has
-    written its report itself. That text is the report; the governed path must
-    not send it through the wrap-up and replace it with a second generation.
 
-    An unusable answer is not a report: a refusal, an answer the provider cut
-    off, or a blank body returns ``""`` so the caller fails instead of saving
-    it as ``market_report`` (see :func:`reject_unusable_response`).
+def run_id_of(state: Mapping[str, Any], prefix: str) -> str:
+    """This run's unique id, shared by every governed analyst of the run.
+
+    An initial state stamped by the graph carries one; a state built elsewhere
+    (a bare programmatic state, a test) gets a fresh one, which the first update
+    stores under ``tool_governance.run_id`` so every later lookup uses it. The
+    market and fundamentals sections both read (and extend) the same value, so
+    a run id is never changed by whichever analyst happens to run second; each
+    analyst's *record* is still separate (``analysts[analyst]``) and a stale
+    record from another run id is never reused.
     """
-    if not isinstance(message, AIMessage):
-        return ""
-    if getattr(message, "tool_calls", None):
-        return ""
-    if _response_problem(message) is not None:
-        return ""
-    return _text_of(message.content).strip()
+    inner = (state.get(GOVERNANCE_STATE_KEY) or {}).get("run_id")
+    if isinstance(inner, str) and inner:
+        return inner
+    return f"{prefix}-{uuid.uuid4().hex}"
 
 
-def _response_problem(message: AIMessage) -> str | None:
-    """Why ``message`` cannot become a report, or ``None`` if it can.
-
-    Uses the project's existing structured-response rules rather than a new
-    heuristic: :func:`structured._refusal_text` for an explicit refusal (the
-    Chat Completions field, a ``refusal`` content block, ``content_blocks``)
-    and :func:`structured._finish_reason` for an explicit token-limit stop. The
-    blank check follows the free-text path of
-    :func:`structured.invoke_structured_or_freetext`: no text at all is not an
-    answer.
-    """
-    refusal = structured._refusal_text(message)
-    if refusal is not None:
-        return f"the model refused: {refusal.strip()[:200]}"
-    finish = structured._finish_reason(message)
-    if finish in structured._TRUNCATED_FINISH_REASONS:
-        return f"the provider stopped at its token limit ({finish}): the text is partial"
-    if not structured._message_content(message).strip():
-        return "the model returned no content"
-    return None
-
-
-def reject_unusable_response(message: Any, what: str) -> None:
-    """Raise :class:`MarketGovernanceError` if ``message`` cannot be a report.
-
-    Called on **both** exits -- the analyst's own text (``market_finish``) and
-    the single wrap-up generation -- so a refusal, a truncated answer, or an
-    empty body fails the run: it is never stored as ``market_report``, never
-    marks the analyst finished, and never triggers a second generation.
-    """
-    if not isinstance(message, AIMessage):
-        raise MarketGovernanceError(
-            f"{what} returned {type(message).__name__}, not a message"
-        )
-    if getattr(message, "tool_calls", None):
-        raise MarketGovernanceError(
-            f"{what} asked for tools after its allowance was spent; the tools "
-            "are closed and no report was fabricated"
-        )
-    problem = _response_problem(message)
-    if problem is not None:
-        raise MarketGovernanceError(f"{what} did not produce a report: {problem}")
-
-
-def prepared_work(state: Mapping[str, Any]) -> bool:
+def prepared_work(state: Mapping[str, Any], *, analyst: str = ANALYST) -> bool:
     """Whether the batch the analyst just issued has a registered plan to emit.
 
     The prepare node registers the batch (charge + saved plan; the execute node
@@ -313,7 +285,7 @@ def prepared_work(state: Mapping[str, Any]) -> bool:
     calls = _calls_of(last)
     if not calls:
         return False
-    scope = scope_of(governance_state_of(state))
+    scope = scope_of(governance_state_of(state), analyst=analyst)
     plan = saved_plan(scope, calls)
     if plan is None:
         return False
@@ -329,7 +301,7 @@ def prepared_work(state: Mapping[str, Any]) -> bool:
     return False
 
 
-def pending_calls(state: Mapping[str, Any]) -> list[str]:
+def pending_calls(state: Mapping[str, Any], *, analyst: str = ANALYST) -> list[str]:
     """The last batch's calls that nobody may run, if any.
 
     Answers the router's question of a tool-call turn: "which calls are left
@@ -352,7 +324,7 @@ def pending_calls(state: Mapping[str, Any]) -> list[str]:
     calls = _calls_of(last)
     if not calls:
         return []
-    scope = scope_of(governance_state_of(state))
+    scope = scope_of(governance_state_of(state), analyst=analyst)
     plan = saved_plan(scope, calls)
     if plan is None:
         return [str(call.get("id")) for call in calls if call.get("id") is not None]
@@ -394,18 +366,38 @@ def create_market_governance_nodes(*, llm: Any, tool_node: Any) -> dict[str, Any
     }
 
 
-def _make_prepare(tool_node: Any):
-    def market_tool_prepare(state: Mapping[str, Any]) -> dict[str, Any]:
+def _make_prepare(
+    tool_node: Any,
+    *,
+    analyst: str = ANALYST,
+    executor_of: Any = None,
+):
+    """The analyst's prepare node: plan, charge and **save** the round.
+
+    Shared by the governed analysts (each owns its own analyst name, record
+    key and executor); it never dispatches.
+    """
+    executor_of = executor_of or _executor
+
+    def prepare(state: Mapping[str, Any]) -> dict[str, Any]:
+        stored = state.get(GOVERNANCE_STATE_KEY) or {}
         governance = governance_state_of(state)
         last = (state.get("messages") or [None])[-1]
         if not isinstance(last, AIMessage):
             return {GOVERNANCE_STATE_KEY: governance}
         calls = _calls_of(last)
         if not calls:
-            # Nothing to register: the analyst is done with the tools.
-            return {GOVERNANCE_STATE_KEY: governance}
+            # Nothing to register: the analyst is done with the tools. Echo the
+            # stored record -- never a fresh one -- so an earlier round (or a
+            # previous turn's flags) is not wiped from the graph state.
+            return {GOVERNANCE_STATE_KEY: stored if isinstance(stored, Mapping) else governance}
 
-        executor = _executor(tool_node, state=state, run_id=governance["run_id"])
+        executor = executor_of(tool_node, state=state, run_id=governance["run_id"])
+        # The router reads this annotated batch back from the graph state, so
+        # the node returns it alongside the saved registration. Without it the
+        # ``add_messages`` reducer would keep only the *unannotated* analyst
+        # message there and the prepared batch would be invisible.
+        batch = [last]
         try:
             prepared = executor.prepare(
                 governance,
@@ -416,11 +408,19 @@ def _make_prepare(tool_node: Any):
         except GovernanceBatchError as exc:
             # Unusable before anything runs. Its calls are still paired (as
             # blocked) so the wrap-up is not left with a dangling tool call.
-            logger.warning("market tool round refused: %s", exc)
+            logger.warning("%s tool round refused: %s", analyst, exc)
+            refused = _refuse(
+                governance,
+                calls,
+                str(exc),
+                governance["run_id"],
+                analyst=analyst,
+            )
+            # Every refused call still owes the analyst one message: emit it
+            # now, beside the echoed batch, so no tool call is left dangling.
             return {
-                GOVERNANCE_STATE_KEY: _refuse(
-                    governance, calls, str(exc), governance["run_id"]
-                )
+                GOVERNANCE_STATE_KEY: refused.state,
+                "messages": [*batch, *refused.messages],
             }
         # This update is what the graph saves: the round is charged and its plan
         # stored, so the execute node resumes it instead of charging again.
@@ -432,12 +432,16 @@ def _make_prepare(tool_node: Any):
             # batch's answers, so emit them now -- the analyst must never be
             # left with a tool call that has no reply.
             return {
-                GOVERNANCE_STATE_KEY: _record_blocked(saved, plan),
-                "messages": [_tool_message(entry["tool_message"]) for entry in plan.block],
+                GOVERNANCE_STATE_KEY: _record_blocked(saved, plan, analyst=analyst),
+                "messages": [
+                    *batch,
+                    *[_tool_message(entry["tool_message"]) for entry in plan.block],
+                ],
             }
-        return {GOVERNANCE_STATE_KEY: saved}
+        return {GOVERNANCE_STATE_KEY: saved, "messages": batch}
 
-    return market_tool_prepare
+    prepare.__name__ = f"{analyst}_tool_prepare"
+    return prepare
 
 
 def _refuse(
@@ -445,42 +449,80 @@ def _refuse(
     calls: list[dict[str, Any]],
     reason: str,
     run_id: str,
-) -> dict[str, Any]:
-    """Record a batch that could not be planned: none of its calls ran."""
+    *,
+    analyst: str = ANALYST,
+) -> _Refusal:
+    """Record a batch that could not be planned: none of its calls ran.
+
+    Returns this analyst's saved record plus one paired ``ToolMessage`` per
+    call that was refused now, so the caller can answer every call it refused.
+    """
     # A first refused batch still needs the analyst's complete record shape, so
     # the counters and flags never read as missing.
-    scope = scope_of(governance) or get_scope(governance, ANALYST, run_id, create=True)
+    scope = scope_of(governance, analyst=analyst) or get_scope(
+        governance, analyst, run_id, create=True
+    )
     results = dict(scope.get("results") or {})
-    refused = 0
+    text = f"{BLOCK_PREFIX}: call refused before execution ({reason})."
+    paired: list[ToolMessage] = []
     for call in calls:
         call_id = call.get("id")
         if call_id is None or str(call_id) in results:
             continue
-        results[str(call_id)] = {
-            "status": "error",
-            "text": f"{BLOCK_PREFIX}: call refused before execution ({reason}).",
-        }
-        refused += 1
-    if refused:
+        results[str(call_id)] = {"status": "error", "text": text}
+        paired.append(
+            _tool_message(
+                {
+                    "tool_call_id": call_id,
+                    "name": call.get("name"),
+                    "status": "error",
+                    "content": text,
+                }
+            )
+        )
+    if paired:
         scope["results"] = results
-        scope["blocked"] = scope.get("blocked", 0) + refused
+        scope["blocked"] = scope.get("blocked", 0) + len(paired)
         scope["closed"] = True
     analysts = dict(governance.get("analysts") or {})
-    analysts[ANALYST] = scope
-    return {**dict(governance), "analysts": analysts}
+    analysts[analyst] = scope
+    return _Refusal({**dict(governance), "analysts": analysts}, paired)
 
 
-def _make_execute(tool_node: Any):
-    def market_tool_execute(state: Mapping[str, Any]) -> dict[str, Any]:
+def _missing_registration(exc: Exception, analyst: str) -> Exception:
+    return MarketGovernanceError(
+        f"the saved registration for this {analyst} tool round is missing; the "
+        "execute node refuses to charge a new round "
+        f"({exc})"
+    )
+
+
+def _make_execute(
+    tool_node: Any,
+    *,
+    analyst: str = ANALYST,
+    executor_of: Any = None,
+    on_missing_registration: Any = None,
+):
+    """The analyst's execute node: resume the **saved** registration and dispatch.
+
+    Shared by the governed analysts; separate from prepare so a tool exception
+    happens after the graph already saved the charge.
+    """
+    executor_of = executor_of or _executor
+    error_of = on_missing_registration or _missing_registration
+
+    def execute(state: Mapping[str, Any]) -> dict[str, Any]:
+        stored = state.get(GOVERNANCE_STATE_KEY) or {}
         governance = governance_state_of(state)
         last = (state.get("messages") or [None])[-1]
         if not isinstance(last, AIMessage):
             return {GOVERNANCE_STATE_KEY: governance}
         calls = _calls_of(last)
         if not calls:
-            return {GOVERNANCE_STATE_KEY: governance}
+            return {GOVERNANCE_STATE_KEY: stored if isinstance(stored, Mapping) else governance}
 
-        executor = _executor(tool_node, state=state, run_id=governance["run_id"])
+        executor = executor_of(tool_node, state=state, run_id=governance["run_id"])
         try:
             prepared = executor.prepare(
                 governance,
@@ -492,39 +534,39 @@ def _make_execute(tool_node: Any):
         except GovernanceBatchError as exc:
             # The saved registration is not in the state: charging a round here
             # would pretend the graph saved what it did not.
-            raise MarketGovernanceError(
-                "the saved registration for this tool round is missing; the "
-                "execute node refuses to charge a new round "
-                f"({exc})"
-            ) from exc
+            raise error_of(exc, analyst) from exc
         if prepared.plan.rounds:
             # Same rule if a plan is somehow returned with a charge attached.
-            raise MarketGovernanceError(
-                "the saved registration for this tool round is missing; the "
-                "execute node refuses to charge a new round"
+            raise error_of(
+                GovernanceBatchError("a plan with a charge was returned"), analyst
             )
         execution = executor.execute(prepared)
         governance = execution.state[GOVERNANCE_STATE_KEY]
         # A blocked call has had its one answer; record it as its result so the
         # batch is queued as answered and the analyst is asked for its report
         # next -- never re-sent to execute the same plan again.
-        governance = _record_blocked(governance, prepared.plan)
-        return {
-            GOVERNANCE_STATE_KEY: governance,
-            "messages": [_tool_message(payload) for payload in execution.messages],
-        }
+        governance = _record_blocked(governance, prepared.plan, analyst=analyst)
+        messages = [_tool_message(payload) for payload in execution.messages]
+        if prepared.plan.execute:
+            return {GOVERNANCE_STATE_KEY: governance, "messages": messages}
+        # Nothing was dispatched (the saved plan only reuses/replays): the
+        # router resumes this batch from the graph state, where the
+        # ``add_messages`` reducer kept only the unannotated analyst message.
+        # Echo the annotated batch back once, then its paired answers.
+        return {GOVERNANCE_STATE_KEY: governance, "messages": [last, *messages]}
 
-    return market_tool_execute
+    execute.__name__ = f"{analyst}_tool_execute"
+    return execute
 
 
 def _record_blocked(
-    governance: Mapping[str, Any], plan: Any
+    governance: Mapping[str, Any], plan: Any, *, analyst: str = ANALYST
 ) -> dict[str, Any]:
     """Remember each blocked call of ``plan`` as answered (never a success)."""
     blocked = getattr(plan, "block", ()) or ()
     if not blocked:
         return dict(governance)
-    scope = scope_of(governance)
+    scope = scope_of(governance, analyst=analyst)
     results = dict(scope.get("results") or {})
     changed = False
     for entry in blocked:
@@ -541,7 +583,7 @@ def _record_blocked(
         return dict(governance)
     scope["results"] = results
     analysts = dict(governance.get("analysts") or {})
-    analysts[ANALYST] = scope
+    analysts[analyst] = scope
     return {**dict(governance), "analysts": analysts}
 
 
@@ -590,7 +632,7 @@ def _make_finish():
             # A usable plain-text answer is guaranteed here: the router only
             # sends a non-empty one to finish. Anything else reached this node
             # by mistake and must not be stored as a report.
-            reject_unusable_response(last, "market_finish")
+            reject_unusable_response(last, "market_finish", MarketGovernanceError)
             raise MarketGovernanceError(
                 "market_finish reached with an answer that is not a report; "
                 "no report was written"
@@ -602,6 +644,9 @@ def _make_finish():
         return {
             GOVERNANCE_STATE_KEY: {**governance, "analysts": analysts},
             "market_report": report,
+            # The analyst's own message is the final answer and the router
+            # reads it back from the state: echo it so the turn stays visible.
+            "messages": [last],
         }
 
     return market_finish
@@ -624,19 +669,28 @@ def _make_wrap_up(llm: Any):
             return {
                 "market_report": own_report,
                 GOVERNANCE_STATE_KEY: {**governance, "analysts": analysts},
+                "messages": [last],
             }
 
         # Every call the model already issued owes it one message, before the
-        # report and without running anything.
+        # report and without running anything. They go to the state with the
+        # report (echoed annotated batch + its pairs + the wrap-up answer), so
+        # no dangling tool call is left behind.
+        echoed: list[Any] = []
+        pairs: list[ToolMessage] = []
         if isinstance(last, AIMessage):
-            messages.extend(_answer_final_calls(messages, governance))
+            pairs = _answer_final_calls(messages, governance)
+            echoed = [last, *pairs]
 
-        result = llm.invoke(_wrap_up_prompt(state, messages))
+        # The model is shown the analyst's last request *with* its answers, so
+        # the conversation it writes from ends in a usable (blocked/restated)
+        # tool reply instead of an unanswered tool call.
+        result = llm.invoke(_wrap_up_prompt(state, [*messages, *pairs]))
 
         # A refusal, a token-limit cut-off, an empty body or a request for more
         # tools is final: raise, so nothing is stored and nothing is generated
         # again (the same guard the analyst's own text goes through).
-        reject_unusable_response(result, "market wrap-up")
+        reject_unusable_response(result, "market wrap-up", MarketGovernanceError)
         report = _text_of(result.content)
 
         scope = scope_of(governance)
@@ -645,7 +699,7 @@ def _make_wrap_up(llm: Any):
         analysts = dict(governance.get("analysts") or {})
         analysts[ANALYST] = scope
         return {
-            "messages": [result],
+            "messages": [*echoed, result],
             "market_report": report,
             GOVERNANCE_STATE_KEY: {**governance, "analysts": analysts},
         }
@@ -741,6 +795,7 @@ __all__ = [
     "market_run_id",
     "pending_calls",
     "prepared_work",
+    "run_id_of",
     "run_state_of",
     "scope_of",
 ]
