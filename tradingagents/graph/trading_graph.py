@@ -40,6 +40,7 @@ from .checkpointer import checkpoint_step, clear_checkpoint, get_checkpointer, t
 from .conditional_logic import ConditionalLogic
 from .fundamentals_governance import parse_fundamentals_tool_governance
 from .market_governance import parse_market_tool_governance
+from .news_governance import parse_news_tool_governance
 from .propagation import Propagator
 from .reflection import Reflector
 from .setup import GraphSetup
@@ -441,6 +442,9 @@ class TradingAgentsGraph:
             ),
             "fundamentals_gov=" + str(
                 parse_fundamentals_tool_governance(self.config).enabled
+            ),
+            "news_gov=" + str(
+                parse_news_tool_governance(self.config).enabled
             ),
             # None, an empty book and a changed book are three different runs.
             f"portfolio={portfolio.fingerprint() if portfolio is not None else 'none'}",

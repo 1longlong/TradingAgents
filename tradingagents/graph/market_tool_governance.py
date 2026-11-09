@@ -102,6 +102,19 @@ _BLOCK_NOTE = (
 )
 
 
+def block_note(analyst: str = ANALYST) -> str:
+    """The explanatory note appended to a call that was not run.
+
+    Shared by the governed analysts; only the analyst's own name differs, so a
+    blocked call is never described in another analyst's terms.
+    """
+    return (
+        f"[Tool governance] This call was NOT run: the {analyst} analyst's tool "
+        "allowance is spent. Do not infer anything the result would have shown; "
+        "state explicitly that this data is missing."
+    )
+
+
 @dataclass(frozen=True)
 class _Refusal:
     """A refused batch: the saved governance record and one message per call."""
@@ -371,11 +384,17 @@ def _make_prepare(
     *,
     analyst: str = ANALYST,
     executor_of: Any = None,
+    on_refused_batch: Any = None,
 ):
     """The analyst's prepare node: plan, charge and **save** the round.
 
     Shared by the governed analysts (each owns its own analyst name, record
     key and executor); it never dispatches.
+
+    ``on_refused_batch(batch, reason)`` may raise to make a batch that the
+    rules refused (an invalid call or a tool the analyst is not bound to)
+    final for the run. The default records the refusal and answers each call
+    with its own message.
     """
     executor_of = executor_of or _executor
 
@@ -406,6 +425,11 @@ def _make_prepare(
                 config=live_config(state),
             )
         except GovernanceBatchError as exc:
+            if on_refused_batch is not None:
+                # This analyst treats an invalid request as final: raise before
+                # anything is recorded, so no report is written and nothing is
+                # generated a second time.
+                on_refused_batch(batch, str(exc))
             # Unusable before anything runs. Its calls are still paired (as
             # blocked) so the wrap-up is not left with a dangling tool call.
             logger.warning("%s tool round refused: %s", analyst, exc)

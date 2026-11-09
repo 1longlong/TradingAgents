@@ -4,12 +4,23 @@ from typing import Any
 
 from tradingagents.agents.utils.agent_states import AgentState
 from tradingagents.agents.utils.tool_governance import round_limit_reached
+from tradingagents.graph.analyst_execution import ANALYST_NODE_SPECS
 from tradingagents.graph.market_governance import parse_market_tool_governance
 
 
 def _analyst_node(analyst: str) -> str:
-    """The graph label of a governed analyst's node."""
-    return "Market Analyst" if analyst == "market" else "Fundamentals Analyst"
+    """The graph label of a governed analyst's own node.
+
+    Read from the analyst execution plan's metadata, so every analyst key maps
+    to exactly the node the graph registers (``market`` -> ``Market Analyst``,
+    ``news`` -> ``News Analyst``, ...). A key that has no node is a programming
+    error, and fails loudly here instead of silently routing one analyst's turn
+    into another analyst's node.
+    """
+    spec = ANALYST_NODE_SPECS.get(analyst)
+    if spec is None:
+        raise ValueError(f"no analyst node is registered for analyst {analyst!r}")
+    return spec.agent_node
 
 
 class ConditionalLogic:
@@ -139,37 +150,31 @@ class ConditionalLogic:
         (``analysts["market"]``) and the ``market_tool_governance`` section are
         the only inputs.
         """
-        from tradingagents.graph import market_tool_governance
-
         return self._governed_analyst(
             state,
             analyst="market",
-            module=market_tool_governance,
+            module=_market_module(),
             parse_limits=parse_market_tool_governance,
-            error=market_tool_governance.MarketGovernanceError,
+            error=_market_module().MarketGovernanceError,
         )
 
     def should_execute_market_prepared(self, state: AgentState):
         """Market tool governance: run the registered round, wrap up, or go back."""
-        from tradingagents.graph import market_tool_governance
-
         return self._governed_prepared(
             state,
             analyst="market",
-            module=market_tool_governance,
+            module=_market_module(),
             parse_limits=parse_market_tool_governance,
         )
 
     def should_continue_market_after_execute(self, state: AgentState):
         """Market tool governance: where the run goes once a batch has run."""
-        from tradingagents.graph import market_tool_governance
-
         return self._governed_after_execute(
             state,
             analyst="market",
-            module=market_tool_governance,
+            module=_market_module(),
             parse_limits=parse_market_tool_governance,
-            error=market_tool_governance.MarketGovernanceError,
+            error=_market_module().MarketGovernanceError,
         )
 
     def should_continue_fundamentals_governed(self, state: AgentState):
@@ -179,46 +184,65 @@ class ConditionalLogic:
         the fundamentals record (``analysts["fundamentals"]``) and the
         ``fundamentals_tool_governance`` section -- never the market analyst's.
         """
-        from tradingagents.graph import fundamentals_tool_governance as ftg
-        from tradingagents.graph.fundamentals_governance import (
-            parse_fundamentals_tool_governance,
-        )
-
         return self._governed_analyst(
             state,
             analyst="fundamentals",
-            module=ftg,
-            parse_limits=parse_fundamentals_tool_governance,
-            error=ftg.FundamentalsGovernanceError,
+            module=_fundamentals_module(),
+            parse_limits=_fundamentals_parse(),
+            error=_fundamentals_module().FundamentalsGovernanceError,
         )
 
     def should_execute_fundamentals_prepared(self, state: AgentState):
         """Fundamentals tool governance: run the registered round, wrap up, or go back."""
-        from tradingagents.graph import fundamentals_tool_governance as ftg
-        from tradingagents.graph.fundamentals_governance import (
-            parse_fundamentals_tool_governance,
-        )
-
         return self._governed_prepared(
             state,
             analyst="fundamentals",
-            module=ftg,
-            parse_limits=parse_fundamentals_tool_governance,
+            module=_fundamentals_module(),
+            parse_limits=_fundamentals_parse(),
         )
 
     def should_continue_fundamentals_after_execute(self, state: AgentState):
         """Fundamentals tool governance: where the run goes once a batch has run."""
-        from tradingagents.graph import fundamentals_tool_governance as ftg
-        from tradingagents.graph.fundamentals_governance import (
-            parse_fundamentals_tool_governance,
-        )
-
         return self._governed_after_execute(
             state,
             analyst="fundamentals",
-            module=ftg,
-            parse_limits=parse_fundamentals_tool_governance,
-            error=ftg.FundamentalsGovernanceError,
+            module=_fundamentals_module(),
+            parse_limits=_fundamentals_parse(),
+            error=_fundamentals_module().FundamentalsGovernanceError,
+        )
+
+    def should_continue_news_governed(self, state: AgentState):
+        """News tool governance (opt-in): where the analyst goes next.
+
+        Same rules as :meth:`should_continue_market_governed`, read only from
+        the news record (``analysts["news"]``) and the ``news_tool_governance``
+        section -- never the market or fundamentals analyst's.
+        """
+        return self._governed_analyst(
+            state,
+            analyst="news",
+            module=_news_module(),
+            parse_limits=_news_parse(),
+            error=_news_module().NewsGovernanceError,
+        )
+
+    def should_execute_news_prepared(self, state: AgentState):
+        """News tool governance: run the registered round, wrap up, or go back."""
+        return self._governed_prepared(
+            state,
+            analyst="news",
+            module=_news_module(),
+            parse_limits=_news_parse(),
+        )
+
+    def should_continue_news_after_execute(self, state: AgentState):
+        """News tool governance: where the run goes once a batch has run."""
+        return self._governed_after_execute(
+            state,
+            analyst="news",
+            module=_news_module(),
+            parse_limits=_news_parse(),
+            error=_news_module().NewsGovernanceError,
         )
 
     def should_continue_social(self, state: AgentState):
@@ -273,3 +297,44 @@ class ConditionalLogic:
         if state["risk_debate_state"]["latest_speaker"].startswith("Conservative"):
             return "Neutral Analyst"
         return "Aggressive Analyst"
+
+
+# ---------------------------------------------------------------------------
+# Lazy module access for the governed analysts
+# ---------------------------------------------------------------------------
+#
+# The router switches on lazily. These helpers keep each analyst's module and
+# parser in one place so a section that is not installed (or a typo in a name)
+# fails at the switch, not at import time, and no analyst's module is loaded for
+# another analyst's turn.
+
+
+def _market_module() -> Any:
+    from tradingagents.graph import market_tool_governance
+
+    return market_tool_governance
+
+
+def _fundamentals_module() -> Any:
+    from tradingagents.graph import fundamentals_tool_governance
+
+    return fundamentals_tool_governance
+
+
+def _fundamentals_parse() -> Any:
+    from tradingagents.graph.fundamentals_governance import (
+        parse_fundamentals_tool_governance,
+    )
+
+    return parse_fundamentals_tool_governance
+
+def _news_module() -> Any:
+    from tradingagents.graph import news_tool_governance
+
+    return news_tool_governance
+
+
+def _news_parse() -> Any:
+    from tradingagents.graph.news_governance import parse_news_tool_governance
+
+    return parse_news_tool_governance

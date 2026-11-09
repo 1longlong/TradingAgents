@@ -29,6 +29,8 @@ from .fundamentals_governance import parse_fundamentals_tool_governance
 from .fundamentals_tool_governance import create_fundamentals_governance_nodes
 from .market_governance import parse_market_tool_governance
 from .market_tool_governance import create_market_governance_nodes
+from .news_governance import parse_news_tool_governance
+from .news_tool_governance import create_news_governance_nodes
 
 # Every target a shared conditional router can return. Each edge driven by the
 # router maps all of them, so a fall-through return (e.g. under prompt/i18n/
@@ -91,6 +93,8 @@ class GraphSetup:
             and any(spec.key == "market" for spec in plan.specs),
             "fundamentals": parse_fundamentals_tool_governance(run_config).enabled
             and any(spec.key == "fundamentals" for spec in plan.specs),
+            "news": parse_news_tool_governance(run_config).enabled
+            and any(spec.key == "news" for spec in plan.specs),
         }
         governance_nodes: dict[str, dict[str, Any]] = {}
         if governed["market"]:
@@ -100,6 +104,10 @@ class GraphSetup:
         if governed["fundamentals"]:
             governance_nodes["fundamentals"] = create_fundamentals_governance_nodes(
                 llm=self.quick_thinking_llm, tool_node=self.tool_nodes["fundamentals"]
+            )
+        if governed["news"]:
+            governance_nodes["news"] = create_news_governance_nodes(
+                llm=self.quick_thinking_llm, tool_node=self.tool_nodes["news"]
             )
 
         analyst_factories = {

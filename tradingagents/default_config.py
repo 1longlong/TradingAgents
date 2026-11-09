@@ -35,6 +35,14 @@ _ENV_OVERRIDES = {
         "fundamentals_tool_governance.max_rounds",
     "TRADINGAGENTS_FUNDAMENTALS_TOOL_GOVERNANCE_MAX_CALLS":
         "fundamentals_tool_governance.max_calls",
+    # News-analyst tool governance (opt-in, independent of the market and
+    # fundamentals sections). Same allowance rules; off unless explicitly
+    # enabled.
+    "TRADINGAGENTS_NEWS_TOOL_GOVERNANCE_ENABLED": "news_tool_governance.enabled",
+    "TRADINGAGENTS_NEWS_TOOL_GOVERNANCE_MAX_ROUNDS":
+        "news_tool_governance.max_rounds",
+    "TRADINGAGENTS_NEWS_TOOL_GOVERNANCE_MAX_CALLS":
+        "news_tool_governance.max_calls",
     # Vendor-retry budget, merged into the nested dict. Every value is checked by
     # dataflows.retry_session when a tool call routes: negatives, booleans,
     # NaN/Infinity and fractional attempts are refused, never clamped.
@@ -298,6 +306,15 @@ DEFAULT_CONFIG = _apply_env_overrides({
         "enabled": False,
         "max_rounds": 4,   # model->tools->model cycles for the fundamentals analyst
         "max_calls": 8,    # calls actually executed for the fundamentals analyst
+    },
+    # News-analyst tool governance (opt-in, default OFF, independent of the two
+    # sections above). Same allowance rules; once the allowance is spent a
+    # single unbound wrap-up call writes ``news_report`` from the news evidence
+    # already collected. Validated strictly.
+    "news_tool_governance": {
+        "enabled": False,
+        "max_rounds": 4,   # model->tools->model cycles for the news analyst
+        "max_calls": 8,    # calls actually executed for the news analyst
     },
     # Tool-level configuration (takes precedence over category-level)
     "tool_vendors": {        # Example: "get_stock_data": "alpha_vantage",  # Override category default

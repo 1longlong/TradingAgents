@@ -58,7 +58,12 @@ def create_news_analyst(llm):
         report = ""
 
         if len(result.tool_calls) == 0:
-            report = result.content
+            # Only a usable answer is a report. A refusal, a token-limit
+            # cut-off or a blank body leaves ``news_report`` empty, so the
+            # governed router can fail the run instead of persisting it.
+            from tradingagents.agents.utils.tool_governance import analyst_report
+
+            report = analyst_report(result)
 
         return {
             "messages": [result],
