@@ -21,6 +21,12 @@ _ENV_OVERRIDES = {
     "TRADINGAGENTS_TEMPERATURE":          "temperature",
     "TRADINGAGENTS_LLM_MAX_RETRIES":      "llm_max_retries",
     "TRADINGAGENTS_MAX_TOKENS":           "max_tokens",
+    # Market-analyst tool governance (opt-in). An analyst tool allowance, not a
+    # run budget or a vendor retry count: it bounds how many tool rounds/calls
+    # the market analyst may cycle through. Off unless explicitly enabled.
+    "TRADINGAGENTS_MARKET_TOOL_GOVERNANCE_ENABLED": "market_tool_governance.enabled",
+    "TRADINGAGENTS_MARKET_TOOL_GOVERNANCE_MAX_ROUNDS": "market_tool_governance.max_rounds",
+    "TRADINGAGENTS_MARKET_TOOL_GOVERNANCE_MAX_CALLS": "market_tool_governance.max_calls",
     # Vendor-retry budget, merged into the nested dict. Every value is checked by
     # dataflows.retry_session when a tool call routes: negatives, booleans,
     # NaN/Infinity and fractional attempts are refused, never clamped.
@@ -263,9 +269,21 @@ DEFAULT_CONFIG = _apply_env_overrides({
         "failure_threshold": 3,
         "cooldown_seconds": 60.0,
     },
+    # Market-analyst tool governance (opt-in, default OFF). An **analyst tool
+    # allowance**: it caps how many tool rounds (one per batch the model asks
+    # for) and executed calls the market analyst may spend before a single,
+    # unbound wrap-up call writes ``market_report`` from the evidence already
+    # collected. It is not a run-level budget and it does not count HTTP
+    # requests or vendor attempts (that is the retry/breaker layer above).
+    # Values are validated strictly: an unknown key, a non-boolean ``enabled``,
+    # or a non-positive/non-integer cap raises instead of being clamped.
+    "market_tool_governance": {
+        "enabled": False,
+        "max_rounds": 4,   # model->tools->model cycles for the market analyst
+        "max_calls": 10,   # calls actually executed for the market analyst
+    },
     # Tool-level configuration (takes precedence over category-level)
-    "tool_vendors": {
-        # Example: "get_stock_data": "alpha_vantage",  # Override category default
+    "tool_vendors": {        # Example: "get_stock_data": "alpha_vantage",  # Override category default
     },
     # Benchmark for alpha calculation in the reflection layer.
     # ``benchmark_ticker`` (when set) overrides the suffix map for all

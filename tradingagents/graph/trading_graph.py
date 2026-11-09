@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -37,6 +38,7 @@ from tradingagents.reporting import write_report_tree
 
 from .checkpointer import checkpoint_step, clear_checkpoint, get_checkpointer, thread_id
 from .conditional_logic import ConditionalLogic
+from .market_governance import parse_market_tool_governance
 from .propagation import Propagator
 from .reflection import Reflector
 from .setup import GraphSetup
@@ -157,6 +159,7 @@ class TradingAgentsGraph:
             self.deep_thinking_llm,
             self.tool_nodes,
             self.conditional_logic,
+            config=self.config,
         )
 
         self.propagator = Propagator(
@@ -429,6 +432,11 @@ class TradingAgentsGraph:
             f"debate={self.config['max_debate_rounds']}",
             f"risk={self.config['max_risk_discuss_rounds']}",
             f"asset={asset_type}",
+            # The market governance switch adds/removes graph nodes, so a resume
+            # must not continue a thread built with the other shape.
+            "market_gov=" + str(
+                parse_market_tool_governance(self.config).enabled
+            ),
             # None, an empty book and a changed book are three different runs.
             f"portfolio={portfolio.fingerprint() if portfolio is not None else 'none'}",
         ])
@@ -545,7 +553,7 @@ class TradingAgentsGraph:
         assembled the state itself would skip the decision log.
         """
         self._resolve_pending_entries(company_name)
-        return self.propagator.create_initial_state(
+        state = self.propagator.create_initial_state(
             company_name,
             trade_date,
             asset_type=asset_type,
@@ -555,6 +563,11 @@ class TradingAgentsGraph:
             instrument_context=self.resolve_instrument_context(company_name, asset_type, trade_date),
             portfolio_context=portfolio.render(company_name) if portfolio is not None else "",
         )
+        # Tool governance (when enabled) keys its per-run record by a unique id
+        # and reads the run's config from the state. Both are plain data.
+        state["tool_governance"] = {"run_id": f"run-{uuid.uuid4().hex}"}
+        state["run_config"] = dict(self.config)
+        return state
 
     def settle_pending(self, company_name):
         """Settle this ticker's decisions whose holding window has now traded.

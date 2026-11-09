@@ -84,7 +84,12 @@ Write a very detailed and nuanced report of the trends you observe. Provide spec
         report = ""
 
         if len(result.tool_calls) == 0:
-            report = result.content
+            # Only a usable answer is a report. A refusal, a token-limit
+            # cut-off or a blank body leaves ``market_report`` empty, so the
+            # governed router can fail the run instead of persisting it.
+            from tradingagents.graph.market_tool_governance import analyst_report
+
+            report = analyst_report(result)
 
         return {
             "messages": [result],

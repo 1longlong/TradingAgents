@@ -6,6 +6,8 @@ request, so reachability can never establish an absence; only an empty result
 from a live vendor does. The news coverage placeholder follows the same rule:
 a window the feed never observed is "could not answer", not "no news".
 """
+from datetime import datetime, timezone
+
 import pandas as pd
 import pytest
 import requests
@@ -13,11 +15,28 @@ import requests
 import tradingagents.dataflows.stockstats_utils as su
 import tradingagents.dataflows.y_finance as y_finance
 import tradingagents.dataflows.yfinance_news as yfinance_news
+from tradingagents.dataflows import date_window
 from tradingagents.dataflows.errors import (
     NoMarketDataError,
     VendorAuthenticationError,
     VendorRateLimitError,
 )
+
+
+def _frozen_datetime(fixed):
+    """A ``datetime`` subclass whose ``now`` is ``fixed``.
+
+    ``coverage_gap`` reads the wall clock as ``datetime.now(timezone.utc)``
+    after importing the class into its own module, so patching the class there
+    is the seam. Subclassing (rather than replacing with a lambda) keeps
+    ``strptime`` and the rest of the class intact for the same module.
+    """
+    class _FrozenDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return fixed if tz is not None else fixed.replace(tzinfo=None)
+
+    return _FrozenDatetime
 
 
 @pytest.mark.unit
@@ -79,13 +98,16 @@ class TestNewsCoverage:
         assert "No news found" not in out
 
     def test_an_observed_empty_window_says_no_news(self, monkeypatch, no_retry, yahoo):
-        from tradingagents.dataflows.utils import get_current_date
-
-        today = get_current_date()
+        # Pin the UTC clock ``coverage_gap`` actually reads, and query the same
+        # date: "ends by today" is decided against that clock, not the host's.
+        # (``get_current_date()`` is host-local, so a run near midnight could
+        # ask about a day UTC still calls tomorrow.)
+        now = datetime(2026, 5, 8, 12, 0, tzinfo=timezone.utc)
+        monkeypatch.setattr(date_window, "datetime", _frozen_datetime(now))
         monkeypatch.setattr(
             yfinance_news.yf, "Ticker", lambda s: yahoo.ticker_returning(pd.DataFrame(), news=[])
         )
-        out = yfinance_news.get_news_yfinance("AAPL", today, today)
+        out = yfinance_news.get_news_yfinance("AAPL", "2026-05-08", "2026-05-08")
         assert out.startswith("No news found for AAPL")
 
 
