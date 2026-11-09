@@ -10,6 +10,15 @@ The function is deliberately self-contained: short timeout, graceful
 degradation on any HTTP or parse failure, and a string return type so
 the calling agent gets a uniform interface regardless of whether the
 network call succeeded.
+
+A response that cannot be read as the documented payload -- a different
+top-level type, ``messages`` that is not a list, a non-object entry, or a
+nested field used for rendering with the wrong type -- is reported as
+``<stocktwits unavailable: ...>`` for the whole response. It is never
+reported as silence, and no sentiment ratio is computed from a partially
+understood stream (that would present the surviving records as the complete
+result). Only the shape is checked; a well-shaped response that is empty or
+out of window keeps the previous behaviour.
 """
 
 from __future__ import annotations
@@ -28,6 +37,77 @@ logger = logging.getLogger(__name__)
 
 _API = "https://api.stocktwits.com/api/2/streams/symbol/{ticker}.json"
 _UA = "tradingagents/0.2 (+https://github.com/TauricResearch/TradingAgents)"
+
+# Safe reason codes for logs: the payload (bodies, usernames, timestamps) never
+# reaches a message, and a malformed response is described by shape only.
+_REASON_TOP_LEVEL = "top_level_not_object"
+_REASON_MESSAGES_TYPE = "messages_not_list"
+_REASON_ENTRY_TYPE = "entry_not_object"
+_REASON_CREATED_AT = "created_at_not_string"
+_REASON_USER = "user_not_object"
+_REASON_USERNAME = "user_username_not_string"
+_REASON_ENTITIES = "entities_not_object"
+_REASON_SENTIMENT = "entities_sentiment_not_object"
+_REASON_SENTIMENT_BASIC = "sentiment_basic_not_string"
+_REASON_BODY = "body_not_string"
+
+
+def _shape_error(data) -> str | None:
+    """The safe reason code for a response that is not the documented shape.
+
+    ``None`` means the payload can be rendered safely. The checks mirror exactly
+    what the renderer and the window filter read, so nothing is trusted by
+    accident. Missing values (``None``/absent) are accepted: StockTwits omits
+    ``entities`` and ``sentiment`` for unlabeled posts, and ``user`` may be
+    absent for deleted accounts -- those render as "no-label"/"?" by design.
+    Values that are *present but of the wrong type* are rejected, because the
+    renderer must not silently drop or stringify them.
+    """
+    if not isinstance(data, dict):
+        return _REASON_TOP_LEVEL
+    messages = data.get("messages")
+    if messages is None:
+        return None  # tolerated: documented as empty by the existing code
+    if not isinstance(messages, list):
+        return _REASON_MESSAGES_TYPE
+    return _message_shape_error(messages)
+
+
+def _message_shape_error(messages) -> str | None:
+    """Reason code for the first entry whose fields the renderer cannot read."""
+    for m in messages:
+        if not isinstance(m, dict):
+            return _REASON_ENTRY_TYPE
+        created = m.get("created_at")
+        if created is not None and not isinstance(created, str):
+            return _REASON_CREATED_AT
+        user = m.get("user")
+        if user is not None:
+            if not isinstance(user, dict):
+                return _REASON_USER
+            username = user.get("username")
+            if username is not None and not isinstance(username, str):
+                return _REASON_USERNAME
+        entities = m.get("entities")
+        if entities is not None:
+            if not isinstance(entities, dict):
+                return _REASON_ENTITIES
+            sentiment = entities.get("sentiment")
+            if sentiment is not None:
+                if not isinstance(sentiment, dict):
+                    return _REASON_SENTIMENT
+                basic = sentiment.get("basic")
+                if basic is not None and not isinstance(basic, str):
+                    return _REASON_SENTIMENT_BASIC
+        body = m.get("body")
+        if body is not None and not isinstance(body, str):
+            return _REASON_BODY
+    return None
+
+
+def _unavailable(reason: str) -> str:
+    """The placeholder for a response that cannot be interpreted safely."""
+    return f"<stocktwits unavailable: {reason}>"
 
 
 def _created_at(message) -> datetime | None:
@@ -83,6 +163,11 @@ def fetch_stocktwits_messages(
     Returns a placeholder string when the endpoint is unreachable, the
     symbol has no messages, or the response shape is unexpected — the
     caller never has to special-case None or exceptions.
+
+    A response whose shape cannot be interpreted raises nothing and is not
+    trimmed to its readable records: the whole payload becomes
+    ``<stocktwits unavailable: <reason>>``, so an unreadable stream is never
+    passed off as "no discussion" and no ratio is derived from it.
     """
     url = _API.format(ticker=_stocktwits_symbol(ticker))
     req = Request(url, headers={"User-Agent": _UA, "Accept": "application/json"})
@@ -92,10 +177,20 @@ def fetch_stocktwits_messages(
     except (OSError, http.client.HTTPException, json.JSONDecodeError) as exc:
         # OSError covers URLError/TimeoutError/connection resets; HTTPException
         # covers chunked-transfer errors (IncompleteRead/BadStatusLine, #1024).
-        logger.warning("StockTwits fetch failed for %s: %s", ticker, exc)
-        return f"<stocktwits unavailable: {type(exc).__name__}>"
+        # Log the exception type only: a URL, body or vendor message could carry
+        # information the placeholder must not.
+        logger.warning("StockTwits fetch failed for %s: %s", ticker, type(exc).__name__)
+        return _unavailable(type(exc).__name__)
 
-    fetched = data.get("messages", []) if isinstance(data, dict) else []
+    # Validate before filtering or rendering. An unreadable payload is reported
+    # for the whole response: no ratio is computed and no surviving record is
+    # presented as the complete result.
+    reason = _shape_error(data)
+    if reason is not None:
+        logger.warning("StockTwits response rejected for %s: %s", ticker, reason)
+        return _unavailable(reason)
+
+    fetched = data.get("messages") or []
     messages = _within_window(fetched, start_date, end_date)
     if not messages:
         if start_date and end_date:
@@ -113,7 +208,8 @@ def fetch_stocktwits_messages(
     bullish = bearish = unlabeled = 0
     for m in messages[:limit]:
         created = m.get("created_at", "")
-        user = (m.get("user") or {}).get("username", "?")
+        user = m.get("user") or {}
+        username = user.get("username", "?")
         entities = m.get("entities") or {}
         sentiment_obj = entities.get("sentiment") or {}
         sentiment = sentiment_obj.get("basic") if isinstance(sentiment_obj, dict) else None
@@ -130,7 +226,7 @@ def fetch_stocktwits_messages(
         else:
             unlabeled += 1
             tag = "no-label"
-        lines.append(f"[{created} · @{user} · {tag}] {body}")
+        lines.append(f"[{created} · @{username} · {tag}] {body}")
 
     total = bullish + bearish + unlabeled
     bull_pct = round(100 * bullish / total) if total else 0
