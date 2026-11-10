@@ -33,6 +33,7 @@ from tradingagents.agents.utils.memory import TradingMemoryLog
 from tradingagents.dataflows.config import set_config
 from tradingagents.dataflows.utils import get_current_date, safe_ticker_component
 from tradingagents.default_config import DEFAULT_CONFIG
+from tradingagents.file_io import write_text_atomic
 from tradingagents.llm_clients import create_llm_client
 from tradingagents.reporting import write_report_tree
 
@@ -680,8 +681,15 @@ class TradingAgentsGraph:
         return final_state, self.process_signal(final_state["final_trade_decision"])
 
     def _log_state(self, trade_date, final_state):
-        """Log the final state to a JSON file."""
-        self.log_states_dict[str(trade_date)] = {
+        """Log the final state to a JSON file.
+
+        The entry is serialised in full first, then written through
+        ``write_text_atomic`` so a failure never truncates the previous log.
+        ``log_states_dict`` is updated only after the file is on disk; if saving
+        fails the error propagates and memory keeps no entry for this date, so it
+        never claims a save that did not happen.
+        """
+        entry = {
             "company_of_interest": final_state["company_of_interest"],
             "trade_date": final_state["trade_date"],
             "market_report": final_state["market_report"],
@@ -718,9 +726,10 @@ class TradingAgentsGraph:
         directory.mkdir(parents=True, exist_ok=True)
 
         log_path = directory / f"full_states_log_{trade_date}.json"
-        with open(log_path, "w", encoding="utf-8") as f:
-            # Reports can be in any language and this file is read by a person.
-            json.dump(self.log_states_dict[str(trade_date)], f, indent=4, ensure_ascii=False)
+        # Reports can be in any language and this file is read by a person.
+        payload = json.dumps(entry, indent=4, ensure_ascii=False)
+        write_text_atomic(log_path, payload, encoding="utf-8")
+        self.log_states_dict[str(trade_date)] = entry
 
     def process_signal(self, full_signal):
         """Process a signal to extract the core decision."""
