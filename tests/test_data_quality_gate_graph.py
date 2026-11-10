@@ -14,6 +14,10 @@ Covers, per the authoritative design:
 - graph topology places Data Quality Gate after the last selected analyst for
   several analyst selections;
 - existing debate/risk route maps remain intact.
+
+Traceability: FR-DQG-001 (deterministic gate), FR-DQG-002 (fail-closed
+precedence), NFR-OFF-001 (offline default); the exception/missing-state cases
+enforce INV-1 (fail closed).
 """
 
 from __future__ import annotations

@@ -16,6 +16,10 @@ from tradingagents.agents.utils.agent_utils import (
     get_language_instruction,
     get_portfolio_context_from_state,
 )
+from tradingagents.agents.utils.output_guard import (
+    enforce_blocked_conclusion,
+    is_blocked_run,
+)
 from tradingagents.agents.utils.structured import (
     NO_EXTERNAL_TOOLS,
     bind_structured,
@@ -34,6 +38,9 @@ def create_portfolio_manager(llm):
         risk_debate_state = state["risk_debate_state"]
         research_plan = state["investment_plan"]
         trader_plan = state["trader_investment_plan"]
+        # The final decision must honour the gate: a blocked run may not be
+        # upgraded by the risk debate into a directional rating.
+        blocked = is_blocked_run(state)
 
         past_context = state.get("past_context", "")
         lessons_line = (
@@ -78,6 +85,16 @@ Write these sections, in this order, starting with the rating on its own line:
 
 {NO_EXTERNAL_TOOLS}{get_language_instruction()}"""
 
+        if blocked:
+            prompt += (
+                "\n\nIMPORTANT — THE DATA QUALITY GATE BLOCKED THIS RUN. The "
+                "Research Manager's conclusion is evidence-insufficient and the "
+                "Trader was restricted to Hold. You MUST NOT issue a directional "
+                "Buy / Overweight / Underweight / Sell rating; the only permitted "
+                "rating is Hold. Explain the missing critical data and the "
+                "recovery conditions rather than manufacturing a direction."
+            )
+
         final_trade_decision = invoke_structured_or_freetext(
             structured_llm,
             llm,
@@ -85,6 +102,14 @@ Write these sections, in this order, starting with the rating on its own line:
             render_pm_decision,
             "Portfolio Manager",
         )
+
+        # Authoritative contract: the final rating on a blocked run is pinned to
+        # Hold on both the structured and free-text paths so no upstream model
+        # can undo the Research Manager's restricted conclusion.
+        if blocked:
+            final_trade_decision = enforce_blocked_conclusion(
+                final_trade_decision, field="rating"
+            )
 
         new_risk_debate_state = {
             "judge_decision": final_trade_decision,

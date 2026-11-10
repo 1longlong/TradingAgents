@@ -18,6 +18,10 @@ manifest and the target trade date (fail closed):
   the Research Manager can weigh it;
 - evaluator routing with runtime-derived conflicts, and the Research Manager's
   safe conflict-summary injection (including preserve of resolution notes).
+
+Traceability: FR-DDT-005 (deterministic ConflictRecord lifecycle); supports
+INV-13 (conflict lifecycle safety) and the fail-closed evidence validation of
+INV-1/INV-3.
 """
 
 from __future__ import annotations

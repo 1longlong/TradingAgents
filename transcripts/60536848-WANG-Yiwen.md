@@ -336,6 +336,220 @@ files are named `*-sanitized.json` to indicate they have been scrubbed.
   traceability scores invented; no commit/push/PR. `docs/ai-use-log.yaml`
   AUL-019.
 
+### Blocked final-output enforcement (2026-11-06 review finding 1)
+
+- **Authorization:** Explicit human authorization for milestone 1 of the
+  Data Quality Gate / dynamic debate fix: fix the blocked final-output escape
+  only, with focused regressions. No budget/report/adapter work, no threshold
+  tuning, no commit/push.
+- **Prompt (intent):** Read the governance docs, `Prompt.md`, `pyproject.toml`,
+  and test conventions; verify path/branch/HEAD/dirty state; read the 2026-11-06
+  independent review and its offline demo; reproduce the defect before fixing.
+  Add a small centralized deterministic data-quality output guard so a blocked
+  verdict stays authoritative through stored recommendations and the final
+  signal/report, for structured and free-text paths, without corrupting prose,
+  with fail-closed missing/invalid/inconsistent gate state and preserved
+  legacy/degraded/normal behavior. Do not invent a confidence ceiling. Add
+  meaningful regressions; run targeted tests, Ruff, the governance validator and
+  `git diff --check`; update the governance records truthfully.
+- **OpenCode output:** Reproduced review finding 1 offline (blocked gate ->
+  `final_signal` Buy). Added `tradingagents/agents/utils/output_guard.py` with
+  `effective_gate_verdict` (fail-closed: only matching normal/degraded is trusted)
+  and `enforce_blocked_conclusion` (pins only the decision field, structured and
+  free-text, preserving rationale/recovery). Wired it into the Research Manager
+  (replacing the duplicated local coercion), the Trader (including the trailing
+  `FINAL TRANSACTION PROPOSAL` line), and the Portfolio Manager. Added
+  `tests/test_output_guard.py`; three pre-existing direct-node tests received an
+  explicit trusted normal gate state. No confidence ceiling invented; review
+  findings 2–4 recorded as open debt/risk.
+- **Verification:** the independent-review demo now yields `final_signal` Hold
+  (was Buy); `tests/test_output_guard.py` 47 passed; affected suite 294 passed;
+  full offline suite 3 failed / 1528 passed (the 3 known date-sensitive cache
+  tests, pre-existing, no new regression, not claimed green); Ruff clean;
+  governance validator PASS (35/35, no secrets); `git diff --check` clean
+  (logbook 058). `docs/ai-use-log.yaml` AUL-020.
+
+### Maintenance corrections: guard edge cases, pre-call budget, audit export (2026-11-06)
+
+- **Authorization:** Operator technical review (not human phase approval)
+  authorized the narrow guard corrections plus maintenance milestones 2
+  (pre-call budget guards) and 3 (audit exports). Automatic multi-category
+  adapters remain out of scope.
+- **Prompt (intent):** fix two guard edge cases (executable trailing BUY without a
+  primary header; repeated decision headers keeping later directional calls),
+  pin all recognized headers and FINAL TRANSACTION PROPOSAL forms, tolerate
+  Markdown markup without rewriting rationale, neutralise blocked Trader sizing
+  under a documented narrow rule, preserve idempotence; ensure FR-DQG-006 is in
+  `docs/req/requirements.yaml`; then pre-call budget guards (preflight before
+  first Bull/Bear, max_calls=1 never executes 2 calls, reserve summary, skip to
+  manager with budget_exhausted, enabled=False legacy) and audit exports
+  (per-evidence validation map in the manifest, run-summary identity/snapshot/
+  quality counts and usage provenance, no fabricated or conflated values).
+- **OpenCode output:** `output_guard.py` now pins every header + marker
+  (markup-tolerant, idempotent) and neutralises blocked Trader sizing; FR-DQG-006
+  added to `requirements.yaml`; `budget.py` gained `can_afford_optional_call` /
+  `budget_admission_decision` / `resolve_budget_config_from_state`, with pre-call
+  checks wired into the Bull/Bear researchers and new researcher-step routers;
+  `report_artifacts.py` now exports per-evidence validations (by evidence ID and
+  as a separate map) and adds identity/snapshot/quality/usage-provenance to
+  `run_summary` and the markdown section. New tests:
+  `tests/test_debate_precall_budget.py`, `tests/test_report_artifacts_audit.py`,
+  and expanded `tests/test_output_guard.py`.
+- **Verification:** `tests/test_output_guard.py` 55 passed; the guard affected
+  suite 184 passed; `tests/test_debate_precall_budget.py` 14 passed and the
+  debate suite 171 passed; `tests/test_report_artifacts_audit.py` 12 passed; the
+  independent-review demo now shows `final_signal` Hold, `max_calls=1` ->
+  `actual_debate_calls=1` (stop `budget_exhausted`), and exported record
+  validation counts `[7,7,7,7,6]` (was `[0,0,0,0,0]`); full offline suite 3
+  failed / 1562 passed (3 known date-sensitive cache tests; not claimed green);
+  Ruff clean; governance validator PASS (35/35, no secrets); `git diff --check`
+  clean (logbook 058–062). No commit/push; no human approval invented.
+
+### Second review: budget boundary + audit compatibility (2026-11-06)
+
+- **Authorization:** Independent second review (not a human phase approval)
+  authorised narrow fixes to one remaining budget bug and two audit-compatibility
+  issues. Automatic multi-category adapters remain out of scope.
+- **Prompt (intent):** correct the pre-call token/time check to include a
+  conservative next-call (or full next-round) estimate in addition to the summary
+  reserve, with exact boundary tests before the first Bull and before Bear; record
+  token/time checks as estimate-based but enforce the configured comparison
+  honestly; do not mark DEBT-012 fully resolved until fixed; keep the call-limit
+  scope (debate calls, not total-run budget) explicit. Audit: prefer a present
+  authoritative map entry, otherwise preserve/normalize a record's embedded
+  validations; add legacy-embedded and shuffled-map determinism regressions;
+  mark disagreeing identity ambiguous rather than choosing a first; remove the
+  inaccurate snapshot_id-minting commentary.
+- **OpenCode output:** `can_afford_optional_call` now requires
+  `remaining >= reserved_summary_* + next_call_estimate_*` with a helper
+  `next_call_estimate` (half the next-round estimate, rounded up for tokens);
+  `budget_admission_decision` records token/time thresholds and
+  `estimate_basis=estimated`, `scope=debate_calls_only`.
+  `_records_with_validations` prefers a present authoritative map entry and
+  otherwise preserves the record's embedded validations;
+  `_run_identity` flags disagreeing values as ambiguous (`identity_ambiguous`);
+  the snapshot_id comment is corrected.
+- **Verification:** `tests/test_debate_precall_budget.py` 22 passed;
+  `tests/test_report_artifacts_audit.py` 20 passed; focused suite 185 passed; full
+  offline suite 3 failed / 1578 passed (3 known date-sensitive cache tests; not
+  claimed green); Ruff clean; governance validator PASS (35/35, no secrets);
+  `git diff --check` clean (logbook 063). No commit/push; no human approval
+  invented.
+
+### Final operator verification (documentation-only, 2026-11-06)
+
+- **Authorization:** Final operator verification, documentation-only follow-up.
+  No feature changes; no test reruns by the agent.
+- **Operator/AI technical verification (independently verified, not a human
+  approval):** 464 focused tests passed in 1.82s across output guard, pre-call
+  budget, audit, gate, debate, conflicts, reporting and comparison; the offline
+  demo returns `final_signal=Hold` on the blocked adversarial-model run;
+  `max_calls=1` gives `actual_debate_calls=1`; evidence validation counts export
+  as `[7,7,7,7,6]`; independent Ruff, governance validator (35/35, no likely
+  secrets) and `git diff --check` pass.
+- **Stricter fully offline suite:** with `socket.socket.connect` patched to raise
+  `OSError('Network disabled for offline verification')` and
+  `pytest -q -p no:cacheprovider -m "not integration"`, the observed result was
+  **4 failed, 1577 passed, 1 skipped, 1 deselected, 22 warnings, 88 subtests
+  passed in 4.76s**. Failures are the known Yahoo
+  reachability/exception-type baseline
+  (`tests/test_no_data_handling.py::TestLoadOhlcvNoPoison::test_empty_download_raises_and_does_not_cache`)
+  plus the 3 known `tests/test_ohlcv_cache_freshness.py` date-sensitive tests.
+  Recorded separately from the earlier 3-failure run under different
+  connectivity; neither claimed all-green.
+- **Status recorded:** the 2026-10-23 human approvals remain historical for their
+  reviewed scope; the 2026-11-06 guard/budget/audit maintenance fixes are
+  technically verified and await explicit human review. Degraded
+  confidence-ceiling policy (DEBT-014) and automatic multi-category adapters
+  (DEBT-015/RISK-015) remain explicitly open. `docs/ai-use-log.yaml` AUL-023.
+
+### Independent recheck fixes (findings 1/2/3, 2026-11-06)
+
+- **Authorization:** Explicitly authorized maintenance on the current dirty tree
+  (branch `feature/data-quality-debate-control`, base HEAD `8abea81`), preserving
+  all previous uncommitted guard/budget/audit changes.
+- **Reproduced on the current tree:** (1) `enforce_blocked_conclusion('Rating：Buy')`
+  prepended Hold but the extractor returned Buy; `Final rating: Buy` escaped the
+  same way; (2) real gate with the fixed dataframe + all-High optional contract
+  produced five `Low`/`unvalidated` records, empty `EvidenceManifest.valid_ids`,
+  empty allowlist; (3) `Rating: Buy because the outlook is good.` became
+  `Rating: Holdbecause the outlook is good.` (final signal REVIEW).
+- **OpenCode output:**
+  - Finding 1: the guard now recognizes the same decision-header grammar the
+    rating extractor reads (fullwidth colon, prefixed labels such as "Final
+    rating", unicode dashes, repeated/trailing alternative labels); the final
+    signal boundary is gate-aware (`SignalProcessor.process_signal(text, state)`
+    -> Hold on a blocked run) and the memory log records Hold for a blocked run.
+  - Finding 2: `evaluate_multi_category_gate` now applies each record's own
+    computed classification/reasons/validations (`attach_record_quality`) before
+    serialization, instead of discarding the aggregator's per-record map.
+  - Finding 3: the semantic whitespace separator and markdown boundary between
+    Hold and the tail prose are preserved; guarded output is idempotent.
+- **Verification:** `tests/test_output_guard.py` 90 passed;
+  `tests/test_gate_debate_integration.py` 9 passed (real gate -> manifest/
+  allowlist -> researcher -> evaluator -> report); focused affected suite 409
+  passed; strict fully offline suite (socket disabled, `-m "not integration"`)
+  **4 failed / 1621 passed / 1 skipped / 1 deselected / 22 warnings / 88 subtests**
+  — the same known 3 date-sensitive cache tests + Yahoo reachability baseline; no
+  new regression; not claimed all-green. Ruff clean; governance validator PASS
+  (35/35, no secrets); `git diff --check` clean (logbook 065).
+- **Status recorded:** these fixes await explicit human review; no human approval
+  or traceability score is invented. Phase 4A scripted numbers stay labelled
+  scripted; degraded confidence ceiling (DEBT-014) and automatic optional adapters
+  remain explicitly OPEN. `docs/ai-use-log.yaml` AUL-024.
+
+### Operator recheck follow-up — guard/parser agreement (2026-11-06)
+
+- **Authorization:** Operator technical recheck of the recheck fixes (not a human
+  approval); narrow correction only, no policy or optional-adapter change. Session
+  ID for this and the prior session segment: `ses_e5323df76ffekYpSDco2JI7KkC`.
+- **Residual reproduced:** `enforce_blocked_conclusion('Ｒａｔｉｎｇ：Ｂｕｙ')` and
+  `enforce_blocked_conclusion('My final overall investment rating: Buy')` returned
+  Buy on the plain textual signal (the structured signal was Hold). The earlier
+  claim that the guard and parser share the same grammar was **false** — the guard
+  used a bounded descriptor count and only the fullwidth colon.
+- **OpenCode output:** added shared parser helpers
+  (`labelled_decision_line_indices`, `labelled_decision_tail`) in
+  `tradingagents/agents/utils/rating.py`; the guard (`output_guard.py`) now
+  canonicalises every parser-recognized labelled rating line to
+  `**Rating**: Hold`, preserving a natural-language tail. Covers fullwidth
+  label+value, arbitrary prefixes, repeated/trailing labels, and full-graph
+  report+memory tag/body consistency; idempotent; normal/degraded unchanged.
+- **CLI clarification:** `cli/main.py` is byte-identical to HEAD — the earlier
+  `state`-argument edit was fully reverted, so there is **no CLI change**; the
+  signal hook is `TradingAgentsGraph.process_signal(curr_state)`.
+- **Verification:** `tests/test_output_guard.py` 90 passed; focused affected suite
+  480 passed; strict fully offline suite (socket disabled, `-m "not integration"`)
+  **4 failed / 1621 passed / 1 skipped / 1 deselected / 22 warnings / 88
+  subtests** — the same known baselines; no new regression; not all-green. Ruff
+  clean; governance validator PASS (35/35, no secrets); `git diff --check` clean
+  (logbook 066). Operator technical feedback recorded, **not a human approval**;
+  `docs/ai-use-log.yaml` AUL-025.
+- **Operator executable-instruction maintenance (2026-11-06; OpenCode session
+  `ses_e51912b64ffefzlHtFIa1ApPUn`):** reproduced that a blocked run's stored
+  intermediate plan kept executable directions — fullwidth
+  `Ａｃｔｉｏｎ：Ｂｕｙ`/`Entry Price：100`/`Stop Loss：95`/`Position Sizing：20%`
+  and `FINAL TRANSACTION PROPOSAL: BUY because momentum improved` — after a
+  prepended Hold. The former regex guard matched bounded ASCII, only the fullwidth
+  colon, and required end-of-line values. OpenCode output: one shared **linear**
+  recognizer (`rating.decision_header`/`_split_header`: NFKC-first, arbitrary plain
+  descriptor with no cap, required separator, single-word value; blockquote/
+  narrative excluded) used by `output_guard.py` to pin every decision field to
+  `**<Label>**: Hold`, neutralise blocked sizing to `not applicable`, pin explained
+  proposal markers preserving the tail, and preserve rationale/quoted
+  alternatives/recovery; `extract_rating` now honours the structural header over
+  quoted/narrative mentions so the plain signal, report and memory agree. In-pass
+  corrections: a catastrophic backtracking regex, an empty-tail/descriptor-cap
+  design, and the parser/guard disagreement. `cli/main.py` unchanged.
+- **Verification:** `tests/test_output_guard.py` 130 passed; focused affected
+  suite 520 passed; strict fully offline suite (socket disabled,
+  `-m "not integration"`) **4 failed / 1661 passed / 1 skipped / 1 deselected /
+  22 warnings / 88 subtests** — the same known baselines; no new regression; not
+  all-green. Ruff clean; governance validator PASS (35/35, no secrets);
+  `git diff --check` clean (logbook 067). Operator technical feedback recorded,
+  **not a human approval**; `docs/ai-use-log.yaml` AUL-026. The CLI state-passing
+  gap, DEBT-014 and DEBT-015/RISK-015 remain OPEN.
+
 ## Verification outcomes (summarized)
 
 See `docs/architecture/evaluation-logbook.md` and `docs/architecture/evaluation-table.md`
@@ -385,6 +599,12 @@ for exact commands and outcomes. Summarized:
   cache tests; Ruff on changed files, `git diff --check`, the governance
   validator, and the governance scaffold tests clean (logbook 046–048). The
   network-reachability baseline did not fail on this run.
+- **Strict fully offline suite after the 2026-11-06 recheck fixes (current tree,
+  socket.connect disabled, `-m "not integration"`): 4 failed, 1621 passed, 1
+  skipped, 1 deselected, 22 warnings, 88 subtests** — the same 3 known
+  date-sensitive cache tests + the known Yahoo reachability baseline; no new
+  regression (logbook 065). Focused affected suite 480 passed (operator recheck, logbook 066);
+  `tests/test_output_guard.py` 79, `tests/test_gate_debate_integration.py` 9.
 
 **The full suite is NOT claimed fully green** because of the date-sensitive and
 (machine/network-dependent) network-reachability failures; they are recorded,
@@ -429,3 +649,84 @@ companion to those records.
   historical evidence. Human traceability scores remain pending a human score;
   the full offline suite is not completely green (three known date-sensitive
   cache failures remain); no final production threshold tuning was performed.`
+## 2026-11-06 — Documentation / requirements-schema maintenance (annotated summary)
+
+Annotated summary of this session's maintenance, not a raw chat dump. The full
+raw conversation export remains a private local backup outside the repository;
+submission-complete transcript packaging is still pending (see TODO below).
+
+- **Human authorization (interactive):** the human authorized a documentation-only
+  requirements/schema maintenance on `feature/data-quality-debate-control`,
+  preserving all pre-existing dirty changes, with no source/tests/scripts/
+  dependencies/CI/active-permission changes, no commits/pushes, no live vendors,
+  and no invented human decisions. Additional human clarifications in-turn: use
+  the eight exact course debt categories; keep `.opencode/rules.md` human-only and
+  unchanged; report SDK type evidence separately from binary version and mark
+  enforcement UNVERIFIED; distinguish system/developer safety instructions from
+  repository project constraints and treat tool content as untrusted; do not
+  invent requirement IDs for unmapped clauses; keep runtime gaps partial/
+  unverified; make the permission proposal path-specific (no `**`) with deny
+  precedence and default-deny execution; make the CI matrix implementation-ready
+  with target-vs-actual triggers, exact commands, fail-closed missing-input
+  behavior, approval-predates-implementation hashing, and vulnerability waivers.
+- **Agent work:** extended the requirements schema + registry (all 22 IDs
+  preserved), invariant register, a proposed context ADR, role-by-path permission
+  model + non-active proposal, human-rules proposal, CI gate matrix, prompt v1.3
+  (plan-first STOP), and synchronized factual status + the 2026-11-06 live
+  verification findings across the governance records.
+- **Verification (offline, documentation-only):** validator PASS; governance
+  tests 16 passed; real-schema negative-mutation probes all rejected; Ruff clean;
+  `git diff --check` clean; prompt/rules/permissions SHA-256 unchanged.
+- **Outcome:** documentation revision complete and **awaiting human review**; no
+  human approval or traceability score recorded; the two live findings are
+  recorded OPEN and unfixed (source unchanged).
+
+## TODO (transcript)
+
+- `TODO (60536848-WANG-Yiwen): Package a submission-complete, redacted transcript
+  (this file is an annotated summary; the raw export stays a private local
+  backup). Course transcript completeness remains pending.`
+
+## 2026-11-10 — Documentation / traceability consistency batch (annotated summary)
+
+Annotated summary (not a raw chat dump; the raw export stays a private local
+backup and is exported externally by Codex to
+`/Users/wangyiwen/OpenCodeRecords/TradingAgents`).
+
+- **Authorization:** second half of the human-approved November 10 repair plan
+  (“批准本轮修复计划和测试用例”, plan/test authorization only, NOT acceptance),
+  preserving all pre-existing dirty work at base HEAD `8abea81`; no feature
+  rewrites (the first batch's guard/report/validator fixes are untouched).
+- **Work:** corrected `verification-constraints.md` to the
+  Structural/Regression/Behavioral tiers with offline-vs-live as a separate
+  evidence axis; added ACCURATE `Traceability:` tags to the 29 mapped test files
+  and deterministic governance regressions that resolve them and require each
+  requirement's own ID; aligned `permission-model.md` with the non-active
+  permission proposal (builder edit allowlist, read-before-edit, planner execute
+  expressibility gap) without activating it; made the requirements validator
+  resolve dangling product references on both paths with true forced-fallback
+  regressions; brought the required-artifact/YAML inventory up to date
+  (prompt_v1.3, ADR-004/005, proposals); added an NFR-OFF-001 count-and-fail
+  strict-offline harness; acknowledged the src/test pointer dirs and the
+  course-layout confirmation TODO.
+- **Verification (offline, technical):** validator PASS (42/42, no secrets);
+  governance 48 passed; mapped+focused 1000 passed; strict-offline harness
+  4 failed / 1768 passed / 1 skipped / 1 deselected with **1 intercepted
+  vendor-reachability socket attempt** (no connection made) so NFR-OFF-001 stays
+  PARTIAL/OPEN; Ruff clean; `git diff --check` clean (logbook 071).
+- **Outcome:** technical/traceability batch complete and **awaiting independent
+  review + later human acceptance**; no acceptance, CI enforcement, permission
+  enforcement, traceability score, or green-suite claim is made.
+
+### Independent Codex AI verification (2026-11-10, current final; NOT human acceptance)
+
+On the current files after this batch, independent Codex AI verification recorded
+(logbook 072): 14-file focused suite **583 passed / 2 warnings**; validator
+**42/42 PASS** with no secret hits; independent boundary **39/39**; **440**
+negative schema mutations rejected; the actual
+`scripts/validate/strict_offline_harness.py` run **4 failed / 1768 passed /
+1 skipped / 1 deselected** with the same **1** intercepted vendor-reachability
+baseline attempt (no connection made; NFR-OFF-001 PARTIAL/OPEN); Ruff clean;
+`git diff --check` clean. Earlier in-batch intermediate counts are kept
+historical; this is the current final recorded result and is AI technical
+verification only — **not** human acceptance. No code/test change.

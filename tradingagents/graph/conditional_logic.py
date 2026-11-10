@@ -60,6 +60,31 @@ class ConditionalLogic:
             return "Bear Researcher"
         return "Bull Researcher"
 
+    def should_continue_after_bull(self, state: AgentState) -> str:
+        """Route after the Bull Researcher.
+
+        Normally the Bear speaks next. When the Bull's pre-call budget guard
+        refused the call, it wrote a ``budget_exhausted`` admission decision to
+        ``debate_termination_decision``; the debate must then skip safely to the
+        Research Manager (an incomplete round) instead of running Bear.
+        """
+        decision = state.get("debate_termination_decision")
+        if isinstance(decision, dict) and decision.get("stop_reason") == "budget_exhausted":
+            return "Research Manager"
+        return "Bear Researcher"
+
+    def should_continue_after_bear(self, state: AgentState) -> str:
+        """Route after the Bear Researcher.
+
+        Normally the Debate Evaluator judges the completed round. When the Bear
+        pre-call guard refused the call, route straight to the Research Manager
+        with the recorded ``budget_exhausted`` reason for the incomplete round.
+        """
+        decision = state.get("debate_termination_decision")
+        if isinstance(decision, dict) and decision.get("stop_reason") == "budget_exhausted":
+            return "Research Manager"
+        return "Debate Evaluator"
+
     def should_continue_after_debate_evaluator(self, state: AgentState) -> str:
         """Route after the Debate Evaluator node (Phase 3B).
 

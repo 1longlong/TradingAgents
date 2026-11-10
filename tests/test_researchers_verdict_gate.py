@@ -10,6 +10,9 @@ when the verdict is degraded even if the context text does not literally say
 
 No network, no paid LLM: the researcher node is driven with a fake LLM that
 captures the prompt it was handed.
+
+Traceability: FR-DDT-002 (valid-new-evidence manifest and citation allowlist);
+supports the researcher-path eligibility handling of INV-1.
 """
 
 from __future__ import annotations

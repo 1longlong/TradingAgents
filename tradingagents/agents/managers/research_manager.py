@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-import re
-
 from tradingagents.agents.schemas import ResearchPlan, render_research_plan
 from tradingagents.agents.utils.agent_utils import (
     get_data_quality_context_from_state,
     get_instrument_context_from_state,
     get_language_instruction,
+)
+from tradingagents.agents.utils.output_guard import (
+    enforce_blocked_conclusion,
+    is_blocked_run,
 )
 from tradingagents.agents.utils.structured import (
     NO_EXTERNAL_TOOLS,
@@ -17,58 +19,16 @@ from tradingagents.agents.utils.structured import (
 )
 from tradingagents.debate.conflicts import build_conflict_summary
 
-# Matches the recommendation field on its own line, capturing the value the LLM
-# chose (markdown ``**Recommendation**: X`` or a bare ``Recommendation: X``).
-_RECOMMENDATION_LINE_RE = re.compile(
-    r"^\s*(?:\*\*Recommendation\*\*|Recommendation)\s*[:\-]\s*(.+?)\s*$"
-)
-
 
 def _enforce_non_directional_hold(plan_text: str) -> str:
     """Deterministically coerce a Research Manager plan to a non-directional Hold.
 
-    Authoritative for a blocked run: the standard bull/bear debate was skipped
-    because critical market data is missing or conflicting, so the intended
-    outcome is an evidence-insufficient conclusion. Prompt obedience alone is
-    not relied upon — whatever the LLM returned (structured or free-text), the
-    stored recommendation is rewritten to ``Hold`` so a conflicting Buy / Sell /
-    Overweight / Underweight is never exposed.
-
-    The rationale is preserved unchanged so the useful evidence-insufficient
-    reasoning and the recovery conditions the model already wrote stay intact,
-    but the recommendation itself is pinned and a short note explains why.
+    Thin wrapper over :func:`tradingagents.agents.utils.output_guard.enforce_blocked_conclusion`
+    (the shared guard) so the Research Manager, Trader, and Portfolio Manager
+    all enforce the same blocked-run contract. The rationale is preserved
+    unchanged; only the recommendation field is pinned.
     """
-    lines = plan_text.splitlines()
-    recommendation_found = False
-    for index, line in enumerate(lines):
-        match = _RECOMMENDATION_LINE_RE.match(line)
-        if not match:
-            continue
-        recommendation_found = True
-        # Preserve the marker text but pin the value to Hold.
-        marker = line[: match.start(1)] if match.start(1) else line
-        lines[index] = f"{marker}Hold"
-        break
-
-    result = "\n".join(lines).strip()
-    if not recommendation_found:
-        # A free-text response that deviated from the Recommendation header
-        # entirely: prepend an authoritative non-directional Hold so the stored
-        # plan is never read as a conflicting directional call.
-        result = (
-            "**Recommendation**: Hold\n\n"
-            "Note: this run was blocked by the Data Quality Gate; only an "
-            "evidence-insufficient conclusion is permitted.\n\n"
-            + result
-        )
-    else:
-        result = (
-            result
-            + "\n\n"
-            + "Note: the Data Quality Gate blocked this run; the conclusion is "
-            "evidence-insufficient, not a directional call."
-        )
-    return result
+    return enforce_blocked_conclusion(plan_text, field="recommendation")
 
 
 def _conflict_summary_block(investment_debate_state: dict) -> str:
@@ -107,7 +67,10 @@ def create_research_manager(llm):
         instrument_context = get_instrument_context_from_state(state)
         history = state["investment_debate_state"].get("history", "")
         data_quality_context = get_data_quality_context_from_state(state)
-        data_quality_verdict = state.get("data_quality_verdict", "blocked")
+        # Fail-closed: treat missing/malformed/inconsistent gate state as
+        # blocked, matching the router and the shared output guard.
+        blocked = is_blocked_run(state)
+        data_quality_verdict = "blocked" if blocked else state.get("data_quality_verdict")
 
         investment_debate_state = state["investment_debate_state"]
         conflict_block = _conflict_summary_block(investment_debate_state)
@@ -184,7 +147,7 @@ Write these sections, in this order, starting with the recommendation on its own
         # Authoritative contract: a blocked run must produce a non-directional
         # Hold even if the model returned a directional call, on both the
         # structured and free-text paths. Do not rely on prompt obedience.
-        if data_quality_verdict == "blocked":
+        if blocked:
             investment_plan = _enforce_non_directional_hold(investment_plan)
 
         new_investment_debate_state = {

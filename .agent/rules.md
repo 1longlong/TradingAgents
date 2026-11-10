@@ -37,3 +37,21 @@ text before editing source or tests.
     authorization. Phase 4B, production threshold tuning, and unrequested
     features remain prohibited without separate explicit human authorization. Do
     not add unrequested features or duplicate/relocate source trees.
+13. **Plan first, then STOP for approval** — before generating or editing any
+    feature code or tests, output a traceable execution plan (scope, interfaces,
+    tests, steps, risks) and **STOP** for explicit human approval. Test cases
+    must be human-approved before implementation. Scope/safety/plan changes
+    require reapproval. Human decisions are never inferred or authored by the
+    agent. See `prompts/prompt_v1.3.yaml`.
+14. **Role scope and frozen areas** — operate only within the granted role
+    (Planner/Builder/Verifier) and path scope, deny by default. Never edit
+    human-only/frozen areas (`.opencode/rules.md`, `.opencode/permissions.jsonc`,
+    `.github/**`, dependency files, secrets, outside-repo paths); propose instead.
+    Safety-critical changes (gate/evaluator/output-guard/fail-closed/budget/
+    permission/prompt) require an **ADR + explicit human approval**.
+15. **Negative tests and freshness** — every feature/requirement change must add
+    at least one **negative** test that pins the fail-closed/invariant-violating
+    behavior, and requirement/invariant IDs must appear in the tests. Re-check
+    context and rules freshness each sprint or whenever the governing prompt
+    version or `AGENTS.md` changes; a stale context must be re-read before any
+    edit.

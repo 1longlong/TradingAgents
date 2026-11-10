@@ -8,6 +8,9 @@ not expose a conflicting directional recommendation.
 
 No network, no paid LLM: the manager node is driven with a fake LLM that
 deliberately returns directional output.
+
+Traceability: FR-DQG-006 (authoritative blocked verdict at the output boundary);
+supports INV-1 (fail closed).
 """
 
 from __future__ import annotations
@@ -121,7 +124,14 @@ def test_non_blocked_run_is_not_forced_to_hold():
         return_value=MagicMock(content="**Recommendation**: Buy\n\n**Rationale**: strong.")
     )
     manager = create_research_manager(llm)
-    out = manager(_base_state(data_quality_verdict="normal"))
+    # A trusted normal gate carries a matching decision object; a bare
+    # ``data_quality_verdict`` without one fails closed to blocked.
+    out = manager(
+        _base_state(
+            data_quality_verdict="normal",
+            data_quality_gate_decision={"decision": "normal"},
+        )
+    )
     assert "**Recommendation**: Buy" in out["investment_plan"]
 
 

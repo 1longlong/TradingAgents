@@ -16,6 +16,18 @@ This script validates, without network and without paid APIs:
    (CI installs it, so the actual schema is enforced there). When ``jsonschema``
    is unavailable, a deterministic subset validator is used as a clearly
    reported local fallback.
+
+   Pure JSON Schema alone cannot guarantee two registry contracts, so the
+   *combined* validation entry point (``validate_against_schema``, and the
+   fallback ``validate_requirements``) runs two shared semantic checks on BOTH
+   paths, in addition to the schema:
+   - ``validate_unique_requirement_ids`` — ``requirements[].id`` uniqueness
+     (``uniqueItems`` compares whole objects, so two same-ID rows differing in
+     any field would otherwise both pass);
+   - ``validate_requirement_references`` — narrow dangling-reference resolution
+     for the ``product.priorities[].requirement_id`` /
+     ``product.tradeoffs[].requirement_id`` contract (a no-op when the registry
+     omits those blocks, so minimal schemas stay valid).
 5. Secret scan over the listed documentation/artifact files: any line
    containing a likely secret (``sk-``, ``Bearer`` token, common key=value with
    a long secret-ish value) is reported by file:line WITHOUT printing the
@@ -67,6 +79,9 @@ REQUIRED_FILES = [
     "docs/req/req-schema.json",
     "docs/architecture/adr/001-data-quality-gate.md",
     "docs/architecture/adr/002-dynamic-debate-termination.md",
+    "docs/architecture/adr/003-phase4a-offline-comparison.md",
+    "docs/architecture/adr/004-governance-context-design.proposed.md",
+    "docs/architecture/adr/005-blocked-output-multiline-containment.md",
     "docs/architecture/invariants.md",
     "docs/architecture/trace-matrix.md",
     "docs/architecture/memory-design.md",
@@ -79,6 +94,9 @@ REQUIRED_FILES = [
     "docs/code-governance/structural-constraints.md",
     "docs/code-governance/verification-constraints.md",
     "docs/code-governance/mcp-tool-manifest.md",
+    "docs/code-governance/ci-gate-matrix.md",
+    "docs/code-governance/agent-permissions-proposal.yaml",
+    "docs/code-governance/human-rules-proposal.md",
     "docs/ai-use-log.yaml",
     "docs/review-memo.md",
     "docs/debt-register.md",
@@ -89,6 +107,7 @@ REQUIRED_FILES = [
     "prompts/prompt_v1.0.yaml",
     "prompts/prompt_v1.1.yaml",
     "prompts/prompt_v1.2.yaml",
+    "prompts/prompt_v1.3.yaml",
     "transcripts/60536848-WANG-Yiwen.md",
     "src/README.md",
     "test/offline/README.md",
@@ -98,9 +117,11 @@ REQUIRED_FILES = [
 YAML_FILES = [
     "docs/req/requirements.yaml",
     "docs/ai-use-log.yaml",
+    "docs/code-governance/agent-permissions-proposal.yaml",
     "prompts/prompt_v1.0.yaml",
     "prompts/prompt_v1.1.yaml",
     "prompts/prompt_v1.2.yaml",
+    "prompts/prompt_v1.3.yaml",
 ]
 
 JSON_FILES = [
@@ -125,6 +146,95 @@ def parse_jsonc(text: str) -> object:
 
 
 # ---------------------------------------------------------------------------
+# Shared semantic ID uniqueness.
+#
+# ``requirements[].id`` must be unique. JSON Schema ``uniqueItems`` alone is NOT
+# sufficient: it compares whole objects, so two requirement objects that share an
+# ``id`` but differ in any other field are each unique and both pass. The real
+# ``jsonschema`` path therefore accepted duplicate IDs that the deterministic
+# subset validator rejected. Both entry paths call this single shared check so
+# they can never disagree. Malformed input (non-object registry, non-list
+# ``requirements``, non-dict rows, missing/non-string IDs) is ignored here and
+# handled by the per-path validation, so this helper never crashes.
+# ---------------------------------------------------------------------------
+def validate_unique_requirement_ids(requirements: object) -> list[str]:
+    """Return duplicate-ID errors (empty when every requirement ID is unique)."""
+    if not isinstance(requirements, dict):
+        return []
+    reqs = requirements.get("requirements")
+    if not isinstance(reqs, list):
+        return []
+    seen: set[str] = set()
+    errors: list[str] = []
+    for idx, req in enumerate(reqs):
+        if not isinstance(req, dict):
+            continue
+        rid = req.get("id")
+        if not isinstance(rid, str) or not rid.strip():
+            continue
+        if rid in seen:
+            errors.append(f"requirements[{idx}].id {rid!r} is a duplicate")
+        else:
+            seen.add(rid)
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# Narrow semantic reference validation (dangling-reference check).
+#
+# The real JSON Schema only checks the PATTERN of a product ``requirement_id``
+# reference (e.g. ``FR-DQG-001``); it cannot assert that the referenced ID
+# actually EXISTS in the registry. The combined validation entry point therefore
+# also resolves product ``priorities``/``tradeoffs`` references against the
+# requirement IDs. It is deliberately NARROW: it only checks the reference
+# contract the real registry supplies (``product.priorities[].requirement_id``
+# and ``product.tradeoffs[].requirement_id``) and is a no-op for minimal schemas
+# that omit those blocks, so existing minimal-schema tests stay valid. Malformed
+# rows are skipped here (shape errors are reported by the schema path).
+# ---------------------------------------------------------------------------
+_REFERENCE_BLOCKS = (("product", "priorities"), ("product", "tradeoffs"))
+
+
+def validate_requirement_references(requirements: object) -> list[str]:
+    """Return dangling-reference errors for known product reference blocks.
+
+    Empty when there are none, or when the relevant blocks are absent (so a
+    minimal schema/registry without product references is unaffected).
+    """
+    if not isinstance(requirements, dict):
+        return []
+    reqs = requirements.get("requirements")
+    if not isinstance(reqs, list):
+        return []
+    known = {
+        r.get("id")
+        for r in reqs
+        if isinstance(r, dict) and isinstance(r.get("id"), str)
+    }
+    product = requirements.get("product")
+    if not isinstance(product, dict):
+        return []
+    errors: list[str] = []
+    for parent, key in _REFERENCE_BLOCKS:
+        del parent  # both reference blocks live under `product`
+        block = product.get(key)
+        if not isinstance(block, list):
+            continue
+        for idx, entry in enumerate(block):
+            if not isinstance(entry, dict):
+                continue
+            ref = entry.get("requirement_id")
+            if not isinstance(ref, str) or not ref.strip():
+                continue
+            if ref not in known:
+                errors.append(
+                    f"product.{key}[{idx}].requirement_id {ref!r} does not "
+                    "resolve to a requirement ID"
+                )
+    return errors
+
+
+# ---------------------------------------------------------------------------
 # Schema validation dispatcher.
 #
 # Preferred: the REAL draft-2020-12 JSON Schema validator (jsonschema) against
@@ -133,6 +243,11 @@ def parse_jsonc(text: str) -> object:
 # Fallback: the deterministic subset validator (`validate_requirements`), used
 # ONLY when `jsonschema` is not installed. It is clearly reported as a fallback
 # so a masked schema regression cannot be mistaken for a real pass.
+#
+# Both paths additionally run the shared semantic checks (ID uniqueness AND
+# dangling-reference resolution) so a duplicate ID or a reference to a
+# non-existent requirement is rejected regardless of which validator is in force.
+# Pure JSON Schema alone cannot express either cross-object contract.
 # ---------------------------------------------------------------------------
 def validate_against_schema(requirements: object, schema: object) -> list[str]:
     _detect_jsonschema()
@@ -145,7 +260,14 @@ def validate_against_schema(requirements: object, schema: object) -> list[str]:
                 f"{list(e.absolute_path) or ['<root>']}: {e.message}"
                 for e in validator.iter_errors(requirements)
             )
-            return problems
+            # The real schema cannot express cross-object ID uniqueness
+            # (uniqueItems compares whole objects) or dangling-reference
+            # resolution, so enforce both explicitly via the shared checks.
+            return (
+                problems
+                + validate_unique_requirement_ids(requirements)
+                + validate_requirement_references(requirements)
+            )
         except Exception as exc:  # noqa: BLE001
             return [f"jsonschema validation raised: {exc}"]
     # Fallback: deterministic subset validator (reported as such by the caller).
@@ -183,7 +305,12 @@ def validate_requirements(requirements: object, schema: object) -> list[str]:
         errors.append("requirements must be a non-empty list")
         return errors
 
-    seen_ids: set[str] = set()
+    # Shared semantic ID uniqueness (identical to the real-schema path); the
+    # per-row loop below only checks each ID's presence and shape.
+    errors.extend(validate_unique_requirement_ids(requirements))
+    # Narrow dangling-reference resolution (identical to the real-schema path);
+    # a no-op when the registry has no product reference blocks.
+    errors.extend(validate_requirement_references(requirements))
     for idx, req in enumerate(reqs):
         prefix = f"requirements[{idx}]"
         if not isinstance(req, dict):
@@ -192,10 +319,6 @@ def validate_requirements(requirements: object, schema: object) -> list[str]:
         rid = req.get("id")
         if not _is_nonempty_str(rid):
             errors.append(f"{prefix}.id is missing")
-        elif rid in seen_ids:
-            errors.append(f"{prefix}.id {rid!r} is a duplicate")
-        else:
-            seen_ids.add(rid)
         if not re.match(r"^(FR-(DQG|DDT)|NFR-[A-Z]+)-[0-9]{3}$", str(rid)):
             errors.append(f"{prefix}.id {rid!r} does not match the stable ID pattern")
         for key in ("title", "description"):
@@ -233,6 +356,9 @@ SCAN_FILES = [
     "docs/req/req-schema.json",
     "docs/architecture/adr/001-data-quality-gate.md",
     "docs/architecture/adr/002-dynamic-debate-termination.md",
+    "docs/architecture/adr/003-phase4a-offline-comparison.md",
+    "docs/architecture/adr/004-governance-context-design.proposed.md",
+    "docs/architecture/adr/005-blocked-output-multiline-containment.md",
     "docs/architecture/trace-matrix.md",
     "docs/architecture/permission-model.md",
     "docs/architecture/memory-design.md",
@@ -245,6 +371,9 @@ SCAN_FILES = [
     "docs/code-governance/structural-constraints.md",
     "docs/code-governance/verification-constraints.md",
     "docs/code-governance/mcp-tool-manifest.md",
+    "docs/code-governance/ci-gate-matrix.md",
+    "docs/code-governance/agent-permissions-proposal.yaml",
+    "docs/code-governance/human-rules-proposal.md",
     "docs/ai-use-log.yaml",
     "docs/review-memo.md",
     "docs/debt-register.md",
@@ -255,6 +384,7 @@ SCAN_FILES = [
     "prompts/prompt_v1.0.yaml",
     "prompts/prompt_v1.1.yaml",
     "prompts/prompt_v1.2.yaml",
+    "prompts/prompt_v1.3.yaml",
     "transcripts/60536848-WANG-Yiwen.md",
     "src/README.md",
     "test/offline/README.md",

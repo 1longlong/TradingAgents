@@ -4,6 +4,9 @@ Offline: no network. ``load_ohlcv`` is monkeypatched to a fixed DataFrame, so
 none of these reach yfinance. Covers no-look-ahead exclusion, truthful
 yfinance/load_ohlcv provenance, structured values, injected ``fetched_at``,
 structural indicator failure, and the backward-compatible Markdown API.
+
+Traceability: FR-DQG-001 (deterministic gate input snapshot); supports INV-3
+(no look-ahead) in the snapshot validation.
 """
 
 from __future__ import annotations

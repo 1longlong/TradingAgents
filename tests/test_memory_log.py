@@ -1,4 +1,8 @@
-"""Tests for TradingMemoryLog — storage, deferred reflection, PM injection, legacy removal."""
+"""Tests for TradingMemoryLog — storage, deferred reflection, PM injection, legacy removal.
+
+Traceability: FR-DQG-006 (blocked-run memory records Hold); supports INV-1
+(fail closed at the memory boundary).
+"""
 
 from unittest.mock import MagicMock, patch
 
@@ -86,6 +90,11 @@ def _make_pm_state(past_context=""):
         "fundamentals_report": "Fundamentals report.",
         "investment_plan": "Research plan.",
         "trader_investment_plan": "Trader plan.",
+        # An explicit normal gate keeps the LLM's directional output uncoerced;
+        # a blocked (or missing/malformed) gate state is pinned to Hold by the
+        # shared output guard.
+        "data_quality_verdict": "normal",
+        "data_quality_gate_decision": {"decision": "normal"},
     }
 
 

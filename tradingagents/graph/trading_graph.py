@@ -29,6 +29,7 @@ from tradingagents.agents.utils.agent_utils import (
     resolve_instrument_identity,
 )
 from tradingagents.agents.utils.memory import TradingMemoryLog
+from tradingagents.agents.utils.output_guard import is_blocked_run
 from tradingagents.dataflows.config import set_config
 from tradingagents.dataflows.utils import get_current_date, safe_ticker_component
 from tradingagents.debate.config import resolve_debate_termination_config
@@ -568,6 +569,24 @@ class TradingAgentsGraph:
         """
         self._resolve_pending_entries(company_name)
 
+    @staticmethod
+    def _is_blocked_state(final_state) -> bool:
+        """True when the structured gate state proves the run was blocked.
+
+        Reuses the output guard's fail-closed reader so the memory log, the final
+        signal, and the report can never disagree about a blocked run. A legacy
+        state that carries no gate fields at all (e.g. a minimal unit-test dict)
+        is not a blocked run: it falls back to parsing the decision text, which
+        preserves existing behavior outside the gate-aware pipeline.
+        """
+        if not isinstance(final_state, dict):
+            return False
+        if "data_quality_gate_decision" not in final_state and (
+            "data_quality_verdict" not in final_state
+        ):
+            return False
+        return is_blocked_run(final_state)
+
     def record_decision(self, company_name, trade_date, final_state):
         """Log a finished run's decision for reflection on the next same-ticker run."""
         decision = final_state.get("final_trade_decision")
@@ -575,7 +594,10 @@ class TradingAgentsGraph:
             logger.warning("No final decision for %s on %s; nothing logged", company_name, trade_date)
             return
         self.memory_log.store_decision(
-            ticker=company_name, trade_date=trade_date, final_trade_decision=decision
+            ticker=company_name,
+            trade_date=trade_date,
+            final_trade_decision=decision,
+            blocked=self._is_blocked_state(final_state),
         )
 
     def _run_graph(self, company_name, trade_date, asset_type: str = "stock",
@@ -669,6 +691,13 @@ class TradingAgentsGraph:
             # Reports can be in any language and this file is read by a person.
             json.dump(self.log_states_dict[str(trade_date)], f, indent=4, ensure_ascii=False)
 
-    def process_signal(self, full_signal):
-        """Process a signal to extract the core decision."""
-        return self.signal_processor.process_signal(full_signal)
+    def process_signal(self, full_signal, state=None):
+        """Process a signal to extract the core decision.
+
+        ``state`` is optional for backward compatibility; when omitted it falls
+        back to the run's ``curr_state`` (set by ``_run_graph``). A blocked gate
+        verdict forces the authoritative ``Hold`` signal even if the rendered
+        decision text carries an unrecognized directional header.
+        """
+        resolved_state = getattr(self, "curr_state", None) if state is None else state
+        return self.signal_processor.process_signal(full_signal, resolved_state)

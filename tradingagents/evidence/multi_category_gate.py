@@ -52,7 +52,7 @@ from tradingagents.evidence.policy import (
     OPTIONAL_CATEGORIES,
     MultiCategoryPolicy,
 )
-from tradingagents.evidence.quality import aggregate_category_quality
+from tradingagents.evidence.quality import aggregate_category_quality, attach_record_quality
 from tradingagents.evidence.validate import validate_market_records
 
 _DEFAULT_ASSET_TYPE = "stock"
@@ -188,6 +188,19 @@ def evaluate_multi_category_gate(
         MARKET_CATEGORY, records, results_by_id, policy=market_policy
     )
 
+    # Apply EACH record's own computed classification, quality reasons, and
+    # validation results before serializing. The aggregator returns the group
+    # rating and a per-record status map; the provisional adapter records still
+    # carry ``Low``/``unvalidated`` until this step, so without it downstream
+    # consumers (manifest, citation allowlist, debate, report) see no qualified
+    # evidence for a run the gate judged normal/degraded (review finding 2).
+    # This is a per-record assignment, never a promotion of every record from the
+    # group rating: an individually Low/Blocked record stays Low/Blocked.
+    classified_records = [
+        attach_record_quality(record, results_by_id.get(record.evidence_id, []), market_policy)
+        for record in records
+    ]
+
     # ---- Optional categories ----
     # Each optional category uses the explicit structured contract group when one
     # is supplied; otherwise it is absent and yields a deterministic explicit
@@ -212,7 +225,7 @@ def evaluate_multi_category_gate(
         verdict=decision.decision.value,
         groups=[g.to_dict() for g in decision.group_statuses],
         gate_decision=decision,
-        evidence_records=[r.to_dict() for r in records],
+        evidence_records=[r.to_dict() for r in classified_records],
         validation_results={
             str(eid): [r.to_dict() for r in rs]
             for eid, rs in results_by_id.items()

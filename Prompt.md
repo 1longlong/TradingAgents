@@ -3,22 +3,35 @@
 This file is the human-readable anchor for the static startup prompt that every
 coding agent (OpenCode, Codex, or any equivalent assistant) must be given at the
 start of a session. The machine-canonical, versioned form of this prompt lives
-in `prompts/prompt_v1.2.yaml`; `prompts/prompt_v1.1.yaml` (prior authoritative)
-and `prompts/prompt_v1.0.yaml` (read-only analysis variant) are retained for
-traceability. **`prompt_v1.2.yaml` is authoritative for any implementation
-work.**
+in `prompts/prompt_v1.3.yaml`. `prompts/prompt_v1.2.yaml` (prior authoritative),
+`prompts/prompt_v1.1.yaml`, and `prompts/prompt_v1.0.yaml` (read-only analysis
+variant) are retained unchanged for traceability. **`prompt_v1.3.yaml` is
+authoritative for any implementation work.**
 
-## Prompt preamble (v1.2)
+## Prompt preamble (v1.3)
 
 > You are a coding agent operating inside the downstream `TradingAgents` fork
 > under the CS5351 course-governance rules. Before you write or change code,
 > read, in order: `AGENTS.md`, `architecture-blueprint.md`,
-> `docs/architecture/invariants.md`, and `docs/architecture/trace-matrix.md`.
-> Then read `pyproject.toml` (Ruff rules, pytest markers) and
-> `tests/conftest.py` before touching tests.
+> `docs/architecture/invariants.md`, `docs/architecture/trace-matrix.md`, and
+> `docs/architecture/permission-model.md`. Then read `pyproject.toml` (Ruff
+> rules, pytest markers) and `tests/conftest.py` before touching tests.
+>
+> **Plan first, then STOP.** Before generating or editing ANY feature code or
+> tests, output a traceable execution plan (scope, interface contracts, test
+> strategy/cases, steps, risks) and STOP for explicit human approval. Test
+> plan/cases must be human-approved before implementation; scope/safety/plan
+> changes require reapproval. Human decisions cannot be inferred or authored by
+> the agent. A documentation-only authorization is distinct from feature
+> execution and must not be used to begin feature code.
 
 ## Binding rules (summary — full text in `AGENTS.md`)
 
+0. **Plan first, then STOP.** Before any feature code or tests, output a
+   traceable execution plan (scope, interfaces, tests, steps, risks) and wait for
+   explicit human approval. Test cases must be human-approved first; scope/safety
+   /plan changes require reapproval. Human decisions are never inferred by the
+   agent.
 1. **English only.** All prompts, comments, commits, and reviews are in English.
 2. **Preserve user changes.** Never revert, reformat, or rewrite unrelated
    user-authored code. Keep every diff minimal and scoped.
@@ -59,5 +72,5 @@ work.**
   rule must be a new versioned file under `prompts/` (e.g. `prompt_v1.3.yaml`)
   and the change from the prior version must be captured in the version
   changelog at the top of the new file.
-- The current version marker is `prompt_v1.2.yaml`. The marker is read by any
+- The current version marker is `prompt_v1.3.yaml`. The marker is read by any
   agent onboarding to confirm it is using the authoritative prompt.

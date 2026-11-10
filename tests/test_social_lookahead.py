@@ -4,6 +4,9 @@ StockTwits and Reddit fetchers pull only recent items, so for a historical run
 they must be trimmed to the analysis window (and yield a clear placeholder when
 nothing qualifies) rather than showing today's chatter as if it were from the
 as-of date. All three sources share dataflows.date_window.in_window.
+
+Traceability: NFR-PIT-001 (point-in-time integrity); supports INV-3 (no
+look-ahead).
 """
 from __future__ import annotations
 

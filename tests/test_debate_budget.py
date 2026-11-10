@@ -4,6 +4,9 @@ Covers deterministic token/time estimation, the additive run-level usage
 tracker, the summary-reserve guarantee, hard-limit detection, and the
 full-round eligibility check, plus the graph wiring that records a call per
 Bull/Bear invocation.
+
+Traceability: FR-DDT-003 (budget-safe termination with summary reserve),
+NFR-BUD-001 (budget safety); supports INV-7 (budget safety).
 """
 
 from __future__ import annotations

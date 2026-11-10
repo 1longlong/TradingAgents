@@ -5,6 +5,151 @@ declared complete. A phase without a recorded review is **not** claimed
 complete. Reviews are recorded here; AI-tool use is recorded separately in
 `docs/ai-use-log.yaml`.
 
+## Current status (as of 2026-11-10)
+
+- **Feature-branch checkpoint publication authorized (not acceptance).** The
+  human explicitly requested committing/pushing the current work to
+  `feature/data-quality-debate-control` as a preliminary backup. This does not
+  approve the pending budget/participation repair plan, final feature acceptance,
+  a PR, or a release merge. DEBT-021/033 and the live blocked-path verification
+  remain open. The current full offline pre-push recheck still reports 1768
+  passed, four known failures, one skipped, one deselected and one intercepted
+  socket attempt; no all-green claim is made.
+
+- **2026-11-10 human approval is PLAN + TESTS ONLY (not acceptance).** The human
+  explicitly approved the November 10 repair plan and its test cases
+  (“批准本轮修复计划和测试用例”). This authorizes the two repair batches (the first
+  batch's guard/report/validator fixes + this second documentation/traceability
+  batch) to proceed; it is **NOT** acceptance of the fixes. **Final human
+  acceptance remains PENDING.**
+- **Present AI technical checks (2026-11-10, NOT human approval):**
+  - First batch (F1): `tests/test_output_guard.py` 197 passed; report-artifact and
+    shared-ID regressions; strict offline 4 failed / 1743 passed (logbook 070).
+  - This doc/traceability batch (D1): validator PASS (42/42, no secrets);
+    governance 48 passed; mapped+focused 1000 passed; strict-offline count-and-fail
+    harness **4 failed / 1768 passed / 1 skipped / 1 deselected** — the SAME four
+    known baselines (3 date-sensitive `test_ohlcv_cache_freshness` +
+    `test_no_data_handling` empty-download). Ruff clean; diff-check clean
+    (logbook 071).
+- **Unresolved / must not be hidden (2026-11-10):** the **4 known baseline
+  failures** remain (RISK-001/RISK-002) and the NFR-OFF-001 count-and-fail harness
+  observes **1 intercepted vendor-reachability socket attempt** (no connection
+  made) from the existing `test_no_data_handling` baseline, so **NFR-OFF-001 stays
+  PARTIAL/OPEN**; the suite is **NOT all-green**. No baseline test/CI/waiver was
+  modified.
+- **Independent Codex AI verification (current final, NOT human acceptance;
+  logbook 072):** 14-file focused suite **583 passed / 2 warnings**; validator
+  **42/42 PASS** + no secret hits; independent boundary **39/39**; **440** negative
+  schema mutations rejected; actual `strict_offline_harness.py` run **4 failed /
+  1768 passed / 1 skipped / 1 deselected** with the same **1** intercepted
+  baseline attempt; Ruff clean; `git diff --check` clean. Earlier in-batch
+  intermediate runs are kept historical; this is the current final recorded
+  result and is AI technical verification only.
+- **User-authorized school-model live run (2026-11-10, Codex; docs-only record;
+  NOT human acceptance; logbook 073):** measured by external callbacks, **16
+  application model calls / 170,665 gateway-reported tokens / 0 truncations**
+  (excludes OpenCode documentation-tool inference); final and report textual
+  signal both **Overweight**. The live Gate was **DEGRADED, not blocked**, so
+  `blocked_signal_is_hold = true` is **VACUOUS** and is **not** live proof of the
+  blocked path. The run ended with **0 complete Bull/Bear rounds**. The report
+  honestly leaves `total_run_calls`/input/output/tool_calls **null** and reports
+  only debate-only **estimated** usage (1 call / 15,183 tokens / 2,024.4 s).
+  **DEBT-021 remains OPEN**: Bull actual **19.70 s / 16,931 tokens** vs estimated
+  **2,024.4 s / 15,183**; the pre-call guard correctly refused Bear but the
+  inflated time estimate stopped it **prematurely** (Bear node visited, **0 actual
+  Bear calls**, `bear_history` empty; `budget_exhausted`). The actual runtime did
+  **not** exceed 600 s — only the faulty estimate did. Optional
+  fundamentals/news/sentiment remain `unavailable_no_structured_source`
+  (DEBT-015/RISK-015, **not fixed**); a supplemental **offline** boundary rerun
+  passed 39/39 and is **not** a live blocked-path test. **Final human acceptance
+  remains PENDING**; no approval/score/reflection is recorded here.
+- **2026-10-23 human approvals remain historical for their reviewed scope.**
+  The human-authored decisions for Stage 2 (runtime multi-category gate), the
+  ConflictRecord / dynamic debate termination work, and Phase 4A
+  (approved with limitations) stand for the scope reviewed on those dates and are
+  **not** re-opened by this note.
+- **2026-11-06 guard/budget/audit maintenance fixes are technically verified and
+  await explicit human review.** The blocked final-output guard (FR-DQG-006), the
+  pre-call budget guard (including the second-review reserve + estimated
+  next-call-cost boundary), and the audit-export corrections (per-evidence
+  validations; run-summary identity/quality/usage provenance; ambiguous-identity
+  handling) were implemented and verified by operator/AI technical verification
+  only. **No human approval has been recorded for these changes**, and no
+  traceability scores were entered.
+- **Operator/AI technical verification of the stricter fully offline suite
+  (2026-11-06):** with `socket.socket.connect` patched to raise
+  `OSError('Network disabled for offline verification')` and run as
+  `pytest -q -p no:cacheprovider -m "not integration"`, the observed result was
+  **4 failed, 1577 passed, 1 skipped, 1 deselected, 22 warnings, 88 subtests
+  passed** (logbook 064). The four failures are the known Yahoo
+  reachability/exception-type baseline
+  (`tests/test_no_data_handling.py::TestLoadOhlcvNoPoison::test_empty_download_raises_and_does_not_cache`)
+  plus the three known date-sensitive cache tests
+  (`tests/test_ohlcv_cache_freshness.py`). This is recorded **separately** from
+  the earlier 3-failure run under different connectivity conditions; neither run
+  is claimed all-green. This is operator/AI technical evidence, **not** a human
+  approval.
+- Still open and explicitly **not** resolved: the degraded-run numeric
+  confidence-ceiling policy (DEBT-014) and the automatic multi-category
+  data adapters / full source-attempt lifecycle (DEBT-015 / RISK-015). See
+  `docs/debt-register.md` and `docs/architecture/risk-list.md`.
+- **2026-11-06 independent recheck findings 1/2/3 fixes are technically verified
+  and await explicit human review (not a human approval).** An independent AI
+  recheck reproduced three defects on the maintenance tree; all three are fixed
+  and regression-tested offline (logbook 065): (1) blocked-signal escape for
+  alternative rating headers (`Rating：Buy`, `Final rating: Buy`) — the guard now
+  aligns with the rating parser and the final signal boundary is gate-aware;
+  (2) real gate -> manifest -> debate quality propagation — each record's own
+  classification/reasons/validations are applied before serialization; (3) the
+  `Hold`/prose separator is preserved. Focused affected suite **480 passed**;
+  strict fully offline suite (socket disabled) **4 failed / 1621 passed / 1
+  skipped / 1 deselected** — the same known 3 date-sensitive cache tests plus the
+  known Yahoo reachability baseline; no new regression; not claimed all-green.
+  **No human approval and no traceability score is recorded for these changes.**
+- **Operator recheck (2026-11-06, technical feedback — not a human approval):** a
+  residual was reproduced in the current guard (fullwidth labels/values and
+  arbitrarily prefixed labels still parsed as Buy on the plain textual signal,
+  contradicting the Hold tag in the report/memory body). Corrected narrowly by
+  canonicalising every parser-recognized labelled rating line via the shared parser
+  recognition; focused suite **480 passed**, strict offline suite **4 failed / 1621
+  passed** (same known baselines, logbook 066). `cli/main.py` is byte-identical to
+  HEAD (no CLI change). These fixes remain **awaiting explicit human review**; no
+  human approval or traceability score is recorded.
+- **Operator executable-instruction maintenance (2026-11-06, technical feedback —
+  not a human approval):** executable directional instructions survived a blocked
+  gate in the stored intermediate plans (fullwidth headers/sizing, explained
+  `FINAL TRANSACTION PROPOSAL: BUY because ...` markers, long descriptors), and a
+  first regex attempt caused catastrophic backtracking; a quoted/narrative rating
+  mention could also override the pinned Hold. All corrected with one shared linear
+  recognizer that pins every decision field to Hold, neutralises blocked sizing and
+  explained markers, preserves rationale/quoted alternatives, and makes
+  `extract_rating` honour the structural decision. `tests/test_output_guard.py`
+  **130 passed**; focused affected suite **520 passed**; strict offline suite
+  **4 failed / 1661 passed** (same known baselines, logbook 067). `cli/main.py`
+  unchanged; the CLI state-passing gap, DEBT-014 and DEBT-015/RISK-015 remain
+  **OPEN**. These fixes remain **awaiting explicit human review**; no human
+  approval or traceability score is recorded.
+- **2026-11-06 authorized school-model live verification (AI technical evidence,
+  NOT human approval):** NVDA / 2026-11-05, `CS5351/DeepSeek-V4-Flash`, 18 calls
+  / 202,622 reported tokens, gate **degraded**, signal **Overweight**. Two OPEN,
+  unfixed issues were found and recorded, not resolved: budget accounting uses
+  estimates not provider usage (Bear refused, 0 complete rounds; RISK-021 /
+  DEBT-021) and a valid cited ID did not prevent a wrong claim date (RISK-020 /
+  DEBT-022). The run was degraded, not blocked; live integration is not
+  all-bug-proof (RISK-023). A deterministic counterfactual replay of saved
+  outputs is not an additional live run.
+- **2026-11-06 documentation/requirements revision (this turn):** documentation
+  and requirements-schema maintenance only (PRD block, structured fit criteria,
+  invariant register, proposed ADR-004, permission proposal, human-only rules
+  proposal, CI gate matrix, prompt v1.3). **No source, tests, CI, or active
+  configuration changed.** This revision is **NOT human-approved** and awaits
+  review; no traceability score is recorded.
+- **Factual status:** base commit `8abea81` is pushed to
+  `origin/feature/data-quality-debate-control`; the 2026-11-06 maintenance and
+  this revision are **uncommitted** (not newly pushed). Phase 4B and production
+  tuning were **not** performed.
+
+
 ## Phase 1 — Analysis
 
 - **Status:** Reviewed and approved to proceed to contract.
@@ -85,14 +230,21 @@ complete. Reviews are recorded here; AI-tool use is recorded separately in
     suite 4 known baseline failures unchanged (entry 044), Ruff + `git diff
     --check` + governance validator clean (entry 045).
 
-## Open / not yet reviewed
+## Open / not yet reviewed — HISTORICAL (superseded 2026-11-06)
 
-- **Verification of the full offline suite** is not claimed as a clean green run
-  in this environment (see `docs/architecture/risk-list.md`).
-- **Stage 2 full completion** is not claimed until an explicit human review
+> **Historical / superseded.** This section recorded the state as of
+> 2026-10-21, before later reviews. It is retained verbatim for audit history and
+> is **not** the current status. For current status see the "Current status (as
+> of 2026-11-06)" section at the top: Stage 2 and the later phases received
+> 2026-10-22/2026-10-23 human decisions for their reviewed scope, and the
+> 2026-11-06 maintenance fixes await explicit human review.
+
+- ~~**Verification of the full offline suite** is not claimed as a clean green
+  run in this environment (see `docs/architecture/risk-list.md`).~~
+- ~~**Stage 2 full completion** is not claimed until an explicit human review
   sign-off is recorded for the Stage 2 phase (runtime integration implemented;
-  RISK-009 / DEBT-009 resolved, but the phase sign-off is still pending).
-- **No submission, demo, or Phase 4** decision has been recorded or made.
+  RISK-009 / DEBT-009 resolved, but the phase sign-off is still pending).~~
+- ~~**No submission, demo, or Phase 4** decision has been recorded or made.~~
 
 ## ConflictRecord runtime lifecycle (FR-DDT-005) — review requested
 
@@ -388,3 +540,93 @@ Reviewer record (human decision, not an AI-generated approval).
   3. Human traceability scores remain `pending` and must not be invented or
      entered.
   4. Final production threshold tuning has not been performed.
+## 2026-11-10 — November 10 repair batch (AI technical; human acceptance PENDING)
+
+**Authorization:** The human explicitly authorized the repair plan and its test
+cases (“批准本轮修复计划和测试用例”, 2026-11-10). This is **plan/test
+authorization only, NOT acceptance** of the resulting fixes. Final human
+acceptance remains pending.
+
+**Scope (F1):** three reproduced defects fixed with failing regression tests
+first, on branch `feature/data-quality-debate-control`, base HEAD `8abea81`,
+preserving all pre-existing dirty work:
+- `output_guard.py` executable multiline / unsupported-format containment,
+  including the boundary variants and the two in-progress-review rounds and the
+  final F1 blockers (same-line executable sizing/price tail; `**Strong Buy**`).
+- `report_artifacts._validation_map` present-`{id: []}` override.
+- `validate_requirements.py` shared duplicate-ID uniqueness across both entry
+  paths.
+
+**Independent in-progress review rounds (AI/operator, NOT human approval):**
+1. Blank physical line between label and value; direction+explanation value;
+   split sizing; quoted/negated rationale; long repeated direction-token lines.
+2. `Action:` newline `- Buy` / `1. Buy` survival; unsafe blanket keyword/quote
+   immunity; discarded `Buy because ...` explanation.
+3. Final F1 blockers: `Action: Buy 100 shares at $100 ...` keeping the executable
+   tail; `**Strong Buy**` surviving as a directive.
+
+Each round's boundary tests were observed failing before the correction, then
+passing. See ADR-005 (PROPOSED), `docs/bug-diary.md`, and logbook 070.
+
+**Verification (offline, deterministic):** `tests/test_output_guard.py` 197
+passed; strict fully offline suite (socket disabled) **4 failed / 1743 passed /
+1 skipped / 1 deselected** — the same four known baselines
+(`test_no_data_handling` empty-download + 3 date-sensitive
+`test_ohlcv_cache_freshness`); no new regression; **NOT all-green**. Ruff clean;
+governance validator PASS (35/35, no secrets); `git diff --check` clean.
+
+**Decision:** Awaiting independent review and later human acceptance. No human
+score, CI enforcement, active permission enforcement, or acceptance is claimed.
+F1 feature changes stop here; documentation/traceability consistency is deferred
+to the separately approved next batch.
+
+## 2026-11-10 — Documentation/traceability consistency batch (AI technical; human acceptance PENDING)
+
+**Authorization:** the same human-approved repair plan (“批准本轮修复计划和测试用例”,
+2026-11-10) — plan/test authorization only, **NOT acceptance**. This is the
+second half (docs/traceability), with **no feature rewrites**; the first batch's
+guard/report/validator fixes are preserved.
+
+**Scope (D1):**
+- `verification-constraints.md`: three tiers Structural/Regression/Behavioral;
+  offline-vs-live is a separate evidence axis (not a tier, not live proof).
+- ACCURATE `Traceability:` tags added to all 29 mapped test files + deterministic
+  governance regressions (`TestMappedTestTraceability`) that resolve tags against
+  the registry/invariants and require each requirement's OWN ID; INV-11/12/14
+  stay honest.
+- `permission-model.md` aligned with `agent-permissions-proposal.yaml` (builder
+  edit allowlist; planner execute intent vs expressible deny-all documented as a
+  gap). Proposal only; active config/.github/pyproject untouched; enforcement NOT
+  claimed.
+- Requirements validator: narrow dangling-reference validation on both paths;
+  forced-fallback regressions that actually force the fallback (patch
+  `_detect_jsonschema`, spy the fallback, real validator raises if reached,
+  non-string/malformed IDs); combined entry point documented.
+- Validator inventory includes prompt v1.3, ADR-004/005, and the proposals
+  (presence/parse only). NFR-OFF-001 uses a count-and-fail harness; one
+  intercepted vendor-reachability attempt from the existing
+  `test_no_data_handling` baseline is observed, so NFR-OFF-001 stays
+  PARTIAL/OPEN (no connection made; baseline/CI/waivers not modified).
+  structural-constraints acknowledges src/test pointer dirs; course layout still
+  needs human confirmation.
+
+**Verification (offline, deterministic):** validator PASS (42/42, no secrets);
+governance 48 passed; mapped+focused 1000 passed; strict-offline count-and-fail
+harness 4 failed / 1768 passed / 1 skipped / 1 deselected (same 4 known
+baselines) with 1 intercepted attempt (NFR-OFF-001 PARTIAL/OPEN); Ruff clean;
+`git diff --check` clean (logbook 071).
+
+**Independent Codex AI verification of the CURRENT files (current final;
+logbook 072, NOT human acceptance):** 14-file focused suite 583 passed / 2
+warnings; validator 42/42 PASS + no secret hits; independent boundary 39/39;
+440 negative schema mutations rejected; actual `scripts/validate/
+strict_offline_harness.py` run 4 failed / 1768 passed / 1 skipped / 1 deselected
+with the same 1 intercepted baseline attempt; Ruff clean; `git diff --check`
+clean. Earlier in-batch intermediate runs are kept historical; this is the
+current final recorded result.
+
+**Decision:** Awaiting independent review and later human acceptance. No human
+score, CI enforcement, permission enforcement, or acceptance is claimed. All
+missing CI/permission enforcement and human scores/team materials stay PENDING;
+existing live-budget/claim-date/confidence-cap/optional-adapter/CLI/audit debts
+stay OPEN.

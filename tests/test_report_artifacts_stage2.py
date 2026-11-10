@@ -5,6 +5,9 @@ Covers the shared CLI/API report artifacts (``0_quality/*``,
 ``Data Quality`` / ``Run Summary`` sections in ``complete_report.md``,
 secret redaction, exclusion of analyst prose / chain-of-thought, and
 legacy/empty-state parity. No network, no paid LLM.
+
+Traceability: FR-DQG-005 (shared deterministic redacted artifacts); supports
+INV-4 (acyclic JSON-safe serialization) and INV-6 (auditability).
 """
 
 from __future__ import annotations

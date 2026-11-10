@@ -3,6 +3,11 @@
 Offline: no network. These cover the locked field counts/order and enum
 values, ``SourceAttempt`` separation, acyclic JSON-safe ``Decimal``
 serialization, and the authoritative ``GateDecision`` output fields.
+
+Traceability: FR-DQG-001 (deterministic gate model), FR-DQG-003 (deterministic
+identifiers / serialization), NFR-AUD-001 (auditability), NFR-DET-001
+(determinism); supports INV-4 (acyclic JSON-safe serialization) and INV-5
+(stable identifiers).
 """
 
 from __future__ import annotations

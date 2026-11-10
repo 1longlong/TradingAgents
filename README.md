@@ -407,14 +407,50 @@ Full course-metadata and requirement/layout details live under [`docs/`](docs/).
 
 ### Branch and Deliverable Status (do not assume)
 
-- Current working branch: `feature/data-quality-debate-control`
-- This is **Phase 3B verification complete**; no Phase 4 work has been started.
-- Work is **uncommitted and unpushed** on this branch as this document is
-  written. See [`docs/review-memo.md`](docs/review-memo.md) and
-  [`docs/architecture/risk-list.md`](docs/architecture/risk-list.md).
+- Current working branch: `feature/data-quality-debate-control`.
+- **Phase 4A (deterministic offline baseline comparison) is completed and
+  human-approved with limitations** (WANG Yiwen 60536848, 2026-10-23). The base
+  commit `8abea81` is already pushed to `origin/feature/data-quality-debate-control`
+  (verified via `git ls-remote`). See [`docs/review-memo.md`](docs/review-memo.md).
+- **Phase 4B (live-provider benchmarking) and production threshold tuning have
+  NOT been performed** and remain prohibited without separate explicit human
+  authorization.
+- **Current status:** the 2026-11-06 maintenance fixes (guard/budget/audit,
+  FR-DQG-006/FR-DDT-002/003), the 2026-11-06 documentation/requirements revision,
+  and the 2026-11-10 repair batches (guard multiline containment, empty-map
+  override, shared ID uniqueness, plus the documentation/traceability batch) in
+  this revision form a **work-in-progress feature-branch checkpoint**, authorized
+  for commit/push by the human on 2026-11-10. They are technically verified
+  offline and **await explicit human review/acceptance**. Publishing this
+  checkpoint is not approval to merge or a claim that all defects are fixed.
+- **Next budget/participation repair is proposed, not implemented.** The measured
+  runtime accounting correction (DEBT-021), truthful partial-debate reporting
+  (DEBT-033), and subsequent live blocked-path verification still await approval
+  of the new plan/test matrix. Do not infer completion from this checkpoint.
+- **2026-11-10 human approval is PLAN + TESTS ONLY (not acceptance).** The human
+  authorized the November 10 repair plan and its test cases. Final human acceptance
+  remains **PENDING**; no traceability score is recorded.
+- **Verification is not all-green (recorded, not hidden).** The strict-offline
+  count-and-fail harness observes **4 known baseline failures** (3 date-sensitive
+  `test_ohlcv_cache_freshness` + the `test_no_data_handling` vendor-reachability
+  baseline) and **1 intercepted outbound socket attempt** (no connection made) from
+  that baseline, so NFR-OFF-001 stays **PARTIAL/OPEN** (DEBT-002/RISK-002). No
+  baseline test/CI/waiver was modified.
+- **Live check (2026-11-06, authorized, NVDA / 2026-11-05, school model
+  `CS5351/DeepSeek-V4-Flash`):** 18 successful model calls / 202,622 reported
+  tokens; final gate **degraded**; final signal **Overweight**. A first harness
+  attempt (18 calls / 178,453 tokens) failed only because the local streaming
+  harness omitted `graph.ticker` before logging — a harness error, **not** a
+  project bug; the corrected rerun totalled 36 calls / 381,075 reported tokens
+  (retry cost not hidden). Live verification is **not** exhaustive proof; two
+  **OPEN, unfixed** issues were found (see
+  [`docs/architecture/risk-list.md`](docs/architecture/risk-list.md) RISK-020 /
+  RISK-021 and DEBT-021 / DEBT-022).
 - **Nothing here has been submitted, presented, or graded.** Student identity is
   confirmed as **WANG Yiwen**, CS5351 student ID **60536848** (see
   [`transcripts/`](transcripts/) and [`docs/debt-register.md`](docs/debt-register.md)).
+  Team roster, contribution, and reflection data are **pending human input** and
+  are not fabricated.
 
 ### Artifact Index
 
@@ -449,7 +485,12 @@ Full course-metadata and requirement/layout details live under [`docs/`](docs/).
 | [`.agent/rules.md`](.agent/rules.md) | Governance | Shared coding-agent rules. |
 | [`prompts/prompt_v1.0.yaml`](prompts/prompt_v1.0.yaml) | Prompt | v1.0 read-only analysis/frozen requirements (historical). |
 | [`prompts/prompt_v1.1.yaml`](prompts/prompt_v1.1.yaml) | Prompt | v1.1 implementation + verification + governance (prior authoritative; historical). |
-| [`prompts/prompt_v1.2.yaml`](prompts/prompt_v1.2.yaml) | Prompt | v1.2 implementation + verification + governance (current authoritative). |
+| [`prompts/prompt_v1.2.yaml`](prompts/prompt_v1.2.yaml) | Prompt | v1.2 implementation + verification + governance (prior authoritative; historical). |
+| [`prompts/prompt_v1.3.yaml`](prompts/prompt_v1.3.yaml) | Prompt | v1.3 plan-first + STOP + implementation + verification (current authoritative). |
+| [`docs/architecture/adr/004-governance-context-design.proposed.md`](docs/architecture/adr/004-governance-context-design.proposed.md) | ADR | PROPOSED context-assembly/compaction design (not implemented). |
+| [`docs/code-governance/ci-gate-matrix.md`](docs/code-governance/ci-gate-matrix.md) | Governance | CI gate matrix + PR review template + 8 debt categories (document only). |
+| [`docs/code-governance/agent-permissions-proposal.yaml`](docs/code-governance/agent-permissions-proposal.yaml) | Governance | Role×path deny-by-default whitelist PROPOSAL (not active). |
+| [`docs/code-governance/human-rules-proposal.md`](docs/code-governance/human-rules-proposal.md) | Governance | Proposed HUMAN-ONLY `.opencode/rules.md` text (awaiting manual adoption). |
 | [`transcripts/60536848-WANG-Yiwen.md`](transcripts/60536848-WANG-Yiwen.md) | Transcript | Annotated human-supervision record. |
 | [`src/README.md`](src/README.md) | Mapping | Maps deliverable D8 to canonical `tradingagents/`/`cli/`. |
 | [`test/offline/README.md`](test/offline/README.md) | Mapping | Indexes offline deterministic tests in `tests/`. |

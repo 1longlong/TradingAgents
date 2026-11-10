@@ -2,6 +2,9 @@
 
 These cover correctness gaps the original tests did not exercise. No network,
 no LLM. Each section maps to one review item.
+
+Traceability: FR-DQG-003 (deterministic identifiers / serialization); supports
+INV-4 (acyclic JSON-safe serialization) and INV-5 (stable identifiers).
 """
 
 from __future__ import annotations

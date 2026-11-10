@@ -9,6 +9,9 @@ LLM so the full LangGraph workflow runs deterministically. Proves that:
 - the evaluator consumes that real usage state (never a disconnected zero
   tracker); and
 - the decision trace is written JSON-safely for downstream routing.
+
+Traceability: FR-DDT-001 (dynamic termination), FR-DDT-005 (conflict lifecycle),
+NFR-BC-001 (backward compatibility); supports INV-8 (disabled legacy routing).
 """
 
 from __future__ import annotations

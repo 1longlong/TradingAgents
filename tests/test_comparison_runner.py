@@ -5,6 +5,10 @@ No network, no LLM, no wall-clock dependence. The runner replays scripted
 fixtures through the pure debate evaluator for BOTH strategies with an identical
 case identity and evidence snapshot; a mismatch fails closed with
 :class:`PairingError`.
+
+Traceability: NFR-CMP-001 (deterministic offline baseline comparison),
+NFR-CMP-002 (measured-vs-estimated metrics), NFR-CMP-003 (honest scripted-result
+labeling); enforces INV-2 (determinism) on the covered path.
 """
 
 from __future__ import annotations

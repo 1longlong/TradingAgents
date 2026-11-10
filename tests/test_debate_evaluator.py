@@ -3,6 +3,11 @@
 No network, no LLM. Covers the exact 8-rule priority order, every branch,
 priority collisions, complete Bull->Bear pair timing, malformed/out-of-order
 turn sequences (fail-closed summary), and JSON-safe decision tracing.
+
+Traceability: FR-DDT-001 (dynamic termination), FR-DDT-003 (budget-safe
+termination), FR-DDT-005 (conflict lifecycle), NFR-AUD-001 (auditability),
+NFR-DET-001 (determinism), NFR-FC-001 (fail closed), NFR-OFF-001 (offline);
+supports INV-1 (fail closed) and INV-2 (determinism) on the covered path.
 """
 
 from __future__ import annotations

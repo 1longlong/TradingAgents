@@ -3,6 +3,10 @@
 No network, no LLM. Covers type/range/cross-constraint validation, unknown-key
 rejection, the legacy ``max_debate_rounds`` back-compat, Python 3.10
 compatibility, and the disabled legacy fixed-round routing.
+
+Traceability: FR-DDT-003 (budget-safe termination config), FR-DDT-004
+(backward-compatible config), NFR-BC-001 (backward compatibility); supports
+INV-8 (backward compatibility).
 """
 
 from __future__ import annotations

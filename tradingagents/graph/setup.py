@@ -48,6 +48,14 @@ DEBATE_EVALUATOR_PATH_MAP = {
     "Bear Researcher": "Bear Researcher",
     "Research Manager": "Research Manager",
 }
+# After a researcher: either the next debate step (Bear / Debate Evaluator) or a
+# safe skip to the Research Manager when a pre-call budget guard refused the
+# call. Complete map so a fall-through never crashes LangGraph (#1088).
+RESEARCHER_STEP_PATH_MAP = {
+    "Bear Researcher": "Bear Researcher",
+    "Debate Evaluator": "Debate Evaluator",
+    "Research Manager": "Research Manager",
+}
 RISK_ANALYSIS_PATH_MAP = {
     "Aggressive Analyst": "Aggressive Analyst",
     "Conservative Analyst": "Conservative Analyst",
@@ -131,8 +139,12 @@ class GraphSetup:
         }
 
         # Create researcher and manager nodes
-        bull_researcher_node = create_bull_researcher(self.quick_thinking_llm)
-        bear_researcher_node = create_bear_researcher(self.quick_thinking_llm)
+        bull_researcher_node = create_bull_researcher(
+            self.quick_thinking_llm, self.debate_termination_config
+        )
+        bear_researcher_node = create_bear_researcher(
+            self.quick_thinking_llm, self.debate_termination_config
+        )
         research_manager_node = create_research_manager(self.deep_thinking_llm)
         trader_node = create_trader(self.quick_thinking_llm)
 
@@ -203,8 +215,20 @@ class GraphSetup:
         # (summarize/stop). The old per-turn fixed-count router is retained as a
         # helper for the disabled baseline mode but is not a graph edge, so the
         # evaluator owns every routing decision (#1088).
-        workflow.add_edge("Bull Researcher", "Bear Researcher")
-        workflow.add_edge("Bear Researcher", "Debate Evaluator")
+        # Pre-call budget guards may refuse an optional call before it runs; the
+        # conditional steps below let a refused Bull/Bear skip safely to the
+        # Research Manager with budget_exhausted instead of executing over
+        # budget (the normal route is Bull -> Bear -> Debate Evaluator).
+        workflow.add_conditional_edges(
+            "Bull Researcher",
+            self.conditional_logic.should_continue_after_bull,
+            RESEARCHER_STEP_PATH_MAP,
+        )
+        workflow.add_conditional_edges(
+            "Bear Researcher",
+            self.conditional_logic.should_continue_after_bear,
+            RESEARCHER_STEP_PATH_MAP,
+        )
         workflow.add_conditional_edges(
             "Debate Evaluator",
             self.conditional_logic.should_continue_after_debate_evaluator,

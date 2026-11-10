@@ -6,6 +6,10 @@ field; future observed_at (look-ahead); stale boundary; NaN/nonfinite or
 negative volume; invalid OHLC relationships; asset mismatch; single-source
 Medium; two-source in-tolerance High; normal conflict Low; severe critical
 conflict Blocked; and Gate scenarios A (normal), B (degraded), C (blocked).
+
+Traceability: FR-DQG-001 (deterministic gate), FR-DQG-002 (fail-closed
+precedence), NFR-FC-001 (fail closed); supports INV-1 (fail closed), INV-2
+(determinism) and INV-3 (look-ahead rejection).
 """
 
 from __future__ import annotations

@@ -3,7 +3,7 @@
 This file governs every coding agent (human, OpenCode, Codex, or any other AI
 assistant) that edits this repository. It is the first document an agent must
 read before making any change, per the static startup prompt
-(`Prompt.md` and `prompts/prompt_v1.2.yaml`).
+(`Prompt.md` and `prompts/prompt_v1.3.yaml`).
 
 ## 1. Read the repository instructions first
 
@@ -11,6 +11,13 @@ read before making any change, per the static startup prompt
   and `docs/architecture/trace-matrix.md` before editing source or tests.
 - Read `pyproject.toml` for the toolchain (Ruff, pytest markers) and the
   `tests/` conventions in `conftest.py` before adding or changing tests.
+- Read `docs/architecture/permission-model.md` (role × path deny-by-default
+  matrix) and `docs/code-governance/verification-constraints.md` before editing.
+- **Plan first, then STOP.** Before generating or editing any feature code or
+  tests, output a traceable execution plan (scope, interfaces, tests, steps,
+  risks) and wait for explicit human approval (see `Prompt.md`,
+  `prompts/prompt_v1.3.yaml`). Test cases must be human-approved before
+  implementation; scope/safety/plan changes require reapproval.
 
 ## 2. Language
 

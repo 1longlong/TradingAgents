@@ -1,4 +1,8 @@
-"""Phase 3B offline tests for deterministic single-call turn metadata parsing."""
+"""Phase 3B offline tests for deterministic single-call turn metadata parsing.
+
+Traceability: FR-DDT-001 (dynamic termination), FR-DDT-002 (structured
+DEBATE_METADATA / safe fallback), FR-DDT-005 (conflict assertions parsed here).
+"""
 
 from __future__ import annotations
 

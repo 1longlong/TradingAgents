@@ -11,6 +11,9 @@ Sections:
 - Versioned policy degrade-on-unavailable behavior.
 - Point-in-time / deterministic-ID integrity.
 - Legacy compatibility (single-category gate decision unchanged).
+
+Traceability: FR-DQG-004 (multi-category gate engine); supports INV-1 (fail
+closed), INV-2 (determinism) and INV-5 (stable identifiers).
 """
 
 from __future__ import annotations

@@ -5,6 +5,9 @@ date, so a historical run could learn from an outcome that had not happened yet.
 Resolved entries now record the date their outcome became known (``resolved:``),
 and get_past_context(as_of=...) filters on it. Legacy entries without a
 resolution date are excluded from a point-in-time query (conservative migration).
+
+Traceability: NFR-PIT-001 (point-in-time integrity); supports INV-3 (no
+look-ahead) on the memory path.
 """
 from __future__ import annotations
 

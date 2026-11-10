@@ -5,6 +5,9 @@ The Portfolio Manager has its own coverage in tests/test_memory_log.py
 covers the parallel schemas, render functions, and graceful-fallback
 behavior we added for the Trader, Research Manager, and Sentiment Analyst
 so they share the same deterministic output shape.
+
+Traceability: FR-DQG-006 (authoritative blocked verdict / Hold contract in the
+structured agent outputs); supports INV-1 (fail closed).
 """
 
 import inspect
@@ -170,6 +173,11 @@ class TestRenderResearchPlan:
 def _make_trader_state():
     return {
         "company_of_interest": "NVDA",
+        # A normal gate verdict keeps the LLM's directional output uncoerced; a
+        # blocked (or missing/malformed) gate state is authoritatively pinned to
+        # Hold by the shared output guard.
+        "data_quality_verdict": "normal",
+        "data_quality_gate_decision": {"decision": "normal", "decided_at": "2026-05-13T12:00:00Z"},
         "investment_plan": "**Recommendation**: Buy\n**Rationale**: ...\n**Strategic Actions**: ...",
         "market_report": "Current price $189.5; 14-day ATR 4.2; support $178, resistance $196.",
     }

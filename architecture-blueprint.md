@@ -111,6 +111,67 @@ Referenced by ID; full list in `docs/req/requirements.yaml`:
   remain); human traceability scores remain `pending`; no production thresholds
   were tuned.
 
+## Authority boundaries (advice vs. authority)
+
+The system produces **advice**; it never has **authority** to trade, commit, or
+change governance on its own.
+
+| Actor | Authority | Boundary |
+| --- | --- | --- |
+| Human (WANG Yiwen, 60536848) | Ultimate: scope, safety, git, network, approvals | Owns `.opencode/rules.md` (human-only) and every phase/review decision |
+| Coding agent (OpenCode/Codex) | Read/analyze/implement within the active authorized scope | May suggest; must stop and ask on any denied action |
+| Runtime graph (gate/evaluator/agents) | Emits a verdict/recommendation within deterministic rules | Cannot override a blocked verdict downstream (FR-DQG-006) |
+
+Advice is never promoted to authority by an AI: human decisions cannot be
+inferred, authored, or backfilled by an agent (see `Prompt.md`, ADR-004).
+
+## End-to-end workflow and change controls
+
+1. **Read instructions first** (`AGENTS.md`, this blueprint, `invariants.md`,
+   `trace-matrix.md`, `pyproject.toml`, `tests/conftest.py`).
+2. **Plan first** — output a traceable execution plan (scope, interfaces, tests,
+   steps, risks) and **STOP for human approval** before any feature code/test edit
+   (`prompts/prompt_v1.3.yaml`).
+3. **Implement** only the approved, in-scope requirement.
+4. **Verify** with the offline deterministic suite + validator + Ruff +
+   `git diff --check`; record exact outcomes.
+5. **Record** AI use (`docs/ai-use-log.yaml`) and human review
+   (`docs/review-memo.md`); update the trace matrix in the same change.
+6. **Human review at every phase boundary**; a phase without a recorded human
+   decision is not complete.
+
+Safety-critical changes (gate/evaluator/output-guard/fail-closed/budget
+semantics, permission boundaries, prompts) require an **ADR + explicit human
+approval** before merge (see `docs/code-governance/structural-constraints.md`).
+Scope, safety, or plan changes trigger **reapproval**.
+
+## Permissions and observability
+
+- **Permissions:** a role-by-path, deny-by-default whitelist is specified in
+  `docs/architecture/permission-model.md` (Human/Planner/Builder/Verifier) and a
+  machine-readable **proposal** (not active) ships in
+  `docs/code-governance/agent-permissions-proposal.yaml`. The **existing shipped**
+  `.opencode/permissions.jsonc` is unchanged this turn, but its existence is not
+  proof it is loaded/enforced: **loading/enforcement is unverified** (RISK-006 /
+  DEBT-004). JSON-parses ≠ config-enforced.
+- **Observability:** the runtime emits a gate summary (`0_quality/gate_summary.md`),
+  evidence manifest (`0_quality/evidence_manifest.json`), debate trace
+  (`2_research/debate_trace.json`), and run summary (`run_summary.json`), plus a
+  decision trace in `AgentState`. A per-requirement runtime/audit-monitor mapping
+  (real hooks vs. planned) is recorded in the trace matrix.
+
+## Governance context design (PROPOSED — not implemented)
+
+A layered, deterministic context-assembly design — immutable safety layer,
+human-governance layer, stable ADR/invariant layer, task-plan layer, working
+evidence layer, history layer — with a 131072-token school-context design budget,
+proposed compaction thresholds, keep/drop rules, a provenance-preserving summary
+schema, and critical-constraint re-injection after compaction/restart is
+specified in `docs/architecture/adr/004-governance-context-design.proposed.md`.
+It is **PROPOSED only**: no runtime assembly/compaction code exists, none is
+enforced, and INV-14 is marked unverified. The existing `max_tokens` /
+`reserved_summary_tokens` govern model *output*, not the context window.
+
 ## Out of scope
 
 - **Phase 4B** (live-provider benchmarking) is not started and is not designed
@@ -124,7 +185,12 @@ Referenced by ID; full list in `docs/req/requirements.yaml`:
 ## Open / uncertain items
 
 Marked `TODO` in `docs/debt-register.md` and `docs/architecture/risk-list.md`.
-The student identity is **confirmed** as WANG Yiwen (CS5351 ID 60536848);
-the identity risk is resolved (RISK-004 / DEBT-005). The only remaining
-uncertainty is the OpenCode `permissions.jsonc` schema against the installed
-OpenCode version (RISK-006 / DEBT-004); both are recorded rather than invented.
+The student identity is **confirmed** as WANG Yiwen (CS5351 ID 60536848); the
+identity risk is resolved (RISK-004 / DEBT-005). Remaining open items include:
+the OpenCode `permissions.jsonc` schema/enforcement against the installed
+OpenCode version (RISK-006 / DEBT-004); the degraded confidence ceiling
+(DEBT-014); automatic optional adapters (DEBT-015 / RISK-015); and the live-run
+budget-accounting basis and claim-date semantics found on 2026-11-06 (DEBT-021 /
+DEBT-022 / RISK-020 / RISK-021). This is **not** claimed to be the "only
+remaining uncertainty"; the earlier single-item framing was stale and is
+corrected here.

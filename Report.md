@@ -149,9 +149,186 @@ for per-command outcomes.
   fixtures**, **not** live-provider measurements; they cannot support a
   production-grade performance claim. Human traceability is **pending a human
   score**. **No production thresholds were tuned** (fixtures use test-pinned
-  policy knobs, policy version `1.0`). Phase 4B is not begun; no live providers
-  are used; nothing is committed or pushed.
-- Human review requested (see `docs/review-memo.md`).
+  policy knobs, policy version `1.0`). Phase 4B (live-provider benchmarking /
+  production tuning) is **not performed**.
+- Human review decision (historical): Phase 4A is **approved with limitations**
+  (WANG Yiwen 60536848, 2026-10-23; `docs/review-memo.md`).
+
+### Blocked final-output enforcement (2026-11-06 review finding 1)
+
+- A 2026-11-06 independent offline review reproduced an end-to-end defect: with
+  missing critical market data the real gate returned `blocked`, the graph
+  correctly skipped Bull/Bear and the Research Manager rewrote its recommendation
+  to Hold, but Trader -> risk debate -> Portfolio Manager still carried a
+  synthetic noncompliant model Buy into `final_trade_decision`, and
+  `SignalProcessor` returned Buy. The blocked verdict was not authoritative at the
+  output boundary (design sections 3.6/7.3).
+- **Fix:** a single deterministic, LLM-free guard
+  (`tradingagents/agents/utils/output_guard.py`) reads the gate state
+  fail-closed (missing/malformed/inconsistent -> `blocked`) and pins only the
+  decision field (Recommendation / Rating / Action) to Hold on blocked runs, for
+  both structured and free-text output, preserving the rationale,
+  evidence-insufficient explanation and recovery conditions. It is wired into the
+  Research Manager (replacing the prior duplicated coercion), the Trader, and the
+  Portfolio Manager. No numeric confidence ceiling was invented (review finding 4
+  remains open and recorded). The adversarial Buy fixtures are deterministic
+  enforcement tests, not a measured live incident.
+- **Verification:** the independent-review demo now yields `final_signal` = Hold
+  (was Buy); `tests/test_output_guard.py` **47 passed**, affected suite **294
+  passed**; full offline suite **3 failed / 1528 passed** (the 3 known
+  date-sensitive cache tests, pre-existing, no new regression; not claimed
+  green) — logbook 058.
+
+### Maintenance corrections (2026-11-06 operator technical review)
+
+The operator technical review (not a human phase approval) confirmed the primary
+blocked-to-Buy escape was fixed and requested narrow corrections, which are
+complete:
+
+- **Guard edge cases (logbook 059):** the guard now pins *every* recognized
+  decision header (Recommendation/Rating/Action) and *every* `FINAL TRANSACTION
+  PROPOSAL` marker, regardless of whether a primary header exists, with Markdown
+  bullet/heading/value markup tolerated around the decision field only (rationale
+  prose is never rewritten); a documented narrow rule neutralises a blocked
+  Trader's executable entry/stop/position sizing while keeping the quoted
+  rationale. `tests/test_output_guard.py` **55 passed**; idempotence preserved.
+- **Pre-call budget guards (logbook 060, finding 2):** a conservative admission
+  guard runs before every Bull/Bear, so `max_calls=1` executes exactly one debate
+  call and skips safely to the Research Manager with `budget_exhausted` for the
+  incomplete round; the summary reserve stays reachable; `enabled=False` keeps the
+  legacy fixed-round baseline. Usage remains an honest estimate, not a physical
+  provider bound. `tests/test_debate_precall_budget.py` **14 passed**.
+- **Audit exports (logbook 061, finding 3):** `evidence_manifest.json` associates
+  each record's validations by `evidence_id` and exports the separate
+  `validation_results_by_evidence_id` map; `run_summary.json` adds
+  `run_id`/`asset_type`/`snapshot_id` (null when unavailable), `quality_counts`,
+  and `usage_provenance` (debate calls separate from total-run calls; unmeasured
+  tool/input-output counts explicit `None`, never fabricated).
+  `tests/test_report_artifacts_audit.py` **12 passed**.
+- **Second review corrections (logbook 063):** (1) the pre-call guard's token/time
+  check now requires remaining >= reserved summary **plus the estimated next-call
+  cost**, not merely the reserve (a remaining-equals-reserve case was wrongly
+  admitted); exact token/time boundaries are tested before the first Bull and
+  before Bear, and the check is honestly labelled `estimated` /
+  `debate_calls_only` (the call limit is debate calls, not total-run budget).
+  (2) Audit export now prefers a present authoritative map entry but otherwise
+  preserves a record's own embedded validations instead of overwriting them with
+  `[]`, with deterministic ordering; disagreeing `run_id`/`snapshot_id` is marked
+  ambiguous (null + flag) rather than silently choosing a first identity, and the
+  false claim that the adapter mints `snapshot_id` was removed (null until a real
+  snapshot identity is recorded). `tests/test_debate_precall_budget.py` **22
+  passed**, `tests/test_report_artifacts_audit.py` **20 passed**.
+- **Verification (logbook 062/063):** full offline suite **3 failed / 1578 passed**
+  (the 3 known date-sensitive cache tests; not claimed green), Ruff clean,
+  governance validator PASS, `git diff --check` clean.
+- **Operator/AI technical verification (logbook 064, not a human approval):**
+  464 focused tests passed in 1.82s; the offline demo returns
+  `final_signal=Hold` on the blocked adversarial-model run; `max_calls=1` gives
+  `actual_debate_calls=1`; evidence validation counts export as `[7,7,7,7,6]`;
+  Ruff, governance validator (35/35, no likely secrets) and `git diff --check`
+  pass. A stricter fully offline run (socket.connect disabled,
+  `-m "not integration"`) observed **4 failed / 1577 passed / 1 skipped / 1
+  deselected** — the 3 known date-sensitive cache tests plus the known Yahoo
+  reachability/exception-type baseline. This is recorded **separately** from the
+  earlier 3-failure run under different connectivity conditions; neither run is
+  all-green.
+- **Status:** the 2026-10-23 human approvals remain historical for their reviewed
+  scope. The 2026-11-06 guard/budget/audit maintenance fixes are technically
+  verified and **await explicit human review** — no human approval is recorded
+  for them and no traceability scores were entered.
+- **Still open (not hidden):** review finding 4 (degraded confidence ceiling is
+  not a validated numeric cap; DEBT-014) and broader original-design item 5
+  (automatic multi-category adapters / full source-attempt lifecycle;
+  DEBT-015/RISK-015) — explicitly out of scope for these maintenance milestones.
+
+### Independent recheck 2026-11-06 (findings 1, 2, 3 fixed; awaiting human review)
+
+A second, independent AI technical recheck (not a human approval) reproduced
+three further defects on the maintenance tree; all three are now fixed and
+regression-tested offline:
+
+- **Finding 1 (High) — blocked verdict could still become a final Buy for
+  alternative rating headers.** `Rating：Buy` (fullwidth colon) and
+  `Final rating: Buy` escaped because the guard anchored labels while
+  `extract_rating` NFKC-normalized and searched within a line, taking the last
+  rating. The guard now recognizes the same header grammar the extractor reads
+  (fullwidth colon, prefixed labels such as "Final rating", unicode dashes,
+  repeated/trailing alternative labels); additionally the final signal boundary is
+  gate-aware (`SignalProcessor.process_signal(text, state)` returns Hold on a
+  blocked run) and the memory log records Hold for a blocked run. Complete-graph
+  regressions (`Rating：Buy`, `Final rating: Buy`, separator cases) end Hold.
+- **Finding 2 (High) — real gate -> manifest -> debate quality propagation was
+  broken.** `evaluate_multi_category_gate` discarded the aggregator's per-record
+  status map and serialized the provisional adapter records
+  (`Low`/`unvalidated`), so a normal/Medium gate run produced empty
+  `EvidenceManifest.valid_ids`, an empty allowlist, and round-1 `no_new_evidence`.
+  Each record's own classification/reasons/validations are now applied before
+  serialization (never a blanket promotion from the group rating).
+  `tests/test_gate_debate_integration.py` proves, through the *real* gate node,
+  that a cited+linked Medium/High ID counts as new while genuine Low/Blocked/future
+  evidence does not, and that report `quality_counts` reflect Medium, not five Low.
+- **Finding 3 (Medium) — guard concatenated Hold with following prose.**
+  `Rating: Buy because ...` became `Rating: Holdbecause ...` (final signal
+  REVIEW). The semantic whitespace separator and markdown boundary are now
+  preserved across every decision-field variant; guarded output is idempotent and
+  parses to Hold.
+- **Verification:** `tests/test_output_guard.py` **90 passed**;
+  `tests/test_gate_debate_integration.py` **9 passed**; focused affected suite
+  **480 passed**; strict fully offline suite (socket.connect disabled,
+  `-m "not integration"`) **4 failed / 1621 passed / 1 skipped / 1 deselected /
+  88 subtests** — the *same* 3 known date-sensitive cache tests plus the known
+  Yahoo reachability baseline; no new regression; not claimed all-green. Ruff
+  clean; governance validator PASS (35/35, no secrets); `git diff --check` clean
+  (logbook 065).
+- **Operator recheck (2026-11-06, technical feedback, not a human approval):** a
+  residual was reproduced in the current guard — fullwidth labels/values
+  (`Ｒａｔｉｎｇ：Ｂｕｙ`) and arbitrarily prefixed labels
+  (`My final overall investment rating: Buy`) still parsed as Buy on the plain
+  textual signal, so the saved report/decision text and memory DECISION body could
+  contradict the Hold tag even though the structured signal was Hold. The previous
+  claim that the guard and parser share the same grammar was **false** (bounded
+  descriptor count, only the fullwidth colon handled). Corrected narrowly: the
+  guard now canonicalises every parser-recognized labelled rating line to
+  `**Rating**: Hold` using the rating parser's own shared NFKC/label recognition
+  (not a finite prefix list), preserving the natural-language tail as
+  non-executable explanation and staying idempotent. Fullwidth/prefixed/repeated/
+  trailing labels and full-graph report+memory tag/body consistency are covered;
+  normal/degraded behavior is unchanged and no policy/optional adapter changed.
+  `cli/main.py` is byte-identical to HEAD — there is **no CLI change** in this
+  tree (the signal hook is `TradingAgentsGraph.process_signal(curr_state)`).
+  Focused suite **480 passed**; strict offline suite **4 failed / 1621 passed**
+  (same baselines; logbook 066). This remains **awaiting explicit human review**.
+
+- **Operator executable-instruction maintenance (2026-11-06, technical, not a
+  human approval):** on the current tree a blocked run with a fake model returning
+  `Ａｃｔｉｏｎ：Ｂｕｙ / Entry Price：100 / Stop Loss：95 / Position Sizing：20% /
+  FINAL TRANSACTION PROPOSAL: BUY because momentum improved` had `**Action**: Hold`
+  prepended but left all four executable lines intact; long/fullwidth
+  `Recommendation` headers and explained proposal markers behaved the same. Fixed
+  with one shared **linear** recognizer
+  (`rating.decision_header`/`_split_header`: NFKC-first, arbitrary plain
+  descriptor with no cap, required separator, single-word value; blockquotes and
+  narrative mentions excluded) used by the guard. Every decision field is pinned
+  to `**<Label>**: Hold`; a blocked Trader's fullwidth entry/stop/sizing fields
+  become `not applicable`; an explained proposal marker becomes
+  `FINAL TRANSACTION PROPOSAL: **HOLD**` with the tail kept. Rationale, quoted
+  alternatives and recovery conditions are preserved, the operation is idempotent
+  and fast on long prose, and `extract_rating` now honours the structural decision
+  over quoted/narrative mentions so the plain signal, report and memory agree.
+  `cli/main.py` unchanged. `tests/test_output_guard.py` **130 passed**; focused
+  affected suite **520 passed**; strict offline suite **4 failed / 1661 passed**
+  (same baselines; logbook 067). Corrected in-pass interruptions: a catastrophic
+  backtracking regex, an empty-tail/cap design, and the parser/guard disagreement.
+  This remains **awaiting explicit human review**.
+
+- **Scope integrity:** Phase 4A scripted numbers remain labelled scripted and are
+  **not** presented as proof of runtime integration; finding 2 is proven by the
+  real-gate integration test, not by the scripted fixtures. The prior
+  guard/budget/audit changes are preserved. These fixes **await explicit human
+  review** — no human approval or traceability score is recorded for them. The
+  CLI state-passing hardening gap, the degraded confidence ceiling (DEBT-014) and
+  automatic optional-category adapters (DEBT-015/RISK-015) remain explicitly OPEN;
+  no numeric policy was invented.
 
 ### Verification evidence (observed)
 
@@ -217,6 +394,83 @@ for per-command outcomes.
   `git diff --check`, the governance validator, and the governance scaffold
   tests all clean — entry 048.
 
+### Live verification (2026-11-06, authorized; AI technical evidence, NOT human approval)
+
+- **Scope:** one authorized end-to-end school-model run against
+  `https://llm.cs.cityu.edu.hk/v1`, model `CS5351/DeepSeek-V4-Flash`, ticker
+  **NVDA**, target date **2026-11-05**, using real public data tools + the real
+  gate/managers/Trader/risk. Credentials stayed in memory only; not written.
+- **Result:** 18 successful model calls, **202,622 gateway-reported tokens**; no
+  model HTTP error, no truncation; final gate **degraded**; final (state-aware and
+  textual) signal **Overweight**. A first harness attempt (18 calls / 178,453
+  tokens) failed only because the local streaming harness omitted `graph.ticker`
+  before logging — a **harness error, not a project bug**; the corrected rerun
+  totals **36 calls / 381,075 reported tokens** (retry cost not hidden).
+- **Market evidence:** five market records, `observed_at=2026-11-04`,
+  `target_date=2026-11-05`, all **Medium** (each validated 7/7/7/7/6); optional
+  fundamentals/news/sentiment all **Low/unavailable** → degraded (not fabricated
+  normal). This is honest, not a bug.
+- **OPEN issues found (NOT fixed; source unchanged):**
+  1. **Budget accounting basis (RISK-021 / DEBT-021):** researchers pass no
+     actual latency/usage; the budget recorded **2,171.77 s estimated** for a Bull
+     call whose actual latency was **12.72 s**, and 16,289 estimated vs 18,058
+     reported tokens. The estimate exhausted the 600 s debate budget, so Bear was
+     refused with `budget_exhausted` and **0 complete Bull/Bear rounds** ran.
+  2. **Claim-date semantics (RISK-020 / DEBT-022):** Bull correctly cited the
+     valid close evidence ID but relabelled the Nov-4 close (200.13) as Nov-5 in
+     prose/metadata; the allowlist validates eligibility, not claim-date truth.
+- **Counterfactual blocked replay (deterministic, offline):** the saved live
+  Research Manager / Trader / Portfolio Manager outputs were fed through the
+  blocked guard; all primary decisions became Hold and sizing became
+  not-applicable. This is a **replay of saved outputs, NOT an additional live run**
+  and NOT a live blocked-path proof.
+- **Not all-bug-proof:** the live gate was **degraded, not blocked**; the normal
+  multi-round path and a real blocked-path live run were **not** exercised live.
+  A completed-round live check and a blocked-path live check require separate
+  explicit authorization (RISK-023).
+- **Existing open items unchanged:** degraded confidence ceiling (DEBT-014),
+  automatic optional adapters (DEBT-015/RISK-015), and the CLI state-passing gap
+  remain OPEN.
+
+### Documentation / requirements revision (2026-11-06, documentation-only)
+
+- Extended `docs/req/req-schema.json` and `docs/req/requirements.yaml` with a
+  product/PRD block, per-requirement structured `fit_criterion` (metric /
+  operator / threshold / unit / verification / applicability / status),
+  `priority_rationale`, `tradeoff`, `origin`, and `category`; added an explicit
+  `deferred_scope` (Won't/deferred) block. All 22 IDs and historical `type`
+  values are preserved (schema_version advanced to v1.1, additive).
+- Expanded the invariant register, added proposed ADR-004 (governance context
+  design, not implemented), a role-by-path deny-by-default permission model + a
+  non-active machine-readable proposal, a human-only rules proposal, a CI gate
+  matrix (document only), and authoritative prompt **v1.3** (plan-first STOP).
+- This revision is **documentation-only**: no source, tests, CI, or active
+  configuration were changed; it is **not human-approved** and awaits review.
+
+### Documentation / traceability consistency batch (2026-11-10, documentation-only)
+
+- Three verification **tiers** are now Structural / Regression / Behavioral;
+  offline-vs-live is a **separate evidence axis** (never a substitute tier, never
+  live proof). `docs/code-governance/verification-constraints.md`.
+- All 29 requirement-mapped test files now carry an accurate `Traceability:`
+  declaration of their own FR/NFR ID; deterministic governance regressions resolve
+  those tags against the registry/invariants and require each requirement's own
+  ID. The 22 requirement IDs are unchanged; INV-11/12/14 stay honest (unmapped /
+  proposed).
+- The role-by-path permission model, its non-active machine-readable proposal, the
+  validator (narrow dangling-reference resolution + true forced-fallback
+  regressions), the required-artifact/YAML inventory (prompt v1.3, ADR-004/005,
+  the proposals), and the NFR-OFF-001 count-and-fail harness were synchronized.
+  The proposal remains **inactive**; no active permission, CI, `.github/**`,
+  `pyproject.toml`, or `.opencode/**` config was changed, and actual enforcement is
+  **UNVERIFIED** and not claimed.
+- This batch is **documentation/traceability-only** (plus deterministic test and
+  validator additions); it is technically verified offline (validator PASS 42/42;
+  governance 48 passed; mapped+focused 1000 passed; strict-offline 4 failed / 1768
+  passed with 1 intercepted attempt) and **awaits human acceptance**. Independent
+  Codex verification of the current files recorded the same final result (see
+  logbook 072).
+
 ### Verification evidence (provided, not re-run in this environment)
 
 The task supplied the following verification outcomes that were observed in the
@@ -256,9 +510,36 @@ re-claimed as a fully-green full suite here**:
 - **Student identity** — now confirmed as **WANG Yiwen**, CS5351 student ID
   **60536848** (`transcripts/60536848-WANG-Yiwen.md`). The transcript was
   initially created under a provisional identity slug and has been finalized.
-- **Uncommitted / unpushed work** — all Phase 1–3B and Stage 2 code, tests, and
-  documentation are uncommitted on `feature/data-quality-debate-control`.
-- **OpenCode permission schema uncertainty** — see `docs/debt-register.md`.
+- **Feature-branch checkpoint (2026-11-10)** — the human authorized committing
+  and pushing the existing maintenance/documentation work to
+  `feature/data-quality-debate-control` as work in progress. This is not final
+  human acceptance, a PR, or authorization to merge into release. Earlier
+  uncommitted/not-pushed statements describe pre-checkpoint snapshots; Git
+  history and the remote branch are the authority for publication status.
+  The new measured-budget/partial-debate-attribution repair plan and its live
+  blocked-path verification remain proposed and unimplemented.
+- **2026-11-10 repair batches (plan + tests human-approved; acceptance PENDING,
+  technical only)** — the first batch fixed three reproduced defects (blocked
+  multiline executable containment in the output guard, present-empty
+  authoritative validation override in report artifacts, and shared duplicate-ID
+  uniqueness across the validator's real and fallback paths; the second batch is
+  documentation/traceability consistency). The strict-offline count-and-fail
+  harness observes the **same 4 known baseline failures** (3 date-sensitive
+  `test_ohlcv_cache_freshness` + the `test_no_data_handling` vendor-reachability
+  baseline) and **1 intercepted outbound socket attempt** (no connection made)
+  from that baseline, so **NFR-OFF-001 stays PARTIAL/OPEN** (DEBT-002/RISK-002)
+  and the suite is **not all-green**. No baseline test/CI/waiver was modified; no
+  human acceptance, CI enforcement, permission enforcement, traceability score, or
+  green-suite claim is made.
+- **OpenCode permission schema / enforcement uncertainty** — the installed
+  binary is `1.18.25`; the SDK static type shape and the broad `.opencode/
+  permissions.jsonc` are recorded, but **load/enforcement is UNVERIFIED** (a
+  benign probe is still pending). See `docs/debt-register.md` DEBT-004/DEBT-027.
+- **Live-verification findings (2026-11-06, OPEN, not fixed)** — budget
+  accounting uses estimates not provider usage (Bear refused, 0 complete rounds;
+  RISK-021/DEBT-021) and a cited valid ID did not prevent a wrong claim date
+  (RISK-020/DEBT-022). The run was degraded (not blocked); live integration is
+  not all-bug-proof. See §"Live verification" below.
 - **Phase 4A results are scripted offline fixtures, not live-provider
   measurements** — they cannot support a production-grade performance claim;
   human traceability is pending a human score; no production thresholds were

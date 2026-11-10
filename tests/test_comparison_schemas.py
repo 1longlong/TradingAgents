@@ -4,6 +4,10 @@ Covers validation, zero-denominator behavior, measured-vs-estimated separation,
 false-strong-conclusion derivation (never from prose), evidence-citation
 coverage from valid cited IDs, human-traceability pending semantics, and stable
 JSON round-tripping. No network, no LLM, no wall-clock dependence.
+
+Traceability: NFR-CMP-001 (deterministic offline comparison), NFR-CMP-002
+(measured-vs-estimated separation), NFR-CMP-003 (traceability rubric / honest
+scripted labeling).
 """
 
 from __future__ import annotations

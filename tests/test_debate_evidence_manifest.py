@@ -4,6 +4,8 @@ Covers the deterministic citation allowlist and the eligibility / linkage /
 date rules: unknown, late, missing-date, unparseable-date, and unlinked IDs
 never count; only known, High/Medium, on-or-before-target, linked, previously
 unused IDs do.
+
+Traceability: FR-DDT-002 (valid-new-evidence manifest and citation allowlist).
 """
 
 from __future__ import annotations

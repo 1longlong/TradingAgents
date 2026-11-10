@@ -5,15 +5,37 @@ from tradingagents.agents.utils.agent_utils import (
     opponent_argument_or_opening,
     report_or_absent,
 )
-from tradingagents.debate.budget import record_call_usage
+from tradingagents.debate.budget import (
+    budget_admission_decision,
+    can_afford_optional_call,
+    record_call_usage,
+    resolve_budget_config_from_state,
+)
 from tradingagents.debate.evidence_manifest import build_citation_allowlist
 from tradingagents.debate.state import append_debate_turn
 from tradingagents.debate.turn import METADATA_INSTRUCTION, parse_turn_metadata
 
 
-def create_bear_researcher(llm):
+def create_bear_researcher(llm, debate_termination_config=None):
     def bear_node(state) -> dict:
         investment_debate_state = state["investment_debate_state"]
+
+        # Pre-call budget guard: an optional Bear call that would breach the
+        # call hard limit (e.g. max_calls=1 already spent by Bull) or eat the
+        # reserved summary capacity is refused, routing to the Research Manager
+        # with budget_exhausted for the incomplete round.
+        config = resolve_budget_config_from_state(state, debate_termination_config)
+        usage = state.get("debate_usage")
+        if not can_afford_optional_call(usage, config):
+            return {
+                "debate_termination_decision": budget_admission_decision(
+                    next_speaker="Bear",
+                    calls_used=int((usage or {}).get("calls", 0)),
+                    max_calls=int(config.max_calls),
+                    config=config,
+                    usage=usage,
+                ),
+            }
         history = investment_debate_state.get("history", "")
 
         current_response = opponent_argument_or_opening(

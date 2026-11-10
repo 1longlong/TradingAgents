@@ -12,6 +12,10 @@ from tradingagents.agents.utils.agent_utils import (
     get_language_instruction,
     get_portfolio_context_from_state,
 )
+from tradingagents.agents.utils.output_guard import (
+    enforce_blocked_conclusion,
+    is_blocked_run,
+)
 from tradingagents.agents.utils.structured import (
     NO_EXTERNAL_TOOLS,
     bind_structured,
@@ -33,6 +37,9 @@ def create_trader(llm):
         # only offer it (and the grounding instruction) when it has content.
         market_report = (state["market_report"] or "").strip()
         portfolio_context = get_portfolio_context_from_state(state)
+        # A blocked gate is authoritative: the Trader may not translate an
+        # evidence-insufficient conclusion into a directional transaction.
+        blocked = is_blocked_run(state)
 
         if market_report:
             grounding = (
@@ -84,6 +91,16 @@ def create_trader(llm):
             },
         ]
 
+        if blocked:
+            # Ground the restriction in the prompt too, but never rely on
+            # prompt obedience: the stored plan is pinned below.
+            messages[-1]["content"] += (
+                "\n\nIMPORTANT — THE DATA QUALITY GATE BLOCKED THIS RUN. The "
+                "research conclusion is evidence-insufficient. You may only "
+                "propose Hold; do not propose Buy or Sell, and do not give an "
+                "aggressive action plan."
+            )
+
         trader_plan = invoke_structured_or_freetext(
             structured_llm,
             llm,
@@ -91,6 +108,11 @@ def create_trader(llm):
             render_trader_proposal,
             "Trader",
         )
+
+        # Authoritative contract: a blocked run's stored transaction proposal
+        # is pinned to Hold on both the structured and free-text paths.
+        if blocked:
+            trader_plan = enforce_blocked_conclusion(trader_plan, field="action")
 
         return {
             "messages": [AIMessage(content=trader_plan)],
