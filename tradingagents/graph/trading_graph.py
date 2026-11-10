@@ -43,6 +43,7 @@ from .market_governance import parse_market_tool_governance
 from .news_governance import parse_news_tool_governance
 from .propagation import Propagator
 from .reflection import Reflector
+from .run_identity import IDENTITY_VERSION, execution_digest
 from .sentiment_prefetch import parse_sentiment_prefetch
 from .setup import GraphSetup
 from .signal_processing import SignalProcessor
@@ -424,13 +425,26 @@ class TradingAgentsGraph:
         return td if td < datetime.now().strftime("%Y-%m-%d") else None
 
     def _run_signature(self, asset_type: str, portfolio=None) -> str:
-        """Graph-shape inputs that must invalidate a checkpoint if changed.
+        """Inputs that make a checkpoint a *different run* if changed.
 
-        Keyed into the checkpoint thread ID so a resume under a different analyst
-        selection, debate/risk depth, or asset mode starts fresh instead of
-        silently continuing the previous graph (#1089).
+        Keyed into the checkpoint thread ID, so any change starts a fresh run
+        instead of silently continuing work computed under other settings:
+
+        * the graph shape (analyst selection, debate/risk depth, asset mode,
+          the governance and prefetch switches, #1089);
+        * the portfolio, where None / empty / a changed book are three runs;
+        * the normalized **execution identity** (tool allowances, vendor chains,
+          news inputs, models, output language) as a digest, so a checkpoint is
+          never resumed under settings that would execute different work.
+
+        The execution identity carries an explicit version. A checkpoint whose
+        thread id was built without it (``run_version=0``) can never collide
+        with a signature that has it, so an older checkpoint is not treated as
+        compatible: it stays on disk, reachable only by the exact signature
+        that created it.
         """
         return "|".join([
+            f"run_version={IDENTITY_VERSION}",
             "analysts=" + ",".join(self.selected_analysts),
             f"debate={self.config['max_debate_rounds']}",
             f"risk={self.config['max_risk_discuss_rounds']}",
@@ -454,6 +468,9 @@ class TradingAgentsGraph:
             ),
             # None, an empty book and a changed book are three different runs.
             f"portfolio={portfolio.fingerprint() if portfolio is not None else 'none'}",
+            # The execution settings, as a digest: the values themselves (which
+            # may include an endpoint-ish string) never reach the thread id.
+            "exec=" + execution_digest(self.config),
         ])
 
     def propagate(self, company_name, trade_date, asset_type: str = "stock", portfolio=None):
@@ -507,7 +524,17 @@ class TradingAgentsGraph:
         if step is not None:
             logger.info("Resuming from step %d for %s on %s", step, company_name, trade_date)
         else:
-            logger.info("Starting fresh for %s on %s", company_name, trade_date)
+            # A fresh start may be the first run for this ticker+date, or a
+            # different signature: a graph-shape or execution-settings change
+            # (another tool allowance, vendor chain, news input, model, language,
+            # date or portfolio). That previous checkpoint, if any, is kept on
+            # disk under its own thread id and is never touched. Only the digest
+            # names the configuration -- its values are never logged.
+            logger.info(
+                "Starting fresh for %s on %s (execution settings %s; any "
+                "previous run under other settings is kept on disk)",
+                company_name, trade_date, execution_digest(self.config),
+            )
         return thread_id(company_name, str(trade_date), signature)
 
     def checkpoint_input(self, init_state):
