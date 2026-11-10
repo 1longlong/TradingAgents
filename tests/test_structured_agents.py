@@ -306,7 +306,13 @@ def _make_rm_state():
             "bear_history": "Bear says...",
             "current_response": "",
             "judge_decision": "",
-            "count": 1,
+            "count": 2,
+            # Structured two-sided execution evidence so participation status is
+            # "both" and the model's rendered output is trusted (not templated).
+            "turns": [
+                {"speaker": "Bull", "content": "Bull says..."},
+                {"speaker": "Bear", "content": "Bear says..."},
+            ],
         },
     }
 

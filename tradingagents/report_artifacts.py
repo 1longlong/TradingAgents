@@ -257,6 +257,30 @@ def _gate_summary_md(final_state: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _participation_summary(final_state: dict[str, Any]) -> dict[str, Any]:
+    """Authoritative, deterministic participation for the report (INV-6/NFR-AUD-001).
+
+    Derived only from structured debate state; a legacy prose-only history is
+    reported as unverified rather than promoted to executed.
+    """
+    from tradingagents.debate.participation import summarize_participation
+
+    debate = final_state.get("investment_debate_state") or {}
+    if not isinstance(debate, dict):
+        debate = {}
+    decision = final_state.get("debate_termination_decision")
+    gate = final_state.get("data_quality_verdict")
+    if not gate:
+        gate_decision = final_state.get("data_quality_gate_decision") or {}
+        if isinstance(gate_decision, dict):
+            gate = gate_decision.get("decision")
+    return summarize_participation(
+        debate,
+        debate_termination_decision=decision if isinstance(decision, dict) else None,
+        gate_verdict=str(gate) if gate else None,
+    )
+
+
 def _debate_trace(final_state: dict[str, Any]) -> dict[str, Any]:
     """Build the ``2_research/debate_trace.json`` payload.
 
@@ -281,10 +305,12 @@ def _debate_trace(final_state: dict[str, Any]) -> dict[str, Any]:
         "route": str(decision.get("route", "") or ""),
         "stop_reason": str(decision.get("stop_reason", "") or ""),
         "round_count": len(round_metrics),
+        "participation": _participation_summary(final_state),
         "trace": trace_entries,
         "round_metrics": round_metrics,
         "budget": dict(budget),
         "usage": dict(usage),
+        "usage_provenance": _usage_provenance(final_state),
         "measured_vs_estimated": {
             "estimated": bool(usage.get("estimated", False)),
             "budget_estimated": bool(budget.get("estimated", False)),
@@ -385,27 +411,50 @@ def _usage_provenance(final_state: dict[str, Any]) -> dict[str, Any]:
     Debate calls are reported separately from any total-run call count: the
     state only counts *debate* researcher calls, so a total-run count and
     tool-call count are explicitly unavailable (``None``) rather than conflated
-    with the debate figure. ``input_tokens``/``output_tokens`` are not tracked
-    separately by the current estimator, so they are ``None`` (not split by
-    guess), while the combined estimated total is preserved.
+    with the debate figure. Per-field provenance (``measured`` / ``provider`` /
+    ``estimated`` / ``mixed`` / ``unavailable``) is surfaced from the recorded
+    ``debate_usage.provenance`` so an estimate is never presented as measured.
+    Input/output token splits are reported only when they are actually known; a
+    split missing any contributing side (or flagged partial) is reported as
+    ``None``/partial rather than as a complete provider total.
     """
     usage = final_state.get("debate_usage") or {}
     if not isinstance(usage, dict):
         usage = {}
+    provenance = usage.get("provenance") or {}
+    if not isinstance(provenance, dict):
+        provenance = {}
     estimated = bool(usage.get("estimated", False))
+
+    input_tokens = usage.get("input_tokens")
+    output_tokens = usage.get("output_tokens")
+    input_partial = bool(usage.get("input_tokens_partial") or provenance.get("input_tokens_partial"))
+    output_partial = bool(usage.get("output_tokens_partial") or provenance.get("output_tokens_partial"))
+
     return {
         "debate_calls": int(usage.get("calls", 0) or 0),
         "debate_tokens": int(usage.get("tokens", 0) or 0),
         "debate_seconds": float(usage.get("seconds", 0.0) or 0.0),
         "estimated": estimated,
+        "tokens_source": provenance.get("tokens"),
+        "seconds_source": provenance.get("seconds"),
+        "clock": usage.get("clock", "unavailable"),
+        "failed_calls": int(usage.get("failed_calls", 0) or 0),
+        "transport_attempts": usage.get("transport_attempts"),
+        "tokens_conflict": bool(provenance.get("tokens_conflict")),
+        "tokens_partial": bool(provenance.get("tokens_partial")),
+        # Split counts are only a full provider total when not partial.
+        "input_tokens": None if input_partial else input_tokens,
+        "output_tokens": None if output_partial else output_tokens,
+        "input_tokens_partial": input_partial,
+        "output_tokens_partial": output_partial,
         "total_run_calls": None,
         "tool_calls": None,
-        "input_tokens": None,
-        "output_tokens": None,
         "unavailable_reason": (
-            "total-run calls, tool calls, and separate input/output token counts "
-            "are not tracked by the current deterministic estimator; debate calls "
-            "are reported separately and must not be read as total-run calls"
+            "total-run calls and tool calls are not tracked by the debate "
+            "accounting; debate calls are reported separately and must not be "
+            "read as total-run calls. Token splits are provider-only and null "
+            "when any contributing call lacked that side."
         ),
     }
 
@@ -445,6 +494,7 @@ def _run_summary(
         "debate_stop_reason": str(debate_decision.get("stop_reason", "") or ""),
         "debate_round_count": len(round_metrics),
         "debate_route": str(debate_decision.get("route", "") or ""),
+        "participation": _participation_summary(final_state),
         "usage": dict(usage),
         "usage_provenance": _usage_provenance(final_state),
         "measured_vs_estimated": {
@@ -533,6 +583,8 @@ def build_run_summary_section(
         usage = {}
     identity = _run_identity(final_state, ticker)
     provenance = _usage_provenance(final_state)
+    participation = _participation_summary(final_state)
+    skip_reason = participation.get("skip_reason") or participation.get("stop_reason") or "n/a"
     lines = [
         "## Run Summary",
         "",
@@ -543,9 +595,15 @@ def build_run_summary_section(
         f"- Snapshot id: {_identity_md(identity['snapshot_id'], identity['snapshot_id_ambiguous'])}",
         f"- Gate verdict: {final_state.get('data_quality_verdict') or str(decision.get('decision', ''))}",
         f"- Debate stop reason: {debate_decision.get('stop_reason', '')}",
+        f"- Debate participation: status={participation.get('status')}, "
+        f"executed={participation.get('executed_speakers') or []}, "
+        f"missing={participation.get('missing_speakers') or []}, "
+        f"skipped={participation.get('skipped_speakers') or []}, "
+        f"skip_reason={skip_reason}",
         f"- Debate rounds completed: {len(round_metrics)}",
         f"- Debate usage: {provenance['debate_calls']} calls, {provenance['debate_tokens']} tokens, "
-        f"{provenance['debate_seconds']}s (estimated={provenance['estimated']}; "
+        f"{provenance['debate_seconds']}s (tokens={provenance['tokens_source']}, "
+        f"seconds={provenance['seconds_source']}, estimated={provenance['estimated']}; "
         "debate calls only, not total-run calls)",
     ]
     if report_paths:

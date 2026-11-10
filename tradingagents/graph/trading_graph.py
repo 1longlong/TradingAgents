@@ -557,6 +557,7 @@ class TradingAgentsGraph:
             ),
             instrument_context=self.resolve_instrument_context(company_name, asset_type, trade_date),
             portfolio_context=portfolio.render(company_name) if portfolio is not None else "",
+            results_dir=self.config.get("results_dir", "") or "",
         )
 
     def settle_pending(self, company_name):

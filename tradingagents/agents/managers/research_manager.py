@@ -12,12 +12,17 @@ from tradingagents.agents.utils.output_guard import (
     enforce_blocked_conclusion,
     is_blocked_run,
 )
+from tradingagents.agents.utils.rating import extract_rating
 from tradingagents.agents.utils.structured import (
     NO_EXTERNAL_TOOLS,
     bind_structured,
     invoke_structured_or_freetext,
 )
 from tradingagents.debate.conflicts import build_conflict_summary
+from tradingagents.debate.participation import (
+    participation_prompt_block,
+    summarize_participation,
+)
 
 
 def _enforce_non_directional_hold(plan_text: str) -> str:
@@ -60,6 +65,126 @@ def _conflict_summary_block(investment_debate_state: dict) -> str:
     return summary.to_prompt_block()
 
 
+def _partial_debate_sections(plan_text: str, participation: dict) -> tuple[str, str, str]:
+    """Split a partial-debate plan into honest (recommendation, rationale, actions).
+
+    The recommendation keeps the model's *valid* rating (existing 5-tier parser)
+    but the rationale/actions are replaced by a deterministic statement of who
+    actually executed. Unverified bilateral attribution from the raw model prose
+    is never carried into the trusted plan.
+    """
+    rating = extract_rating(plan_text) or "Review"
+    executed = participation.get("executed_speakers") or []
+    missing = participation.get("missing_speakers") or []
+    skipped = participation.get("skipped_speakers") or []
+    evidence = participation.get("evidence")
+    reason = participation.get("skip_reason") or participation.get("stop_reason") or "unknown"
+    unverified = [
+        speaker
+        for speaker in ("Bull", "Bear")
+        if participation.get(speaker.lower()) == "unverified"
+    ]
+
+    if executed:
+        executed_line = f"Speakers confirmed executed: {', '.join(executed)}."
+    elif unverified:
+        executed_line = "No speaker is confirmed executed; execution status is unverified."
+    else:
+        executed_line = "No speaker executed a model call."
+    if unverified:
+        unverified_line = (
+            f"Execution is UNVERIFIED for: {', '.join(unverified)} "
+            "(no argument is attributed to them)."
+        )
+    else:
+        unverified_line = ""
+    if missing:
+        missing_line = (
+            f"No response from: {', '.join(missing)} (no argument is attributed to them)."
+        )
+    else:
+        missing_line = ""
+    if skipped:
+        skip_line = f"Skipped for stop reason: {', '.join(skipped)} ({reason})."
+    else:
+        skip_line = f"Debate stop reason: {reason}."
+
+    rationale = (
+        f"This is a single-sided/incomplete debate. {executed_line} "
+        f"{unverified_line} {missing_line} {skip_line} Assessment is limited to "
+        f"the executed speaker(s)' evidence; it must NOT be read as a validated "
+        f"two-sided debate. Execution evidence: {evidence}."
+    ).replace("  ", " ").strip()
+    actions = (
+        "Proceed only with the evidence actually presented. Do not assume any "
+        "counter-argument, conflict, approval, or position from a speaker that "
+        "did not respond. If the single-sided evidence is insufficient to size a "
+        "position, prefer the smaller/incomplete-evidence posture."
+    )
+    return rating, rationale, actions
+
+
+def build_partial_debate_template(plan_text: str, participation: dict) -> str:
+    """Deterministic trusted Research Manager plan for a partial/unknown debate.
+
+    Preserves the existing valid rating policy (the model's 5-tier rating is
+    kept via the shared parser) but replaces the narrative with an authoritative
+    participation statement. The tradeoff is less narrative detail in the
+    authoritative partial plan; the raw model prose is quarantined separately.
+    """
+    rating, rationale, actions = _partial_debate_sections(plan_text, participation)
+    return (
+        f"**Recommendation**: {rating}\n\n"
+        f"**Rationale**: {rationale}\n\n"
+        f"**Strategic Actions**: {actions}"
+    )
+
+
+def _quarantine_partial_raw(state, participation: dict, raw_text: str) -> str | None:
+    """Write the raw partial-debate model narrative to a redacted audit file.
+
+    This is NON-authoritative audit material only. The path is resolved via
+    :func:`resolve_audit_paths` (prefers an explicit ``debate_partial_audit_path``,
+    otherwise a safe default under the run's ``results_dir``/identity) so the real
+    graph persists it even without an explicit override. The raw narrative is
+    passed through :func:`redact_secrets` and is never placed in the trusted
+    plan/report body or the memory body. Returns the path written, or ``None``.
+    """
+    from tradingagents.debate.failure_audit import resolve_audit_paths
+
+    _, quarantine_path = resolve_audit_paths(state)
+    if not quarantine_path:
+        return None
+    try:
+        from pathlib import Path
+
+        from tradingagents.report_artifacts import redact_secrets
+
+        target = Path(quarantine_path).expanduser()
+        target.parent.mkdir(parents=True, exist_ok=True)
+        import json
+
+        run_id = state.get("run_id")
+        if not run_id and state.get("company_of_interest") and state.get("trade_date"):
+            run_id = f"{state.get('trade_date')}/{state.get('company_of_interest')}"
+        record = {
+            "run_id": run_id,
+            "trade_date": state.get("trade_date"),
+            "status": participation.get("status"),
+            "evidence": participation.get("evidence"),
+            "executed_speakers": participation.get("executed_speakers"),
+            "missing_speakers": participation.get("missing_speakers"),
+            "skip_reason": participation.get("skip_reason"),
+            "non_authoritative": True,
+            "raw_model_narrative": redact_secrets(raw_text),
+        }
+        with open(target, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps(record, sort_keys=True) + "\n")
+        return str(target)
+    except Exception:  # noqa: BLE001 — audit write failure never blocks the plan
+        return None
+
+
 def create_research_manager(llm):
     structured_llm = bind_structured(llm, ResearchPlan, "Research Manager")
 
@@ -78,6 +203,32 @@ def create_research_manager(llm):
             f"\n\n{conflict_block}" if conflict_block else ""
         )
 
+        # Authoritative participation truth (pure/structured). Used to make the
+        # debate assumption explicit rather than asserting a two-sided debate.
+        participation = summarize_participation(
+            investment_debate_state,
+            debate_termination_decision=state.get("debate_termination_decision"),
+            gate_verdict="blocked" if blocked else state.get("data_quality_verdict"),
+        )
+        participation_block = participation_prompt_block(participation)
+        full_two_sided = participation.get("status") == "both"
+        if full_two_sided:
+            debate_assumption = (
+                "The debate always contains conflicting arguments; deciding which side is stronger is the job, so conflict alone is not a reason to Hold. "
+                "Commit to the side with the stronger case, sized by how decisively it wins. Choose Hold only when the evidence is still balanced after that weighing, or too thin to support a call; "
+                "do not manufacture a direction to appear decisive. Weigh the bull and bear cases on their merits, independent of which side spoke first or last."
+            )
+        else:
+            debate_assumption = (
+                "IMPORTANT — this is NOT a complete two-sided debate. Only the "
+                "speaker(s) reported below actually responded; do NOT invent, "
+                "assume, or attribute any argument, conflict, approval, position "
+                "or rebuttal to a speaker that produced no response. Base the "
+                "assessment only on the executed speaker(s)' evidence. You may "
+                "still choose a direction if that evidence genuinely supports it; "
+                "do not manufacture a bilateral conflict that did not occur."
+            )
+
         prompt = f"""As the Research Manager and debate facilitator, your role is to critically evaluate this round of debate and deliver a clear, actionable investment plan for the trader.
 
 {instrument_context}
@@ -93,10 +244,12 @@ def create_research_manager(llm):
 - **Underweight**: Cautious view; recommend trimming exposure
 - **Sell**: Strong conviction in the bear thesis; recommend exiting or avoiding the position
 
-The debate always contains conflicting arguments; deciding which side is stronger is the job, so conflict alone is not a reason to Hold. Commit to the side with the stronger case, sized by how decisively it wins. Choose Hold only when the evidence is still balanced after that weighing, or too thin to support a call; do not manufacture a direction to appear decisive. Weigh the bull and bear cases on their merits, independent of which side spoke first or last.
+{debate_assumption}
 {conflict_section}
 
 ---
+
+**{participation_block}**
 
 **Debate History:**
 {history}
@@ -143,12 +296,36 @@ Write these sections, in this order, starting with the recommendation on its own
             render_research_plan,
             "Research Manager",
         )
+        # Retain the raw model narrative for potential quarantine (non-authoritative
+        # audit only). It is never placed in the trusted plan/report/memory body.
+        raw_model_text = investment_plan
 
-        # Authoritative contract: a blocked run must produce a non-directional
-        # Hold even if the model returned a directional call, on both the
-        # structured and free-text paths. Do not rely on prompt obedience.
+        # The deterministic SAFE PARTIAL-DEBATE TEMPLATE applies whenever the
+        # debate is NOT an authoritatively-confirmed two-sided debate — including
+        # "unknown"/legacy states (no structured execution evidence either way).
+        # The approved plan requires partial OR unknown -> deterministic trusted
+        # template, so the trusted plan never carries unverified bilateral
+        # attribution and there is no wrapper-only contradiction.
+        partial_or_unknown = not full_two_sided
         if blocked:
+            # Authoritative contract: a blocked run is always a non-directional
+            # Hold. On a partial/unknown blocked run the trusted narrative is
+            # replaced by the participation template so it cannot carry invented
+            # absent-opponent attribution, THEN Hold is re-pinned on top.
             investment_plan = _enforce_non_directional_hold(investment_plan)
+            if partial_or_unknown:
+                investment_plan = build_partial_debate_template(investment_plan, participation)
+                investment_plan = _enforce_non_directional_hold(investment_plan)
+        elif partial_or_unknown:
+            investment_plan = build_partial_debate_template(investment_plan, participation)
+
+        # Quarantine the raw model narrative for a partial/unknown debate as
+        # separate NON-authoritative audit material (redacted), never in the
+        # trusted plan/report body/memory. The default path is resolved from the
+        # run's results_dir/identity so the real graph persists it even without an
+        # explicit override.
+        if partial_or_unknown:
+            _quarantine_partial_raw(state, participation, raw_model_text)
 
         new_investment_debate_state = {
             "judge_decision": investment_plan,

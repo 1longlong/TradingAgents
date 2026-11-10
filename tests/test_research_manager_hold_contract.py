@@ -52,26 +52,48 @@ def _base_state(**overrides):
 )
 def test_blocked_structured_path_always_holds(directional):
     llm = MagicMock()
-    # Structured output path: the model returns a directional ResearchPlan.
+    # Structured output path: the model returns a directional ResearchPlan whose
+    # rationale invents an absent-Bear argument.
     plan = ResearchPlan(
         recommendation=PortfolioRating(directional),
-        rationale="Strong directional case (should be preserved).",
+        rationale="The bear overplayed its hand (should NOT be trusted).",
         strategic_actions="Add to position (should be neutralised).",
     )
     structured_llm = MagicMock()
     structured_llm.invoke = MagicMock(return_value=plan)
     llm.with_structured_output = MagicMock(return_value=structured_llm)
 
+    # Positively-partial blocked run: only Bull executed (structured), Bear
+    # refused pre-call. The trusted prose must use the safe partial template and
+    # must NOT carry the invented absent-Bear attribution.
+    state = _base_state(data_quality_verdict="blocked")
+    state["data_quality_gate_decision"] = {"decision": "blocked"}
+    state["debate_termination_decision"] = {
+        "route": "summarize",
+        "stop_reason": "budget_exhausted",
+        "refused_speaker": "Bear",
+        "trace": [],
+    }
+    state["investment_debate_state"] = {
+        "history": "Bull Analyst: case",
+        "count": 1,
+        "bull_history": "Bull Analyst: case",
+        "bear_history": "",
+        "current_response": "Bull Analyst: case",
+        "turns": [{"speaker": "Bull", "content": "case"}],
+    }
+
     manager = create_research_manager(llm)
-    out = manager(_base_state())
+    out = manager(state)
 
     plan_text = out["investment_plan"]
     assert "**Recommendation**: Hold" in plan_text, plan_text
     # No conflicting directional recommendation is exposed.
     for word in ("Buy", "Sell", "Overweight", "Underweight"):
         assert f"**Recommendation**: {word}" not in plan_text, plan_text
-    # The evidence-insufficient rationale is preserved.
-    assert "Strong directional case" in plan_text
+    # Safer trusted template: the invented absent-Bear rationale is NOT preserved.
+    assert "bear overplayed" not in plan_text.lower()
+    assert "no response from: bear" in plan_text.lower()
 
 
 @pytest.mark.parametrize(
@@ -150,3 +172,150 @@ def test_enforce_dirties_metadata_notes_but_pins_hold():
     assert "**Recommendation**: Hold" in coerced
     assert "**Recommendation**: Underweight" not in coerced
     assert "Weak fundamentals." in coerced
+
+
+def test_partial_hallucinated_opponent_not_in_trusted_plan():
+    # NFR-AUD-001 / INV-6: when Bear did NOT execute (structured Bull-only
+    # state), a model that falsely attributes a claim to the absent Bear must
+    # not leak that attribution into the authoritative investment_plan. A
+    # truthful footer over contradictory trusted prose is a FAIL.
+    llm = MagicMock()
+    llm.with_structured_output = MagicMock(return_value=None)
+    llm.invoke = MagicMock(
+        return_value=MagicMock(
+            content=(
+                "**Recommendation**: Buy\n\n"
+                "**Rationale**: The bear overplayed its hand and conceded, so "
+                "the bull thesis clearly wins.\n\n"
+                "**Strategic Actions**: Buy aggressively."
+            )
+        )
+    )
+    state = _base_state(
+        data_quality_verdict="normal",
+        data_quality_gate_decision={"decision": "normal"},
+    )
+    state["investment_debate_state"] = {
+        "history": "Bull Analyst: bullish case",
+        "count": 1,
+        "bull_history": "Bull Analyst: bullish case",
+        "bear_history": "",
+        "current_response": "Bull Analyst: bullish case",
+        "turns": [{"speaker": "Bull", "content": "bullish case"}],
+    }
+    manager = create_research_manager(llm)
+    out = manager(state)
+    plan = out["investment_plan"]
+    low = plan.lower()
+    assert "bear overplayed" not in low
+    assert "conceded" not in low
+    assert "bear" not in low or "no response from: bear" in low
+    # Rating policy preserved (not coerced to Hold just because partial).
+    assert "**Recommendation**: Buy" in plan
+
+
+def test_partial_forwards_are_quarantined_separately(tmp_path):
+    # The raw partial narrative may exist only in the quarantined audit file,
+    # never in the trusted plan.
+    llm = MagicMock()
+    llm.with_structured_output = MagicMock(return_value=None)
+    llm.invoke = MagicMock(
+        return_value=MagicMock(
+            content="**Recommendation**: Buy\n\n**Rationale**: the bear conceded.\n\n**Strategic Actions**: buy."
+        )
+    )
+    audit = tmp_path / "partial_audit.jsonl"
+    state = _base_state(
+        data_quality_verdict="normal",
+        data_quality_gate_decision={"decision": "normal"},
+    )
+    state["debate_partial_audit_path"] = str(audit)
+    state["investment_debate_state"] = {
+        "history": "Bull Analyst: bullish case",
+        "count": 1,
+        "bull_history": "Bull Analyst: bullish case",
+        "bear_history": "",
+        "current_response": "Bull Analyst: bullish case",
+        "turns": [{"speaker": "Bull", "content": "bullish case"}],
+    }
+    manager = create_research_manager(llm)
+    out = manager(state)
+    assert "the bear conceded" not in out["investment_plan"].lower()
+    raw = audit.read_text(encoding="utf-8")
+    assert "the bear conceded" in raw
+    assert "non_authoritative" in raw
+
+
+def _legacy_unknown_state(**overrides):
+    """A non-blocked state with legacy prose-only histories (UNKNOWN evidence)."""
+    state = _base_state(
+        data_quality_verdict="normal",
+        data_quality_gate_decision={"decision": "normal"},
+    )
+    state["investment_debate_state"] = {
+        "history": "Bull Analyst: bull prose\nBear Analyst: bear prose",
+        "count": 2,
+        "bull_history": "Bull Analyst: bull prose",
+        "bear_history": "Bear Analyst: bear prose",
+        "current_response": "Bear Analyst: bear prose",
+        # No structured turns -> legacy/unknown (prose does not prove execution).
+    }
+    state.update(overrides)
+    return state
+
+
+def test_adversarial_unknown_legacy_not_trusted_in_plan(tmp_path):
+    # Partial OR UNKNOWN -> deterministic trusted template. A legacy/unknown
+    # state whose model invents absent-opponent attribution must NOT leak into
+    # the trusted plan; the raw narrative exists only in quarantined audit.
+    llm = MagicMock()
+    llm.with_structured_output = MagicMock(return_value=None)
+    llm.invoke = MagicMock(
+        return_value=MagicMock(
+            content=(
+                "**Recommendation**: Buy\n\n"
+                "**Rationale**: The bear overplayed its hand and conceded, and "
+                "the bull rebutted it decisively.\n\n"
+                "**Strategic Actions**: Buy aggressively."
+            )
+        )
+    )
+    state = _legacy_unknown_state()
+    state["debate_partial_audit_path"] = str(tmp_path / "q.jsonl")
+    manager = create_research_manager(llm)
+    out = manager(state)
+    plan = out["investment_plan"].lower()
+    assert "overplayed" not in plan
+    assert "rebutted" not in plan
+    assert "**rationale**:" in plan
+    assert "unverified" in plan
+    # Rating policy preserved (unknown/legacy is not coerced to Hold).
+    assert "**recommendation**: buy" in plan
+
+
+def test_default_results_dir_quarantine_no_override(tmp_path):
+    # No explicit debate_partial_audit_path; the DEFAULT path must be derived
+    # from results_dir + identity so the raw audit is persisted (not dropped).
+    llm = MagicMock()
+    llm.with_structured_output = MagicMock(return_value=None)
+    llm.invoke = MagicMock(
+        return_value=MagicMock(
+            content="**Recommendation**: Buy\n\n**Rationale**: the bear conceded.\n\n**Strategic Actions**: buy."
+        )
+    )
+    state = _legacy_unknown_state()
+    state["results_dir"] = str(tmp_path)
+    state["company_of_interest"] = "COF"
+    state["trade_date"] = "2026-05-13"
+    # Ensure no explicit override.
+    state.pop("debate_partial_audit_path", None)
+    manager = create_research_manager(llm)
+    out = manager(state)
+    assert "the bear conceded" not in out["investment_plan"].lower()
+    # The default quarantine file exists under results_dir/<ticker>/<date>/audit.
+    files = list(tmp_path.rglob("partial_debate_audit.jsonl"))
+    assert len(files) == 1, list(tmp_path.rglob("*"))
+    raw = files[0].read_text(encoding="utf-8")
+    assert "the bear conceded" in raw
+    assert "non_authoritative" in raw
+    assert "2026-05-13/COF" in raw

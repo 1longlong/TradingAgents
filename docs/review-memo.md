@@ -7,6 +7,60 @@ complete. Reviews are recorded here; AI-tool use is recorded separately in
 
 ## Current status (as of 2026-11-10)
 
+- **CURRENT DISPOSITION (supersedes the pre-repair bullets below for these
+  specific figures; NOT human acceptance).** The DEBT-021/033 measured-budget +
+  participation repair (ADR-007), including the follow-up unknown/quarantine/
+  malformed fixes, is implemented and independently verified on the FINAL tree:
+  **644 focused offline tests passed (2 warnings)**, 0 forbidden socket
+  attempts, **25/25** external boundary probes (now including the UNKNOWN
+  adversary, default quarantine + run identity, and malformed unhashable-speaker
+  cases); canonical `scripts/validate/strict_offline_harness.py` **1822 passed /
+  4 SAME known baseline failures / 1 skipped / 1 deselected / 22 warnings / 88
+  subtests / 1 intercepted baseline socket attempt (no connection)**;
+  Ruff/governance 42/42/diff clean (logbook 076, AUL-037). Bounded real
+  school-model validation **completed on the frozen PRE-FOLLOWUP tree** (25
+  application calls, 228,903 gateway tokens, 0 retries): D2 = a **narrow
+  controlled-fixture blocked-path proof** (real gate + real downstream nodes;
+  zero Bull/Bear invokes; Hold throughout; participation `data_quality_blocked`)
+  — **not** exhaustive and **not** live-vendor blocked proof; D1 = real-vendor
+  run with Bull+Bear invoked, one complete round, stop `max_rounds_reached`,
+  measured + provider usage (logbook 074, AUL-035). The follow-up branches were
+  **offline-only** verified — there was **no second live run** and no claim the
+  old 214-file fingerprint is unchanged after the follow-up. **Human final
+  acceptance remains PENDING.** At verification completion these changes were
+  local and uncommitted/unpushed. The human has subsequently authorized their
+  commit and push to `feature/data-quality-debate-control` only (AUL-038);
+  consult Git history and remote verification for publication completion.
+  This authorization is NOT final feature acceptance, PR creation, or a release
+  merge. Remaining limits stay OPEN:
+  failed-checkpoint/cross-resume hard-budget accounting unsolved; all-agent
+  production usage totals untracked; degraded confidence cap (DEBT-014) and
+  optional adapters (DEBT-015/RISK-015) open; the suite is **NOT all-green**.
+- **Follow-up (2026-11-10, OFFLINE ONLY; logbook 075, AUL-036):** three
+  approved-plan deviations were corrected — the deterministic trusted
+  partial-debate template + quarantine now apply to **partial OR unknown/legacy**
+  (incl. blocked, Hold re-pinned); the quarantine path is resolved via
+  `resolve_audit_paths` so the real graph persists under `results_dir`/identity
+  without an explicit override; malformed structured state (list-valued speaker
+  / non-mapping turns) fails closed to unverified instead of raising. Fresh
+  OFFLINE evidence (independent): 644 focused passed / 25/25 probes;
+  full strict offline 1822 passed / 4 SAME baseline failures / 1 skipped / 1
+  deselected / 88 subtests; Ruff/governance 42/42/diff clean (logbook 076,
+  AUL-037; the earlier inline 392 was the pre-independent count). The D1/D2 live
+  results apply to the **frozen pre-follow-up** tree and are **not** re-claimed
+  for these follow-up branches (no live audit-file-persistence claim; no second
+  live run; no claim the 214-file fingerprint is unchanged after follow-up).
+  Human acceptance remains PENDING; changes remain UNCOMMITTED/UNPUSHED.
+
+- **HISTORICAL / PRE-REPAIR (retained for provenance; superseded above for its
+  counts and "live blocked-path OPEN" phrasing).** The earlier feature-branch
+  checkpoint publication note below was recorded before the repair: at that time
+  the full offline pre-push recheck reported 1768 passed / 4 known failures / 1
+  skipped / 1 deselected / 1 intercepted socket attempt, and the live
+  blocked-path verification was open. It remains an accurate record of that
+  checkpoint's authorization (a preliminary backup, **not** acceptance); it does
+  not describe the CURRENT tree.
+
 - **Feature-branch checkpoint publication authorized (not acceptance).** The
   human explicitly requested committing/pushing the current work to
   `feature/data-quality-debate-control` as a preliminary backup. This does not
@@ -21,7 +75,9 @@ complete. Reviews are recorded here; AI-tool use is recorded separately in
   (“批准本轮修复计划和测试用例”). This authorizes the two repair batches (the first
   batch's guard/report/validator fixes + this second documentation/traceability
   batch) to proceed; it is **NOT** acceptance of the fixes. **Final human
-  acceptance remains PENDING.**
+  acceptance remains PENDING.** (The approved plan has since been implemented and
+  verified — see the CURRENT DISPOSITION above and logbook 074 — which is still
+  not acceptance.)
 - **Present AI technical checks (2026-11-10, NOT human approval):**
   - First batch (F1): `tests/test_output_guard.py` 197 passed; report-artifact and
     shared-ID regressions; strict offline 4 failed / 1743 passed (logbook 070).
@@ -37,16 +93,19 @@ complete. Reviews are recorded here; AI-tool use is recorded separately in
   made) from the existing `test_no_data_handling` baseline, so **NFR-OFF-001 stays
   PARTIAL/OPEN**; the suite is **NOT all-green**. No baseline test/CI/waiver was
   modified.
-- **Independent Codex AI verification (current final, NOT human acceptance;
-  logbook 072):** 14-file focused suite **583 passed / 2 warnings**; validator
-  **42/42 PASS** + no secret hits; independent boundary **39/39**; **440** negative
-  schema mutations rejected; actual `strict_offline_harness.py` run **4 failed /
-  1768 passed / 1 skipped / 1 deselected** with the same **1** intercepted
-  baseline attempt; Ruff clean; `git diff --check` clean. Earlier in-batch
-  intermediate runs are kept historical; this is the current final recorded
-  result and is AI technical verification only.
+- **Independent Codex AI verification (HISTORICAL / PRE-REPAIR, logbook 072; the
+  "583 passed / 1768 passed" figures are superseded by the CURRENT DISPOSITION
+  above; NOT human acceptance):** 14-file focused suite **583 passed / 2
+  warnings**; validator **42/42 PASS** + no secret hits; independent boundary
+  **39/39**; **440** negative schema mutations rejected; actual
+  `strict_offline_harness.py` run **4 failed / 1768 passed / 1 skipped / 1
+  deselected** with the same **1** intercepted baseline attempt; Ruff clean;
+  `git diff --check` clean. This was the pre-repair recorded result and is AI
+  technical verification only.
 - **User-authorized school-model live run (2026-11-10, Codex; docs-only record;
-  NOT human acceptance; logbook 073):** measured by external callbacks, **16
+  NOT human acceptance; logbook 073 — HISTORICAL / PRE-REPAIR; superseded for its
+  "0 complete rounds / DEBT-021 OPEN" status by the CURRENT DISPOSITION / logbook
+  074):** measured by external callbacks, **16
   application model calls / 170,665 gateway-reported tokens / 0 truncations**
   (excludes OpenCode documentation-tool inference); final and report textual
   signal both **Overweight**. The live Gate was **DEGRADED, not blocked**, so
@@ -616,17 +675,74 @@ harness 4 failed / 1768 passed / 1 skipped / 1 deselected (same 4 known
 baselines) with 1 intercepted attempt (NFR-OFF-001 PARTIAL/OPEN); Ruff clean;
 `git diff --check` clean (logbook 071).
 
-**Independent Codex AI verification of the CURRENT files (current final;
-logbook 072, NOT human acceptance):** 14-file focused suite 583 passed / 2
+**Independent Codex AI verification of the CURRENT files (HISTORICAL /
+PRE-REPAIR; logbook 072, NOT human acceptance — superseded by the CURRENT
+DISPOSITION at the top and logbook 074):** 14-file focused suite 583 passed / 2
 warnings; validator 42/42 PASS + no secret hits; independent boundary 39/39;
 440 negative schema mutations rejected; actual `scripts/validate/
 strict_offline_harness.py` run 4 failed / 1768 passed / 1 skipped / 1 deselected
 with the same 1 intercepted baseline attempt; Ruff clean; `git diff --check`
-clean. Earlier in-batch intermediate runs are kept historical; this is the
-current final recorded result.
+clean. Earlier in-batch intermediate runs are kept historical; the 583/1768
+figures describe the pre-repair tree, not the current one.
 
-**Decision:** Awaiting independent review and later human acceptance. No human
+**Decision (HISTORICAL / PRE-REPAIR, logbook 071/072):** Awaiting independent
+review and later human acceptance. No human
 score, CI enforcement, permission enforcement, or acceptance is claimed. All
 missing CI/permission enforcement and human scores/team materials stay PENDING;
 existing live-budget/claim-date/confidence-cap/optional-adapter/CLI/audit debts
 stay OPEN.
+
+## 2026-11-10 — DEBT-021/033 repair (budget accounting + participation truth)
+
+**Scope (implementation present; NOT accepted):** ADR-007 measured-clock budget
+accounting, deterministic participation truth, SAFE PARTIAL-DEBATE manager
+template, sanitized failure ledger, report/JSON/markdown participation and
+per-field usage provenance. No feature beyond the approved plan; no
+dependencies/CI/active-permissions/human-rules change; no commit/push/PR.
+
+**Verification (offline + bounded live, AI; NOT human acceptance — PRE-FOLLOWUP
+counts; superseded by the CURRENT DISPOSITION / logbook 076):**
+Inline implementation focused suite 387 passed. Codex independent re-run of the
+then-current frozen PRE-FOLLOWUP tree: 639 focused offline tests passed, 0
+forbidden socket attempts, 19/19 external boundary probes; full canonical
+`scripts/validate/strict_offline_harness.py` 1817 passed, 4 SAME known baseline
+failures (3 date-sensitive OHLCV cache + 1 intercepted baseline network),
+1 skipped, 1 deselected, 88 subtests, 1 intercepted baseline socket
+attempt (no connection); Ruff/governance 42/42/diff clean; code fingerprint of
+214 files unchanged across the live verification (this fingerprint statement
+applies to the PRE-FOLLOWUP tree only, not the final post-followup tree).
+
+Bounded real school-model validation COMPLETED (Codex; guarded at 32 requests /
+250000 observed tokens / 4096 output-per-call / 120 s per request / 1200 s wall;
+25 actual application calls, 228903 reported gateway tokens, 0 retries, no
+trades, no threshold tuning). Evidence backup:
+`/Users/wangyiwen/OpenCodeRecords/TradingAgents/2026-11-10-school-budget-attribution-lahiq22h/`.
+- **D2 (blocked, controlled fixture):** empty critical-market-record fixture at
+  the REAL gate boundary + synthetic market analyst report (clearly NOT
+  live-vendor data), then REAL school RM/Trader/risk/Portfolio nodes: 6 real
+  calls, Gate blocked, zero Bull/Bear invokes, Hold at RM/Trader/Portfolio/
+  final/memory, no executable blocked Trader sizing, report bodies agree,
+  participation explicitly `data_quality_blocked`; 14/14 checks. This is a
+  NARROW controlled-fixture blocked-path proof, not exhaustive/live-vendor
+  blocked proof.
+- **D1 (degraded, real vendors NVDA 2026-11-05):** Gate degraded, Bull+Bear
+  invoked, one complete round, stop `max_rounds_reached` (NOT premature
+  `budget_exhausted`); production `debate_usage` 2 calls / 34744 tokens
+  (30902 in + 3842 out) / 34.056785748922266 s / estimated false /
+  tokens_source provider / seconds_source measured / transport_attempts null
+  (honest); independent callback elapsed 14.38+19.67 s and gateway totals match;
+  report/state/participation/stop consistency 7/7.
+- A first HARNESS-SETUP attempt aborted (`AttributeError` in the synthetic
+  analyst message shape) BEFORE ANY model calls (calls=0); the harness was fixed
+  and the original artifact retained. It is a harness-setup fault, not a product
+  failure or a retry of a failed product call.
+
+**Decision:** The current implementation is technically verified offline and by
+the bounded live scenarios, PENDING human acceptance. This is NOT full-suite
+green (4 known baseline failures remain) and NOT a claim of final feature
+completeness. Remaining limits stay explicit: failed-checkpoint/cross-resume
+hard-budget accounting is unsolved; all-agent production usage totals are
+untracked in the product (external harness has a full-run meter only); the
+degraded confidence cap, optional-category adapters, claim-date semantics and
+other open debts remain OPEN. No human score/approval is claimed or invented;
+no prior signatures are changed.

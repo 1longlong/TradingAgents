@@ -406,3 +406,29 @@ class TestSummaryReserve:
         res = graph.invoke(_initial_state())
         # Char-based estimates are honest estimates, never physical guarantees.
         assert res["debate_usage"]["estimated"] is True
+
+    def test_refused_call_does_not_invoke_model(self):
+        # FR-DDT-003 / NFR-BUD-001 / INV-7: a pre-call refusal routes to the
+        # manager WITHOUT invoking the refused speaker's model.
+        cfg = DebateTerminationConfig.from_dict({"max_calls": 1, "max_debate_rounds": 2})
+        quick = _fake_llm()
+        deep = _fake_llm("Hold")
+        graph = _build_graph(quick, deep, config_override=cfg)
+        res = graph.invoke(_initial_state())
+        prompts = _researcher_prompts(quick)
+        assert prompts["bull"] is True
+        # Bear was refused pre-call: no Bear researcher prompt was sent.
+        assert prompts["bear"] is False
+        assert res["debate_termination_decision"]["stop_reason"] == "budget_exhausted"
+
+    def test_graph_records_measured_seconds(self):
+        # A real graph call records a measured elapsed time (>= 0), never the
+        # char-derived time basis.
+        cfg = DebateTerminationConfig.from_dict({"max_calls": 100, "max_debate_rounds": 1})
+        quick = _fake_llm()
+        deep = _fake_llm("Hold")
+        graph = _build_graph(quick, deep, config_override=cfg)
+        res = graph.invoke(_initial_state())
+        usage = res["debate_usage"]
+        assert usage["seconds"] >= 0.0
+        assert usage["provenance"]["seconds"] in ("measured", "mixed")

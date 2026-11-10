@@ -705,8 +705,11 @@ class TestExecutableInstructionSurvival:
         assert "**Recommendation**: Hold" in plan, plan
         for word in DIRECTIONAL:
             assert f"**Recommendation**: {word}" not in plan
-        # Rationale survives; a fullwidth directional header does not.
-        assert "momentum looked strong." in plan
+        # Blocked + zero executed speakers: the safer deterministic partial
+        # template replaces the model narrative (explicitly approved), so the
+        # raw rationale is NOT trusted; the fullwidth directional header is gone.
+        assert "momentum looked strong." not in plan
+        assert "**Rationale**:" in plan
         assert "Ｂｕｙ" not in plan
 
 

@@ -502,3 +502,120 @@ class TestReportPersistenceRoundtrip:
         write_report_artifacts(state, "COF", tmp_path)
         raw = (tmp_path / "0_quality" / "evidence_manifest.json").read_text()
         assert "CHAIN OF THOUGHT" not in raw
+
+
+class TestMeasuredProvenanceAndParticipation:
+    """FR-DQG-005 / NFR-AUD-001 / INV-6: measured provenance and participation
+    truth surfaced in the report artifacts (DEBT-021/033 repair)."""
+
+    def _summary(self, tmp_path, state=None):
+        write_report_artifacts(state or _state(), "COF", tmp_path)
+        return json.loads((tmp_path / "run_summary.json").read_text())
+
+    def test_measured_provenance_surfaced(self, tmp_path):
+        state = _state()
+        state["debate_usage"] = {
+            "calls": 2,
+            "tokens": 300,
+            "seconds": 4.5,
+            "estimated": False,
+            "provenance": {
+                "tokens": "provider",
+                "seconds": "measured",
+                "input_tokens": "provider",
+                "output_tokens": "provider",
+            },
+            "clock": "measured",
+            "failed_calls": 0,
+            "transport_attempts": None,
+            "input_tokens": 200,
+            "output_tokens": 100,
+        }
+        prov = self._summary(tmp_path, state)["usage_provenance"]
+        assert prov["tokens_source"] == "provider"
+        assert prov["seconds_source"] == "measured"
+        assert prov["clock"] == "measured"
+        assert prov["input_tokens"] == 200
+        assert prov["output_tokens"] == 100
+        assert prov["estimated"] is False
+
+    def test_partial_split_reported_null(self, tmp_path):
+        state = _state()
+        state["debate_usage"] = {
+            "calls": 1,
+            "tokens": 150,
+            "seconds": 1.0,
+            "estimated": True,
+            "provenance": {"tokens": "estimated", "seconds": "measured", "tokens_partial": True},
+            "input_tokens": 100,
+            "input_tokens_partial": True,
+        }
+        prov = self._summary(tmp_path, state)["usage_provenance"]
+        # A partial split is never presented as a complete provider total.
+        assert prov["input_tokens"] is None
+        assert prov["input_tokens_partial"] is True
+
+    def test_participation_reported_in_summary_and_trace(self, tmp_path):
+        state = _state()
+        state["investment_debate_state"] = {
+            "round_metrics": [],
+            "budget": {},
+            "turns": [{"speaker": "Bull", "content": "b"}],
+            "bull_history": "b",
+            "bear_history": "",
+            "history": "b",
+        }
+        state["debate_termination_decision"] = {
+            "route": "summarize",
+            "stop_reason": "budget_exhausted",
+            "refused_speaker": "Bear",
+            "trace": [],
+        }
+        write_report_artifacts(state, "COF", tmp_path)
+        summary = json.loads((tmp_path / "run_summary.json").read_text())
+        assert summary["debate_stop_reason"] == "budget_exhausted"
+        trace = json.loads((tmp_path / "2_research" / "debate_trace.json").read_text())
+        part = trace["participation"]
+        assert part["status"] == "one"
+        assert part["executed_speakers"] == ["Bull"]
+        assert "Bear" in part["skipped_speakers"]
+        # run_summary.json must ALSO carry the same top-level-aware participation
+        # (not only the trace), and the Markdown summary must state it too.
+        sp = summary["participation"]
+        assert sp["status"] == "one"
+        assert sp["executed_speakers"] == ["Bull"]
+        assert "Bear" in sp["skipped_speakers"]
+        assert sp["skip_reason"]
+        md = build_run_summary_section(state, "COF", {})
+        assert "Debate participation: status=one" in md
+        assert "skip_reason=" in md
+
+    def test_conflict_originals_survive_report_json(self, tmp_path):
+        state = _state()
+        state["debate_usage"] = {
+            "calls": 1,
+            "tokens": 112,
+            "seconds": 1.0,
+            "estimated": False,
+            "provenance": {
+                "tokens": "derived_conflicted",
+                "seconds": "measured",
+                "tokens_conflict": True,
+                "tokens_conflict_originals": [
+                    {"source": "usage_metadata", "input_tokens": 100, "output_tokens": 10, "total_tokens": 110, "call_index": 0},
+                    {"source": "response_metadata.token_usage", "input_tokens": 101, "output_tokens": 11, "total_tokens": 112, "call_index": 0},
+                ],
+            },
+            "clock": "measured",
+            "failed_calls": 0,
+            "transport_attempts": None,
+        }
+        write_report_artifacts(state, "COF", tmp_path)
+        trace = json.loads((tmp_path / "2_research" / "debate_trace.json").read_text())
+        prov = trace["usage_provenance"]
+        assert prov["tokens_conflict"] is True
+        # Source-labelled originals remain in the persisted trace usage dict.
+        stored = trace["usage"]["provenance"]["tokens_conflict_originals"]
+        by_source = {o["source"]: o for o in stored}
+        assert by_source["usage_metadata"]["total_tokens"] == 110
+        assert by_source["response_metadata.token_usage"]["total_tokens"] == 112

@@ -1516,3 +1516,129 @@ status: Partial (live evidence recorded honestly; DEGRADED not blocked; DEBT-021
         and the optional-adapter limitation remain OPEN; 0 complete rounds)
 date: 2026-11-10
 ```
+
+### 074 — DEBT-021/033 measured-budget + participation repair: independent verification and bounded school-model validation (2026-11-10; AI technical, NOT acceptance)
+
+```text
+scope: Independent verification of the CURRENT frozen tree (source/tests
+       unchanged; fingerprint of 214 files unchanged across the live
+       verification) plus a bounded real school-model validation of ADR-007.
+       Documentation-only recording in this entry; no source/test edit, no git
+       mutation, no human acceptance claimed or invented.
+
+offline (independent, Codex): 639 focused offline tests passed; 0 forbidden
+       socket attempts; 19/19 external boundary probes. Full canonical
+       scripts/validate/strict_offline_harness.py: 1817 passed, 4 SAME known
+       baseline failures (3 date-sensitive OHLCV cache + the intercepted
+       baseline network baseline), 1 skipped, 1 deselected, 22 warnings, 88
+       subtests, 1 intercepted baseline socket attempt (no connection). Ruff /
+       governance (42/42, no likely secrets) / git diff --check clean.
+
+live guards (shared across both scenarios): 32 requests / 250000 observed tokens
+       / 4096 output tokens per call / 120 s per request / 1200 s wall; retries
+       disabled (0 retries); no trades; no threshold tuning. Selected-case only,
+       NOT exhaustive and NOT a Phase-4B benchmark. Credentials used only in
+       runtime memory; no credential value emitted or persisted. Total: 25
+       actual application calls, 228903 reported gateway tokens, 0 length
+       truncations. Evidence backup:
+       /Users/wangyiwen/OpenCodeRecords/TradingAgents/
+         2026-11-10-school-budget-attribution-lahiq22h/ (verification.json +
+         D1, D2 subtrees).
+
+D2 (ran first) — blocked, controlled fixture: an EMPTY critical-market-record
+       fixture at the REAL gate boundary plus a synthetic market analyst report
+       (clearly NOT live-vendor data) then REAL school RM/Trader/risk/Portfolio
+       nodes. 6 real model calls; Gate blocked; ZERO Bull/Bear invokes; Hold at
+       RM/Trader/Portfolio/final/memory; no executable blocked Trader sizing;
+       report bodies agree; participation explicitly data_quality_blocked;
+       14/14 scenario checks passed. This is a NARROW controlled-fixture proof of
+       the blocked path, NOT exhaustive and NOT a live-vendor blocked proof.
+
+D1 — degraded, real vendors NVDA 2026-11-05: Gate degraded; Bull+Bear actually
+       invoked; one complete round; stop_reason max_rounds_reached (NOT a
+       premature budget_exhausted). Production debate_usage: 2 calls / 34744
+       tokens (30902 input + 3842 output) / 34.056785748922266 seconds /
+       estimated false / tokens_source provider / seconds_source measured /
+       transport_attempts null (honestly unknown). Independent callback elapsed
+       14.38 + 19.67 s and gateway totals match. Report/state/participation/stop
+       consistency 7/7 checks passed. No all-agent production-usage
+       instrumentation is claimed: the external harness has a full-run meter
+       only.
+
+harness-setup note (honest, not hidden): a first HARNESS-SETUP attempt
+       (backup ...-setup-incomplete-qjoo1bhs) stopped with an AttributeError in
+       the synthetic analyst message shape BEFORE ANY model calls (calls = 0).
+       The harness AIMessage contract was fixed and the original artifact
+       retained. This is a harness-setup fault, NOT a product failure and NOT a
+       retry of a failed product call. The successful subsequent run (lahiq22h)
+       covers 21/21 checks. No additional live runs were authorized.
+
+remaining limits (explicit): failed-checkpoint / cross-resume hard-budget
+       accounting is unsolved; all-agent production usage totals are untracked in
+       the product; the degraded confidence cap, optional-category adapters,
+       claim-date semantics and other open debts remain OPEN. NOT full-suite
+       green (4 known baseline failures remain); NOT final feature completeness.
+
+source: Supplied by Codex (independent verification + bounded live scenarios),
+        read-only here; NOT re-run by this documentation turn.
+status: Technically verified offline + by bounded live scenarios; PENDING human
+        acceptance. Narrow controlled-fixture blocked proof (not exhaustive).
+date: 2026-11-10
+```
+
+### 075 — DEBT-021/033 follow-up: unknown/legacy template + default quarantine + malformed fail-closed (2026-11-10; AI technical, OFFLINE ONLY)
+
+```text
+scope: Follow-up correcting three deviations from the already-approved ADR-007
+       plan (no new feature): (1) deterministic trusted partial-debate template +
+       quarantine now apply whenever the debate is NOT authoritatively two-sided
+       (partial OR unknown/legacy), incl. blocked (Hold re-pinned); (2) quarantine
+       path resolved via resolve_audit_paths(state) so the real graph persists
+       the redacted raw audit under results_dir/identity without an explicit
+       override; (3) malformed structured state fails closed to unverified rather
+       than raising (unhashable list-valued speaker / non-mapping turns guarded).
+
+result (FRESH OFFLINE EVIDENCE ONLY — no new live run): focused suite 392 passed
+       (10 files); full strict offline (socket patched) 1822 passed, 4 SAME known
+       baseline failures (3 date-sensitive OHLCV cache + 1 intercepted baseline
+       network), 1 skipped, 1 deselected, 88 subtests; Ruff clean; governance
+       42/42 PASS; git diff --check clean. No new failures or waivers.
+
+live-evidence boundary: the 2026-11-10 D1/D2 bounded live results (logbook 074)
+       apply to the FROZEN PRE-FOLLOWUP tree and are NOT re-claimed for these
+       follow-up branches; there is NO live audit-file-persistence claim and no
+       claim that the 214-file fingerprint is unchanged after the follow-up.
+       D1/D2 request/iteration and rating-policy behavior is unaffected by these
+       branches. Human acceptance remains PENDING.
+
+status: Offline-verified follow-up; PENDING human acceptance.
+date: 2026-11-10
+```
+
+### 076 — POST-followup independent offline verification (final tree; 2026-11-10; AI technical, OFFLINE ONLY)
+
+```text
+scope: Independent POST-followup offline verification of the final tree
+       (docs/AUL-036 follow-up branches: unknown/legacy template, default
+       quarantine + run identity, malformed unhashable-speaker fail-closed).
+       Offline only; no new live/model calls; no source/test change requested.
+
+CURRENT FINAL OFFLINE EVIDENCE: 644 focused tests passed (2 warnings), 0
+       forbidden socket attempts; updated external boundary probes 25/25 passed
+       (now including the UNKNOWN adversary, default quarantine + run identity,
+       and malformed unhashable-speaker cases); canonical full strict harness
+       1822 passed, 4 SAME baseline failures (3 date-sensitive OHLCV cache + 1
+       intercepted baseline network), 1 skipped, 1 deselected, 22 warnings, 88
+       subtests, 1 intercepted baseline socket attempt (no connection).
+
+supersedes for COUNTS ONLY (not history): the earlier live-time 639 focused /
+       1817 full / 19 probes described the frozen PRE-FOLLOWUP tree (logbook
+       074/AUL-035). The 25 live application calls / 228903 tokens and the
+       D2+D1 scenario results remain explicitly PRE-FOLLOWUP; the follow-up
+       branches are offline-only verified. No claim of a second live run and no
+       claim that the old 214-file fingerprint is unchanged after the follow-up.
+
+status: Offline-verified final tree; PENDING human acceptance (not all-green: 4
+        known baseline failures remain).
+date: 2026-11-10
+```

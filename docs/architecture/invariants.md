@@ -18,9 +18,11 @@ Status vocabulary:
 - **Unverified** — stated intent not yet mechanically proven.
 - **Not implemented** — no code exists.
 
-No invariant is claimed globally "Enforced" for live runtime; the only
-end-to-end live run so far (2026-11-06, NVDA) was **degraded**, not blocked, so it
-did not exercise the blocked fail-closed path.
+No invariant is claimed globally "Enforced" for live runtime; the 2026-11-06
+NVDA run was **degraded**, not blocked. A 2026-11-10 bounded validation added a
+**narrow controlled-fixture blocked-path proof** (D2: real gate + real RM/Trader/
+risk/Portfolio nodes, zero Bull/Bear invokes, Hold throughout) — this is not an
+exhaustive or live-vendor blocked proof.
 
 ## INV-1 Fail closed on missing evidence or internal error
 
@@ -38,7 +40,7 @@ did not exercise the blocked fail-closed path.
   asserts a raised exception becomes `blocked`, not `normal`.
 - **Fallback:** verdict is `blocked`; router routes to Research Manager; output
   pinned to Hold; final signal Hold.
-- **Enforcement gap / status:** **Enforced (code, offline)** on the covered path (blocked path proven offline; the 2026-11-06 live run was degraded, not blocked). Degraded
+- **Enforcement gap / status:** **Enforced (code, offline)** on the covered path (blocked path proven offline; the 2026-11-06 live run was degraded, not blocked). 2026-11-10 D2 adds a narrow **controlled-fixture** blocked-path live proof (real gate + real downstream nodes; zero Bull/Bear invokes; Hold throughout) — not exhaustive/live-vendor. Degraded
   confidence ceiling (DEBT-014) is a separate OPEN item, not a fail-closed gap.
 
 ## INV-2 Determinism of the gate and evaluator
@@ -108,7 +110,7 @@ did not exercise the blocked fail-closed path.
 - **Negative verification:** artifact audit asserts per-evidence validation
   association and identity/provenance are present (never silently dropped).
 - **Fallback:** absent state → safe defaults; never invented values.
-- **Enforcement gap / status:** **Enforced (code, offline)**.
+- **Enforcement gap / status:** **Enforced (code, offline)**. ADR-007 adds deterministic debate participation truth (structured-only; legacy prose = unverified) surfaced in reports, and a sanitized allow-listed failure ledger (`docs`/`tests/test_debate_participation.py`) — never exception text, prompts, bodies or auth. Confirmed by the 2026-11-10 bounded live D2 run: participation explicitly `data_quality_blocked`, zero absent-opponent attribution in the trusted report.
 
 ## INV-7 Budget safety
 
@@ -121,11 +123,21 @@ did not exercise the blocked fail-closed path.
 - **Negative verification:** `max_calls=1` executes exactly one debate call; a
   reserve-only case is refused.
 - **Fallback:** refuse the call → Research Manager with `budget_exhausted`.
-- **Enforcement gap / status:** **Partial** — reserve is enforced against
-  *estimated* usage. The 2026-11-06 live run showed the estimate (2171.77 s vs an
-  actual 12.72 s; 16,289 est vs 18,058 reported tokens) exhausted the time budget
-  before Bear, yielding 0 complete rounds (DEBT-021 / RISK-021, OPEN). The guard
-  itself is active and safe; the accounting basis is the open defect.
+- **Enforcement gap / status:** **Partial → improved (code, offline).** The
+  2026-11-06 run showed the estimate (2171.77 s vs actual 12.72 s) exhausting the
+  time budget before Bear (DEBT-021 / RISK-021). ADR-007 repair (2026-11-10):
+  each real Bull/Bear call is now timed with an injectable monotonic clock and
+  uses provider-reported token usage when valid, with explicitly-labelled
+  estimate fallback; invalid/backwards/non-finite clocks abort (no char-time
+  revival); per-field provenance and conflict originals are recorded; a
+  sanitized failure ledger records aborted attempts. Offline-proven
+  (`tests/test_debate_budget.py`, `test_debate_researcher_timing.py`) and
+  confirmed by the 2026-11-10 bounded live D1 run (real Bull+Bear, measured
+  seconds, provider tokens, `transport_attempts` null; stop `max_rounds_reached`,
+  not premature `budget_exhausted`). REMAINING GAP (explicit): cross-resume
+  hard-budget accounting is NOT solved (a failed node's usage is not persisted;
+  the sanitized failure ledger is the only durable record of an aborted call).
+  All-agent production usage totals remain untracked in the product.
 
 ## INV-8 Backward compatibility
 
