@@ -18,6 +18,7 @@ from tradingagents.agents import (
     create_portfolio_manager,
     create_research_manager,
     create_sentiment_analyst,
+    create_sentiment_prefetch_node,
     create_trader,
 )
 from tradingagents.agents.utils.agent_states import AgentState
@@ -31,6 +32,7 @@ from .market_governance import parse_market_tool_governance
 from .market_tool_governance import create_market_governance_nodes
 from .news_governance import parse_news_tool_governance
 from .news_tool_governance import create_news_governance_nodes
+from .sentiment_prefetch import PREFETCH_NODE, parse_sentiment_prefetch
 
 # Every target a shared conditional router can return. Each edge driven by the
 # router maps all of them, so a fall-through return (e.g. under prompt/i18n/
@@ -110,9 +112,20 @@ class GraphSetup:
                 llm=self.quick_thinking_llm, tool_node=self.tool_nodes["news"]
             )
 
+        # The sentiment prefetch split (opt-in, default off) adds one node in
+        # front of the sentiment analyst: it saves the three source blocks, and
+        # the analyst then consumes them instead of fetching. With it off the
+        # analyst is its original single node.
+        prefetch_split = (
+            parse_sentiment_prefetch(run_config).enabled
+            and any(spec.key == "social" for spec in plan.specs)
+        )
+
         analyst_factories = {
             "market": lambda: create_market_analyst(self.quick_thinking_llm),
-            "social": lambda: create_sentiment_analyst(self.quick_thinking_llm),
+            "social": lambda: create_sentiment_analyst(
+                self.quick_thinking_llm, prefetch_split=prefetch_split
+            ),
             "news": lambda: create_news_analyst(self.quick_thinking_llm),
             "fundamentals": lambda: create_fundamentals_analyst(self.quick_thinking_llm),
         }
@@ -137,6 +150,8 @@ class GraphSetup:
             workflow.add_node(spec.agent_node, analyst_factories[spec.key]())
             workflow.add_node(spec.clear_node, create_msg_delete())
             workflow.add_node(spec.tool_node, self.tool_nodes[spec.key])
+            if spec.key == "social" and prefetch_split:
+                workflow.add_node(PREFETCH_NODE, create_sentiment_prefetch_node())
             if spec.key in governance_nodes:
                 prefix = spec.key
                 workflow.add_node(f"{prefix}_tool_prepare", governance_nodes[spec.key]["prepare"])
@@ -154,9 +169,17 @@ class GraphSetup:
         workflow.add_node("Conservative Analyst", conservative_analyst)
         workflow.add_node("Portfolio Manager", portfolio_manager_node)
 
+        def entry_node(spec) -> str:
+            # The sentiment analyst is always entered through its prefetch node
+            # when the split is on -- first in the plan or behind another
+            # analyst -- because that node is what saves its sources.
+            if spec.key == "social" and prefetch_split:
+                return PREFETCH_NODE
+            return spec.agent_node
+
         # Define edges
         # Start with the first analyst
-        workflow.add_edge(START, plan.specs[0].agent_node)
+        workflow.add_edge(START, entry_node(plan.specs[0]))
 
         # Connect analysts in sequence
         for i, spec in enumerate(plan.specs):
@@ -213,9 +236,14 @@ class GraphSetup:
 
             # Connect to next analyst or to Bull Researcher if this is the last analyst
             if i < len(plan.specs) - 1:
-                workflow.add_edge(current_clear, plan.specs[i + 1].agent_node)
+                workflow.add_edge(current_clear, entry_node(plan.specs[i + 1]))
             else:
                 workflow.add_edge(current_clear, "Bull Researcher")
+
+        if prefetch_split:
+            # Prefetch has no branch and no tools: success flows straight into
+            # the generation node, and a failure propagates out (nothing saved).
+            workflow.add_edge(PREFETCH_NODE, "Sentiment Analyst")
 
         # Both research-debate edges share the complete DEBATE_PATH_MAP (#1088).
         for debate_node in ("Bull Researcher", "Bear Researcher"):

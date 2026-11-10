@@ -43,6 +43,9 @@ _ENV_OVERRIDES = {
         "news_tool_governance.max_rounds",
     "TRADINGAGENTS_NEWS_TOOL_GOVERNANCE_MAX_CALLS":
         "news_tool_governance.max_calls",
+    # Sentiment prefetch split (opt-in): adds the prefetch node before the
+    # sentiment analyst. Off unless explicitly enabled.
+    "TRADINGAGENTS_SENTIMENT_PREFETCH_ENABLED": "sentiment_prefetch.enabled",
     # Vendor-retry budget, merged into the nested dict. Every value is checked by
     # dataflows.retry_session when a tool call routes: negatives, booleans,
     # NaN/Infinity and fractional attempts are refused, never clamped.
@@ -315,6 +318,17 @@ DEFAULT_CONFIG = _apply_env_overrides({
         "enabled": False,
         "max_rounds": 4,   # model->tools->model cycles for the news analyst
         "max_calls": 8,    # calls actually executed for the news analyst
+    },
+    # Sentiment prefetch split (opt-in, default OFF). When on, the graph runs
+    # "Sentiment Prefetch" -> "Sentiment Analyst": the prefetch node saves the
+    # three source blocks (news, StockTwits, Reddit) plus their identity in the
+    # ``sentiment_inputs`` state field, and the analyst builds its prompt from
+    # that saved input instead of fetching. A model failure after the prefetch
+    # node returned can then resume without fetching again; it is not an
+    # exactly-once guarantee (a failure inside the prefetch node itself, or a
+    # crash before it returns, still fetches again on resume).
+    "sentiment_prefetch": {
+        "enabled": False,
     },
     # Tool-level configuration (takes precedence over category-level)
     "tool_vendors": {        # Example: "get_stock_data": "alpha_vantage",  # Override category default

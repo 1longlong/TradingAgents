@@ -79,3 +79,6 @@ class AgentState(MessagesState):
     # and the run config, both stamped into the initial state at run start.
     tool_governance: Annotated[dict, "Per-analyst tool-governance record (plain data)"]
     run_config: Annotated[dict, "The run's configuration, for nodes that only receive state"]
+    # Sentiment prefetch split (opt-in): the three source blocks and their
+    # identity, saved as plain data by the sentiment prefetch node.
+    sentiment_inputs: Annotated[dict, "Saved sentiment sources + identity (plain data)"]

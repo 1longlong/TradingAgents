@@ -43,6 +43,7 @@ from .market_governance import parse_market_tool_governance
 from .news_governance import parse_news_tool_governance
 from .propagation import Propagator
 from .reflection import Reflector
+from .sentiment_prefetch import parse_sentiment_prefetch
 from .setup import GraphSetup
 from .signal_processing import SignalProcessor
 
@@ -445,6 +446,11 @@ class TradingAgentsGraph:
             ),
             "news_gov=" + str(
                 parse_news_tool_governance(self.config).enabled
+            ),
+            # The sentiment prefetch split adds a node in front of the
+            # sentiment analyst, so its switch is part of the graph shape too.
+            "sentiment_prefetch=" + str(
+                parse_sentiment_prefetch(self.config).enabled
             ),
             # None, an empty book and a changed book are three different runs.
             f"portfolio={portfolio.fingerprint() if portfolio is not None else 'none'}",

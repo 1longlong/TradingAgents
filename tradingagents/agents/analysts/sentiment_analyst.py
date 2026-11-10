@@ -24,6 +24,11 @@ back to free-text generation for providers that lack native support, so
 the sentiment header (band + score + confidence) is deterministic across
 runs and providers instead of free-form per-model prose.
 
+The optional prefetch split (``config["sentiment_prefetch"]``, see
+:mod:`tradingagents.graph.sentiment_prefetch`) puts the three fetches in their
+own graph node, so a checkpoint taken between fetching and generating lets a
+failed model call resume without fetching the sources again.
+
 See: https://github.com/TauricResearch/TradingAgents/issues/557
 See: https://github.com/TauricResearch/TradingAgents/issues/796
 """
@@ -48,47 +53,176 @@ from tradingagents.dataflows.reddit import fetch_reddit_posts
 from tradingagents.dataflows.stocktwits import fetch_stocktwits_messages
 
 
+def _prefetch_module():
+    """The prefetch module, imported lazily.
+
+    ``tradingagents.graph`` imports the agents package (graph setup), and this
+    agent is imported *by* that package, so a module-level import of the graph
+    package here would be circular.
+    """
+    from tradingagents.graph import sentiment_prefetch
+
+    return sentiment_prefetch
+
+
 def _seven_days_back(trade_date: str) -> str:
     return (datetime.strptime(trade_date, "%Y-%m-%d") - timedelta(days=7)).strftime("%Y-%m-%d")
 
 
-def create_sentiment_analyst(llm):
+def _analysis_window(state):
+    """The ticker, trade date and 7-day start date this analyst analyses."""
+    ticker = state["company_of_interest"]
+    end_date = state["trade_date"]
+    return ticker, end_date, _seven_days_back(end_date)
+
+
+def _fetch_sources(
+    ticker: str, start_date: str, end_date: str, fetch_parameters
+) -> dict[str, str]:
+    """Fetch the three sentiment sources exactly once, for one window.
+
+    ``fetch_parameters`` (from the snapshot this call runs under) carries the
+    limits the fetches use, so the saved identity names the news article count
+    and the vendor chain the request will actually receive. The news tool's
+    vendor reads ``news_article_limit`` from ``get_config()`` at call time;
+    inside :func:`fetch_snapshot` that read returns the snapshot's value.
+
+    StockTwits and Reddit degrade on any transport or parse failure and return
+    a placeholder string; news does NOT — a rejected credential, a refused
+    request or an internal error still propagates through route_to_vendor, so
+    no source is treated as "no data" when it was never observed.
+    """
+    prefetch = _prefetch_module()
+    if prefetch.news_article_limit_now() != fetch_parameters.news_article_limit:
+        raise prefetch.SentimentInputError(
+            "the news article limit changed between snapshot and fetch "
+            f"({fetch_parameters.news_article_limit!r} -> "
+            f"{prefetch.news_article_limit_now()!r}); "
+            "refusing to label the fetched text with a stale limit"
+        )
+    return {
+        "news": get_news.func(ticker, start_date, end_date, trade_date=end_date),
+        # Pass the analysis window so a historical run trims social posts to it
+        # instead of leaking today's chatter into a backtest (#1220).
+        "stocktwits": fetch_stocktwits_messages(
+            ticker,
+            limit=fetch_parameters.stocktwits_limit,
+            start_date=start_date,
+            end_date=end_date,
+        ),
+        "reddit": fetch_reddit_posts(ticker, start_date=start_date, end_date=end_date),
+    }
+
+
+def create_sentiment_prefetch_node():
+    """Create the ``Sentiment Prefetch`` graph node (prefetch-split path).
+
+    Makes the same three calls as the single-node path and returns them, with
+    their identity, under ``sentiment_inputs``. Nothing else in the state is
+    written, so the checkpoint after this node is what lets a failed model call
+    resume without fetching again. A fetch error propagates unchanged: nothing
+    is saved, and a resume fetches again.
+    """
+
+    def sentiment_prefetch_node(state):
+        prefetch = _prefetch_module()
+        ticker, end_date, start_date = _analysis_window(state)
+        # One context-local snapshot of the run's config is used for the
+        # request parameters, the vendor chain the fetch routes through and
+        # the identity the result is saved under. Nothing global is written,
+        # so a concurrent set_config cannot change this request and is not
+        # overwritten when the block exits (normally, on an error or on
+        # cancellation). The blocks are fetched and saved inside the block so
+        # the label is read from the same snapshot that served the request.
+        with prefetch.fetch_snapshot(_run_config(state)) as snapshot:
+            blocks = _fetch_sources(
+                ticker, start_date, end_date, snapshot.parameters
+            )
+            # Refuse if the context's snapshot is no longer the one that
+            # fetched: the label is never corrected from a later read.
+            prefetch.refuse_changed_fetch_parameters(
+                snapshot, prefetch.current_fetch_parameters()
+            )
+            update = {
+                prefetch.STATE_KEY: prefetch.save_inputs(
+                    state,
+                    ticker=ticker,
+                    start_date=start_date,
+                    end_date=end_date,
+                    snapshot=snapshot,
+                    news_block=blocks["news"],
+                    stocktwits_block=blocks["stocktwits"],
+                    reddit_block=blocks["reddit"],
+                )
+            }
+        return update
+
+    return sentiment_prefetch_node
+
+
+def _run_config(state):
+    """The config this run was started with (``run_config``), else the live one."""
+    config = state.get("run_config")
+    if isinstance(config, dict) and config:
+        return config
+    from tradingagents.dataflows.config import get_config
+
+    return get_config()
+
+
+def create_sentiment_analyst(llm, prefetch_split: bool = False):
     """Create a sentiment analyst node for the trading graph.
 
     Pre-fetches news + StockTwits + Reddit data, injects them into the
     prompt as structured blocks, and produces a deterministic sentiment
     report via structured output (with a free-text fallback for providers
     that do not support it).
+
+    ``prefetch_split`` selects the two-node path (default off, which is the
+    original one-node path): ``True`` makes this node consume only the three
+    blocks already saved under ``sentiment_inputs`` by
+    :func:`create_sentiment_prefetch_node`, never fetching sources itself.
     """
     structured_llm = bind_structured(llm, SentimentReport, "Sentiment Analyst")
 
     def sentiment_analyst_node(state):
-        ticker = state["company_of_interest"]
-        end_date = state["trade_date"]
-        start_date = _seven_days_back(end_date)
+        ticker, end_date, start_date = _analysis_window(state)
         instrument_context = get_instrument_context_from_state(state)
 
-        # Pre-fetch all three sources. StockTwits and Reddit degrade on any
-        # transport or parse failure and return a placeholder string; news does
-        # NOT — a rejected credential, a refused request or an internal error
-        # still propagates through route_to_vendor, so no source is treated as
-        # "no data" when it was never observed. Pre-fetch is not persisted
-        # either: a re-run of this node fetches all three again.
-        news_block = get_news.func(ticker, start_date, end_date, trade_date=end_date)
-        # Pass the analysis window so a historical run trims social posts to it
-        # instead of leaking today's chatter into a backtest (#1220).
-        stocktwits_block = fetch_stocktwits_messages(
-            ticker, limit=30, start_date=start_date, end_date=end_date
-        )
-        reddit_block = fetch_reddit_posts(ticker, start_date=start_date, end_date=end_date)
+        if prefetch_split:
+            # Saved blocks only. A missing/partial/mismatched input raises
+            # before the model is called; it never re-fetches, and an
+            # "<... unavailable ...>" placeholder is used exactly as saved.
+            # The expected values are read inside the same context-local
+            # snapshot of the run config the prefetch used, so this run's
+            # config -- not the global one -- decides whether the saved input
+            # still matches. No fetch happens here.
+            prefetch = _prefetch_module()
+            with prefetch.fetch_snapshot(_run_config(state)) as snapshot:
+                blocks = prefetch.load_inputs(
+                    state,
+                    ticker=ticker,
+                    start_date=start_date,
+                    end_date=end_date,
+                    snapshot=snapshot,
+                )
+        else:
+            # Pre-fetch is not persisted on this path: a re-run of this node
+            # fetches all three again. One context-local snapshot serves both
+            # the fetch and the label, like the prefetch node.
+            prefetch = _prefetch_module()
+            with prefetch.fetch_snapshot(_run_config(state)) as snapshot:
+                blocks = _fetch_sources(
+                    ticker, start_date, end_date, snapshot.parameters
+                )
 
         system_message = _build_system_message(
             ticker=ticker,
             start_date=start_date,
             end_date=end_date,
-            news_block=news_block,
-            stocktwits_block=stocktwits_block,
-            reddit_block=reddit_block,
+            news_block=blocks["news"],
+            stocktwits_block=blocks["stocktwits"],
+            reddit_block=blocks["reddit"],
         )
 
         prompt = ChatPromptTemplate.from_messages(
