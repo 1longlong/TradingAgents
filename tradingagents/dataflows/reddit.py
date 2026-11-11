@@ -55,14 +55,29 @@ def _posted_at(post) -> datetime | None:
 
 
 def _coverage_dates(posts) -> list:
-    """Dates that bound the feed's coverage. The search is limited to the last
-    week (``t=week``), so the lookback start bounds it even when nothing came
-    back; a full page may have cut older matches off, so then only the posts
-    themselves do."""
-    dates = [_posted_at(p) for p in posts]
-    if len(posts) < _FEED_PAGE:
-        dates.append(datetime.now(timezone.utc) - _SEARCH_LOOKBACK)
-    return dates
+    """Timestamps of posts that actually came back.
+
+    Only real post dates are returned. The previous version appended
+    ``now() - 7 days`` here whenever the page was short, which put the run's
+    *wall-clock* into the analyst's prompt as though it were a vendor fact: two
+    runs of the same backtest produced different "coverage starts" dates.
+
+    The lookback bound is a property of the query (``t=week`` asks for exactly
+    seven days), not of any post, so it is supplied separately by
+    :func:`_lookback_floor` and labelled as such rather than mixed in with real
+    timestamps.
+    """
+    return [_posted_at(p) for p in posts]
+
+
+def _lookback_floor() -> datetime:
+    """The oldest instant the ``t=week`` search could have returned.
+
+    This is the declared reach of the request, not an observed post date, so
+    callers must not present it as one. It is still the correct lower bound for
+    deciding whether a window was observed at all.
+    """
+    return datetime.now(timezone.utc) - _SEARCH_LOOKBACK
 
 _RSS = "https://www.reddit.com/r/{sub}/search.rss?{qs}"
 # A descriptive, identified User-Agent (per Reddit's API etiquette). Reddit
@@ -262,8 +277,17 @@ def fetch_reddit_posts(
     window = bool(start_date and end_date)
     posts = _within_window(fetched, start_date, end_date)
     if not posts:
+        # The week-long reach of ``t=week`` bounds coverage even when nothing
+        # came back, so a 7-day window that returned nothing is a real absence.
+        # That bound is the query's declared reach, not a fabricated post date.
+        # It only holds for a *short* page: a full page may have cut older
+        # matches off, so then the posts themselves are the only bound (the
+        # reason the original code gated on page length).
+        reach = _coverage_dates(fetched)
+        if len(fetched) < _FEED_PAGE:
+            reach.append(_lookback_floor())
         gap = window and coverage_gap(
-            _coverage_dates(fetched), start_date, end_date,
+            reach, start_date, end_date,
             "Reddit search", f"discussion of {ticker.upper()}",
         )
         period = f"within {start_date}..{end_date}" if window else "in the past 7 days"

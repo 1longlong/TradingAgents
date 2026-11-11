@@ -1,5 +1,14 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
+from tradingagents.agents.schemas import (
+    MarketAnalystReport,
+    render_market_analyst_report,
+)
+from tradingagents.agents.utils.structured import (
+    bind_structured,
+    finalize_analyst_report,
+)
+
 from tradingagents.agents.utils.agent_utils import (
     get_indicators,
     get_instrument_context_from_state,
@@ -9,7 +18,17 @@ from tradingagents.agents.utils.agent_utils import (
 )
 
 
-def create_market_analyst(llm):
+def create_market_analyst(llm, structured: bool = True):
+    """Create the market analyst node.
+
+    ``structured`` is the ablation switch for native structured output. When
+    False the analyst never binds a schema and emits free text, so an ablation
+    arm can run the pre-S2 path with every other variable held constant.
+    """
+    structured_llm = (
+        bind_structured(llm, MarketAnalystReport, "Market Analyst")
+        if structured else None
+    )
 
     def market_analyst_node(state):
         current_date = state["trade_date"]
@@ -45,12 +64,17 @@ Volatility Indicators:
 
 Volume-Based Indicators:
 - vwma: VWMA: A moving average weighted by volume. Usage: Confirm trends by integrating price action with volume data. Tips: Watch for skewed results from volume spikes; use in combination with other volume analyses.
+- mfi: MFI: The Money Flow Index is a momentum indicator that uses both price and volume to measure buying and selling pressure. Usage: Identify overbought (>80) or oversold (<20) conditions and confirm the strength of trends or reversals. Tips: Use alongside RSI or MACD to confirm signals; divergence between price and MFI can indicate potential reversals.
 
 - Select indicators that provide diverse and complementary information. Avoid redundancy (e.g., do not select both rsi and stochrsi). Also briefly explain why they are suitable for the given market context. When you tool call, please use the exact name of the indicators provided above as they are defined parameters, otherwise your call will fail. Please make sure to call get_stock_data first to retrieve the CSV that is needed to generate indicators. Then use get_indicators with the specific indicator names.
 
 Before writing the final report, call get_verified_market_snapshot for this ticker and the current date, and treat it as the source of truth for any exact OHLCV, price-level, or indicator-value claim. If another tool's output conflicts with the verified snapshot, flag the discrepancy rather than inventing a reconciled number. Do not claim historical validation, support/resistance bounces, or exact percentage moves unless they are directly supported by tool output with concrete dates and prices.
 
-Write a very detailed and nuanced report of the trends you observe. Provide specific, actionable insights with supporting evidence to help traders make informed decisions."""
+Write a very detailed and nuanced report of the trends you observe. Provide specific, actionable insights with supporting evidence to help traders make informed decisions.
+
+Also state what would falsify your view: for each InvalidationCondition, name the price or indicator development that would prove the stance wrong, the signal a reader would watch, and the evidence in your report it rests on. This is not a stop-loss; keep them separate. A threshold may only be quoted from tool output -- if the data gives no number, leave it null rather than inventing one.
+
+Where the evidence supports it, lay out Bull, Base and Bear branches for the trade-date horizon, each with its trigger, what would rule it out, and a probability weight in percent. Weights are your estimate of how likely each branch is, not your confidence in the report. Only assign weights when the evidence supports them and they sum to 100; otherwise set the status to not_estimable and leave the weights null. Never split the weight evenly by default."""
             + """ Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."""
             + get_language_instruction()
         )
@@ -82,13 +106,25 @@ Write a very detailed and nuanced report of the trends you observe. Provide spec
         result = chain.invoke(state["messages"])
 
         report = ""
+        report_obj = None
 
         if len(result.tool_calls) == 0:
-            report = result.content
+            report, report_obj = finalize_analyst_report(
+                llm=llm,
+                structured_llm=structured_llm,
+                messages=prompt.format_prompt(messages=state["messages"]).to_messages() + [result],
+                render=render_market_analyst_report,
+                agent_name="Market Analyst",
+                free_text_block=result.content,
+            )
 
         return {
             "messages": [result],
             "market_report": report,
+            # Typed side-channel for downstream consumers (Bull/Bear/Risk read
+            # routed fields from it). None on every fallback path, so prose can
+            # never be mistaken for a parsed S2 field.
+            "market_report_obj": report_obj,
         }
 
     return market_analyst_node

@@ -21,6 +21,8 @@ from tradingagents.dataflows.errors import (
     VendorError,
     VendorNotConfiguredError,
     VendorRateLimitError,
+    VendorTimeoutError,
+    VendorUnavailableError,
 )
 from tradingagents.dataflows.fred import FredNotConfiguredError
 
@@ -41,6 +43,14 @@ class HierarchyTests(unittest.TestCase):
         self.assertTrue(issubclass(FredNotConfiguredError, VendorNotConfiguredError))
         # ... and therefore still ValueErrors
         self.assertTrue(issubclass(FredNotConfiguredError, ValueError))
+
+    def test_timeout_is_its_own_type_under_unavailable(self):
+        # Audit W7: a timeout must not be caught by ``except VendorRateLimitError``
+        # (it is not a throttle) but must still be caught by existing
+        # ``except VendorUnavailableError`` callers, so the router fails over.
+        self.assertTrue(issubclass(VendorTimeoutError, VendorUnavailableError))
+        self.assertTrue(issubclass(VendorTimeoutError, VendorError))
+        self.assertFalse(issubclass(VendorTimeoutError, VendorRateLimitError))
 
     def test_symbol_utils_reexports_no_market_data_error(self):
         from tradingagents.dataflows.symbol_utils import (

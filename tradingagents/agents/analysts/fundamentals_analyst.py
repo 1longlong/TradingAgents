@@ -1,5 +1,14 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
+from tradingagents.agents.schemas import (
+    FundamentalsAnalystReport,
+    render_fundamentals_analyst_report,
+)
+from tradingagents.agents.utils.structured import (
+    bind_structured,
+    finalize_analyst_report,
+)
+
 from tradingagents.agents.utils.agent_utils import (
     get_balance_sheet,
     get_cashflow,
@@ -10,7 +19,17 @@ from tradingagents.agents.utils.agent_utils import (
 )
 
 
-def create_fundamentals_analyst(llm):
+def create_fundamentals_analyst(llm, structured: bool = True):
+    """Create the fundamentals analyst node.
+
+    ``structured`` is the ablation switch for native structured output. When
+    False the analyst never binds a schema and emits free text, so an ablation
+    arm can run the pre-S2 path with every other variable held constant.
+    """
+    structured_llm = (
+        bind_structured(llm, FundamentalsAnalystReport, "Fundamentals Analyst")
+        if structured else None
+    )
     def fundamentals_analyst_node(state):
         current_date = state["trade_date"]
         instrument_context = get_instrument_context_from_state(state)
@@ -24,6 +43,8 @@ def create_fundamentals_analyst(llm):
 
         system_message = (
             "You are a researcher tasked with analyzing fundamental information over the past week about a company. Please write a comprehensive report of the company's fundamental information such as financial documents, company profile, basic company financials, and company financial history to gain a full view of the company's fundamental information to inform traders. Make sure to include as much detail as possible. Provide specific, actionable insights with supporting evidence to help traders make informed decisions."
+            + " Also state what would falsify your view: each invalidation condition should name the reported metric or guidance development that would prove the stance wrong, the signal a reader would watch, and the figure in your report it rests on. A threshold may only be quoted from tool output; if the reports give no number, leave it null rather than inventing one."
+            + " Where the evidence supports it, lay out Bull, Base and Bear branches for the trade-date horizon, each with its trigger, what would rule it out, and a probability weight in percent. Weights estimate how likely each branch is, not your confidence in the report. Only assign weights when the evidence supports them and they sum to 100; otherwise set the status to not_estimable and leave the weights null. Never split the weight evenly by default."
             + " Make sure to append a Markdown table at the end of the report to organize key points in the report, organized and easy to read."
             + " Use the available tools: `get_fundamentals` for comprehensive company analysis, `get_balance_sheet`, `get_cashflow`, and `get_income_statement` for specific financial statements."
             + get_language_instruction()
@@ -56,13 +77,23 @@ def create_fundamentals_analyst(llm):
         result = chain.invoke(state["messages"])
 
         report = ""
+        report_obj = None
 
         if len(result.tool_calls) == 0:
-            report = result.content
+            report, report_obj = finalize_analyst_report(
+                llm=llm,
+                structured_llm=structured_llm,
+                messages=prompt.format_prompt(messages=state["messages"]).to_messages() + [result],
+                render=render_fundamentals_analyst_report,
+                agent_name="Fundamentals Analyst",
+                free_text_block=result.content,
+            )
 
         return {
             "messages": [result],
             "fundamentals_report": report,
+            # Typed side-channel; see market_analyst_node for the contract.
+            "fundamentals_report_obj": report_obj,
         }
 
     return fundamentals_analyst_node

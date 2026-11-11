@@ -37,7 +37,7 @@ import shutil
 import statistics
 import subprocess
 import sys
-from collections.abc import MutableMapping
+from collections.abc import Mapping, MutableMapping
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -1438,7 +1438,8 @@ def _telemetry_snapshot(runtime_dir: Path) -> set[str]:
 
 
 def _select_run_telemetry(runtime_dir: Path, before: set[str],
-                          reported_path: str | None) -> Path:
+                          reported_path: str | None,
+                          reported_base: Path | None = None) -> Path:
     """Select this run's telemetry artifact from files created since ``before``.
 
     Only artifacts that did not exist before the run qualify, so leftover files
@@ -1446,6 +1447,12 @@ def _select_run_telemetry(runtime_dir: Path, before: set[str],
     artifact is accepted. Zero is a failure and more than one is an ambiguity,
     even if the child reported one of them: silently picking the reported file
     would mask a genuine multi-artifact problem.
+
+    ``reported_path`` may be relative: the child runs with its cwd set to the
+    experiment directory and records a ``_portable_path``, while ``before``
+    holds absolute snapshot strings. ``reported_base`` is the directory such a
+    relative path is anchored to (the experiment dir at the call site); when it
+    is ``None`` the path is resolved against the current working directory.
     """
     new = sorted(_telemetry_snapshot(runtime_dir) - set(before))
     if len(new) == 0:
@@ -1459,13 +1466,21 @@ def _select_run_telemetry(runtime_dir: Path, before: set[str],
             f"refusing to guess"
         )
     selected = Path(new[0])
-    if reported_path and str(Path(reported_path)) != str(selected):
-        # The child disagrees with the only new artifact. That is a contract
-        # violation rather than something to auto-resolve.
-        raise RuntimeError(
-            f"runner reported telemetry {reported_path} but the only new artifact "
-            f"is {selected}; refusing to guess"
-        )
+    if reported_path:
+        reported = Path(reported_path)
+        if not reported.is_absolute() and reported_base is not None:
+            reported = Path(reported_base) / reported
+        # Compare by resolved identity, not by spelling: the same artifact can
+        # legitimately arrive under two different strings. ``resolve`` also
+        # makes the comparison symlink- and ".."-safe. A genuinely different
+        # file still fails below, so the single-artifact contract is unchanged.
+        if reported.resolve() != selected.resolve():
+            # The child disagrees with the only new artifact. That is a contract
+            # violation rather than something to auto-resolve.
+            raise RuntimeError(
+                f"runner reported telemetry {reported_path} but the only new artifact "
+                f"is {selected}; refusing to guess"
+            )
     return selected
 
 
@@ -1623,7 +1638,8 @@ def execute_measured_run(exp_dir: Path, experiment: dict, case: dict,
                 before = sorted(
                     _telemetry_snapshot(runtime_dir) - set(new_reported)
                 )
-        telemetry_path = _select_run_telemetry(runtime_dir, set(before), reported)
+        telemetry_path = _select_run_telemetry(runtime_dir, set(before), reported,
+                                               reported_base=exp_dir)
     except RuntimeError as exc:
         status = "status_mismatch"
         report = report or {}
@@ -2099,7 +2115,14 @@ def _run_single(spec_path: str) -> int:
         "status": status,
         "run_status": status,
         "error": error,
-        "telemetry_path": _portable_path(telemetry_path, Path(spec_path).parent.parent.parent),
+        # ``_portable_path`` output is documented as relative to the experiment
+        # directory (see ``_portable_path`` / ``_resolve_report_path``), and the
+        # consumer resolves it against ``exp_dir``. ``spec.json`` lives at
+        # ``<exp>/runs/run_NN/attempt_NN/``, so the base is four levels up, not
+        # three: using ``parent.parent.parent`` yielded ``<exp>/runs`` and
+        # dropped the ``runs/`` component, so every run was rejected as a
+        # ``status_mismatch`` even though its telemetry was the only new file.
+        "telemetry_path": _portable_path(telemetry_path, Path(spec_path).parent.parent.parent.parent),
     }
     run_dir = Path(spec_path).parent
     (run_dir / RUNNER_REPORT_FILE).write_text(
@@ -2130,6 +2153,16 @@ _CITYU_ENV_MAP = (
 # case_id, ticker, date, rounds) is derived from the invocation.
 _TEMPLATE_KEYS = (
     "provider", "quick_model", "deep_model", "output_language", "cache_policy",
+)
+
+# Non-CityU app variables the harness passes through from the same secrets file
+# when the shell does not already set them. The app reads these from the process
+# environment (e.g. ``fred.get_api_key``), so a value in the file alone reached
+# the app only if the caller happened to export it. Only mapped names are copied
+# — a stray variable in the file still cannot change the benchmark's config.
+_PASSTHROUGH_ENV = (
+    "FRED_API_KEY",          # dataflows/fred.py: the macro_data vendor
+    "SEC_EDGAR_USER_AGENT",  # dataflows/sec_edgar.py: optional filings vendor
 )
 
 
@@ -2277,11 +2310,21 @@ def _env_file_values(path: Path) -> dict[str, str]:
             continue
         key, _, value = line.partition("=")
         key = key.strip()
-        value = value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-            value = value[1:-1]
+        value = _unquote(value.strip())
         values[key] = value
     return values
+
+
+def _unquote(value: str) -> str:
+    """Strip one matching quote pair, tolerating a doubled wrapper.
+
+    Editors and shell wrappers sometimes leave ``""sk-…""`` behind after a
+    re-quote; the inner quote pair is then the real one. Only quotes are
+    touched — the value itself is never evaluated or expanded.
+    """
+    while len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+        value = value[1:-1]
+    return value
 
 
 def apply_cityu_env(env: MutableMapping[str, str], secrets_path: Path) -> list[str]:
@@ -2297,7 +2340,20 @@ def apply_cityu_env(env: MutableMapping[str, str], secrets_path: Path) -> list[s
         if value and not env.get(target):
             env[target] = value
             applied.append(target)
+    for name in _PASSTHROUGH_ENV:
+        value = file_values.get(name)
+        if value and not env.get(name):
+            env[name] = value
+            applied.append(name)
     return applied
+
+
+def credential_state(env: Mapping[str, str]) -> list[dict]:
+    """Report which optional data credentials are configured. Never prints values."""
+    return [
+        {"variable": name, "configured": bool(env.get(name))}
+        for name in _PASSTHROUGH_ENV
+    ]
 
 
 def required_cityu_env() -> list[str]:

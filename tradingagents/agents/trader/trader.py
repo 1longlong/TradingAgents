@@ -16,6 +16,7 @@ from tradingagents.agents.utils.structured import (
     NO_EXTERNAL_TOOLS,
     bind_structured,
     invoke_structured_or_freetext,
+    split_free_text_guidance,
 )
 
 
@@ -84,12 +85,23 @@ def create_trader(llm):
             },
         ]
 
+        # The "## Output" section describes the free-text answer shape, which
+        # competes with the bound tool schema and made the model answer in
+        # markdown instead of calling the tool. Trim it from the structured call
+        # only; the free-text fallback still receives the full prompt.
+        structured_messages = [
+            ({**msg, "content": split_free_text_guidance(msg["content"])}
+             if isinstance(msg.get("content"), str) else msg)
+            for msg in messages
+        ]
+
         trader_plan = invoke_structured_or_freetext(
             structured_llm,
             llm,
             messages,
             render_trader_proposal,
             "Trader",
+            structured_prompt=structured_messages,
         )
 
         return {

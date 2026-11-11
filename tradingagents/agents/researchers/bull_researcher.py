@@ -1,9 +1,10 @@
 from tradingagents.agents.utils.agent_utils import (
     get_instrument_context_from_state,
     get_language_instruction,
-    opponent_argument_or_opening,
+    opponent_argument_without_repetition,
     report_or_absent,
 )
+from tradingagents.agents.utils.s2_context import bull_context_block, routed_report
 
 
 def create_bull_researcher(llm):
@@ -12,13 +13,24 @@ def create_bull_researcher(llm):
         history = investment_debate_state.get("history", "")
         bull_history = investment_debate_state.get("bull_history", "")
 
-        current_response = opponent_argument_or_opening(
-            investment_debate_state.get("current_response", ""), "bear analyst"
+        # ``history`` already ends with the opponent's latest argument, so the
+        # separate "last argument" slot only repeats text the prompt carries.
+        current_response = opponent_argument_without_repetition(
+            investment_debate_state.get("current_response", ""), "bear analyst", history
         )
-        market_research_report = report_or_absent(state["market_report"], "market")
+        routed = bull_context_block(
+            state.get("market_report_obj"), state.get("fundamentals_report_obj")
+        )
+        market_research_report = routed_report(
+            report_or_absent(state["market_report"], "market"), routed.get("market"), "market"
+        )
         sentiment_report = report_or_absent(state["sentiment_report"], "sentiment")
         news_report = report_or_absent(state["news_report"], "news")
-        fundamentals_report = report_or_absent(state["fundamentals_report"], "fundamentals")
+        fundamentals_report = routed_report(
+            report_or_absent(state["fundamentals_report"], "fundamentals"),
+            routed.get("fundamentals"),
+            "fundamentals",
+        )
         instrument_context = get_instrument_context_from_state(state)
         asset_type = state.get("asset_type", "stock")
         target_label = "stock" if asset_type == "stock" else "asset"

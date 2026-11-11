@@ -11,6 +11,7 @@ from tradingagents.agents.utils.structured import (
     NO_EXTERNAL_TOOLS,
     bind_structured,
     invoke_structured_or_freetext,
+    split_free_text_guidance,
 )
 
 
@@ -43,6 +44,8 @@ The debate always contains conflicting arguments; deciding which side is stronge
 **Debate History:**
 {history}
 
+{NO_EXTERNAL_TOOLS}
+
 ## Output
 
 Write these sections, in this order, starting with the recommendation on its own line:
@@ -50,8 +53,7 @@ Write these sections, in this order, starting with the recommendation on its own
 - **Recommendation**: exactly one of Buy / Overweight / Hold / Underweight / Sell
 - **Rationale**: which arguments decided it
 - **Strategic Actions**: concrete steps for the trader, sized against a standard allocation
-
-{NO_EXTERNAL_TOOLS}""" + get_language_instruction()
+""" + get_language_instruction()
 
         investment_plan = invoke_structured_or_freetext(
             structured_llm,
@@ -59,6 +61,7 @@ Write these sections, in this order, starting with the recommendation on its own
             prompt,
             render_research_plan,
             "Research Manager",
+            structured_prompt=split_free_text_guidance(prompt),
         )
 
         new_investment_debate_state = {

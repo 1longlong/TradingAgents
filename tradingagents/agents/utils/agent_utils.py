@@ -14,7 +14,10 @@ from tradingagents.agents.utils.fundamental_data_tools import (
     get_fundamentals,
     get_income_statement,
 )
-from tradingagents.agents.utils.macro_data_tools import get_macro_indicators
+from tradingagents.agents.utils.macro_data_tools import (
+    get_macro_indicators,
+    get_macro_indicators_batch,
+)
 from tradingagents.agents.utils.market_data_validation_tools import get_verified_market_snapshot
 from tradingagents.agents.utils.news_data_tools import (
     get_global_news,
@@ -37,6 +40,7 @@ __all__ = [
     "get_global_news",
     "get_insider_transactions",
     "get_macro_indicators",
+    "get_macro_indicators_batch",
     "get_prediction_markets",
     "get_verified_market_snapshot",
     "build_instrument_context",
@@ -79,6 +83,33 @@ def opponent_argument_or_opening(text: str, opponent: str) -> str:
     if text:
         return text
     return f"(The {opponent} has not spoken yet — open the debate with your own case.)"
+
+
+def opponent_argument_without_repetition(
+    text: str, opponent: str, history: str
+) -> str:
+    """Opponent argument for a prompt that *also* interpolates the history.
+
+    ``history`` is the running transcript every debate speaker appends to, so
+    once the opponent has spoken their argument is already the latest entry in
+    it. Interpolating both sends the same text twice, which is pure duplication:
+    the model cannot learn anything from the second copy.
+
+    When the argument is already in ``history`` a short pointer replaces it —
+    the transcript still identifies the opponent's latest position as its most
+    recent entry, so no information is lost. Arguments not yet in ``history``
+    (and the empty/unspoken marker) are returned unchanged, so a caller can also
+    use this when the two sources differ.
+    """
+    resolved = opponent_argument_or_opening(text, opponent)
+    if not history or resolved.startswith("("):
+        return resolved
+    if resolved in history:
+        return (
+            f"(The {opponent} has already spoken — their latest argument is the "
+            "most recent entry in the conversation history above.)"
+        )
+    return resolved
 
 
 def _clean_identity_value(value: Any) -> str | None:

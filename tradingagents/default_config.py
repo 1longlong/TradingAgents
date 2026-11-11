@@ -20,6 +20,9 @@ _ENV_OVERRIDES = {
     "TRADINGAGENTS_TEMPERATURE":          "temperature",
     "TRADINGAGENTS_LLM_MAX_RETRIES":      "llm_max_retries",
     "TRADINGAGENTS_MAX_TOKENS":           "max_tokens",
+    # Ablation feature switches (see default_config notes).
+    "TRADINGAGENTS_BATCH_MACRO_ENABLED":              "batch_macro_enabled",
+    "TRADINGAGENTS_STRUCTURED_ANALYST_OUTPUT_ENABLED": "structured_analyst_output_enabled",
     # Provider-specific reasoning/thinking knobs (None = each provider's own
     # default). Settable here for non-interactive runs; the CLI also offers an
     # interactive choice, which is skipped when the matching var is set.
@@ -116,10 +119,29 @@ DEFAULT_CONFIG = _apply_env_overrides({
     "max_debate_rounds": 1,
     "max_risk_discuss_rounds": 1,
     "max_recur_limit": 100,
+    # Feature switches.
+    # Both default to True, so the shipped configuration is unchanged: these
+    # exist so an ablation can hold every other variable fixed and toggle one
+    # feature at a time (see token_benchmarks/optimization_campaigns/
+    # ..._macro_s2_completion/benchmark_plan.md). They are read once at graph
+    # construction; turning one off changes what is *bound and prompted*, not
+    # just a flag that is ignored downstream.
+    #
+    # batch_macro: when False the news analyst is neither given the
+    # ``get_macro_indicators_batch`` tool nor told to prefer it. The single-series
+    # ``get_macro_indicators`` tool always remains available.
+    "batch_macro_enabled": True,
+    # structured_analyst_output: when False the three tool-loop analysts skip
+    # ``bind_structured`` and emit free text, exactly as before S2.
+    "structured_analyst_output_enabled": True,
     # News / data fetching parameters
     # Increase for longer lookback strategies or to broaden macro coverage;
     # decrease to reduce token usage in agent prompts.
     "news_article_limit": 20,             # max articles per ticker (ticker-news)
+    # GDELT discovery re-fetch budget: how many candidate URLs have their
+    # publisher timestamp verified per get_news call. Each verification is one
+    # network fetch, so this bounds the cost of a historical news lookup.
+    "news_verify_budget": 8,
     "global_news_article_limit": 10,      # max articles for global/macro news
     "global_news_lookback_days": 7,       # macro news lookback window
     # Search queries used by get_global_news for macro headlines. Extend or
@@ -140,13 +162,25 @@ DEFAULT_CONFIG = _apply_env_overrides({
         "core_stock_apis": "yfinance",       # Options: alpha_vantage, yfinance
         "technical_indicators": "yfinance",  # Options: alpha_vantage, yfinance
         "fundamental_data": "yfinance",      # Options: alpha_vantage, yfinance
+        # get_news is bound to the date-range vendors first (see
+        # ``tool_vendors``): only they can answer a historical window, and the
+        # category default alone ("yfinance") silently excluded them.
         "news_data": "yfinance",             # Options: alpha_vantage, yfinance
         "macro_data": "fred",                # Options: fred (needs FRED_API_KEY)
         "prediction_markets": "polymarket",  # Options: polymarket (keyless)
     },
     # Tool-level configuration (takes precedence over category-level)
     "tool_vendors": {
-        # Example: "get_stock_data": "alpha_vantage",  # Override category default
+        # Company news: the date-range vendors must be in the chain or a
+        # historical run can never ask them anything. Before this, the
+        # category-level "yfinance" excluded alpha_vantage_historical entirely
+        # and yfinance's ticker endpoint was retired (HTTP 404), so no run could
+        # put a real headline in front of the News Analyst (campaign
+        # 20261107_140536). yfinance stays last, as it was: it is recent-only
+        # and its ticker endpoint is retired, so it is a last resort, never a
+        # preferred source. GDELT is keyless and verifies each article's
+        # publisher timestamp before reporting it.
+        "get_news": "alpha_vantage_historical,gdelt,yfinance",
     },
     # Benchmark for alpha calculation in the reflection layer.
     # ``benchmark_ticker`` (when set) overrides the suffix map for all

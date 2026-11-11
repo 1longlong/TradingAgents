@@ -57,12 +57,19 @@ class GraphSetup:
         deep_thinking_llm: Any,
         tool_nodes: dict[str, ToolNode],
         conditional_logic: ConditionalLogic,
+        config: dict | None = None,
     ):
-        """Initialize with required components."""
+        """Initialize with required components.
+
+        ``config`` carries the ablation feature switches. It defaults to None so
+        existing callers and tests keep working; a missing key is treated as
+        enabled, which is the shipped behaviour.
+        """
         self.quick_thinking_llm = quick_thinking_llm
         self.deep_thinking_llm = deep_thinking_llm
         self.tool_nodes = tool_nodes
         self.conditional_logic = conditional_logic
+        self.config = config or {}
 
     def setup_graph(
         self, selected_analysts=("market", "social", "news", "fundamentals")
@@ -79,10 +86,20 @@ class GraphSetup:
         plan = build_analyst_execution_plan(selected_analysts)
 
         analyst_factories = {
-            "market": lambda: create_market_analyst(self.quick_thinking_llm),
+            "market": lambda: create_market_analyst(
+                self.quick_thinking_llm,
+                structured=self.config.get("structured_analyst_output_enabled", True),
+            ),
             "social": lambda: create_sentiment_analyst(self.quick_thinking_llm),
-            "news": lambda: create_news_analyst(self.quick_thinking_llm),
-            "fundamentals": lambda: create_fundamentals_analyst(self.quick_thinking_llm),
+            "news": lambda: create_news_analyst(
+                self.quick_thinking_llm,
+                batch_macro=self.config.get("batch_macro_enabled", True),
+                structured=self.config.get("structured_analyst_output_enabled", True),
+            ),
+            "fundamentals": lambda: create_fundamentals_analyst(
+                self.quick_thinking_llm,
+                structured=self.config.get("structured_analyst_output_enabled", True),
+            ),
         }
 
         # Create researcher and manager nodes

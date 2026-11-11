@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Any
 
 from langgraph.graph import MessagesState
 from typing_extensions import TypedDict
@@ -59,6 +59,17 @@ class AgentState(MessagesState):
         str, "Report from the News Researcher of current world affairs"
     ]
     fundamentals_report: Annotated[str, "Report from the Fundamentals Researcher"]
+    # Typed side-channels for the two S2 analysts. Hold the parsed pydantic
+    # report when structuring succeeded and ``None`` on every fallback path, so a
+    # downstream reader can route real fields (invalidation, scenarios) without
+    # mistaking prose for data. They are not user-facing report keys: reporting,
+    # the state log and the CLI read only the ``*_report`` strings above.
+    market_report_obj: Annotated[
+        Any, "Parsed MarketAnalystReport, or None when the prose fallback was used"
+    ]
+    fundamentals_report_obj: Annotated[
+        Any, "Parsed FundamentalsAnalystReport, or None when the prose fallback was used"
+    ]
 
     # researcher team discussion step
     investment_debate_state: Annotated[

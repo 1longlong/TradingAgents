@@ -2,9 +2,10 @@ from tradingagents.agents.utils.agent_utils import (
     get_instrument_context_from_state,
     get_language_instruction,
     get_portfolio_context_from_state,
-    opponent_argument_or_opening,
+    opponent_argument_without_repetition,
     report_or_absent,
 )
+from tradingagents.agents.utils.s2_context import risk_context_block, routed_report
 
 
 def create_neutral_debator(llm):
@@ -13,17 +14,28 @@ def create_neutral_debator(llm):
         history = risk_debate_state.get("history", "")
         neutral_history = risk_debate_state.get("neutral_history", "")
 
-        current_aggressive_response = opponent_argument_or_opening(
-            risk_debate_state.get("current_aggressive_response", ""), "aggressive analyst"
+        current_aggressive_response = opponent_argument_without_repetition(
+            risk_debate_state.get("current_aggressive_response", ""), "aggressive analyst",
+            history,
         )
-        current_conservative_response = opponent_argument_or_opening(
-            risk_debate_state.get("current_conservative_response", ""), "conservative analyst"
+        current_conservative_response = opponent_argument_without_repetition(
+            risk_debate_state.get("current_conservative_response", ""), "conservative analyst",
+            history,
         )
 
-        market_research_report = report_or_absent(state["market_report"], "market")
+        routed = risk_context_block(
+            state.get("market_report_obj"), state.get("fundamentals_report_obj")
+        )
+        market_research_report = routed_report(
+            report_or_absent(state["market_report"], "market"), routed.get("market"), "market"
+        )
         sentiment_report = report_or_absent(state["sentiment_report"], "sentiment")
         news_report = report_or_absent(state["news_report"], "news")
-        fundamentals_report = report_or_absent(state["fundamentals_report"], "fundamentals")
+        fundamentals_report = routed_report(
+            report_or_absent(state["fundamentals_report"], "fundamentals"),
+            routed.get("fundamentals"),
+            "fundamentals",
+        )
         instrument_context = get_instrument_context_from_state(state)
         portfolio_context = get_portfolio_context_from_state(state)
 

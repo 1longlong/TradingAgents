@@ -278,6 +278,32 @@ class TestTraderAgent:
         result = trader(_make_trader_state())
         assert result["trader_investment_plan"] == plain_response
 
+    def test_structured_call_omits_the_free_text_output_section(self):
+        # Regression: the markdown "## Output" instructions competed with the
+        # bound tool schema on DeepSeek models and made them answer in prose, so
+        # the parser returned None and every decision agent paid for a second
+        # full-prompt free-text call.
+        captured = {}
+        create_trader(_structured_trader_llm(captured))(_make_trader_state())
+        structured_text = " ".join(m["content"] for m in captured["prompt"])
+        assert "## Output" not in structured_text
+        assert "**Action**" not in structured_text
+        # Everything the decision rests on must survive the trim.
+        assert "Proposed Investment Plan" in structured_text
+        assert "Technical Market Report:" in structured_text
+
+    def test_fallback_still_receives_the_output_section(self):
+        # A provider without structured output only ever sees the prompt, so the
+        # free-text path must keep the format instructions the trim removed.
+        llm = MagicMock()
+        llm.with_structured_output.side_effect = NotImplementedError("provider unsupported")
+        llm.invoke.return_value = MagicMock(content="plain")
+        create_trader(llm)(_make_trader_state())
+        prompt = llm.invoke.call_args.args[0]
+        text = " ".join(m["content"] for m in prompt)
+        assert "## Output" in text
+        assert "**Action**" in text
+
 
 # ---------------------------------------------------------------------------
 # Research Manager agent: structured happy path + fallback

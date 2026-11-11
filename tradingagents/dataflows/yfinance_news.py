@@ -3,14 +3,91 @@
 import contextlib
 from datetime import datetime, timezone
 
+import curl_cffi.requests.exceptions as curl_errors
+import requests
 import yfinance as yf
 from dateutil.relativedelta import relativedelta
+from yfinance.exceptions import YFDataException, YFRateLimitError
 
 from .config import get_config
 from .date_window import coverage_gap, in_window
-from .errors import NoMarketDataError
+from .errors import NoMarketDataError, VendorRateLimitError, VendorUnavailableError
 from .stockstats_utils import yf_retry
 from .symbol_utils import normalize_symbol
+
+# HTTP statuses that mean "this vendor cannot serve this call right now", as
+# opposed to "this vendor has no data for this symbol". 408/429/5xx are classic
+# transience; 401/403 mean the vendor refused *this* request (expired cookie,
+# blocked client), which is a fact about the request, not about the instrument.
+# Deliberately NOT ``VendorNotConfiguredError``: news is a core category with a
+# single configured vendor, and the router re-raises that type when nothing
+# serves the call (``interface.py``), which would abort the whole run.
+_TRANSIENT_HTTP_STATUS = frozenset({401, 403, 408, 429}) | frozenset(range(500, 600))
+
+# Statuses that mean the *endpoint* is gone, not that the symbol is unlisted.
+# Yahoo retired ``xhr/ncp`` (yfinance's ticker-news path) and answers HTTP 404;
+# treating that as ``NoMarketDataError`` would tell the analyst "NVDA has no
+# news", and treating it as rate-limiting would say "try again later" about an
+# API that is never coming back (campaign 20261107_140536, probes/PROBE_LOG.md).
+_RETIRED_ENDPOINT_STATUS = frozenset({404, 410})
+
+
+def _is_retired_endpoint_error(exc: Exception) -> bool:
+    """Whether ``exc`` is the retired-endpoint signature rather than a bad symbol.
+
+    yfinance raises a bare ``YFDataException`` (``*** YAHOO! FINANCE IS
+    CURRENTLY DOWN! ***``) when ``get_news`` gets a non-JSON body. That message
+    is emitted for a dead endpoint, so it is classified as permanent. A plain
+    HTTP 404 from another path stays "no data for the symbol" (the existing
+    behaviour, asserted by ``test_missing_symbol_still_reports_absence``).
+    """
+    message = str(exc)
+    if isinstance(exc, YFDataException) and "CURRENTLY DOWN" in message.upper():
+        return True
+    request = getattr(exc, "request", None)
+    url = getattr(request, "url", None) if request is not None else None
+    return isinstance(url, str) and "xhr/ncp" in url
+
+
+# yfinance 1.x fetches through ``curl_cffi``, whose exception classes are NOT
+# subclasses of ``requests``'. Both stacks are listed so a transport failure is
+# recognised whichever client actually raised it.
+_TRANSPORT_ERRORS = (
+    requests.exceptions.Timeout,
+    requests.exceptions.ConnectionError,
+    curl_errors.Timeout,
+    curl_errors.ConnectionError,
+)
+
+
+def _status_of(exc: Exception) -> int | None:
+    """Extract an HTTP status from either transport's HTTPError."""
+    if isinstance(exc, (requests.exceptions.HTTPError, curl_errors.HTTPError)):
+        return getattr(getattr(exc, "response", None), "status_code", None)
+    return None
+
+
+def _classify_news_failure(exc: Exception, symbol: str, canonical: str, detail: str):
+    """Map a raw vendor exception onto the router's existing error taxonomy.
+
+    The router reacts by exception *type* (see ``errors.py``), so the type is
+    what decides whether the analyst is told "the vendor is down" (a fact about
+    the vendor) or "no data for this symbol" (a fact about the instrument).
+    Anything unrecognised keeps the historical ``NoMarketDataError`` behaviour.
+    """
+    if _is_retired_endpoint_error(exc):
+        # Permanent: a retired endpoint. Say so, and never "try again later".
+        return VendorUnavailableError(f"{detail}: Yahoo ticker-news endpoint is retired ({exc})")
+    if isinstance(exc, (YFRateLimitError, YFDataException) + _TRANSPORT_ERRORS):
+        # ``YFDataException`` is yfinance's own "the request failed" signal
+        # (e.g. the literal ``*** YAHOO! FINANCE IS CURRENTLY DOWN! ***``).
+        # Its "missing data" subclasses (``YFPricesMissingError`` and friends)
+        # derive from ``YFException`` instead, so they are *not* caught here.
+        return VendorRateLimitError(f"{detail}: {exc}")
+    status = _status_of(exc)
+    if status in _TRANSIENT_HTTP_STATUS:
+        return VendorRateLimitError(f"{detail}: HTTP {status} ({exc})")
+    return NoMarketDataError(symbol, canonical, f"{detail}: {exc}")
 
 
 def _extract_article_data(article: dict) -> dict:
@@ -119,7 +196,9 @@ def get_news_yfinance(
         return f"## {ticker}{resolved} News, from {start_date} to {end_date}:\n\n{news_str}"
 
     except Exception as e:
-        raise NoMarketDataError(ticker, ticker, f"news unavailable: {e}") from e
+        raise _classify_news_failure(
+            e, ticker, ticker, "news unavailable"
+        ) from e
 
 
 def get_global_news_yfinance(
@@ -197,4 +276,6 @@ def get_global_news_yfinance(
         return f"## Global Market News, from {start_date} to {curr_date}:\n\n{news_str}"
 
     except Exception as e:
-        raise NoMarketDataError("global news", "global news", f"unavailable: {e}") from e
+        raise _classify_news_failure(
+            e, "global news", "global news", "unavailable"
+        ) from e

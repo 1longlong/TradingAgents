@@ -56,6 +56,48 @@ def _isolate_config():
     config_module._config = copy.deepcopy(default_config.DEFAULT_CONFIG)
 
 
+#: Network endpoints tests must never reach for real. The default ``get_news``
+#: chain now tries Alpha Vantage and GDELT before yfinance; without this guard
+#: those are live HTTP calls, which makes results depend on the network and on
+#: whatever key happens to be in the environment (and risks scraping history
+#: with a real credential during a test run).
+_LIVE_NETWORK_HOSTS = (
+    "alpha_vantage",
+    "alphavantage",
+    "api.gdeltproject.org",
+    "gdelttopics",
+)
+
+
+@pytest.fixture(autouse=True)
+def _block_live_news_vendors(monkeypatch):
+    """Make the news vendors fail fast instead of dialling out.
+
+    The default ``get_news`` chain is now
+    ``alpha_vantage_historical,gdelt,yfinance``. Without this, a test that only
+    patches the yfinance transport would still make a **real** Alpha Vantage or
+    GDELT request first (locally with a real key), so results would depend on
+    the network and on the environment. Both are patched here to raise typed
+    vendor errors, which the router already handles by skipping to the next
+    vendor -- exactly what would happen in production on such a failure.
+
+    Tests that exercise these adapters patch their internals themselves, which
+    overrides this fixture.
+    """
+
+    import tradingagents.dataflows.historical_news as hist
+
+    def _refuse_alpha(*_args, **_kwargs):
+        raise OSError("live Alpha Vantage disabled in tests")
+
+    monkeypatch.setattr(hist, "_alpha_vantage_news", _refuse_alpha)
+
+    import tradingagents.dataflows.gdelt_news as gdelt
+
+    monkeypatch.setattr(gdelt, "_request", lambda *a, **k: (None, None, "transport"))
+    monkeypatch.setattr(gdelt, "_fetch_page", lambda *a, **k: (None, None, "transport"))
+
+
 @pytest.fixture()
 def mock_llm_client():
     client = MagicMock()

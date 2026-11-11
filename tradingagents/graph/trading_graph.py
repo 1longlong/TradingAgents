@@ -22,6 +22,7 @@ from tradingagents.agents.utils.agent_utils import (
     get_indicators,
     get_insider_transactions,
     get_macro_indicators,
+    get_macro_indicators_batch,
     get_news,
     get_prediction_markets,
     get_stock_data,
@@ -163,6 +164,7 @@ class TradingAgentsGraph:
             self.deep_thinking_llm,
             self.tool_nodes,
             self.conditional_logic,
+            config=self.config,
         )
 
         self.propagator = Propagator(
@@ -255,6 +257,12 @@ class TradingAgentsGraph:
                     get_global_news,
                     get_insider_transactions,
                     get_macro_indicators,
+                    # Batch macro is ablation-switchable. The ToolNode must agree
+                    # with the analyst, or an OFF run could still execute a batch
+                    # call the model somehow produced.
+                    *([get_macro_indicators_batch]
+                      if (getattr(self, "config", None) or {}).get(
+                          "batch_macro_enabled", True) else []),
                     get_prediction_markets,
                 ]
             ),

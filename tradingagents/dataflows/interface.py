@@ -16,6 +16,7 @@ from .errors import (
     NoMarketDataError,
     VendorNotConfiguredError,
     VendorRateLimitError,
+    VendorUnavailableError,
 )
 from .fred import get_macro_data as get_fred_macro_data
 from .polymarket import get_prediction_markets as get_polymarket_prediction_markets
@@ -33,6 +34,8 @@ from .y_finance import (
     get_stock_stats_indicators_window,
     get_YFin_data_online,
 )
+from .historical_news import get_news_historical as get_historical_news
+from .gdelt_news import get_news_gdelt
 from .yfinance_news import get_global_news_yfinance, get_news_yfinance
 
 logger = logging.getLogger(__name__)
@@ -131,6 +134,12 @@ VENDOR_METHODS = {
     },
     # news_data
     "get_news": {
+        # Historical first: these are the vendors whose endpoints accept a
+        # date range, so they are the only ones that can answer a backtest
+        # window. ``yfinance`` last: its ticker-news endpoint is retired (404)
+        # and it only ever served recent items (campaign 20261107_140536).
+        "alpha_vantage_historical": get_historical_news,
+        "gdelt": get_news_gdelt,
         "alpha_vantage": get_alpha_vantage_news,
         "yfinance": get_news_yfinance,
     },
@@ -203,6 +212,7 @@ def route_to_vendor(method: str, *args, **kwargs):
 
     last_no_data: NoMarketDataError | None = None
     last_unavailable: VendorRateLimitError | None = None
+    last_retired: VendorUnavailableError | None = None
     first_error: Exception | None = None
     for vendor in vendor_chain:
         vendor_impl = VENDOR_METHODS[method][vendor]
@@ -215,6 +225,14 @@ def route_to_vendor(method: str, *args, **kwargs):
             # Kept so an all-unavailable chain can say the vendor was the
             # problem, rather than reporting nothing about the symbol.
             last_unavailable = e
+            continue
+        except VendorUnavailableError as e:
+            # Permanent endpoint failure (e.g. a retired API). Same reaction as a
+            # throttle -- try the next vendor, never abort a core category -- but
+            # remembered separately so the final message says "retired", not
+            # "try again later".
+            logger.warning("Vendor %r endpoint unavailable for %s: %s; trying next vendor.", vendor, method, e)
+            last_retired = e
             continue
         except VendorNotConfiguredError as e:
             logger.warning("Vendor %r not configured for %s; trying next vendor.", vendor, method)
@@ -265,6 +283,14 @@ def route_to_vendor(method: str, *args, **kwargs):
     # abort the run.
     # Every vendor was throttled or unreachable: that is a fact about the
     # vendors, not about the instrument, and it must not end the run.
+    if last_retired is not None and last_unavailable is None:
+        return (
+            f"DATA_UNAVAILABLE: every configured vendor for {method} either has a "
+            f"retired endpoint or no usable data ({last_retired}). The vendor "
+            f"endpoint is not serving; this says nothing about the instrument. "
+            f"Report the data as unavailable and do not estimate or fabricate values."
+        )
+
     if last_unavailable is not None:
         return (
             f"DATA_UNAVAILABLE: no configured vendor could serve {method} right now "

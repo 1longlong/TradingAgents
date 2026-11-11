@@ -548,6 +548,36 @@ class TestRerunTelemetrySelection:
 
         return runner
 
+    def test_runner_reporting_relative_path_is_a_valid_run(self, tmp_path):
+        """End-to-end: the production runner's relative report must validate.
+
+        ``run_single_process`` records ``telemetry_path`` with ``_portable_path``
+        relative to the experiment directory, while ``telemetry_before`` holds
+        absolute snapshot strings. Reproducing that split used to mark a
+        genuinely valid run as ``status_mismatch``.
+        """
+        exp_dir, exp, case, runtime = self._setup(tmp_path)
+        run_dir = exp_dir / tb.RUNS_DIR / "run_01" / "attempt_01"
+        absolute_runner = self._runner_writing(
+            runtime, run_dir, [("run-new-1.json", "new", 22222)])
+
+        def relative_runner(spec_path, exp_dir, run_index, attempt=1):
+            result = absolute_runner(spec_path, exp_dir, run_index, attempt)
+            absolute = result["report"]["telemetry_path"]
+            # The child runs with cwd = experiment dir; ``_portable_path``
+            # renders the record relative to that location.
+            relative = Path(absolute).relative_to(exp_dir).as_posix()
+            result["report"] = {**result["report"], "telemetry_path": relative}
+            return result
+
+        metrics = tb.execute_measured_run(
+            exp_dir, exp, case, 1, runner=relative_runner, run_dir=run_dir)
+
+        assert metrics["run_status"] == "completed"
+        assert metrics["valid"] is True
+        assert metrics["reported_input_tokens_sum"] == 22222
+        assert (run_dir / tb.TELEMETRY_FILE).exists()
+
     def test_nonzero_exit_with_completed_telemetry_keeps_metrics(self, tmp_path):
         """A child that writes completed telemetry but exits non-zero is valid."""
         exp_dir, exp, case, runtime = self._setup(tmp_path)
@@ -625,6 +655,60 @@ class TestRerunTelemetrySelection:
         assert "multiple new telemetry artifacts" in (metrics["error"] or "")
         # Ambiguity must not be papered over by copying the reported file.
         assert not (run_dir / tb.TELEMETRY_FILE).exists()
+
+    def test_relative_reported_path_selects_the_same_artifact(self, tmp_path):
+        """A repository-relative report resolves to the same artifact."""
+
+        exp_dir, exp, case, runtime = self._setup(tmp_path)
+        target = runtime / "telemetry" / "run-new-1.json"
+        target.write_text(json.dumps(synth_payload("new", inp=22222)), encoding="utf-8")
+        # The child runs with cwd set to the experiment dir, so the recorded
+        # ``_portable_path`` is anchored there.
+        relative = target.relative_to(exp_dir).as_posix()
+
+        before = tb._telemetry_snapshot(runtime)
+        before.discard(str(target))
+        selected = tb._select_run_telemetry(runtime, before, relative,
+                                            reported_base=exp_dir)
+
+        assert selected == target
+        assert selected.resolve() == target.resolve()
+        assert not Path(relative).is_absolute()
+
+    def test_runner_report_path_is_relative_to_the_experiment_dir(self, tmp_path):
+        """The producer must anchor ``telemetry_path`` at the experiment dir.
+
+        Regression: ``spec.json`` sits at ``<exp>/runs/run_NN/attempt_NN/``, so
+        ``spec_path.parent.parent.parent`` is ``<exp>/runs``. Anchoring there
+        emitted ``run_NN/attempt_NN/...`` and dropped the ``runs/`` component,
+        which the consumer resolves against ``<exp>`` -- so the recorded path
+        never matched the real artifact and every run was rejected as
+        ``status_mismatch``.
+        """
+        exp_dir, exp, case, runtime = self._setup(tmp_path)
+        target = runtime / "telemetry" / "run-new-1.json"
+        target.write_text(json.dumps(synth_payload("new")), encoding="utf-8")
+        spec_path = exp_dir / tb.RUNS_DIR / "run_01" / "attempt_01" / "spec.json"
+
+        recorded = tb._portable_path(target, spec_path.parent.parent.parent.parent)
+
+        assert recorded is not None
+        assert not Path(recorded).is_absolute()
+        assert Path(recorded).parts[0] == tb.RUNS_DIR, recorded
+        assert (exp_dir / recorded).resolve() == target.resolve()
+
+    def test_different_reported_path_is_still_rejected(self, tmp_path):
+        """Resolving must not weaken the single-artifact contract."""
+        exp_dir, exp, case, runtime = self._setup(tmp_path)
+        other = runtime / "telemetry" / "run-other-1.json"
+        other.write_text(json.dumps(synth_payload("other")), encoding="utf-8")
+        target = runtime / "telemetry" / "run-new-1.json"
+        target.write_text(json.dumps(synth_payload("new")), encoding="utf-8")
+
+        before = tb._telemetry_snapshot(runtime)
+        before.discard(str(target))
+        with pytest.raises(RuntimeError, match="refusing to guess"):
+            tb._select_run_telemetry(runtime, before, str(other))
 
     def test_historical_telemetry_is_preserved(self, tmp_path):
         exp_dir, exp, case, runtime = self._setup(tmp_path)
@@ -1484,6 +1568,41 @@ class TestMeasurementCredentials:
         tb.apply_cityu_env(env, secrets)
         assert not marker.exists()
         assert env["TRADINGAGENTS_LLM_BACKEND_URL"] == "https://x/v1"
+
+    def test_doubled_quotes_are_unwrapped_once_more(self, tmp_path):
+        # A value that a wrapper re-quoted arrives as ""sk-…""; the inner pair is
+        # the real wrapper, so the key must not keep literal quote characters.
+        secrets = tmp_path / "env"
+        secrets.write_text('CITYU_FOUNDRY_API_KEY=""sk-secret-value""\n')
+        env = {}
+        tb.apply_cityu_env(env, secrets)
+        assert env["OPENAI_COMPATIBLE_API_KEY"] == "sk-secret-value"
+
+    def test_fred_key_is_forwarded_from_the_secrets_file(self, tmp_path):
+        secrets = tmp_path / "env"
+        secrets.write_text('FRED_API_KEY="0123456789abcdef0123456789abcdef"\n'
+                           "UNRELATED=leak\n")
+        env = {}
+        applied = tb.apply_cityu_env(env, secrets)
+        assert applied == ["FRED_API_KEY"]
+        assert env["FRED_API_KEY"] == "0123456789abcdef0123456789abcdef"
+        assert "UNRELATED" not in env
+
+    def test_existing_fred_key_wins_over_the_file(self, tmp_path):
+        secrets = tmp_path / "env"
+        secrets.write_text("FRED_API_KEY=from-file\n")
+        env = {"FRED_API_KEY": "from-shell"}
+        assert tb.apply_cityu_env(env, secrets) == []
+        assert env["FRED_API_KEY"] == "from-shell"
+
+    def test_credential_state_reports_configured_without_values(self, tmp_path):
+        secrets = tmp_path / "env"
+        secrets.write_text("FRED_API_KEY=never-print-this-value\n")
+        env = {}
+        tb.apply_cityu_env(env, secrets)
+        state = {row["variable"]: row["configured"] for row in tb.credential_state(env)}
+        assert state["FRED_API_KEY"] is True
+        assert "never-print-this-value" not in repr(state)
 
     def test_missing_secrets_file_exits_without_leaking(self, tmp_path, capsys):
         root, _ = _tmpl_repo(tmp_path)
