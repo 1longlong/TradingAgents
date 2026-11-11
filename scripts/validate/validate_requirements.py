@@ -13,9 +13,14 @@ This script validates, without network and without paid APIs:
 3. YAML files parse (via PyYAML if installed; else a conservative fallback).
 4. ``docs/req/requirements.yaml`` validates against ``docs/req/req-schema.json``
    using the real draft-2020-12 JSON Schema when ``jsonschema`` is installed
-   (CI installs it, so the actual schema is enforced there). When ``jsonschema``
-   is unavailable, a deterministic subset validator is used as a clearly
-   reported local fallback.
+   (the governance CI job installs it, so the actual schema is enforced there).
+   When ``jsonschema`` is unavailable (e.g. the Python test jobs, which do not
+   install it), a deterministic subset validator is used as a clearly reported
+   local fallback. The subset validator is NOT a general JSON Schema
+   implementation; it checks the per-requirement and ``project`` rules the real
+   registry depends on, including ``project.schema_version`` matching the
+   *pattern read from the actual schema* (not a hardcoded version), so a
+   non-empty-but-invalid version such as ``"1.0"`` is rejected on BOTH paths.
 
    Pure JSON Schema alone cannot guarantee two registry contracts, so the
    *combined* validation entry point (``validate_against_schema``, and the
@@ -82,6 +87,7 @@ REQUIRED_FILES = [
     "docs/architecture/adr/003-phase4a-offline-comparison.md",
     "docs/architecture/adr/004-governance-context-design.proposed.md",
     "docs/architecture/adr/005-blocked-output-multiline-containment.md",
+    "docs/architecture/adr/006-validator-fail-closed-schema-version.md",
     "docs/architecture/invariants.md",
     "docs/architecture/trace-matrix.md",
     "docs/architecture/memory-design.md",
@@ -281,6 +287,26 @@ def _is_nonempty_str(value: object) -> bool:
     return isinstance(value, str) and len(value.strip()) > 0
 
 
+def _schema_string_pattern(schema: object, *path: str) -> str | None:
+    """Return the ``pattern`` declared for a property path in the real schema.
+
+    The subset fallback must enforce the same constraints the real draft-2020-12
+    validator enforces, so it reads the actual pattern from ``docs/req/req-schema.json``
+    rather than hardcoding one version/format. Returns ``None`` when the schema
+    path (or its ``pattern``) is absent, in which case the fallback only requires a
+    non-empty string — it must never invent a stricter rule than the schema.
+    """
+    node: object = schema
+    for key in path:
+        if not isinstance(node, dict):
+            return None
+        node = node.get(key)
+    if not isinstance(node, dict):
+        return None
+    pattern = node.get("pattern")
+    return pattern if isinstance(pattern, str) else None
+
+
 def validate_requirements(requirements: object, schema: object) -> list[str]:
     errors: list[str] = []
     if not isinstance(schema, dict):
@@ -295,6 +321,26 @@ def validate_requirements(requirements: object, schema: object) -> list[str]:
         for key in ("name", "branch", "schema_version"):
             if not _is_nonempty_str(proj.get(key)):
                 errors.append(f"project.{key} is missing/non-empty")
+        # Fallback fail-closed: `schema_version` is a pattern-constrained string
+        # in the real schema, not merely "non-empty". A non-empty-but-wrong value
+        # such as "1.0" (the schema requires `^v[0-9]+\.[0-9]+$`) passed the
+        # subset check while the real schema rejects it, so the CI (no-jsonschema)
+        # jobs accepted a value the governance job rejects. Read the actual
+        # pattern from the schema so the two paths agree; when the schema omits
+        # the pattern, only non-emptiness is required (no invented constraint).
+        schema_version = proj.get("schema_version")
+        pattern = _schema_string_pattern(
+            schema, "properties", "project", "properties", "schema_version"
+        )
+        if (
+            pattern is not None
+            and _is_nonempty_str(schema_version)
+            and re.fullmatch(pattern, schema_version) is None
+        ):
+            errors.append(
+                f"project.schema_version {schema_version!r} does not match the "
+                f"schema pattern {pattern!r}"
+            )
         for key in ("deliverable_slide_sources", "canonical_source_trees"):
             val = proj.get(key)
             if not isinstance(val, list) or not val:
@@ -359,6 +405,7 @@ SCAN_FILES = [
     "docs/architecture/adr/003-phase4a-offline-comparison.md",
     "docs/architecture/adr/004-governance-context-design.proposed.md",
     "docs/architecture/adr/005-blocked-output-multiline-containment.md",
+    "docs/architecture/adr/006-validator-fail-closed-schema-version.md",
     "docs/architecture/trace-matrix.md",
     "docs/architecture/permission-model.md",
     "docs/architecture/memory-design.md",

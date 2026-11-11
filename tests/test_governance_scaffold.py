@@ -66,6 +66,82 @@ class TestSchemaVersionPattern:
         assert not re.fullmatch(SCHEMA_VERSION_PATTERN, "v1.0.0")
 
 
+def _with_schema_version(value):
+    """The real registry with only ``project.schema_version`` replaced."""
+    reqs = load_real_requirements()
+    reqs["project"]["schema_version"] = value
+    return reqs
+
+
+@pytest.mark.unit
+class TestFallbackSchemaVersionValidation:
+    """CI Python jobs do not install ``jsonschema``; the dispatcher then uses the
+    deterministic subset fallback. That fallback must reject a non-empty but
+    schema-invalid ``schema_version`` (e.g. ``"1.0"``) exactly as the real
+    draft-2020-12 schema does. The subset validator reads the pattern from the
+    actual schema, so it never hardcodes a version and never invents a rule the
+    real schema lacks (a minimal schema with no pattern still only requires a
+    non-empty string). It is NOT a general JSON Schema implementation; this
+    pins only the ``project.schema_version`` fit.
+    """
+
+    def test_direct_fallback_accepts_valid_versions(self):
+        # Values the real schema accepts must remain accepted by the fallback.
+        for good in ("v1.0", "v2.1", "v0.0", "v10.99"):
+            assert re.fullmatch(SCHEMA_VERSION_PATTERN, good), good
+            errors = validate_requirements.validate_requirements(
+                _with_schema_version(good), load_real_schema()
+            )
+            assert errors == [], (good, errors)
+
+    def test_direct_fallback_rejects_bad_versions(self):
+        schema = load_real_schema()
+        for bad in ("1.0", "v1", "v1.0.0", "v1.0-beta", "V1.0", "1", ""):
+            assert not re.fullmatch(SCHEMA_VERSION_PATTERN, bad), bad
+            errors = validate_requirements.validate_requirements(
+                _with_schema_version(bad), schema
+            )
+            assert any("schema_version" in e for e in errors), (bad, errors)
+
+    def test_direct_fallback_rejects_nonstring_version(self):
+        schema = load_real_schema()
+        for bad in (1, 5.0, True, None, ["v1.0"]):
+            errors = validate_requirements.validate_requirements(
+                _with_schema_version(bad), schema
+            )
+            assert any("schema_version" in e for e in errors), (bad, errors)
+
+    def test_fallback_reads_pattern_from_schema_not_a_hardcoded_version(self):
+        # A schema whose version pattern differs from the real registry must be
+        # honoured: the fallback must NOT hardcode `^v[0-9]+\.[0-9]+$`.
+        schema = load_real_schema()
+        schema["properties"]["project"]["properties"]["schema_version"]["pattern"] = (
+            r"^release-[0-9]+$"
+        )
+        good = validate_requirements.validate_requirements(
+            _with_schema_version("release-7"), schema
+        )
+        assert good == [], good
+        bad = validate_requirements.validate_requirements(
+            _with_schema_version("v1.0"), schema
+        )
+        assert any("schema_version" in e for e in bad), bad
+
+    def test_minimal_schema_without_version_pattern_stays_compatible(self):
+        # A minimal schema with no version pattern path must not be rejected for
+        # a non-empty version; the fallback invents no stricter constraint.
+        reqs = {
+            "project": {"name": "x", "branch": "b", "schema_version": "anything",
+                        "deliverable_slide_sources": ["s"], "canonical_source_trees": ["c"]},
+            "requirements": [
+                {"id": "NFR-DET-001", "type": "NonFunctional", "title": "t",
+                 "description": "d", "priority": "Must", "source_files": ["a"],
+                 "design_artifacts": ["d"], "verification_evidence": ["e"]},
+            ],
+        }
+        assert validate_requirements.validate_requirements(reqs, {"type": "object"}) == []
+
+
 @pytest.mark.unit
 class TestStableIdPattern:
     def test_accepts_exact_required_forms(self):
@@ -159,6 +235,77 @@ class TestDispatcherAgainstRealSchema:
         bad["unexpected_top_level"] = True
         errors = validate_requirements.validate_against_schema(bad, load_real_schema())
         assert errors
+
+
+@pytest.mark.unit
+class TestDispatcherSchemaVersionBothPaths:
+    """The dispatcher rejects a bad ``schema_version`` on BOTH the real-schema
+    path (when ``jsonschema`` is installed) and the deterministic fallback path
+    (the CI Python jobs, which do not install ``jsonschema``). The fallback is
+    forced by making ``importlib.util.find_spec`` report no ``jsonschema``, which
+    is exactly what ``_detect_jsonschema`` consults — so a locally installed
+    ``jsonschema`` cannot hide CI's path.
+    """
+
+    @staticmethod
+    def _force_no_jsonschema(monkeypatch):
+        import importlib.util as _iu
+
+        real_find_spec = _iu.find_spec
+
+        def _fake_find_spec(name, *args, **kwargs):
+            if name == "jsonschema" or name.startswith("jsonschema."):
+                return None
+            return real_find_spec(name, *args, **kwargs)
+
+        monkeypatch.setattr(_iu, "find_spec", _fake_find_spec)
+
+    def test_forced_no_jsonschema_uses_fallback_and_rejects_bad_version(self, monkeypatch):
+        self._force_no_jsonschema(monkeypatch)
+        # The dispatcher re-detects on every call; it must now choose the subset.
+        validate_requirements.validate_against_schema(
+            load_real_requirements(), load_real_schema()
+        )
+        assert validate_requirements._JSSCHEMA_AVAILABLE is False
+        assert validate_requirements._validator_name == "deterministic-subset"
+        # The exact CI failure: '1.0' must now be rejected by the fallback.
+        errors = validate_requirements.validate_against_schema(
+            _with_schema_version("1.0"), load_real_schema()
+        )
+        assert any("schema_version" in e for e in errors), errors
+
+    def test_forced_no_jsonschema_accepts_valid_registry(self, monkeypatch):
+        self._force_no_jsonschema(monkeypatch)
+        errors = validate_requirements.validate_against_schema(
+            load_real_requirements(), load_real_schema()
+        )
+        assert errors == [], errors
+
+    def test_forced_no_jsonschema_rejects_missing_and_nonstring_version(self, monkeypatch):
+        self._force_no_jsonschema(monkeypatch)
+        schema = load_real_schema()
+        for bad in (1, 5.0, True, None, ["v1.0"]):
+            errors = validate_requirements.validate_against_schema(
+                _with_schema_version(bad), schema
+            )
+            assert any("schema_version" in e for e in errors), (bad, errors)
+
+    def test_forced_no_jsonschema_missing_project_version_key(self, monkeypatch):
+        self._force_no_jsonschema(monkeypatch)
+        bad = load_real_requirements()
+        del bad["project"]["schema_version"]
+        errors = validate_requirements.validate_against_schema(bad, load_real_schema())
+        assert any("schema_version" in e for e in errors), errors
+
+    def test_real_schema_path_still_rejects_bad_version_when_available(self):
+        import importlib.util
+
+        if importlib.util.find_spec("jsonschema") is None:
+            pytest.skip("jsonschema not installed; real-schema path unavailable here")
+        errors = validate_requirements.validate_against_schema(
+            _with_schema_version("1.0"), load_real_schema()
+        )
+        assert errors, "schema_version '1.0' must be rejected by the real schema"
 
 
 def _duplicate_id_requirements():

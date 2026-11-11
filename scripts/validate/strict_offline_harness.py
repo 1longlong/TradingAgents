@@ -13,11 +13,14 @@ network connection attempts during the socket-disabled non-integration run).
 Scope (honest, fail-closed):
 - This proves the non-integration run makes **no** outbound connection attempt
   (the count is asserted to be 0), *if* that holds. It does **NOT** assert the run
-  is green: known date-sensitive cache failures and a network-reachability-
-  dependent baseline may still fail and are recorded separately
-  (RISK-001/RISK-002). Today one intercepted attempt IS observed from the existing
-  `test_no_data_handling` vendor-reachability probe, so the count is NOT zero and
-  this requirement stays PARTIAL/OPEN.
+  is green: a genuine regression must still fail and is recorded separately. As of
+  the 2026-11-11 repair the observed count is **0** (the former
+  `test_no_data_handling` vendor-reachability probe is now mocked), so the
+  zero-attempt guarantee holds on the local strict-offline run; the remote CI
+  jobs are not re-run by this harness and remain a separate evidence axis
+  (DEBT-034). Historically one intercepted attempt was observed there and that
+  history is retained in the logbook. This is not a remote-green claim; see
+  logbook 078 for the count.
 - Exit code: the harness fails closed (non-zero) when a forbidden attempt is
   observed, AND it also propagates pytest's own non-zero result, so a red suite is
   never hidden. A network-attempt violation is checked and reported first; the

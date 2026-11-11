@@ -5,7 +5,63 @@ declared complete. A phase without a recorded review is **not** claimed
 complete. Reviews are recorded here; AI-tool use is recorded separately in
 `docs/ai-use-log.yaml`.
 
-## Current status (as of 2026-11-10)
+## Current status (as of 2026-11-11)
+
+- **Publication authorization (2026-11-11, not merge or completion acceptance).**
+  WANG Yiwen explicitly requested committing and pushing the verified repair to
+  `feature/data-quality-debate-control`, updating existing Draft PR #2 and
+  triggering CI. The remote feature branch was fetched with zero divergence.
+  Independent local results are recorded in logbook 078 / AUL-040; publication
+  preflight is AUL-041. Remote CI success must be checked after the push and is
+  not inferred from local passes. No merge is authorized or performed.
+
+- **2026-11-11 scoped CI/baseline repair (plan/test authorization only, NOT
+  human acceptance).** WANG Yiwen explicitly approved this round's repair plan
+  AND test cases in the controlling conversation on 2026-11-11. This authorized
+  the Builder to implement the scoped maintenance (validator subset-fallback
+  schema-version fix, TZ-stable cache fixtures, socket-free no-data tests). It is
+  the human approval of the PLAN and TESTS, not a completion acceptance of the
+  implemented change; later human review remains pending. Outcome recorded in
+  logbook 078 / AUL-040 / ADR-006; remote GitHub CI was not re-run (push not
+  authorized). The four former baseline failures are resolved offline (full
+  strict-offline suite 1844 passed, 0 socket attempts); the historical figures
+  below are preserved as history.
+
+  **INDEPENDENT Codex verification of this repair (2026-11-11; AI technical
+  evidence, NOT remote-green and NOT human acceptance):** focused three modules
+  **76 passed / 0 socket attempts**; forced-no-jsonschema governance **52 passed,
+  6 skipped / 0 attempts**; full strict offline **1844 passed, 1 skipped, 1
+  deselected, 22 warnings, 88 subtests / 0 attempts**; full strict suite with
+  `jsonschema` hidden via a `find_spec` simulation **1838 passed, 7 skipped, 1
+  deselected, 22 warnings, 88 subtests / 0 attempts**; separate
+  `TZ=UTC`/`Asia/Hong_Kong`/`America/New_York` runs of the cache+no-data modules
+  each **18 passed / 0 attempts**; Ruff, validator **43/43**, and `git diff
+  --check` pass. This confirms the offline repair and the zero-socket guarantee;
+  it is not a claim of green remote CI or human acceptance.
+
+- **LATEST final-commit live verification (supersedes the earlier absence of a
+  post-follow-up full-workflow run; NOT human acceptance).** At the human's
+  explicit request, Codex reran the actual school model on committed source
+  `bda6e3a135976bcdb66f84e02ebda666167177e2`, with a clean starting tree and
+  matching 214-file source/test fingerprints before and after execution.
+  Both bounded workflows completed: 25 application calls, 219496 reported
+  tokens, zero output truncations, retries disabled. D1 used real analysts and
+  vendors, gate `degraded`, both Bull/Bear invoked, one complete round, stop
+  `max_rounds_reached`; debate accounting was 31.924532042001374 measured seconds
+  and 31120 provider tokens (27066 input + 4054 output). D2 used the explicit
+  empty-critical-market fixture, real gate and real downstream model nodes:
+  zero Bull/Bear calls, Hold at manager/trader/portfolio/final/memory, no
+  executable blocked Trader sizing. D1/D2 checks passed 21/21; nine additional
+  default-quarantine checks passed, including actual file persistence, run
+  identity, non-authoritative labeling and exclusion of raw narrative from
+  trusted manager/report/memory text. See logbook 077 / AUL-039 and external
+  backup `2026-11-10-final-commit-school-live-hkmbgkqj/`.
+  This is selected-case live evidence, not exhaustive testing: D2 is synthetic
+  missing evidence, not a live-vendor outage; UNKNOWN/legacy adversarial states,
+  malformed-state handling and failed-node resume remain separately scoped
+  offline/untested limitations. The four known baseline failures remain.
+  Only verification documentation changed after the run; no feature/test edits,
+  new commit/push, PR, merge, or human acceptance occurred in this rerun.
 
 - **CURRENT DISPOSITION (supersedes the pre-repair bullets below for these
   specific figures; NOT human acceptance).** The DEBT-021/033 measured-budget +

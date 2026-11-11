@@ -1642,3 +1642,127 @@ status: Offline-verified final tree; PENDING human acceptance (not all-green: 4
         known baseline failures remain).
 date: 2026-11-10
 ```
+
+## 077 — Final committed-source school-model rerun
+
+- **Authorization:** the human explicitly requested a complete school-model
+  rerun after the repair was pushed. Verification only; no implementation edits,
+  commit/push, PR, merge, trades or threshold tuning.
+- **Version:** `bda6e3a135976bcdb66f84e02ebda666167177e2`; clean starting tree;
+  214-file source/test fingerprints matched before and after execution.
+- **Command:** `.venv/bin/python
+  /Users/wangyiwen/Documents/Codex/2026-10-19/https-github-com-1longlong-tradingagents-https/verify_budget_attribution_2026_11_10.py
+  --run-live` (existing external, explicitly opt-in harness; not default pytest).
+- **Guards:** shared 32 application calls / 250000 observed tokens / 4096 output
+  tokens per call / 120-second request timeout / 1200-second wall time; retries
+  disabled. Observed tokens are a stopping guard, not a physical future-cost
+  guarantee. Credentials were used in runtime memory without emitted values.
+- **Overall:** COMPLETE, 25 application calls, 219496 reported gateway tokens,
+  zero output truncations. D2 ran first, followed by D1.
+- **D2:** controlled empty critical-market records and synthetic analyst report;
+  real gate, routers and downstream school-model nodes. Blocked, 6 real calls,
+  zero Bull/Bear calls; manager/trader/portfolio/final signal/memory all Hold;
+  no executable blocked Trader sizing. Standard checks **14/14** passed.
+- **Additional D2 checks:** **9/9** passed. Default quarantine file actually
+  exists without an explicit path override, preserves nonempty raw narrative,
+  records `non_authoritative: true`, run ID `2026-11-05/NVDA` and
+  `data_quality_blocked`, and keeps raw narrative out of the trusted manager,
+  complete report and memory. Report participation accurately lists both
+  researchers as skipped.
+- **D1:** real analysts/vendors, NVDA as of 2026-11-05, gate degraded; both
+  Bull/Bear invoked, one complete round, `max_rounds_reached`. Debate usage:
+  **31120 provider tokens = 27066 input + 4054 output**, **31.924532042001374
+  measured seconds**. Independent callback timing (15.52 + 16.40 seconds) and
+  gateway token totals agree. Standard checks **7/7** passed.
+- **Backup:** `/Users/wangyiwen/OpenCodeRecords/TradingAgents/2026-11-10-final-commit-school-live-hkmbgkqj/`
+  contains verification JSON, state, report/memory trees and the additional
+  quarantine checks. Console and before/after fingerprint logs are adjacent.
+- **Interpretation:** this now supplies live full-workflow and default-audit
+  persistence evidence for the final committed source. Earlier pre-follow-up
+  runs stay historical; they are not retroactively relabeled. D2 is a synthetic
+  missing-data fixture, not an observed live-vendor outage. UNKNOWN/legacy
+  adversarial states, malformed metadata and failure/resume paths are not newly
+  exercised by these two live scenarios. The four known baseline failures and
+  other open debts remain; no all-green/all-bug-free claim or human approval.
+
+## 078 — CI/baseline repair (validator fallback + TZ/socket tests)
+
+- **Authorization:** WANG Yiwen explicitly approved this round's repair plan AND
+  test cases in the controlling conversation on 2026-11-11. Plan/test
+  authorization only; this is **NOT** a human completion acceptance. Scoped
+  maintenance, not a new phase. No new runtime feature; `tradingagents/**`
+  unchanged; no dependency / `.github/**` / permission edits; no commit/push/PR.
+- **Reported CI evidence (independently verified by Codex, NOT re-run here):**
+  PR #2 (release <- feature, HEAD `bda6e3a`), run 42946358949; all four Python
+  jobs (3.10/3.11/3.12/3.13) failed the SAME test
+  `tests/test_governance_scaffold.py::TestDispatcherAgainstRealSchema::test_real_schema_rejects_bad_schema_version`
+  (1 failed, 1820 passed, 7 skipped, 22 warnings, 88 subtests). The test jobs do
+  NOT install optional `jsonschema`; the governance job DOES and passed.
+- **Root cause (reproduced offline):** the deterministic subset fallback checked
+  `project.schema_version` only as non-empty and accepted `"1.0"`, which the real
+  schema pattern `^v[0-9]+\.[0-9]+$` rejects. A forced-fallback mutation against
+  the real registry reproduced `errors=[]`.
+- **Repairs (within approved files):**
+  - `scripts/validate/validate_requirements.py`: the subset fallback now reads the
+    `schema_version` pattern from the actual schema
+    (`_schema_string_pattern`) and rejects non-matching/non-string/missing values
+    on BOTH paths; a minimal schema with no pattern still only requires
+    non-emptiness (no invented constraint). Not a general JSON Schema
+    implementation; documented limitation unchanged. ADR-006.
+  - `tests/test_governance_scaffold.py`: direct + dispatcher version
+    acceptance/rejection, forced fallback (`importlib.util.find_spec` reports no
+    `jsonschema`), real-jsonschema path when available, malformed/missing/non-string
+    rejection, minimal-schema compatibility. The failing test is NOT skipped or
+    weakened.
+  - `tests/test_ohlcv_cache_freshness.py`: fixture epoch fixed to the local
+    wall-clock (`to_pydatetime().timestamp()`) matching production
+    `pd.Timestamp.fromtimestamp`; per-day write uses the same conversion; new
+    UTC / `Asia/Hong_Kong` / `America/New_York` summer+winter regression matrix
+    (fresh accepted, expired rejected, previous-day rejected, historical
+    same-day-cache behavior preserved), process TZ/`tzset` restored per test.
+    Freshness/TTL semantics unchanged.
+  - `tests/test_no_data_handling.py`: mocks `stockstats_utils.vendor_reachable`
+    (True → genuine no-data → `NoMarketDataError`; False → outage →
+    `VendorRateLimitError`), both leave no poisoned cache and retry on the second
+    call; uses `tmp_path` (no shared `tests/_tmp_cache`); outage-vs-no-data
+    production distinction preserved.
+  - Docs/trace: ADR-006, trace-matrix NFR-OFF-001/NFR-DET-001, risk-list
+    RISK-001/002 (mitigated) + RISK-030, debt-register DEBT-001/002 (resolved) +
+    DEBT-034, harness docstring. Historical failures are preserved as history.
+- **Focused runs (offline):**
+  - `tests/test_no_data_handling.py` + `tests/test_ohlcv_cache_freshness.py`:
+    **18 passed**; re-run under `TZ=UTC`, `TZ=Asia/Hong_Kong`,
+    `TZ=America/New_York`: **76 passed** each (with the governance module).
+  - `tests/test_governance_scaffold.py`: **58 passed** (jsonschema installed);
+    forced no-jsonschema via a faithful `find_spec("jsonschema") -> None`
+    simulation: **52 passed, 6 skipped** (the 6 are the pre-existing real-schema
+    branches that legitimately skip without `jsonschema`).
+- **Full strict-offline suite** (`scripts/validate/strict_offline_harness.py`,
+  default command): **1844 passed, 1 skipped, 1 deselected, 22 warnings, 88
+  subtests, 0 forbidden socket attempts**. The former four baseline failures are
+  resolved; zero-attempt NFR-OFF-001 is achieved offline.
+- **Validator:** `scripts/validate/validate_requirements.py`: RESULT PASS (with
+  `jsonschema`) and PASS with the subset fallback (jsonschema hidden). **Ruff:**
+  clean on all changed Python. **`git diff --check`:** clean.
+- **Independent Codex verification (2026-11-11; AI technical evidence, NOT
+  remote-green and NOT human acceptance):** focused three modules **76 passed /
+  0 socket attempts**; forced-no-jsonschema governance **52 passed, 6 skipped /
+  0 attempts**; full strict offline **1844 passed, 1 skipped, 1 deselected, 22
+  warnings, 88 subtests / 0 attempts**; full strict suite with `jsonschema`
+  hidden via a `find_spec` simulation **1838 passed, 7 skipped, 1 deselected, 22
+  warnings, 88 subtests / 0 attempts**; separate `TZ=UTC`,
+  `TZ=Asia/Hong_Kong`, `TZ=America/New_York` runs of the cache+no-data modules
+  each **18 passed / 0 attempts**; Ruff, validator **43/43**, and `git diff
+  --check` pass. This independently confirms the offline repair and the
+  zero-socket guarantee on an all-green offline run.
+- **Identifier-only correction (2026-11-11):** the historical regression node
+  `TestLoadOhlcvNoPoison::test_empty_download_raises_and_does_not_cache` was
+  preserved (not removed) as a regular pytest class method with the same
+  `tmp_path` + reachability mocks, retaining both parameterized
+  reachable/unreachable checks; no duplicate/vacuous standalone wrapper remains.
+  Re-verified: `tests/test_no_data_handling.py` **5 passed** (the historical node
+  collects as 2 parameterized cases). Also fixed the RISK-030 row to the six
+  table columns.
+- **Limitations (honest):** remote GitHub CI was NOT re-run (push is not
+  authorized), so this is NOT a remote-green claim. The repair proves the
+  covered offline path, not live behavior; no live calls were made this round.
