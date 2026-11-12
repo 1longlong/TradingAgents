@@ -33,7 +33,7 @@ deterministic :class:`~tradingagents.evidence.policy.MarketPolicy`.
 
 from __future__ import annotations
 
-from typing import Final
+from typing import Any, Final
 
 from tradingagents.evidence.models import (
     Criticality,
@@ -148,6 +148,76 @@ def evaluate_record_quality(
     return QualityStatus.MEDIUM, [REASON_MEDIUM_SINGLE_SOURCE]
 
 
+# ---------------------------------------------------------------------------
+# Optional-category per-record classification (never forces the OHLCV schema)
+# ---------------------------------------------------------------------------
+
+_OPTIONAL_CATEGORIES = frozenset({"fundamentals", "news", "sentiment"})
+
+# Mandatory PASS rule ids per optional category. A record is only usable when the
+# category's core checks are explicitly PRESENT and PASS — an absent/empty
+# result set, or one where the mandatory checks are only NOT_APPLICABLE, must
+# fail closed (never silently Medium).
+_OPTIONAL_MANDATORY_RULES: dict[str, tuple[str, ...]] = {
+    # completeness + a known publication/filed date (the freshness class PASS).
+    "fundamentals": ("optional.completeness.required_fields", "optional.freshness.publication_date"),
+    "news": ("optional.completeness.required_fields", "optional.freshness.publication_date"),
+    "sentiment": ("optional.completeness.required_fields", "optional.freshness.publication_date"),
+}
+
+
+def evaluate_optional_record_quality(
+    record: EvidenceRecord,
+    results,
+) -> tuple[QualityStatus, list[str]]:
+    """Classify ONE optional-category record from its own validator results.
+
+    Optional categories are qualitative: a news headline or a source-native
+    sentiment label has no numeric ``value_normalized`` and must NOT be forced
+    through the market rule that treats a ``None`` value as unusable. This
+    classifier is driven solely by the per-record ``ValidationResult`` set the
+    per-category validator produced, and **fails closed**:
+
+    - any ``FAIL`` (completeness / look-ahead / filed-as-of / ticker / amount
+      legality) -> ``Blocked`` (record not usable/decisive);
+    - the category's mandatory checks must be PRESENT and ``PASS``; if any is
+      absent or not PASS (e.g. an empty result set, or all NOT_APPLICABLE) ->
+      ``Blocked`` (incomplete/unknown validation never becomes Medium);
+    - any ``WARNING`` (with all mandatory PASS) -> ``Low``;
+    - otherwise -> ``Medium``.
+
+    A sentinel raw value is always Blocked. This never inspects numeric
+    magnitudes for text facts, so a valid qualitative record is Medium and
+    becomes usable, while an excluded/malformed/unvalidated record stays
+    Blocked/Low.
+    """
+    if is_sentinel(record):
+        return QualityStatus.BLOCKED, [REASON_BLOCKED_NO_USABLE_SOURCE]
+    results = list(results or [])
+    status_by_rule: dict[str, ValidationStatus] = {}
+    has_fail = False
+    has_warning = False
+    for result in results:
+        status_by_rule[result.rule_id] = result.status
+        if result.status == ValidationStatus.FAIL:
+            has_fail = True
+        elif result.status == ValidationStatus.WARNING:
+            has_warning = True
+    if has_fail:
+        return QualityStatus.BLOCKED, [REASON_BLOCKED_CRITICAL_FAILURE]
+    mandatory = _OPTIONAL_MANDATORY_RULES.get(record.category, ())
+    if not mandatory:
+        return QualityStatus.BLOCKED, [REASON_BLOCKED_CRITICAL_FAILURE]
+    for rule_id in mandatory:
+        if status_by_rule.get(rule_id) != ValidationStatus.PASS:
+            # Missing / NOT_APPLICABLE / WARNING on a mandatory check => not
+            # proven usable. Fail closed (never Medium from an empty set).
+            return QualityStatus.BLOCKED, [REASON_BLOCKED_CRITICAL_FAILURE]
+    if has_warning:
+        return QualityStatus.LOW, [REASON_LOW_MATERIAL_FAILURE]
+    return QualityStatus.MEDIUM, [REASON_MEDIUM_SINGLE_SOURCE]
+
+
 def attach_record_quality(
     record: EvidenceRecord,
     results,
@@ -158,8 +228,16 @@ def attach_record_quality(
     A frozen dataclass is rebuilt with the evaluated ``quality_status`` /
     ``quality_reasons`` and the fresh ``validation_results`` so downstream
     consumers see a self-consistent record without mutating the input.
+
+    Optional-category records (fundamentals/news/sentiment) are classified by
+    :func:`evaluate_optional_record_quality` from their own validator results, so
+    a valid qualitative record (no numeric value) is ``Medium`` rather than
+    forced to ``Low`` by the market OHLCV rule.
     """
-    status, reasons = evaluate_record_quality(record, results, policy)
+    if record.category in _OPTIONAL_CATEGORIES:
+        status, reasons = evaluate_optional_record_quality(record, results)
+    else:
+        status, reasons = evaluate_record_quality(record, results, policy)
     return EvidenceRecord.build(
         evidence_id=record.evidence_id,
         run_id=record.run_id,
@@ -366,6 +444,165 @@ def aggregate_category_quality(
             human_readable_reason=(
                 "Medium: hard checks pass but not every critical metric is "
                 "fully corroborated."
+            ),
+        ),
+        per_status,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Optional-category aggregation (fundamentals / news / sentiment)
+# ---------------------------------------------------------------------------
+
+# Optional categories are qualitative/supporting: their records are never
+# critical to the overall decision, and this aggregator deliberately does NOT
+# reuse the market "High" rule (which demands corroborated *critical* metrics).
+# News/post counts are not independent corroboration of a financial claim, so an
+# optional category is never graded above Medium here.
+
+REASON_OPTIONAL_MEDIUM: Final[str] = "optional_medium_records"
+REASON_OPTIONAL_LOW_SINGLE: Final[str] = "optional_low_single_source"
+
+
+def _optional_lineage_identity(record: EvidenceRecord) -> str:
+    """Content lineage identity of an optional record (for independence).
+
+    Independence must count distinct *content lineages*, not distinct provider
+    wrapper names: two syndicated copies of one article, or two rows that came
+    from the same filing/post, are NOT independent corroboration. The evidence_id
+    embeds the lineage slug (``provider/wrapper`` is only its prefix), so this
+    groups by the trailing lineage component; two records with identical
+    content identity collapse to one independent lineage regardless of the
+    provider label. Falls back to the source name when the id has no slug.
+    """
+    evidence_id = record.evidence_id or ""
+    parts = evidence_id.rsplit("/", 2)
+    if len(parts) == 3 and parts[1]:
+        return parts[1]  # the deterministic lineage slug
+    return record.source_name or evidence_id
+
+
+def _optional_independent_sources(
+    records: list[EvidenceRecord],
+    per_status: dict[str, QualityStatus],
+) -> set[str]:
+    """Distinct independent content lineages among VALID (Medium) records.
+
+    Only records the per-record evaluation accepted as ``Medium`` (validated,
+    eligible) contribute; ``Low``/``Blocked``/excluded rows never inflate the
+    count, and identical content lineage collapses to one independent source.
+    """
+    sources: set[str] = set()
+    for record in records:
+        if per_status.get(record.evidence_id) != QualityStatus.MEDIUM:
+            continue
+        if is_sentinel(record) or not (record.value_raw or "").strip():
+            continue
+        sources.add(_optional_lineage_identity(record))
+    return sources
+
+
+def aggregate_optional_category_quality(
+    category: str,
+    records: list[EvidenceRecord],
+    results_by_id: dict[str, list],
+    policy: Any | None = None,
+) -> tuple[EvidenceGroupQuality, dict[str, QualityStatus]]:
+    """Aggregate one OPTIONAL category's validated records into a group quality.
+
+    Precedence:
+
+    - any record evaluated ``Blocked`` -> group ``Blocked`` (the gate will still
+      never let an optional block the run; this is a defensive mirror);
+    - every record ``Low`` (or no usable record) -> group ``Low``;
+    - at least one ``Medium`` record with >= ``min_independent_sources`` distinct
+      **independent content lineages** -> group ``Medium`` (never ``High``: a
+      qualitative category is not independent corroboration of a financial
+      claim);
+    - otherwise -> group ``Low``.
+
+    ``policy`` is a :class:`~tradingagents.evidence.policy.CategoryPolicy` (which
+    supplies ``min_independent_sources``) or a bundle exposing it; per-record
+    classification uses the deterministic default record policy. Independent
+    sources count valid eligible lineages only (never provider wrapper names or
+    invalid rows). Records already excluded by the validator (future/malformed/
+    undated) should not be passed here; the caller drops them.
+    """
+    min_independent = getattr(policy, "min_independent_sources", 1)
+    try:
+        min_independent = int(min_independent)
+    except (TypeError, ValueError):
+        min_independent = 1
+    per_status: dict[str, QualityStatus] = {}
+    per_reasons: dict[str, list[str]] = {}
+    for record in records:
+        results = results_by_id.get(record.evidence_id, [])
+        # Optional qualitative records must not be forced through the OHLCV
+        # numeric rule (a text value is not "unusable"): classify from their own
+        # per-category validator results instead.
+        status, reasons = evaluate_optional_record_quality(record, results)
+        per_status[record.evidence_id] = status
+        per_reasons[record.evidence_id] = reasons
+
+    evidence_ids = sorted(r.evidence_id for r in records)
+    sources = _optional_independent_sources(records, per_status)
+    source_count = len(sources)
+    criticality = Criticality.IMPORTANT
+
+    blocked = [eid for eid, st in per_status.items() if st == QualityStatus.BLOCKED]
+    if blocked:
+        reasons = per_reasons[blocked[0]]
+        return (
+            EvidenceGroupQuality(
+                category=category,
+                quality_status=QualityStatus.BLOCKED,
+                criticality=criticality,
+                evidence_ids=evidence_ids,
+                source_count=source_count,
+                independent_source_count=source_count,
+                reason_codes=list(dict.fromkeys(reasons)),
+                human_readable_reason=(
+                    "Blocked: optional record failed hard validation; not decisive."
+                ),
+            ),
+            per_status,
+        )
+
+    has_medium = any(st == QualityStatus.MEDIUM for st in per_status.values())
+    if has_medium and source_count >= min_independent:
+        return (
+            EvidenceGroupQuality(
+                category=category,
+                quality_status=QualityStatus.MEDIUM,
+                criticality=criticality,
+                evidence_ids=evidence_ids,
+                source_count=source_count,
+                independent_source_count=source_count,
+                reason_codes=[REASON_OPTIONAL_MEDIUM],
+                human_readable_reason=(
+                    f"Medium: {source_count} validated structured source(s); "
+                    "qualitative category, never counted as corroboration."
+                ),
+            ),
+            per_status,
+        )
+
+    if source_count <= 1:
+        reason_codes = [REASON_OPTIONAL_LOW_SINGLE]
+    else:
+        reason_codes = [REASON_LOW_MATERIAL_FAILURE]
+    return (
+        EvidenceGroupQuality(
+            category=category,
+            quality_status=QualityStatus.LOW,
+            criticality=criticality,
+            evidence_ids=evidence_ids,
+            source_count=source_count,
+            independent_source_count=source_count,
+            reason_codes=reason_codes,
+            human_readable_reason=(
+                "Low: optional evidence is single-source or not fully validated; "
+                "it degrades but cannot be decisive."
             ),
         ),
         per_status,

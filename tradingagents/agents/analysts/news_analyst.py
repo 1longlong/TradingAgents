@@ -8,6 +8,7 @@ from tradingagents.agents.utils.agent_utils import (
     get_news,
     get_prediction_markets,
 )
+from tradingagents.debate.usage_capture import instrument_analyst_invoke
 
 
 def create_news_analyst(llm):
@@ -53,7 +54,7 @@ def create_news_analyst(llm):
         prompt = prompt.partial(instrument_context=instrument_context)
 
         chain = prompt | llm.bind_tools(tools)
-        result = chain.invoke(state["messages"])
+        result = instrument_analyst_invoke(chain, state["messages"], speaker="News Analyst")
 
         report = ""
 

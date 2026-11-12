@@ -301,7 +301,16 @@ def create_msg_delete():
                 f"{instrument_context} The analysis date is {trade_date}."
             )
         )
-        return {"messages": removal_operations + [placeholder]}
+        # Durability (ADR-008): this clear node runs immediately after the
+        # analyst's tool node in the same graph invocation, so the run-scoped
+        # collector still holds any structured vendor evidence the tools
+        # captured. Flush it into the returned state delta so it is checkpointed
+        # at the tool boundary (a ContextVar alone is not durable). A no-op when
+        # no run is active or nothing was captured; never changes messages.
+        from tradingagents.graph.evidence_tool_node import capture_into_state
+
+        captured_state = capture_into_state(state)
+        return {"messages": removal_operations + [placeholder], **captured_state}
 
     return delete_messages
 

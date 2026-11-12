@@ -389,23 +389,30 @@ class TestInvalidEvidence:
         )
         assert conflicts == []
 
-    def test_re_observation_with_unknown_evidence_drops_open_conflict(self):
+    def test_re_observation_with_unknown_evidence_keeps_open_conflict(self):
+        # ADR-010: a re-observation on an UNKNOWN id must NOT erase the open
+        # conflict (that would let bad evidence manufacture convergence); the
+        # prior record is KEPT and an auditable denial is recorded.
         created, _ = derive_conflicts(
             round_index=1,
             turns=[_turn("Bull", _assert_assert(evidence=["run:1"]))],
             manifest=_manifest(_RECORD_RUN1),
             target_date=TARGET,
         )
-        dropped, _ = derive_conflicts(
+        denials: list[str] = []
+        kept, _ = derive_conflicts(
             round_index=2,
             turns=[_turn("Bear", _assert_assert(evidence=["run:999"]))],
             manifest=_manifest(_RECORD_RUN1),  # run:999 unknown
             target_date=TARGET,
             tracked=created,
+            denials=denials,
         )
-        assert dropped == []
+        assert len(kept) == 1
+        assert kept[0].status.value == "open"
+        assert any("observation_rejected" in d for d in denials)
 
-    def test_re_observation_with_future_evidence_drops_open_conflict(self):
+    def test_re_observation_with_future_evidence_keeps_open_conflict(self):
         created, _ = derive_conflicts(
             round_index=1,
             turns=[_turn("Bull", _assert_assert(evidence=["run:1"]))],
@@ -413,14 +420,41 @@ class TestInvalidEvidence:
             target_date=TARGET,
         )
         future = dict(_RECORD_RUN1, observed_at="2026-06-01")
-        dropped, _ = derive_conflicts(
+        denials: list[str] = []
+        kept, _ = derive_conflicts(
             round_index=2,
             turns=[_turn("Bear", _assert_assert(evidence=["run:1"]))],
             manifest=_manifest(future),
             target_date=TARGET,
             tracked=created,
+            denials=denials,
         )
-        assert dropped == []
+        assert len(kept) == 1
+        assert kept[0].status.value == "open"
+        assert any("observation_rejected" in d for d in denials)
+
+    def test_re_observation_with_invalid_claim_keeps_open_conflict(self):
+        # A wrong exact claim on a valid ID also cannot erase the open conflict.
+        created, _ = derive_conflicts(
+            round_index=1,
+            turns=[_turn("Bull", _assert_assert(evidence=["run:1"]))],
+            manifest=_manifest(_RECORD_RUN1),
+            target_date=TARGET,
+        )
+        denials: list[str] = []
+        kept, _ = derive_conflicts(
+            round_index=2,
+            turns=[_turn("Bear", _assert_assert(evidence=["run:1"]))],
+            manifest=_manifest(_RECORD_RUN1),
+            target_date=TARGET,
+            tracked=created,
+            invalid_claimed_ids={"run:1"},
+            denials=denials,
+        )
+        assert len(kept) == 1
+        assert kept[0].status.value == "open"
+        assert kept[0].blocks_termination() is True
+        assert any("observation_rejected" in d for d in denials)
 
 
 # ---- Legacy compatibility and malformed state ------------------------------

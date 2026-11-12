@@ -254,6 +254,20 @@ def _gate_summary_md(final_state: dict[str, Any]) -> str:
     if error:
         lines.append("")
         lines.append(f"Gate error: {error}")
+    cap = _confidence_cap_block(final_state)
+    lines.append("")
+    if cap.get("cap_applies"):
+        lines.append(
+            f"Confidence ceiling: {cap.get('cap')} (degraded run; "
+            f"policy v{cap.get('policy_version')}; engineering constraint, not a "
+            f"calibrated probability). Capped entries: {cap.get('capped_count', 0)}; "
+            f"quarantined: {cap.get('quarantined_count', 0)}."
+        )
+    else:
+        lines.append(
+            f"Confidence ceiling: not applied (verdict={cap.get('verdict')}; "
+            f"policy v{cap.get('policy_version')})."
+        )
     return "\n".join(lines) + "\n"
 
 
@@ -281,6 +295,62 @@ def _participation_summary(final_state: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def _redacted_claim_validation(summary: dict[str, Any]) -> dict[str, Any]:
+    """A JSON-safe, secret-redacted view of the exact-claim validation summary.
+
+    Carries only the allow-listed per-claim descriptors (status/reason/metric/
+    date/value/unit/ids) the evaluator already produced — never raw model prose.
+    Malformed entries are skipped (fail safe), never coerced.
+    """
+    out: dict[str, list[dict[str, Any]]] = {"verified": [], "rejected": [], "unverified": []}
+    for key in ("verified", "rejected", "unverified"):
+        entries = summary.get(key) if isinstance(summary, dict) else None
+        if not isinstance(entries, list):
+            continue
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            out[key].append(
+                {
+                    "status": redact_secrets(str(entry.get("status", ""))),
+                    "reason": redact_secrets(str(entry.get("reason", ""))),
+                    "metric": redact_secrets(str(entry.get("metric", ""))),
+                    "date_role": redact_secrets(str(entry.get("date_role", ""))),
+                    "date": redact_secrets(str(entry.get("date", ""))),
+                    "value": redact_secrets(str(entry.get("value", ""))),
+                    "unit": redact_secrets(str(entry.get("unit", ""))),
+                    "evidence_ids": [
+                        redact_secrets(str(e)) for e in (entry.get("evidence_ids") or [])
+                    ],
+                }
+            )
+    # ADR-010 amendment: pass through the standalone typed-claim coverage block
+    # (deterministic counts only, no prose) so an out-of-marker typed claim is never
+    # an invisible empty success in the exported trace.
+    coverage = summary.get("coverage") if isinstance(summary, dict) else None
+    if isinstance(coverage, dict) and coverage:
+        turns = coverage.get("turns")
+        out["coverage"] = {
+            "typed_lines_found": int(coverage.get("typed_lines_found", 0) or 0),
+            "parsed": int(coverage.get("parsed", 0) or 0),
+            "unparseable": int(coverage.get("unparseable", 0) or 0),
+            "source": redact_secrets(str(coverage.get("source", ""))),
+            "turns": [
+                {
+                    "speaker": redact_secrets(str(t.get("speaker", ""))),
+                    "typed_lines_found": int(t.get("typed_lines_found", 0) or 0),
+                    "parsed": int(t.get("parsed", 0) or 0),
+                    "unparseable": int(t.get("unparseable", 0) or 0),
+                }
+                for t in turns
+                if isinstance(t, dict)
+            ]
+            if isinstance(turns, list)
+            else [],
+        }
+    return out
+
+
 def _debate_trace(final_state: dict[str, Any]) -> dict[str, Any]:
     """Build the ``2_research/debate_trace.json`` payload.
 
@@ -301,11 +371,15 @@ def _debate_trace(final_state: dict[str, Any]) -> dict[str, Any]:
     budget = debate.get("budget") or {}
     if not isinstance(budget, dict):
         budget = {}
+    claim_validation = debate.get("claim_validation_summary") or {}
+    if not isinstance(claim_validation, dict):
+        claim_validation = {}
     return {
         "route": str(decision.get("route", "") or ""),
         "stop_reason": str(decision.get("stop_reason", "") or ""),
         "round_count": len(round_metrics),
         "participation": _participation_summary(final_state),
+        "claim_validation": _redacted_claim_validation(claim_validation),
         "trace": trace_entries,
         "round_metrics": round_metrics,
         "budget": dict(budget),
@@ -450,13 +524,70 @@ def _usage_provenance(final_state: dict[str, Any]) -> dict[str, Any]:
         "output_tokens_partial": output_partial,
         "total_run_calls": None,
         "tool_calls": None,
+        # ADR-009: the whole-run aggregate (all model-calling phases) and the real
+        # execution identity, plus an explicit completeness. These are REPORTING
+        # only — never a budget limit — and ``debate_*`` above remains the
+        # debate-scoped subset. ``completeness`` is ``unknown`` when no phase was
+        # accounted, so a reader never mistakes the debate figure for a full-run
+        # total.
+        "whole_run_usage": _whole_run_usage(final_state),
+        "execution_run_id": final_state.get("run_id"),
         "unavailable_reason": (
             "total-run calls and tool calls are not tracked by the debate "
-            "accounting; debate calls are reported separately and must not be "
-            "read as total-run calls. Token splits are provider-only and null "
-            "when any contributing call lacked that side."
+            "accounting; the whole_run_usage block reports every accounted model "
+            "invocation (with completeness). debate calls are reported separately "
+            "and must not be read as total-run calls. Token splits are "
+            "provider-only and null when any contributing call lacked that side."
         ),
     }
+
+
+def _whole_run_usage(final_state: dict[str, Any]) -> dict[str, Any]:
+    """The whole-run usage block (per-phase + totals + completeness), JSON-safe.
+
+    Absent a ``whole_run_usage`` state field (a legacy/pre-feature run) it reports
+    ``completeness: unknown`` with zeroed totals — never a fabricated total.
+    """
+    block = final_state.get("whole_run_usage")
+    if not isinstance(block, dict):
+        return {
+            "by_phase": {},
+            "totals": {
+                "calls": 0,
+                "tokens": 0,
+                "seconds": 0.0,
+                "unknown_cost_calls": 0,
+                "reserved_unconfirmed_calls": 0,
+                "reserved_estimated_tokens": 0,
+                "reserved_estimated_seconds": 0.0,
+            },
+            "completeness": "unknown",
+            "unresolved_invocations": 0,
+            "reserved_unconfirmed_calls": 0,
+            "settled_calls": 0,
+            "reserved_unconfirmed": [],
+        }
+    return block
+
+
+def _confidence_cap_block(final_state: dict[str, Any]) -> dict[str, Any]:
+    """The versioned ADR-011 confidence-cap summary (verdict recomputed)."""
+    try:
+        from tradingagents.debate.confidence_policy import confidence_cap_summary
+
+        return confidence_cap_summary(final_state)
+    except Exception:  # noqa: BLE001 — a report must never crash on this block
+        return {
+            "verdict": "blocked",
+            "policy_version": "",
+            "cap": None,
+            "cap_applies": False,
+            "entry_count": 0,
+            "capped_count": 0,
+            "quarantined_count": 0,
+            "entries": [],
+            "note": "confidence cap summary unavailable",
+        }
 
 
 def _run_summary(
@@ -497,6 +628,13 @@ def _run_summary(
         "participation": _participation_summary(final_state),
         "usage": dict(usage),
         "usage_provenance": _usage_provenance(final_state),
+        # ADR-009: whole-run totals (all phases) and the real execution identity,
+        # explicitly separate from the debate-scoped ``usage`` above.
+        "whole_run_usage": _whole_run_usage(final_state),
+        "execution_run_id": final_state.get("run_id"),
+        # ADR-011: the versioned confidence-cap audit + policy (recomputed from the
+        # authoritative gate verdict, never trusted from a state-supplied value).
+        "confidence_cap": _confidence_cap_block(final_state),
         "measured_vs_estimated": {
             "estimated": bool(usage.get("estimated", False)),
         },
@@ -568,6 +706,31 @@ def _identity_md(value: str | None, ambiguous: bool) -> str:
     return value if value is not None else "unavailable"
 
 
+def _whole_run_usage_md(block: dict[str, Any]) -> str:
+    """A Markdown line summarizing the whole-run usage block with completeness.
+
+    The token source labels the AGGREGATE provenance (``provider`` / ``estimated``
+    / ``mixed``): a total mixing provider-exact and estimated/unknown calls is
+    ``mixed`` and is never presented as an exact provider total (ADR-009
+    amendment). ``mixed`` is report-only and never a per-call source.
+    """
+    totals = (block or {}).get("totals") or {}
+    completeness = (block or {}).get("completeness", "unknown")
+    unknown = int(totals.get("unknown_cost_calls", 0) or 0)
+    reserved = int((block or {}).get("reserved_unconfirmed_calls", 0) or 0)
+    unreadable = bool((block or {}).get("accounting_unreadable"))
+    tokens_source = totals.get("tokens_source")
+    return (
+        f"- Whole-run usage: {int(totals.get('calls', 0) or 0)} calls, "
+        f"{int(totals.get('tokens', 0) or 0)} tokens, "
+        f"{float(totals.get('seconds', 0.0) or 0.0)}s "
+        f"(completeness={completeness}, tokens_source={tokens_source}, "
+        f"unknown_cost_calls={unknown}, "
+        f"reserved_unconfirmed_calls={reserved}, accounting_unreadable={unreadable}; "
+        "all model-calling phases; reporting only, not a budget limit)"
+    )
+
+
 def build_run_summary_section(
     final_state: dict[str, Any],
     ticker: str,
@@ -605,6 +768,7 @@ def build_run_summary_section(
         f"{provenance['debate_seconds']}s (tokens={provenance['tokens_source']}, "
         f"seconds={provenance['seconds_source']}, estimated={provenance['estimated']}; "
         "debate calls only, not total-run calls)",
+        _whole_run_usage_md(provenance["whole_run_usage"]),
     ]
     if report_paths:
         lines.append("")

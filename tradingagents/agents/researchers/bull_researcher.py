@@ -7,11 +7,10 @@ from tradingagents.agents.utils.agent_utils import (
     opponent_argument_or_opening,
     report_or_absent,
 )
+from tradingagents.debate import researcher_accounting as accounting
 from tradingagents.debate.budget import (
     budget_admission_decision,
     can_afford_optional_call,
-    extract_provider_usage,
-    record_call_usage,
     resolve_budget_config_from_state,
     validate_clock_elapsed,
 )
@@ -82,17 +81,19 @@ def create_bull_researcher(llm, debate_termination_config=None, *, clock=time.mo
         # A refused call skips safely to the Research Manager with an explicit
         # budget_exhausted reason instead of executing over budget.
         config = resolve_budget_config_from_state(state, debate_termination_config)
-        usage = state.get("debate_usage")
-        if not can_afford_optional_call(usage, config):
-            return {
-                "debate_termination_decision": budget_admission_decision(
-                    next_speaker="Bull",
-                    calls_used=int((usage or {}).get("calls", 0)),
-                    max_calls=int(config.max_calls),
-                    config=config,
-                    usage=usage,
-                ),
-            }
+        # ADR-009: reconcile the debate usage from the durable ledger BEFORE the
+        # admission check, and reserve atomically, so a stale checkpoint usage can
+        # never admit a further OPTIONAL call after unresolved/failed spend.
+        refusal, invocation_id = accounting.admit_and_reserve(
+            state,
+            "Bull",
+            config,
+            can_afford=can_afford_optional_call,
+            admission_decision=budget_admission_decision,
+        )
+        if refusal:
+            return {"debate_termination_decision": refusal}
+        durable = invocation_id is not None
         history = investment_debate_state.get("history", "")
 
         current_response = opponent_argument_or_opening(
@@ -157,6 +158,14 @@ Use this information to deliver a compelling bull argument, refute the bear's co
         start = _safe_clock(clock)
         if validate_clock_elapsed(start, start)["ok"] is False:
             # Abort before llm.invoke; telemetry unavailable; 0 actual calls.
+            # The durable reservation made at admission is released as a CANCELLED
+            # attempt with NO provider call and NO unresolved spend (the estimate
+            # never reached the provider), so a later admission is not blocked by
+            # a phantom attempt.
+            if invocation_id is not None:
+                accounting.settle_failure(
+                    invocation_id, "Bull", status="cancelled", unresolved=False
+                )
             _record_failure(
                 state, "Bull", None, attempted=False,
                 status=STATUS_CLOCK_ABORT, reason="clock_invalid", turn_index=turn_index,
@@ -165,6 +174,8 @@ Use this information to deliver a compelling bull argument, refute the bear's co
         try:
             response = llm.invoke(prompt)
         except Exception as error:
+            if invocation_id is not None:
+                accounting.settle_failure(invocation_id, "Bull", status="failed")
             _record_failure(
                 state, "Bull", error, attempted=True,
                 status=STATUS_INVOKE_FAILED, turn_index=turn_index,
@@ -175,8 +186,18 @@ Use this information to deliver a compelling bull argument, refute the bear's co
         content = response.content
         turn = parse_turn_metadata(speaker="Bull", content=content)
 
+        # ADR-011: cap the numeric confidence AND readable confidence prose on a
+        # degraded run BEFORE the turn enters the debate state, so the evaluator /
+        # StanceSnapshot and the next speaker's prompt never see a raw over-cap
+        # value. The raw readable content is kept separately (non-authoritative).
+        from tradingagents.debate.confidence_policy import cap_debate_turn, update_audit
+
+        raw_transcript: dict = {}
+        turn_capped, cap_entries = cap_debate_turn(
+            turn, state, index=turn_index, raw_transcript_sink=raw_transcript
+        )
         new_investment_debate_state = append_debate_turn(
-            investment_debate_state, turn
+            investment_debate_state, turn_capped
         )
 
         clock_check = validate_clock_elapsed(start, end)
@@ -185,6 +206,10 @@ Use this information to deliver a compelling bull argument, refute the bear's co
             # aborts. The invocation was actually attempted (one logical call),
             # so the ledger records attempted=1 with unavailable clock; no
             # response token cost is invented. Telemetry unavailable.
+            if invocation_id is not None:
+                accounting.settle_failure(
+                    invocation_id, "Bull", status="invalid_clock", unresolved=True
+                )
             _record_failure(
                 state, "Bull", None, attempted=True,
                 status=STATUS_CLOCK_END_INVALID, reason="clock_invalid", turn_index=turn_index,
@@ -192,18 +217,41 @@ Use this information to deliver a compelling bull argument, refute the bear's co
             raise InvalidClockError(
                 f"Bull debate timing unavailable ({clock_check['reason']})"
             )
-        provider_usage = extract_provider_usage(response)
-        usage = record_call_usage(
-            state.get("debate_usage"),
-            prompt_chars=len(prompt),
-            response_chars=len(content),
-            provider_usage=provider_usage,
-            measured_seconds=clock_check["seconds"],
-        )
+        if durable:
+            # Settle the durable ledger BEFORE returning the state update so a
+            # crash after the provider succeeds cannot lose the spend.
+            accounting.settle_success(
+                invocation_id,
+                "Bull",
+                response,
+                prompt_chars=len(prompt),
+                response_chars=len(content),
+                measured_seconds=clock_check["seconds"],
+                clock_reason=None,
+            )
+            usage = accounting.derive_debate_usage(state)
+        else:
+            usage = accounting.accumulate_legacy_usage(
+                state,
+                prompt_chars=len(prompt),
+                response_chars=len(content),
+                response=response,
+                measured_seconds=clock_check["seconds"],
+            )
 
-        return {
+        result = {
             "investment_debate_state": new_investment_debate_state,
             "debate_usage": usage,
         }
+        if cap_entries:
+            result["confidence_cap_audit"] = update_audit(state, cap_entries)
+        if raw_transcript:
+            # Non-authoritative: the raw readable text before capping, kept ONLY
+            # for audit so a reviewer can see what the model actually wrote. It is
+            # never placed in the trusted history/prompt/report body.
+            prev = dict(state.get("confidence_cap_raw_transcript") or {})
+            prev[f"Bull:{turn_index}"] = raw_transcript["Bull"]
+            result["confidence_cap_raw_transcript"] = prev
+        return result
 
     return bull_node

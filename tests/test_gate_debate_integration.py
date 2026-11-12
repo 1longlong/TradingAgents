@@ -134,7 +134,10 @@ def _market_record_ids(state: dict) -> list[str]:
 class TestGateAppliesPerRecordQuality:
     def test_normal_gate_records_carry_computed_status_and_validations(self, fixed_snapshot):
         state = _real_gate_state()
-        assert state["data_quality_verdict"] == "normal"
+        # ADR-008: a manually claimed HIGH optional grade without captured
+        # records is clamped to Low, so the run now honestly degrades (the market
+        # category is still fully classified Medium below).
+        assert state["data_quality_verdict"] == "degraded"
         groups = {g["category"]: g["quality_status"] for g in state["data_quality_group_statuses"]}
         assert groups["market"] == "Medium"
 

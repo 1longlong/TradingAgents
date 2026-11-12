@@ -2,6 +2,7 @@ import json
 
 from .alpha_vantage_common import _make_api_request
 from .date_window import withhold_live_profile
+from .evidence_capture import capture_alpha_vantage_statement
 
 
 def _filter_reports_by_date(result, curr_date: str):
@@ -58,17 +59,23 @@ def get_fundamentals(ticker: str, curr_date: str = None) -> str:
 def get_balance_sheet(ticker: str, freq: str = "quarterly", curr_date: str = None):
     """Retrieve balance sheet data for a given ticker symbol using Alpha Vantage."""
     result = _make_api_request("BALANCE_SHEET", {"symbol": ticker})
-    return _filter_reports_by_date(result, curr_date)
+    filtered = _filter_reports_by_date(result, curr_date)
+    capture_alpha_vantage_statement(ticker, filtered, "balance_sheet", "get_balance_sheet")
+    return filtered
 
 
 def get_cashflow(ticker: str, freq: str = "quarterly", curr_date: str = None):
     """Retrieve cash flow statement data for a given ticker symbol using Alpha Vantage."""
     result = _make_api_request("CASH_FLOW", {"symbol": ticker})
-    return _filter_reports_by_date(result, curr_date)
+    filtered = _filter_reports_by_date(result, curr_date)
+    capture_alpha_vantage_statement(ticker, filtered, "cashflow", "get_cashflow")
+    return filtered
 
 
 def get_income_statement(ticker: str, freq: str = "quarterly", curr_date: str = None):
     """Retrieve income statement data for a given ticker symbol using Alpha Vantage."""
     result = _make_api_request("INCOME_STATEMENT", {"symbol": ticker})
-    return _filter_reports_by_date(result, curr_date)
+    filtered = _filter_reports_by_date(result, curr_date)
+    capture_alpha_vantage_statement(ticker, filtered, "income_statement", "get_income_statement")
+    return filtered
 

@@ -47,12 +47,21 @@ from tradingagents.evidence.gate import (
     build_multi_category_gate_decision,
     build_unavailable_category,
 )
-from tradingagents.evidence.models import Criticality, EvidenceGroupQuality, GateDecision
+from tradingagents.evidence.models import (
+    Criticality,
+    EvidenceGroupQuality,
+    GateDecision,
+    QualityStatus,
+)
 from tradingagents.evidence.policy import (
     OPTIONAL_CATEGORIES,
     MultiCategoryPolicy,
 )
-from tradingagents.evidence.quality import aggregate_category_quality, attach_record_quality
+from tradingagents.evidence.quality import (
+    aggregate_category_quality,
+    aggregate_optional_category_quality,
+    attach_record_quality,
+)
 from tradingagents.evidence.validate import validate_market_records
 
 _DEFAULT_ASSET_TYPE = "stock"
@@ -99,6 +108,7 @@ class MultiCategoryGateResult:
         validation_results: dict[str, Any],
         context: str,
         error: str | None,
+        pruned_record_ids: list[str] | None = None,
     ) -> None:
         self.verdict = verdict
         self.groups = groups
@@ -107,6 +117,10 @@ class MultiCategoryGateResult:
         self.validation_results = validation_results
         self.context = context
         self.error = error
+        # Records that were captured but excluded (future/malformed/undated) at
+        # this gate run; they are NOT decisive and are pruned from persisted
+        # ingest state so a later resume cannot resurrect them as evidence.
+        self.pruned_record_ids = list(pruned_record_ids or [])
 
     def to_dict(self) -> dict[str, Any]:
         """The report-facing JSON-safe dict for this gate result."""
@@ -136,6 +150,9 @@ def evaluate_multi_category_gate(
     market_policy: Any = None,
     run_id_builder: Callable[[str, str], str] = build_multi_category_run_id,
     optional_category_groups: Mapping[str, EvidenceGroupQuality] | None = None,
+    captured_optional_records: Mapping[str, list[Any]] | None = None,
+    optional_validator: Callable | None = None,
+    optional_record_aggregator: Callable | None = None,
 ) -> MultiCategoryGateResult:
     """Evaluate the market category plus the optional categories.
 
@@ -160,6 +177,17 @@ def evaluate_multi_category_gate(
             analyst prose. A category absent here (or in the policy) yields an
             explicit deterministic ``unavailable``/``insufficient`` result
             instead of a fabricated one.
+        captured_optional_records: Typed optional-category records actually
+            captured from a configured vendor source in this run, keyed by
+            category (ADR-008 automatic path). Each record is validated per
+            category and aggregated for real; excluded (future/malformed/
+            undated) records are dropped from the serialized set and never
+            count. Per-record validations are merged into the result so the
+            manifest/allowlist/report see them.
+        optional_validator: Per-category validator for captured records
+            (defaults to ``validate_optional_records``).
+        optional_record_aggregator: Aggregator for captured optional records
+            (defaults to ``aggregate_optional_category_quality``).
 
     Returns:
         A :class:`MultiCategoryGateResult` with the market group (validated) and
@@ -201,17 +229,40 @@ def evaluate_multi_category_gate(
         for record in records
     ]
 
+    # ---- Captured optional categories (ADR-008 automatic path) ----
+    # Typed vendor-origin records are validated per category and aggregated for
+    # real; the market serialized set is extended so one manifest carries both
+    # critical and optional evidence. Excluded records (future/malformed/undated)
+    # never count.
+    serialized_records = list(classified_records)
+    merged_validations = {
+        str(eid): [r.to_dict() for r in rs] for eid, rs in results_by_id.items()
+    }
+    pruned: list[str] = []
+    captured_groups = _evaluate_captured_optional(
+        captured_optional_records or {},
+        trade_date=trade_date,
+        normalized=normalized,
+        validators=optional_validator,
+        aggregator=optional_record_aggregator,
+        policy=resolved_policy,
+        serialized_records=serialized_records,
+        merged_validations=merged_validations,
+        market_policy=market_policy,
+        pruned_record_ids=pruned,
+    )
+
     # ---- Optional categories ----
-    # Each optional category uses the explicit structured contract group when one
-    # is supplied; otherwise it is absent and yields a deterministic explicit
-    # unavailable/insufficient result with stable reasons. Optional categories
-    # are never parsed from analyst prose and never block a run.
+    # Captured real records win; otherwise the explicit structured contract
+    # group (compatible, but never able to raise quality above what records
+    # support); otherwise an explicit unavailable result. Optional categories are
+    # never parsed from analyst prose and never block a run.
     groups: list[EvidenceGroupQuality] = [market_group]
     supplied = optional_category_groups or {}
     for category in OPTIONAL_CATEGORIES:
         category_policy = resolved_policy.optional.get(category)
         group = _resolve_optional_group(
-            category, supplied, category_policy
+            category, supplied, category_policy, captured_groups.get(category)
         )
         groups.append(group)
 
@@ -225,20 +276,96 @@ def evaluate_multi_category_gate(
         verdict=decision.decision.value,
         groups=[g.to_dict() for g in decision.group_statuses],
         gate_decision=decision,
-        evidence_records=[r.to_dict() for r in classified_records],
-        validation_results={
-            str(eid): [r.to_dict() for r in rs]
-            for eid, rs in results_by_id.items()
-        },
+        evidence_records=[r.to_dict() for r in serialized_records],
+        validation_results=merged_validations,
         context=_build_multi_context(decision),
         error=None,
+        pruned_record_ids=pruned,
     )
+
+
+def _evaluate_captured_optional(
+    captured: Mapping[str, list[Any]],
+    *,
+    trade_date: str,
+    normalized: str,
+    validators: Callable | None,
+    aggregator: Callable | None,
+    policy: MultiCategoryPolicy,
+    serialized_records: list,
+    merged_validations: dict,
+    market_policy: Any,
+    pruned_record_ids: list,
+) -> dict[str, EvidenceGroupQuality]:
+    """Validate + aggregate captured optional records into category groups.
+
+    Mutates ``serialized_records`` (appending non-excluded classified optional
+    records), ``merged_validations`` (recording every record's validations,
+    including excluded ones so the audit shows WHY they were dropped), and
+    ``pruned_record_ids`` (appending the IDs of excluded records so the gate can
+    prune them from persisted ingest state). Returns the per-category group
+    quality for categories that had captured records.
+    """
+    if not captured:
+        return {}
+    if validators is None:
+        from tradingagents.evidence.vendor_adapters import validate_optional_records
+
+        validators = validate_optional_records
+    if aggregator is None:
+        aggregator = aggregate_optional_category_quality
+
+    groups: dict[str, EvidenceGroupQuality] = {}
+    for category in OPTIONAL_CATEGORIES:
+        records = [r for r in captured.get(category, []) if r.category == category]
+        if not records:
+            continue
+        results_by_id = validators(
+            {category: records},
+            expected_symbol=normalized,
+            target_date=trade_date,
+        )
+        # Resolve the category's OWN CategoryPolicy for the group aggregation:
+        # ``aggregate_optional_category_quality`` reads ``min_independent_sources``
+        # from a CategoryPolicy, NOT the MultiCategoryPolicy bundle. Passing the
+        # bundle would silently fall back to a numeric default. Per-record
+        # classification (below) keeps the separate MarketPolicy.
+        category_policy = policy.optional.get(category)
+        aggregate_policy = category_policy if category_policy is not None else policy
+        group, _per_status = aggregator(category, records, results_by_id, policy=aggregate_policy)
+        groups[category] = group
+        for record in records:
+            record_results = results_by_id.get(record.evidence_id, [])
+            merged_validations[record.evidence_id] = [
+                r.to_dict() for r in record_results
+            ]
+            if _is_excluded(record_results):
+                pruned_record_ids.append(record.evidence_id)
+                continue
+            serialized_records.append(
+                attach_record_quality(record, record_results, market_policy)
+            )
+    return groups
+
+
+def _is_excluded(results: list) -> bool:
+    """True iff a record failed a freshness/look-ahead/completeness check."""
+    from tradingagents.evidence.models import ValidationClass, ValidationStatus
+
+    for result in results:
+        if result.status == ValidationStatus.FAIL and result.validation_class in (
+            ValidationClass.FRESHNESS_LOOKAHEAD,
+            ValidationClass.COMPLETENESS,
+        ):
+            return True
+    return False
 
 
 def _resolve_optional_group(
     category: str,
     supplied: Mapping[str, EvidenceGroupQuality],
     category_policy: Any,
+    captured_group: EvidenceGroupQuality | None = None,
 ) -> EvidenceGroupQuality:
     """Resolve one optional category's group quality from the explicit contract.
 
@@ -252,7 +379,38 @@ def _resolve_optional_group(
 
     Never parses analyst prose and never invents a source/date/unit/confidence.
     """
-    group = supplied.get(category)
+    # A captured, record-backed group is authoritative: real validated records
+    # beat a manually claimed grade. A manual group can only appear when no
+    # records were captured, and even then its quality never exceeds what the
+    # record-less state supports (it stays LOW, see below).
+    if captured_group is not None:
+        group = captured_group
+    else:
+        group = supplied.get(category)
+        # Manual contract stays compatible but is weakest: without records behind
+        # it, a claimed High/Medium grade is clamped to at most LOW so it can
+        # never fabricate a high optional grade.
+        if group is not None and group.quality_status in (
+            QualityStatus.HIGH,
+            QualityStatus.MEDIUM,
+        ):
+            return EvidenceGroupQuality(
+                category=group.category,
+                quality_status=QualityStatus.LOW,
+                criticality=(
+                    Criticality.IMPORTANT
+                    if group.criticality == Criticality.CRITICAL
+                    else group.criticality
+                ),
+                evidence_ids=[],
+                source_count=0,
+                independent_source_count=0,
+                reason_codes=["manual_group_without_records"],
+                human_readable_reason=(
+                    "Low: a manually supplied optional grade without captured "
+                    "structured records is not trusted as High/Medium."
+                ),
+            )
     if group is not None:
         if not isinstance(group, EvidenceGroupQuality):
             raise ValueError(

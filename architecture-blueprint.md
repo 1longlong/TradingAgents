@@ -51,6 +51,23 @@ and traceability lives in `docs/architecture/trace-matrix.md`.
 - **Phase 3B (dynamic debate termination):** `debate` package (config, models,
   turn, budget, evidence_manifest, state, evaluator, evaluator_node) plus the
   researchers' verdict gate and the research-manager hold contract.
+- **Stage 3 (exact-claim validation, ADR-010):** additive `debate/claims.py` +
+  `evidence/origin.py` validate a typed exact claim's date role / value / unit /
+  scale against the cited record and typed origin metadata; a valid cited ID no
+  longer launders a wrong exact date/value/unit into new evidence, factual
+  conflicts, or trusted output. Implemented + offline-verified (NOT human
+  acceptance).
+- **Stage 4 (degraded-run confidence cap 0.60, ADR-011):** additive
+  `debate/confidence_policy.py` caps explicit confidence-labelled numerics on a
+  degraded run across debate turns/stances, the evaluator snapshot, the RM/Trader/
+  PM typed+prose decisions (typed numeric capped on its exact raw value BEFORE the
+  lossy 2dp render), and a shared post-gate state-input sanitizer that caps a
+  per-read COPY of the persisted analyst reports / plans / debate+risk histories
+  and turn/stance numerics before every post-gate prompt (direct GraphSetup +
+  SQLite resume); the API and CLI resume paths run the same fail-closed sanitizer
+  first; the report writer and memory log use the effective value. Implemented +
+  offline-verified (fresh 2026-11-11 run: cap tests 110 passed, full strict-offline
+  2154 passed / 0 sockets; logbook 082; NOT human acceptance).
 
 ### Evidence package (`tradingagents/evidence/`)
 
@@ -62,6 +79,7 @@ and traceability lives in `docs/architecture/trace-matrix.md`.
 | `policy.py` | Deterministic `Decimal`-threshold policy objects (`MarketPolicy`, `MarketRecordPolicy`, `MetricTolerance`). |
 | `quality.py` | Per-record precedence and per-category aggregation. |
 | `gate.py` | `GateDecision` generation with injected `decided_at`; precedence `blocked` > `degraded` > `normal`. |
+| `origin.py` | ADR-010 versioned, evidence-ID-keyed typed origin metadata (distinct target/observation/availability/timestamp date roles + unit/currency/scale), kept out of the 20 locked record fields. |
 
 ### Debate package (`tradingagents/debate/`)
 
@@ -70,7 +88,11 @@ and traceability lives in `docs/architecture/trace-matrix.md`.
 | `config.py` | Validated `debate_termination` config group; `enabled=False` reproduces fixed-round baseline. |
 | `models.py` | `DebateTurn`, `ConflictRecord`, `StanceSnapshot`, `RoundMetrics`, `BudgetState`, `RoutingDecision`, etc. |
 | `evidence_manifest.py` | Valid-new-evidence rules against the gate manifest (citation allowlist). |
-| `budget.py` | Deterministic usage estimation / accounting. |
+| `claims.py` | ADR-010 deterministic exact-claim validation (date role/value/unit/scale) against the record + typed origin metadata. |
+| `budget.py` | Deterministic usage estimation / accounting; whole-run aggregation; summary admission. |
+| `usage_ledger.py` | ADR-009 durable run-scoped SQLite reservation/settlement ledger (strict resume, atomic admission). |
+| `usage_capture.py` | ADR-009 run-scoped instrumented model-call capture binding. |
+| `researcher_accounting.py` | ADR-009 researcher + summary reservation/settlement glue. |
 | `turn.py` | Structured `DEBATE_METADATA` parsing with a best-effort prose fallback; parse failure never extends the debate. |
 | `state.py` | Debate-state mutation helpers (researcher side). |
 | `evaluator.py` | Pure `evaluate_round` decision rules (authoritative ordering in its module docstring). |
@@ -189,7 +211,9 @@ The student identity is **confirmed** as WANG Yiwen (CS5351 ID 60536848); the
 identity risk is resolved (RISK-004 / DEBT-005). Remaining open items include:
 the OpenCode `permissions.jsonc` schema/enforcement against the installed
 OpenCode version (RISK-006 / DEBT-004); the degraded confidence ceiling
-(DEBT-014); automatic optional adapters (DEBT-015 / RISK-015); and the live-run
+(DEBT-014 — now implemented as ADR-011 Stage 4, 0.60 engineering ceiling,
+offline-verified, awaiting independent Codex review + human acceptance);
+automatic optional adapters (DEBT-015 / RISK-015); and the live-run
 budget-accounting basis and claim-date semantics found on 2026-11-06 (DEBT-021 /
 DEBT-022 / RISK-020 / RISK-021). This is **not** claimed to be the "only
 remaining uncertainty"; the earlier single-item framing was stale and is

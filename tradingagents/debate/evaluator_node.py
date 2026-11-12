@@ -15,6 +15,10 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
+from tradingagents.debate.claims import (
+    claimed_ids_with_failed_claims,
+    summarize_claim_validations,
+)
 from tradingagents.debate.config import (
     DebateTerminationConfig,
     resolve_debate_termination_config,
@@ -33,6 +37,10 @@ from tradingagents.debate.models import (
     Stance,
     StanceSnapshot,
     StopReason,
+)
+from tradingagents.evidence.origin import (
+    ORIGIN_STATE_KEY,
+    origin_records_from_state,
 )
 
 _EMPTY_STATUSES: list[dict[str, Any]] = []
@@ -183,6 +191,39 @@ def create_debate_evaluator_node(
         gate_verdict = state.get("data_quality_verdict")
         gate_group_statuses = state.get("data_quality_group_statuses") or _EMPTY_STATUSES
 
+        # ADR-010: validate every typed exact claim this round against the actual
+        # manifest records + typed origin metadata, and collect the cited ids whose
+        # claim did NOT verify (a valid-but-misused citation must not extend the
+        # debate). Legacy/qualitative turns carry no exact claims -> empty set.
+        evidence_records_raw = state.get("data_quality_evidence_records") or _EMPTY_RECORDS
+        records_by_id = {
+            str(r.get("evidence_id", "")): r
+            for r in evidence_records_raw
+            if isinstance(r, Mapping) and r.get("evidence_id")
+        }
+        origin_by_id = origin_records_from_state(dict(state))
+        duplicate_origin_ids = _duplicate_origin_ids_from_state(state)
+        expected_run_id = _expected_evidence_run_id(state)
+        expected_symbol = str(state.get("company_of_interest", "") or "")
+        invalid_claimed_ids = claimed_ids_with_failed_claims(
+            list(round_turns),
+            origin_by_id=origin_by_id,
+            records_by_id=records_by_id,
+            target_date=target_date,
+            expected_symbol=expected_symbol,
+            expected_run_id=expected_run_id,
+            duplicate_origin_ids=duplicate_origin_ids,
+        )
+        claim_summary = summarize_claim_validations(
+            list(round_turns),
+            origin_by_id=origin_by_id,
+            records_by_id=records_by_id,
+            target_date=target_date,
+            expected_symbol=expected_symbol,
+            expected_run_id=expected_run_id,
+            duplicate_origin_ids=duplicate_origin_ids,
+        )
+
         # Conflicts are never fabricated: only the conflicts the model tracked
         # via structured metadata (or a caller supplied) are considered. An
         # action-only divergence (Bull and Bear recommending different actions)
@@ -196,12 +237,15 @@ def create_debate_evaluator_node(
         # closed: invalid or future evidence never creates a conflict). The
         # updated list is what the evaluator judges and is persisted back to the
         # debate state for the Research Manager — this closes the runtime gap.
+        conflict_denials: list[str] = []
         tracked_conflicts, resolution_notes = derive_conflicts(
             round_index=round_index,
             turns=round_turns,
             manifest=manifest,
             target_date=target_date,
             tracked=conflicts,
+            invalid_claimed_ids=invalid_claimed_ids,
+            denials=conflict_denials,
         )
 
         metrics, decision = evaluate_round(
@@ -220,6 +264,7 @@ def create_debate_evaluator_node(
             gate_verdict=gate_verdict,
             gate_group_statuses=gate_group_statuses,
             manifest_index=manifest_index,
+            invalid_claimed_ids=invalid_claimed_ids,
             prior_no_new_evidence_streak=int(debate.get("no_new_evidence_streak") or 0),
             prior_bull=prior_bull,
             prior_bear=prior_bear,
@@ -240,9 +285,59 @@ def create_debate_evaluator_node(
             bear_confidence=bear_confidence,
             conflicts=tracked_conflicts,
             resolution_notes=resolution_notes,
+            conflict_denials=conflict_denials,
+            claim_summary=claim_summary,
+            round_index=round_index,
         )
 
     return debate_evaluator_node
+
+
+def _expected_evidence_run_id(state: Mapping[str, Any]) -> str | None:
+    """The reproducible gate/evidence run id for this state (or ``None``)."""
+    from tradingagents.dataflows.symbol_utils import normalize_symbol
+    from tradingagents.graph.data_quality_gate import build_gate_run_id
+
+    symbol = str(state.get("company_of_interest", "") or "")
+    trade_date = str(state.get("trade_date", "") or "")
+    if not symbol or not trade_date:
+        return None
+    try:
+        return build_gate_run_id(trade_date, normalize_symbol(symbol))
+    except Exception:  # noqa: BLE001 — a bad identity fails closed elsewhere
+        return None
+
+
+def _duplicate_origin_ids_from_state(state: Mapping[str, Any]) -> set[str]:
+    """Evidence ids whose origin metadata is duplicated with conflict.
+
+    The production channel is a dict (id -> origin), which cannot duplicate. Two
+    sources of ambiguity are honoured and UNIONED (fail closed -> unverifiable):
+
+    - the DECLARED ``data_quality_origin_conflicted_ids`` channel (Defect-1,
+      ADR-010 amendment) that the gate writes when it failed an origin closed; and
+    - a legacy/hostile state that carries a LIST form of the origin channel with a
+      conflicting duplicate.
+    """
+    from tradingagents.debate.claims import duplicate_origin_id_set
+    from tradingagents.evidence.ingest import INGEST_ORIGIN_CONFLICTED_STATE_KEY
+
+    ids: set[str] = set()
+    for evidence_id in state.get(INGEST_ORIGIN_CONFLICTED_STATE_KEY) or []:
+        if isinstance(evidence_id, str) and evidence_id:
+            ids.add(evidence_id)
+    raw = state.get(ORIGIN_STATE_KEY)
+    if isinstance(raw, list):
+        normalized = []
+        for entry in raw:
+            if isinstance(entry, Mapping) and "evidence_id" in entry:
+                normalized.append(dict(entry))
+            elif isinstance(entry, Mapping):
+                # Tolerate {id: origin} entries flattened into a list.
+                for evidence_id, origin in entry.items():
+                    normalized.append({"evidence_id": evidence_id, "origin": origin})
+        ids |= duplicate_origin_id_set(normalized)
+    return ids
 
 
 def _valid_paired_turns(turns: Sequence[Any]) -> bool:
@@ -346,8 +441,28 @@ def _write_decision(
     bear_confidence: float = 0.0,
     conflicts: Sequence[ConflictRecord] | None = None,
     resolution_notes: Sequence[str] | None = None,
+    conflict_denials: Sequence[str] | None = None,
+    claim_summary: dict[str, Any] | None = None,
+    round_index: int | None = None,
 ) -> dict[str, Any]:
     debate = dict(state.get("investment_debate_state") or {})
+
+    # ADR-011: the persisted stance confidence must be the EFFECTIVE value even if
+    # a raw over-cap turn reached this node (defense in depth). Recompute from the
+    # authoritative verdict; keyed by round+speaker so a re-run of the same round
+    # overwrites its entry and never double-counts.
+    from tradingagents.debate.confidence_policy import (
+        apply_confidence_cap,
+        boundary_id,
+        current_trusted_verdict,
+        update_audit,
+    )
+
+    verdict = current_trusted_verdict(state)
+    bull_confidence, bear_confidence, cap_entries = _cap_stance_confidences(
+        verdict, bull_confidence, bear_confidence, round_index, apply_confidence_cap,
+        boundary_id,
+    )
 
     round_metrics = list(debate.get("round_metrics") or [])
     if with_metrics and metrics is not None:
@@ -388,14 +503,57 @@ def _write_decision(
     # list and an empty summary are written (missing metadata -> no conflict).
     if conflicts is not None:
         debate["conflicts"] = [c.to_dict() for c in conflicts]
-        debate["conflict_summary"] = build_conflict_summary(
-            conflicts, resolution_notes
-        ).to_dict()
+        summary = build_conflict_summary(conflicts, resolution_notes)
+        summary_dict = summary.to_dict()
+        # ADR-010: auditable denials for a rejected observation / resolution that
+        # cited invalid evidence. The prior open/escalated record is KEPT (never
+        # erased); the denial is surfaced so a bad citation cannot manufacture
+        # convergence silently.
+        summary_dict["denials"] = [str(d) for d in (conflict_denials or []) if d]
+        debate["conflict_summary"] = summary_dict
 
-    return {
+    # ADR-010: persist the deterministic exact-claim validation summary so the
+    # Research Manager and any report read the *validated* picture (verified vs
+    # rejected vs unverified), never the raw unverified claim prose.
+    if claim_summary is not None:
+        debate["claim_validation_summary"] = dict(claim_summary)
+
+    result: dict[str, Any] = {
         "investment_debate_state": debate,
         "debate_termination_decision": decision.to_dict(),
     }
+    if cap_entries:
+        result["confidence_cap_audit"] = update_audit(state, cap_entries)
+    return result
+
+
+def _cap_stance_confidences(
+    verdict: str,
+    bull_confidence: float,
+    bear_confidence: float,
+    round_index: int | None,
+    apply_cap: Any,
+    boundary_id: Any,
+) -> tuple[float, float, list[dict[str, Any]]]:
+    """Return effective bull/bear stance confidences plus their audit entries."""
+    entries: list[dict[str, Any]] = []
+    effective_bull = bull_confidence
+    effective_bear = bear_confidence
+    for speaker, raw in (("Bull", bull_confidence), ("Bear", bear_confidence)):
+        entry = apply_cap(
+            raw,
+            verdict,
+            source=speaker,
+            boundary=boundary_id("evaluator_stance", speaker, round_index),
+        )
+        if entry.get("capped"):
+            entries.append(entry)
+        if entry.get("effective_value") is not None:
+            if speaker == "Bull":
+                effective_bull = entry["effective_value"]
+            else:
+                effective_bear = entry["effective_value"]
+    return effective_bull, effective_bear, entries
 
 
 def _disabled_round_decision(

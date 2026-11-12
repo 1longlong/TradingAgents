@@ -67,7 +67,12 @@ from tradingagents.evidence.gate import (
     build_multi_category_gate_decision,
     build_unavailable_category,
 )
+from tradingagents.evidence.ingest import (
+    INGEST_DROPPED_STATE_KEY,
+    INGEST_ORIGIN_CONFLICTED_STATE_KEY,
+)
 from tradingagents.evidence.multi_category_gate import evaluate_multi_category_gate
+from tradingagents.evidence.origin import ORIGIN_STATE_KEY, build_origin_map_from_records
 from tradingagents.evidence.policy import (
     DEFAULT_MULTI_CATEGORY_POLICY,
     OPTIONAL_CATEGORIES,
@@ -92,6 +97,11 @@ GATE_ERROR_KEY = "data_quality_error"
 # prose. Absent values (the honest state today) yield deterministic
 # unavailable/insufficient results that degrade under the policy.
 GATE_OPTIONAL_EVIDENCE_KEY = "data_quality_optional_evidence"
+
+# ADR-008: JSON-safe envelope for the run's captured vendor-origin evidence and
+# source-attempt ledger (documented metadata channel; never nested in a record).
+GATE_INGESTED_EVIDENCE_KEY = "data_quality_ingested_evidence"
+GATE_SOURCE_ATTEMPTS_KEY = "data_quality_source_attempts"
 
 # Human-readable routing verdicts (mirror GateVerdict values).
 GATE_NORMAL = "normal"
@@ -263,6 +273,7 @@ def create_data_quality_gate_node(
     asset_type: str = _DEFAULT_ASSET_TYPE,
     look_back_days: int = 30,
     optional_evidence_reader: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
+    captured_evidence_reader: Callable[[Mapping[str, Any]], tuple[dict, list]] | None = None,
 ) -> Callable[[Mapping[str, Any]], dict[str, Any]]:
     """Build the Data Quality Gate LangGraph node with injectable components.
 
@@ -314,6 +325,7 @@ def create_data_quality_gate_node(
     """
     resolved_policy = policy or DEFAULT_MULTI_CATEGORY_POLICY
     read_optional = optional_evidence_reader or _read_optional_category_groups
+    read_captured = captured_evidence_reader or _read_captured_evidence
 
     def data_quality_gate_node(state: Mapping[str, Any]) -> dict[str, Any]:
         symbol = str(state.get("company_of_interest", ""))
@@ -334,6 +346,7 @@ def create_data_quality_gate_node(
 
         try:
             optional_groups = read_optional(state, resolved_policy)
+            captured_records, captured_attempts = read_captured(state)
             result = evaluate_multi_category_gate(
                 trade_date=trade_date,
                 symbol=symbol,
@@ -348,9 +361,10 @@ def create_data_quality_gate_node(
                 market_policy=market_policy,
                 run_id_builder=run_id_builder,
                 optional_category_groups=optional_groups,
+                captured_optional_records=captured_records,
             )
             decision = result.gate_decision
-            return {
+            output = {
                 GATE_VERDICT_KEY: decision.decision.value,
                 GATE_EVIDENCE_RECORDS_KEY: result.evidence_records,
                 GATE_VALIDATION_KEY: result.validation_results,
@@ -358,7 +372,51 @@ def create_data_quality_gate_node(
                 GATE_DECISION_KEY: _gate_decision_to_dicts(decision),
                 GATE_CONTEXT_KEY: result.context,
                 GATE_ERROR_KEY: None,
+                GATE_SOURCE_ATTEMPTS_KEY: captured_attempts,
             }
+            # Persist the captured evidence into graph state so a checkpoint
+            # taken after this gate survives a process restart and a resumed run
+            # re-seeds from it. Excluded records are pruned so they cannot be
+            # resurrected as decisive evidence on resume.
+            persisted = _persist_ingest_state(state, pruned=result.pruned_record_ids)
+            # Defect-1 (ADR-010 amendment): the AUTHORITATIVE origin map is merged
+            # AFTER persistence, so the collector's (often empty-for-market) origin
+            # delta can no longer overwrite the gate-derived/captured origins.
+            # Genuine captured origins are preserved; a real captured conflict or a
+            # lost-trust id is failed closed (removed from the trusted map and
+            # recorded in the declared conflicted channel) — never re-derived, never
+            # resurrected, never first/last-wins.
+            if persisted is not None:
+                output.update(
+                    {
+                        key: value
+                        for key, value in persisted.items()
+                        if key != ORIGIN_STATE_KEY
+                        and key != INGEST_ORIGIN_CONFLICTED_STATE_KEY
+                    }
+                )
+            # Defect-1: tombstone exclusion is authoritative across BOTH the durable
+            # collector delta AND any pre-existing state tombstones (a no-collector
+            # run has persisted=None but existing state may still carry drops).
+            existing_dropped = (
+                state.get(INGEST_DROPPED_STATE_KEY) if isinstance(state, Mapping) else None
+            ) or []
+            merged_origin_map, conflicted_ids = _merge_authoritative_origins(
+                gate_origin_map=_origin_state_map(state, result.evidence_records),
+                persisted_origin_map=(persisted or {}).get(ORIGIN_STATE_KEY) or {},
+                persisted_conflicted_ids=(persisted or {}).get(
+                    INGEST_ORIGIN_CONFLICTED_STATE_KEY
+                )
+                or [],
+                pruned_ids=result.pruned_record_ids,
+                dropped_ids=list(
+                    set((persisted or {}).get(INGEST_DROPPED_STATE_KEY) or [])
+                    | {str(eid) for eid in existing_dropped if isinstance(eid, str)}
+                ),
+            )
+            output[ORIGIN_STATE_KEY] = merged_origin_map
+            output[INGEST_ORIGIN_CONFLICTED_STATE_KEY] = conflicted_ids
+            return output
         except Exception as exc:  # noqa: BLE001 — fail closed on any gate error
             logger.error(
                 "Data Quality Gate failed for %s on %s; routing blocked: %s",
@@ -423,6 +481,256 @@ def _read_optional_category_groups(
             groups[category] = EvidenceGroupQuality.from_dict(dict(value))
         # Any other shape is rejected (never coerced or parsed from prose).
     return groups
+
+
+def _read_captured_evidence(
+    state: Mapping[str, Any],
+) -> tuple[dict[str, list], list[dict]]:
+    """Read the run's captured vendor-origin evidence, state + live collector.
+
+    Reads **both** the durable persisted state channel (``data_quality_ingested_
+    evidence`` / ``data_quality_source_attempts``, populated by the tool-node
+    boundary and checkpointed) and the live request/run-scoped collector
+    (ADR-008). This is what makes capture durable: on a resumed run the state
+    channel survives the process boundary even though the ``ContextVar`` does
+    not, so the gate still sees the evidence a prior checkpoint carried.
+
+    The persisted channel is untrusted input from the checkpoint store; a record
+    is only added if it re-parses as a typed ``EvidenceRecord`` (so a tampered or
+    malformed persisted row can never become decisive evidence — it is skipped).
+    Returns ``(records_by_category, attempts)`` where attempts are bare 7-field
+    dicts (from the versioned envelope) and records are typed objects keyed by
+    category.
+    """
+    from tradingagents.evidence.ingest import (
+        INGEST_ATTEMPTS_STATE_KEY,
+        INGEST_RECORDS_STATE_KEY,
+        AttemptEnvelope,
+        get_active_collector,
+    )
+    from tradingagents.evidence.models import EvidenceRecord
+
+    typed_records: dict[str, EvidenceRecord] = {}
+    attempts_by_index: dict[int, dict] = {}
+
+    # 1) Durable persisted state channel (survives checkpoint/resume).
+    for raw in state.get(INGEST_RECORDS_STATE_KEY) or []:
+        if not isinstance(raw, Mapping):
+            continue
+        try:
+            record = EvidenceRecord.from_dict(dict(raw))
+        except Exception:  # noqa: BLE001 — malformed persisted row is skipped
+            logger.error("Skipping malformed persisted ingested-evidence row")
+            continue
+        if record.evidence_id:
+            typed_records[record.evidence_id] = record
+    for raw in state.get(INGEST_ATTEMPTS_STATE_KEY) or []:
+        if not isinstance(raw, Mapping):
+            continue
+        try:
+            env = AttemptEnvelope.from_dict(dict(raw))
+        except Exception:  # noqa: BLE001 — malformed persisted attempt is skipped
+            continue
+        attempts_by_index[env.attempt_index] = env.attempt.to_dict()
+
+    # 2) Live run-scoped collector (authoritative, fresher capture).
+    try:
+        collector = get_active_collector()
+    except Exception:  # noqa: BLE001 — a broken collector must not block the gate
+        logger.error("Captured-evidence collector unavailable; using persisted state only")
+        collector = None
+    if collector is not None:
+        for record in collector.all_records():
+            typed_records[record.evidence_id] = record
+        for env in collector.attempt_envelopes():
+            attempts_by_index[env.attempt_index] = env.attempt.to_dict()
+
+    records_by_category: dict[str, list] = {}
+    for record in typed_records.values():
+        records_by_category.setdefault(record.category, []).append(record)
+    for category in records_by_category:
+        records_by_category[category].sort(key=lambda r: r.evidence_id)
+    attempts = [attempts_by_index[i] for i in sorted(attempts_by_index)]
+    return records_by_category, attempts
+
+
+def _persist_ingest_state(
+    state: Mapping[str, Any], *, pruned: list[str]
+) -> dict[str, Any] | None:
+    """Merge the live collector's captured evidence into durable graph state.
+
+    Returns the JSON-safe state keys (``data_quality_ingested_evidence``,
+    ``data_quality_source_attempt_envelopes``, ``data_quality_ingest_metadata``,
+    ``data_quality_dropped_evidence_ids``) that make capture survive a checkpoint,
+    or ``None`` when there is no active collector (nothing to persist). Each
+    pruned record id is EXPLICITLY tombstoned on the collector (dropped + recorded
+    in ``data_quality_dropped_evidence_ids``) so a later resume/merge can never
+    resurrect an excluded record as evidence.
+    """
+    try:
+        from tradingagents.evidence.ingest import (
+            get_active_collector,
+            merge_into_state,
+        )
+
+        collector = get_active_collector()
+        if collector is None:
+            return None
+        # Tombstone excluded records on the collector itself (explicit drop), so
+        # the merged state both omits them and carries the tombstone.
+        for evidence_id in pruned or []:
+            collector.drop_record(evidence_id)
+        delta = collector.state_delta()
+        return merge_into_state(delta, state)
+    except Exception:  # noqa: BLE001 — persistence must never block the gate
+        logger.error("Persisting captured evidence failed; state channel unchanged")
+        return None
+
+
+def _record_id(record: Any) -> str:
+    """The ``evidence_id`` of a typed record or its serialized dict form."""
+    try:
+        if isinstance(record, Mapping):
+            return str(record.get("evidence_id", "") or "")
+        return str(getattr(record, "evidence_id", "") or "")
+    except Exception:  # noqa: BLE001 — an unreadable id is treated as absent
+        return ""
+
+
+def _origin_state_map(
+    state: Mapping[str, Any], records: list[Any]
+) -> tuple[dict[str, Any], set[str]]:
+    """Serialized origin map for ``records`` (captured origin preferred).
+
+    Reads captured origin from the durable state channel and the live collector
+    (ADR-010), then derives an honest origin only for a record with none. A
+    genuinely DIFFERING dual origin for the same id (state vs collector, or two
+    collector captures) is a real conflict: the id is returned in the conflicted
+    set so the caller fails it closed — it is never silently first/last-wins.
+
+    The result is JSON-safe and deterministic (sorted by evidence id). Any failure
+    degrades to derived-origin-only plus any known conflict set; it never blocks
+    the gate.
+    """
+    from tradingagents.evidence.ingest import (
+        INGEST_ORIGIN_CONFLICTED_STATE_KEY,
+        _origin_canonical,
+        get_active_collector,
+    )
+    from tradingagents.evidence.origin import (
+        ORIGIN_DROPPED_STATE_KEY,
+        origin_records_from_state,
+        serialize_origin_map,
+    )
+
+    existing = origin_records_from_state(dict(state) if isinstance(state, Mapping) else {})
+    # Seed the conflict set UNCONDITIONALLY from persisted state (Defect-1 fix):
+    # with no active collector (e.g. a direct SQLite resume / imported report
+    # state) a previously-conflicted id must stay untrusted and must NOT be
+    # re-derived/re-trusted from a stale persisted origin.
+    conflicted: set[str] = set()
+    # Seed the tombstone set UNCONDITIONALLY from persisted state too: with no
+    # active collector a previously-excluded id must never be re-derived/re-trusted
+    # from a stale map (no resurrection).
+    tombstoned: set[str] = set()
+    if isinstance(state, Mapping):
+        for evidence_id in state.get(INGEST_ORIGIN_CONFLICTED_STATE_KEY) or []:
+            if isinstance(evidence_id, str) and evidence_id:
+                conflicted.add(evidence_id)
+        for evidence_id in state.get(ORIGIN_DROPPED_STATE_KEY) or []:
+            if isinstance(evidence_id, str) and evidence_id:
+                tombstoned.add(evidence_id)
+    try:
+        collector = get_active_collector()
+    except Exception:  # noqa: BLE001 — a broken collector must not block the gate
+        collector = None
+    if collector is not None:
+        for evidence_id, origin in collector.origins_map().items():
+            prior = existing.get(evidence_id)
+            if prior is None:
+                existing[evidence_id] = origin
+            elif _origin_canonical(prior) != _origin_canonical(origin):
+                # State vs live collector genuinely disagree for the same id.
+                conflicted.add(evidence_id)
+        conflicted |= collector.conflicted_origin_ids()
+        tombstoned |= set(collector.dropped_record_ids())
+    # A conflicted/tombstoned id is untrustworthy: drop any stale origin BEFORE
+    # derivation so the gate never re-trusts (nor re-derives a trusted replacement
+    # for) it.
+    for evidence_id in conflicted | tombstoned:
+        existing.pop(evidence_id, None)
+    # Also exclude tombstones from the derivation input so no replacement origin is
+    # minted for a record that persists in the manifest but is explicitly dropped.
+    derivable = [r for r in records if str(_record_id(r)) not in tombstoned]
+    try:
+        serialized = serialize_origin_map(build_origin_map_from_records(derivable, existing))
+    except Exception:  # noqa: BLE001 — never block the gate on origin derivation
+        logger.error("Origin-metadata derivation failed; using derived-only map")
+        serialized = serialize_origin_map(build_origin_map_from_records(records, {}))
+    return serialized, conflicted
+
+
+def _merge_authoritative_origins(
+    *,
+    gate_origin_map: tuple[dict[str, Any], set[str]],
+    persisted_origin_map: Mapping[str, Any],
+    persisted_conflicted_ids: Any,
+    pruned_ids: Any,
+    dropped_ids: Any,
+) -> tuple[dict[str, Any], list[str]]:
+    """Merge the gate-authoritative origin map AFTER ingestion persistence.
+
+    Defect-1 (ADR-010 amendment): the gate-derived/captured origin map must be the
+    authoritative LAST write to ``ORIGIN_STATE_KEY`` — a collector persistence delta
+    (often with an empty origin map for market records) must never clobber it.
+
+    Semantics:
+
+    - The gate map (over ``records``) is the base; every manifest record keeps a
+      typed origin (captured genuine roles preserved, else derived — never a
+      fabricated date/currency).
+    - A genuine captured origin from the persisted channel that the gate map lacks
+      is added (preserves genuine captured SEC/news roles across persistence).
+    - Any id in the gate conflict set OR the persisted conflict set OR whose two
+      maps genuinely differ is FAILED CLOSED: removed from the trusted map and
+      recorded in the returned conflicted list (unverifiable downstream). A
+      conflicted id is NEVER re-derived or re-trusted.
+    - Pruned/dropped/tombstoned ids are never resurrected (records or origins).
+    - Deterministic order (sorted by evidence id), JSON-safe.
+    """
+    from tradingagents.evidence.ingest import _origin_dict_canonical
+
+    base_map, gate_conflicted = gate_origin_map
+    merged: dict[str, Any] = {
+        str(eid): origin for eid, origin in base_map.items() if isinstance(origin, Mapping)
+    }
+    conflicted: set[str] = set(gate_conflicted)
+    for eid in persisted_conflicted_ids or []:
+        if isinstance(eid, str):
+            conflicted.add(eid)
+    for eid, origin in (persisted_origin_map or {}).items():
+        if not isinstance(origin, Mapping):
+            continue
+        eid = str(eid)
+        if eid in merged and _origin_dict_canonical(merged[eid]) != _origin_dict_canonical(origin):
+            # Two genuine origins disagree across channels: fail closed, do not
+            # prefer either side.
+            conflicted.add(eid)
+        else:
+            merged.setdefault(eid, origin)
+    excluded = {str(eid) for eid in (pruned_ids or []) if isinstance(eid, str)}
+    excluded |= {str(eid) for eid in (dropped_ids or []) if isinstance(eid, str)}
+    for eid in excluded:
+        merged.pop(eid, None)
+        conflicted.discard(eid)
+    # A conflicted id is not a trusted origin: remove it from the trusted map so a
+    # consumer sees it as unverifiable rather than as a silently-chosen origin.
+    for eid in conflicted:
+        merged.pop(eid, None)
+    return (
+        {eid: merged[eid] for eid in sorted(merged)},
+        sorted(conflicted - excluded),
+    )
 
 
 def _safe_now(now_provider: Callable[[], str], symbol: str, trade_date: str) -> str | None:

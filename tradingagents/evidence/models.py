@@ -338,8 +338,10 @@ class EvidenceRecord:
                 self, "quality_status", QualityStatus(str(self.quality_status))
             )
         value_normalized = quantize_decimal(self.value_normalized)
-        if value_normalized is not None:
-            object.__setattr__(self, "value_normalized", value_normalized)
+        # Always assign the quantized result: a NaN/inf/None input becomes
+        # ``None`` (an absent magnitude), never a stored NaN that could be
+        # mistaken for a real numeric value downstream.
+        object.__setattr__(self, "value_normalized", value_normalized)
         # ValidationResults are owned by this record; they never own it back.
         object.__setattr__(
             self,

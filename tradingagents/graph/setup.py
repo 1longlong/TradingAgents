@@ -21,6 +21,10 @@ from tradingagents.agents import (
     create_trader,
 )
 from tradingagents.agents.utils.agent_states import AgentState
+from tradingagents.debate.confidence_policy import (
+    create_confidence_state_sanitize_node,
+    with_sanitized_state,
+)
 from tradingagents.debate.config import (
     DEFAULT_DEBATE_TERMINATION_CONFIG,
     DebateTerminationConfig,
@@ -30,6 +34,7 @@ from tradingagents.debate.evaluator_node import create_debate_evaluator_node
 from .analyst_execution import build_analyst_execution_plan
 from .conditional_logic import ConditionalLogic
 from .data_quality_gate import create_data_quality_gate_node
+from .evidence_tool_node import EvidenceCapturingAnalystNode, EvidenceCapturingToolNode
 
 # Every target a shared conditional router can return. Each edge driven by the
 # router maps all of them, so a fall-through return (e.g. under prompt/i18n/
@@ -159,21 +164,63 @@ class GraphSetup:
 
         # Add analyst nodes to the graph
         for spec in plan.specs:
-            workflow.add_node(spec.agent_node, analyst_factories[spec.key]())
+            # Wrap analysts that prefetch vendor data in-node (e.g. the Sentiment
+            # Analyst) so a checkpoint right after the analyst retains captures
+            # (ADR-008). A no-op when the analyst captured nothing.
+            workflow.add_node(
+                spec.agent_node,
+                EvidenceCapturingAnalystNode(analyst_factories[spec.key](), name=spec.agent_node),
+            )
             workflow.add_node(spec.clear_node, create_msg_delete())
-            workflow.add_node(spec.tool_node, self.tool_nodes[spec.key])
+            # Wrap the tool node so captured vendor evidence is written into
+            # state at the tool-boundary checkpoint itself (ADR-008 durability;
+            # the ContextVar alone is not durable and the analyst loop means a
+            # later clear node is not sufficient).
+            workflow.add_node(
+                spec.tool_node,
+                EvidenceCapturingToolNode(self.tool_nodes[spec.key], name=spec.tool_node),
+            )
 
-        # Add other nodes
+        # Add other nodes. Every POST-gate node is wrapped so the analyst reports /
+        # plans / debate+risk histories interpolated into its prompt are capped on a
+        # degraded run BEFORE the model reads them (ADR-011). The reports are written
+        # by the analysts BEFORE the gate verdict is known, so this read-boundary
+        # sanitizer — not an analyst-time rewrite — is what keeps a raw over-cap
+        # confidence out of downstream prompts on every entry path (graph, direct
+        # GraphSetup, API and CLI). A no-op on a normal/blocked run.
         workflow.add_node("Data Quality Gate", self.data_quality_gate_node)
-        workflow.add_node("Bull Researcher", bull_researcher_node)
-        workflow.add_node("Bear Researcher", bear_researcher_node)
-        workflow.add_node("Debate Evaluator", self.debate_evaluator_node)
-        workflow.add_node("Research Manager", research_manager_node)
-        workflow.add_node("Trader", trader_node)
-        workflow.add_node("Aggressive Analyst", aggressive_analyst)
-        workflow.add_node("Neutral Analyst", neutral_analyst)
-        workflow.add_node("Conservative Analyst", conservative_analyst)
-        workflow.add_node("Portfolio Manager", portfolio_manager_node)
+        # A deterministic POST-gate node that PERSISTS the capped analyst-report /
+        # plan / history fields (and turn/stance numeric confidence) back into the
+        # state, so the RETURNED state and any _log_state / public JSON export carry
+        # the effective values — not only the protected model prompts. No model call.
+        workflow.add_node(
+            "Confidence Sanitizer", create_confidence_state_sanitize_node()
+        )
+        workflow.add_node("Bull Researcher", with_sanitized_state(bull_researcher_node, name="bull"))
+        workflow.add_node("Bear Researcher", with_sanitized_state(bear_researcher_node, name="bear"))
+        workflow.add_node(
+            "Debate Evaluator",
+            with_sanitized_state(self.debate_evaluator_node, name="debate_evaluator"),
+        )
+        workflow.add_node(
+            "Research Manager",
+            with_sanitized_state(research_manager_node, name="research_manager"),
+        )
+        workflow.add_node("Trader", with_sanitized_state(trader_node, name="trader"))
+        workflow.add_node(
+            "Aggressive Analyst", with_sanitized_state(aggressive_analyst, name="aggressive")
+        )
+        workflow.add_node(
+            "Neutral Analyst", with_sanitized_state(neutral_analyst, name="neutral")
+        )
+        workflow.add_node(
+            "Conservative Analyst",
+            with_sanitized_state(conservative_analyst, name="conservative"),
+        )
+        workflow.add_node(
+            "Portfolio Manager",
+            with_sanitized_state(portfolio_manager_node, name="portfolio"),
+        )
 
         # Define edges
         # Start with the first analyst
@@ -201,10 +248,14 @@ class GraphSetup:
             else:
                 workflow.add_edge(current_clear, "Data Quality Gate")
 
-        # After the gate, route to the Bull Researcher (normal/degraded) or the
-        # Research Manager (blocked). Fails closed in the router (#1088).
+        # After the gate, persist the capped report/history/plan deltas (degraded)
+        # then route to the Bull Researcher (normal/degraded) or the Research
+        # Manager (blocked). The sanitizer is a no-op on a normal/blocked run and the
+        # router is re-evaluated on the same (unchanged-verdict) state, failing
+        # closed in the router (#1088).
+        workflow.add_edge("Data Quality Gate", "Confidence Sanitizer")
         workflow.add_conditional_edges(
-            "Data Quality Gate",
+            "Confidence Sanitizer",
             self.conditional_logic.should_continue_after_data_gate,
             GATE_PATH_MAP,
         )

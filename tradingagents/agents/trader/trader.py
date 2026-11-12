@@ -14,6 +14,7 @@ from tradingagents.agents.utils.agent_utils import (
 )
 from tradingagents.agents.utils.output_guard import (
     enforce_blocked_conclusion,
+    enforce_trusted_boundary,
     is_blocked_run,
 )
 from tradingagents.agents.utils.structured import (
@@ -101,23 +102,52 @@ def create_trader(llm):
                 "aggressive action plan."
             )
 
+        from tradingagents.debate.confidence_policy import (
+            cap_agent_text,
+            cap_typed_confidence,
+            update_audit,
+        )
+
+        # ADR-011: cap the TYPED numeric confidence at full raw precision BEFORE the
+        # lossy 2-decimal render, so a raw 0.954321 / 0.6000001 is genuinely capped
+        # and its exact raw is recorded (not masked by rounded rendered text).
+        typed_audit: list[dict] = []
+
+        def _cap_typed(result):
+            return cap_typed_confidence(
+                result, state, source="Trader", boundary="trader_typed",
+                sink=typed_audit,
+            )
+
         trader_plan = invoke_structured_or_freetext(
             structured_llm,
             llm,
             messages,
             render_trader_proposal,
             "Trader",
+            sanitize_result=_cap_typed,
         )
 
         # Authoritative contract: a blocked run's stored transaction proposal
         # is pinned to Hold on both the structured and free-text paths.
         if blocked:
             trader_plan = enforce_blocked_conclusion(trader_plan, field="action")
+        # ADR-010: never restate a REJECTED exact fact in the trusted trader plan.
+        trader_plan = enforce_trusted_boundary(trader_plan, state)
 
-        return {
+        # ADR-011: cap explicit confidence-labelled numerics on a degraded run.
+        trader_plan, _text_entries = cap_agent_text(
+            trader_plan, state, source="Trader", boundary="trader_plan",
+        )
+        _cap_entries = list(typed_audit) + list(_text_entries)
+
+        result = {
             "messages": [AIMessage(content=trader_plan)],
             "trader_investment_plan": trader_plan,
             "sender": name,
         }
+        if _cap_entries:
+            result["confidence_cap_audit"] = update_audit(state, _cap_entries)
+        return result
 
     return functools.partial(trader_node, name="Trader")

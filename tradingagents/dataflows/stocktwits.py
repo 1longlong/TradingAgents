@@ -22,6 +22,7 @@ from datetime import datetime
 from urllib.request import Request, urlopen
 
 from .date_window import coverage_gap, in_window
+from .evidence_capture import capture_sentiment_source_failure, capture_stocktwits_messages
 from .symbol_utils import crypto_base
 
 logger = logging.getLogger(__name__)
@@ -93,10 +94,14 @@ def fetch_stocktwits_messages(
         # OSError covers URLError/TimeoutError/connection resets; HTTPException
         # covers chunked-transfer errors (IncompleteRead/BadStatusLine, #1024).
         logger.warning("StockTwits fetch failed for %s: %s", ticker, exc)
+        capture_sentiment_source_failure(ticker, "stocktwits", "stocktwits", error_type=type(exc).__name__)
         return f"<stocktwits unavailable: {type(exc).__name__}>"
 
     fetched = data.get("messages", []) if isinstance(data, dict) else []
     messages = _within_window(fetched, start_date, end_date)
+    # Capture the windowed original message objects (source-native sentiment
+    # label preserved) before the prose is assembled. No-op outside a run.
+    capture_stocktwits_messages(ticker, messages[:limit] if messages else [])
     if not messages:
         if start_date and end_date:
             gap = coverage_gap(

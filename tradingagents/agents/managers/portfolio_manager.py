@@ -95,12 +95,27 @@ Write these sections, in this order, starting with the rating on its own line:
                 "recovery conditions rather than manufacturing a direction."
             )
 
+        # ADR-011: cap the TYPED numeric confidence at full raw precision BEFORE the
+        # lossy 2-decimal render, so a raw 0.954321 / 0.6000001 is genuinely capped
+        # and its exact raw is recorded (not masked by rounded rendered text).
+        from tradingagents.debate.confidence_policy import cap_typed_confidence
+
+        typed_audit: list[dict] = []
+
+        def _cap_typed(result):
+            return cap_typed_confidence(
+                result, state,
+                source="Portfolio Manager", boundary="final_trade_decision_typed",
+                sink=typed_audit,
+            )
+
         final_trade_decision = invoke_structured_or_freetext(
             structured_llm,
             llm,
             prompt,
             render_pm_decision,
             "Portfolio Manager",
+            sanitize_result=_cap_typed,
         )
 
         # Authoritative contract: the final rating on a blocked run is pinned to
@@ -110,6 +125,24 @@ Write these sections, in this order, starting with the rating on its own line:
             final_trade_decision = enforce_blocked_conclusion(
                 final_trade_decision, field="rating"
             )
+        # ADR-010: the final trusted decision must not restate a REJECTED exact
+        # fact (valid ID, wrong date/value/unit) even if a downstream model echoed
+        # it. Narrow, line-scoped redaction only; never a global Hold.
+        from tradingagents.agents.utils.output_guard import (
+            enforce_trusted_boundary,
+        )
+
+        final_trade_decision = enforce_trusted_boundary(final_trade_decision, state)
+
+        # ADR-011: cap explicit confidence-labelled numerics on a degraded run so
+        # the final decision never carries a raw over-cap confidence.
+        from tradingagents.debate.confidence_policy import cap_agent_text, update_audit
+
+        final_trade_decision, _text_entries = cap_agent_text(
+            final_trade_decision, state,
+            source="Portfolio Manager", boundary="final_trade_decision",
+        )
+        _cap_entries = list(typed_audit) + list(_text_entries)
 
         new_risk_debate_state = {
             "judge_decision": final_trade_decision,
@@ -124,9 +157,12 @@ Write these sections, in this order, starting with the rating on its own line:
             "count": risk_debate_state["count"],
         }
 
-        return {
+        result = {
             "risk_debate_state": new_risk_debate_state,
             "final_trade_decision": final_trade_decision,
         }
+        if _cap_entries:
+            result["confidence_cap_audit"] = update_audit(state, _cap_entries)
+        return result
 
     return portfolio_manager_node

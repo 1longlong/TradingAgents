@@ -252,10 +252,7 @@ product:
       rationale: "Prohibited without separate explicit human authorization; no threshold invented."
     - item: "Degraded-run numeric confidence ceiling (DEBT-014)."
       classification: "deferred (blocked on authorization)"
-      rationale: "A ceiling must be specified by policy before enforcement; not invented here."
-    - item: "Automatic multi-category fundamentals/news/sentiment adapters (DEBT-015/RISK-015)."
-      classification: "won't (out of scope)"
-      rationale: "Explicitly out of scope for the current milestones; requires a separate authorized implementation round."
+      rationale: "A ceiling must be specified by policy before enforcement; not invented here. (Stage 3 of the 2026-11-11 approved four-item plan; NOT yet implemented.)"
     - item: "Live latency/token accounting basis for debate budget (DEBT-021/RISK-021)."
       classification: "deferred (blocked on authorization)"
       rationale: "The 2026-11-06 live finding is reproduced and recorded but NOT fixed (source unchanged); requires an authorized implementation round."
@@ -458,15 +455,22 @@ requirements:
       - tradingagents/evidence/gate.py
       - tradingagents/evidence/policy.py
       - tradingagents/graph/data_quality_gate.py
+      - tradingagents/evidence/ingest.py
+      - tradingagents/evidence/vendor_adapters.py
+      - tradingagents/dataflows/evidence_capture.py
+      - tradingagents/graph/evidence_tool_node.py
     design_artifacts:
       - docs/architecture/adr/001-data-quality-gate.md
+      - docs/architecture/adr/008-automatic-structured-evidence-ingestion.md
       - docs/architecture/invariants.md
     tests:
       - tests/test_stage2_multicategory_gate.py
       - tests/test_gate_debate_integration.py
+      - tests/test_structured_evidence_ingestion.py
     verification_evidence:
       - "tests/test_stage2_multicategory_gate.py: 26 passed (current tree)."
       - "2026-11-06 review finding 2 fix: the engine now applies EACH record's own computed QualityStatus, quality reasons, and validation results before serializing (the aggregator's per-record map is no longer discarded); a normal gate with a Medium market group yields citable valid IDs, and genuinely Low/Blocked/future records stay invalid. A real gate -> manifest/allowlist -> researcher -> evaluator -> report regression proves qualified Medium/High evidence counts as new while Low/Blocked/future does not (tests/test_gate_debate_integration.py, 9 passed)."
+      - "2026-11-11 Stage 1 (ADR-008, approved plan+tests ONLY, NOT human acceptance): automatic structured optional-evidence ingestion (fundamentals/news/sentiment) from real vendor-origin records through the real tool path + a compiled StateGraph (analyst -> wrapped ToolNode -> clear -> gate -> research -> report), with source-attempt lifecycle, manual-grade clamping, per-category validation and lineage-based independence. tests/test_structured_evidence_ingestion.py: 53 passed; full strict-offline suite 1897 passed / 1 skipped / 1 deselected / 88 subtests / 0 socket attempts (logbook 079)."
     owner: 60536848-WANG-Yiwen
 
   - id: FR-DQG-005
@@ -539,8 +543,13 @@ requirements:
       header and every Final Transaction Proposal marker; it never rewrites
       arbitrary rationale prose. On a blocked Trader output, executable
       entry/stop/position-sizing values are neutralised (a documented narrow
-      rule) while the quoted rationale is preserved. Degraded runs keep their
-      supported behavior; no numeric confidence ceiling is invented.
+      rule) while the quoted rationale is preserved. A degraded (not blocked) run
+      additionally enforces a deterministic confidence ceiling (ADR-011 Stage 4,
+      approved 0.60 engineering ceiling) on explicit confidence-labelled numerics
+      across the debate, managers, trader, portfolio decision, every post-gate
+      model prompt read, the saved report and the memory log; it is not applied to
+      a blocked run (which keeps its non-numeric Hold discipline) and is not a
+      calibrated probability or production threshold tuning.
     priority: Must
     priority_rationale: "See product.priorities for the rationale; Must-level because a violation is a safety/correctness veto."
     tradeoff:
@@ -661,29 +670,37 @@ requirements:
       unit: "allowlist eligibility violations"
       verification:
         method: "Manifest/turn/gate-integration tests."
-        command: ".venv/bin/python -m pytest tests/test_debate_evidence_manifest.py tests/test_debate_turn.py tests/test_gate_debate_integration.py -q"
+        command: ".venv/bin/python -m pytest tests/test_debate_evidence_manifest.py tests/test_debate_turn.py tests/test_gate_debate_integration.py tests/test_exact_claim_validation.py tests/test_exact_claim_runtime.py tests/test_standalone_claims.py -q"
         references:
           - "tests/test_gate_debate_integration.py"
           - "tests/test_debate_evidence_manifest.py"
+          - "tests/test_exact_claim_runtime.py"
+          - "tests/test_standalone_claims.py"
       applicability: offline-test
       status:
         state: verified
-        evidence: "9 passed real-chain; Low/Blocked/future never count (logbook 065)."
+        evidence: "9 passed real-chain; Low/Blocked/future never count (logbook 065). Stage 3 (ADR-010): a valid cited ID whose typed exact claim does not validate is NOT valid new evidence and cannot extend the debate (tests/test_exact_claim_validation.py 73 + tests/test_exact_claim_runtime.py 30 passed; logbook 081). 2026-11-12 (ADR-010 amendment): standalone typed lines outside the marker are recovered into the SAME fail-closed validation (unknown/future/wrong/foreign rejected; fenced/quoted examples never trusted; honest coverage; legacy path unchanged) — tests/test_standalone_claims.py 49 passed; full strict-offline 2290 passed / 0 sockets (logbook 085)."
     status: Implemented
     source_files:
       - tradingagents/debate/evidence_manifest.py
       - tradingagents/debate/turn.py
+      - tradingagents/debate/claims.py
+      - tradingagents/evidence/origin.py
       - tradingagents/agents/researchers/bull_researcher.py
       - tradingagents/agents/researchers/bear_researcher.py
     design_artifacts:
       - docs/architecture/adr/002-dynamic-debate-termination.md
+      - docs/architecture/adr/010-exact-claim-validation.md
     tests:
       - tests/test_debate_evidence_manifest.py
       - tests/test_debate_turn.py
       - tests/test_researchers_verdict_gate.py
+      - tests/test_exact_claim_validation.py
+      - tests/test_exact_claim_runtime.py
     verification_evidence:
       - "Stage-2 relevant suite: 442 passed (current tree, logbook 043)."
       - "2026-11-06 review finding 2 fix: real gate -> manifest/allowlist -> researcher -> evaluator -> report integration proven (tests/test_gate_debate_integration.py, 9 passed); a real Medium/High gate record cited and linked counts as new valid evidence, while Low/Blocked/future records do not."
+      - "2026-11-11 Stage 3 (ADR-010): a valid cited ID whose typed exact claim is wrong (date/value/unit) is excluded from valid-new-evidence; a correct typed exact claim and the qualitative no-claim path are unchanged (tests/test_exact_claim_validation.py 73 + tests/test_exact_claim_runtime.py 30 passed; full strict-offline 2044 passed / 0 sockets; logbook 081). NOT human acceptance."
     owner: 60536848-WANG-Yiwen
 
   - id: FR-DDT-003
@@ -708,35 +725,45 @@ requirements:
       threshold: 0
       unit: "over-budget admitted calls"
       verification:
-        method: "Pre-call/budget/evaluator tests with exact token+time boundaries."
-        command: ".venv/bin/python -m pytest tests/test_debate_precall_budget.py tests/test_debate_budget.py tests/test_debate_evaluator.py -q"
+        method: "Pre-call/budget/evaluator tests with exact token+time boundaries, plus the durable-ledger reservation/settlement/resume and atomic-admission tests."
+        command: ".venv/bin/python -m pytest tests/test_debate_precall_budget.py tests/test_debate_budget.py tests/test_debate_evaluator.py tests/test_durable_usage_ledger.py tests/test_whole_run_usage.py -q"
         references:
           - "tests/test_debate_precall_budget.py"
           - "tests/test_debate_budget.py"
+          - "tests/test_durable_usage_ledger.py"
+          - "tests/test_whole_run_usage.py"
       applicability: offline-test
       status:
         state: verified
-        evidence: "22 passed exact-boundary (logbook 060/063). Live accounting basis OPEN (DEBT-021)."
+        evidence: "22 passed exact-boundary (logbook 060/063); Stage 2 durable ledger/summary-reserve/atomic-admission 33 + whole-run 10 passed (logbook 080). Live accounting basis OPEN (DEBT-021); live concurrency/retry unobserved (DEBT-036)."
     status: Implemented
     source_files:
       - tradingagents/debate/budget.py
       - tradingagents/debate/config.py
+      - tradingagents/debate/usage_ledger.py
+      - tradingagents/debate/usage_capture.py
+      - tradingagents/debate/researcher_accounting.py
       - tradingagents/debate/evaluator.py
       - tradingagents/agents/researchers/bull_researcher.py
       - tradingagents/agents/researchers/bear_researcher.py
       - tradingagents/graph/setup.py
       - tradingagents/graph/conditional_logic.py
+      - tradingagents/graph/trading_graph.py
     design_artifacts:
       - docs/architecture/adr/002-dynamic-debate-termination.md
+      - docs/architecture/adr/009-durable-run-usage-ledger.md
       - docs/architecture/runtime-policy-catalog.md
     tests:
       - tests/test_debate_budget.py
       - tests/test_debate_config.py
       - tests/test_debate_evaluator.py
       - tests/test_debate_precall_budget.py
+      - tests/test_durable_usage_ledger.py
+      - tests/test_whole_run_usage.py
     verification_evidence:
       - "Stage-2 relevant suite: 402 passed (current tree)."
       - "Pre-call guard: tests/test_debate_precall_budget.py 22 passed (second review makes the token/time check require remaining >= reserved_summary + estimated next-call cost, with exact boundaries before Bull/Bear); max_calls=1 executes exactly one debate call and skips to the manager with budget_exhausted; enabled=False keeps the legacy baseline (logbook 060/063)."
+      - "2026-11-11 Stage 2 (ADR-009): durable per-run reservation/settlement ledger (reserve-before-call, settle-after, idempotent resume reconcile), unknown/in-flight spend fail-closed, summary admission distinct from the optional guard (consumes the reserve, requires a call slot), and atomic admission (call+token+time+reserve+unresolved re-read inside a BEGIN IMMEDIATE txn across independent capture instances); tests/test_durable_usage_ledger.py 33 passed + tests/test_whole_run_usage.py 10 passed; full strict-offline 1940 passed / 0 sockets (logbook 080). NOT live-confirmed; not final acceptance."
     owner: 60536848-WANG-Yiwen
 
   - id: FR-DDT-004
@@ -822,25 +849,30 @@ requirements:
       unit: "conflict-lifecycle safety failures"
       verification:
         method: "Conflict tracker tests."
-        command: ".venv/bin/python -m pytest tests/test_debate_conflicts.py tests/test_debate_turn.py -q"
+        command: ".venv/bin/python -m pytest tests/test_debate_conflicts.py tests/test_debate_turn.py tests/test_exact_claim_runtime.py -q"
         references:
           - "tests/test_debate_conflicts.py"
+          - "tests/test_exact_claim_runtime.py"
       applicability: offline-test
       status:
         state: verified
-        evidence: "39 passed (logbook 046)."
+        evidence: "39 passed (logbook 046). Stage 3 (ADR-010): a factual conflict on a valid ID whose typed exact claim did not validate is not created/drops an open one (tests/test_exact_claim_runtime.py::TestConflictLifecycle; logbook 081)."
     status: Implemented
     source_files:
       - tradingagents/debate/conflicts.py
+      - tradingagents/debate/claims.py
+      - tradingagents/evidence/origin.py
       - tradingagents/debate/turn.py
       - tradingagents/debate/models.py
       - tradingagents/debate/evaluator_node.py
       - tradingagents/agents/managers/research_manager.py
     design_artifacts:
       - docs/architecture/adr/002-dynamic-debate-termination.md
+      - docs/architecture/adr/010-exact-claim-validation.md
       - docs/architecture/invariants.md
     tests:
       - tests/test_debate_conflicts.py
+      - tests/test_exact_claim_runtime.py
       - tests/test_debate_turn.py
       - tests/test_debate_evaluator.py
       - tests/test_debate_graph.py
@@ -962,7 +994,7 @@ requirements:
       unit: "look-ahead leaks in point-in-time tests"
       verification:
         method: "Point-in-time/look-ahead tests (date-sensitive)."
-        command: ".venv/bin/python -m pytest tests/test_fundamentals_lookahead.py tests/test_news_lookahead.py tests/test_social_lookahead.py tests/test_memory_pointintime.py -q"
+        command: ".venv/bin/python -m pytest tests/test_fundamentals_lookahead.py tests/test_news_lookahead.py tests/test_social_lookahead.py tests/test_memory_pointintime.py tests/test_exact_claim_validation.py -q"
         references:
           - "tests/test_fundamentals_lookahead.py"
           - "tests/test_news_lookahead.py"
@@ -970,21 +1002,26 @@ requirements:
       applicability: runtime
       status:
         state: partially_verified
-        evidence: "Existing PIT tests pass within offline suite; re-run date-sensitive (RISK-001)."
+        evidence: "Existing PIT tests pass within offline suite; re-run date-sensitive (RISK-001). Stage 3 (ADR-010): typed exact-claim dates validated against the matching date role only; a matched-but-future role value is a look-ahead rejection; SEC filed != fiscal end; news publication != figure date; date-only source cannot prove a timestamp (tests/test_exact_claim_validation.py 48 passed; logbook 081)."
     status: Implemented
     source_files:
       - tradingagents/evidence/validate.py
+      - tradingagents/evidence/origin.py
+      - tradingagents/debate/claims.py
       - tradingagents/dataflows/market_data_validator.py
     design_artifacts:
       - docs/architecture/memory-design.md
       - docs/architecture/invariants.md
+      - docs/architecture/adr/010-exact-claim-validation.md
     tests:
       - tests/test_fundamentals_lookahead.py
       - tests/test_news_lookahead.py
       - tests/test_social_lookahead.py
       - tests/test_memory_pointintime.py
+      - tests/test_exact_claim_validation.py
     verification_evidence:
       - "Existing point-in-time tests pass within the offline suite (re-run is date-sensitive)."
+      - "2026-11-11 Stage 3 (ADR-010): exact-claim date roles are validated distinctly (target/observation/availability/timestamp); a date-only source cannot prove a timestamp; a matched-but-future role value is rejected. Offline (tests/test_exact_claim_validation.py 48 passed; logbook 081); NOT human acceptance."
     owner: 60536848-WANG-Yiwen
 
   - id: NFR-AUD-001
@@ -1010,25 +1047,29 @@ requirements:
       unit: "audit-field omissions in exported records"
       verification:
         method: "Evidence-model + evaluator + artifact-audit tests."
-        command: ".venv/bin/python -m pytest tests/test_evidence_models.py tests/test_debate_evaluator.py tests/test_report_artifacts_audit.py -q"
+        command: ".venv/bin/python -m pytest tests/test_evidence_models.py tests/test_debate_evaluator.py tests/test_report_artifacts_audit.py tests/test_exact_claim_validation.py tests/test_exact_claim_runtime.py -q"
         references:
           - "tests/test_report_artifacts_audit.py"
       applicability: offline-test
       status:
         state: verified
-        evidence: "Observed PASS (logbook 046/061)."
+        evidence: "Observed PASS (logbook 046/061). Stage 3 (ADR-010): every exact-claim verdict (verified/rejected/unverified + reason + asserted date/value/unit/ids) exported in debate_trace.json and injected into the Research Manager; rejected facts redacted from trusted plan without a global Hold (tests/test_exact_claim_runtime.py 9 passed; logbook 081)."
     status: Implemented
     source_files:
       - tradingagents/evidence/models.py
       - tradingagents/debate/models.py
       - tradingagents/debate/evaluator.py
+      - tradingagents/debate/claims.py
       - tradingagents/report_artifacts.py
     design_artifacts:
       - docs/architecture/invariants.md
+      - docs/architecture/adr/010-exact-claim-validation.md
     tests:
       - tests/test_evidence_models.py
       - tests/test_debate_evaluator.py
       - tests/test_report_artifacts_audit.py
+      - tests/test_exact_claim_validation.py
+      - tests/test_exact_claim_runtime.py
     verification_evidence:
       - "Stage-2 relevant suite: 402 passed (current tree)."
       - "Per-evidence validations and run-summary identity/provenance exported (logbook 061)."
@@ -1057,30 +1098,40 @@ requirements:
       unit: "summary-reserve violations in the offline admission-guard tests (estimate-based scope)"
       verification:
         method: "Offline budget + pre-call guard tests (reserve + estimated next-call cost, exact token/time boundaries) must show zero reserve violations. SCOPE: OFFLINE, ESTIMATE-BASED admission only — this does not measure real provider latency/token accounting. Real latency/token integration behavior is PARTIALLY VERIFIED at best and is recorded OPEN in DEBT-021: a 2026-11-06 live run showed the estimate (2171.77 s vs actual 12.72 s; 16,289 est vs 18,058 reported tokens) exhausted the time budget before Bear with 0 complete rounds."
-        command: ".venv/bin/python -m pytest tests/test_debate_budget.py tests/test_debate_precall_budget.py -q"
+        command: ".venv/bin/python -m pytest tests/test_debate_budget.py tests/test_debate_precall_budget.py tests/test_durable_usage_ledger.py tests/test_whole_run_usage.py -q"
         references:
           - "tests/test_debate_precall_budget.py"
           - "tests/test_debate_budget.py"
+          - "tests/test_durable_usage_ledger.py"
+          - "tests/test_whole_run_usage.py"
       applicability: offline-test
       status:
         state: partially_verified
-        evidence: "Offline estimate-based guard: 22 pre-call tests pass with zero reserve violations (logbook 060/063). Real latency/token accounting is UNVERIFIED and OPEN (DEBT-021 / RISK-021); the guard is active and safe but its estimate basis is the open defect."
+        evidence: "Offline estimate-based guard: 22 pre-call tests pass with zero reserve violations (logbook 060/063); Stage 2 durable ledger fail-closed unresolved/atomic admission + summary-reserve 33 + whole-run 10 passed (logbook 080). Real latency/token accounting is UNVERIFIED and OPEN (DEBT-021 / RISK-021); live concurrency/retry unobserved (DEBT-036)."
     status: Implemented
     source_files:
       - tradingagents/debate/budget.py
       - tradingagents/debate/config.py
+      - tradingagents/debate/usage_ledger.py
+      - tradingagents/debate/usage_capture.py
+      - tradingagents/debate/researcher_accounting.py
       - tradingagents/agents/researchers/bull_researcher.py
       - tradingagents/agents/researchers/bear_researcher.py
       - tradingagents/graph/setup.py
       - tradingagents/graph/conditional_logic.py
+      - tradingagents/graph/trading_graph.py
     design_artifacts:
+      - docs/architecture/adr/009-durable-run-usage-ledger.md
       - docs/architecture/runtime-policy-catalog.md
     tests:
       - tests/test_debate_budget.py
       - tests/test_debate_precall_budget.py
+      - tests/test_durable_usage_ledger.py
+      - tests/test_whole_run_usage.py
     verification_evidence:
       - "Stage-2 relevant suite: 402 passed (current tree)."
       - "Pre-call guard prevents over-budget optional calls and preserves the summary reserve; the token/time check includes the estimated next-call cost, not only the reserve (logbook 060/063)."
+      - "2026-11-11 Stage 2 (ADR-009): a durable run-scoped SQLite ledger reserves spend before every outbound call and settles after, so a failed/billed attempt survives a crash and resume reconciles idempotently; unresolved/unknown spend makes optional calls fail closed; the summary reserve is protected per attempt without a second optional estimate; admission re-reads and enforces the full policy inside a BEGIN IMMEDIATE transaction. tests/test_durable_usage_ledger.py 33 passed + tests/test_whole_run_usage.py 10 passed; full strict-offline 1940 passed / 0 sockets (logbook 080). Offline-only; a reservation is an estimate, not a physical billing bound (DEBT-036)."
     owner: 60536848-WANG-Yiwen
 
   - id: NFR-BC-001

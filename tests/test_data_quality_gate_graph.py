@@ -363,6 +363,9 @@ class TestMultiCategoryRuntimeGate:
     """
 
     def test_structured_optional_evidence_routes_normal(self, fixed_snapshot):
+        # ADR-008: a manually claimed HIGH optional grade without captured
+        # structured records behind it is NOT trusted (clamped to Low), so the
+        # gate honestly degrades. The manual contract stays compatible (no error).
         node = create_data_quality_gate_node(now_provider=lambda: FETCHED)
         state = {
             "company_of_interest": SYMBOL,
@@ -371,12 +374,12 @@ class TestMultiCategoryRuntimeGate:
             GATE_OPTIONAL_EVIDENCE_KEY: _optional_evidence_all_high(),
         }
         out = node(state)
-        assert out["data_quality_verdict"] == "normal"
-        assert out["data_quality_gate_decision"]["decision"] == "normal"
+        assert out["data_quality_verdict"] == "degraded"
+        assert out["data_quality_gate_decision"]["decision"] == "degraded"
         cats = {g["category"]: g["quality_status"] for g in out["data_quality_group_statuses"]}
         assert cats["market"] in ("High", "Medium")
         for optional in ("fundamentals", "news", "sentiment"):
-            assert cats[optional] == "High", "structured optional evidence is honoured"
+            assert cats[optional] == "Low", "manual high grade without records is clamped"
         assert json.loads(json.dumps(out))
 
     def test_absent_optional_evidence_routes_degraded(self, fixed_snapshot):
@@ -398,8 +401,8 @@ class TestMultiCategoryRuntimeGate:
     def test_mixed_optional_evidence_honoured_per_category(self, fixed_snapshot):
         from tradingagents.evidence.policy import CATEGORY_NEWS
 
-        # One optional category supplied (HIGH), the rest absent -> degraded, and
-        # the supplied category is honoured while absent ones degrade.
+        # A manually supplied HIGH grade without records is clamped to Low; the
+        # absent categories stay Low too, so the run degrades (never fabricated).
         evidence = {CATEGORY_NEWS: _high_optional_group(CATEGORY_NEWS)}
         node = create_data_quality_gate_node(now_provider=lambda: FETCHED)
         out = node({
@@ -410,7 +413,7 @@ class TestMultiCategoryRuntimeGate:
         })
         assert out["data_quality_verdict"] == "degraded"
         cats = {g["category"]: g["quality_status"] for g in out["data_quality_group_statuses"]}
-        assert cats[CATEGORY_NEWS] == "High"
+        assert cats[CATEGORY_NEWS] == "Low"
         for optional in ("fundamentals", "sentiment"):
             assert cats[optional] == "Low"
 
@@ -496,7 +499,7 @@ class TestMultiCategoryRuntimeGate:
         # record's ``fetched_at`` (the upstream snapshot builder stamps wall-clock
         # time); it is not a gate decision input, so compare the gate-decision
         # surface exactly and verify run-id stability on the records.
-        assert a[GATE_VERDICT_KEY] == b[GATE_VERDICT_KEY] == "normal"
+        assert a[GATE_VERDICT_KEY] == b[GATE_VERDICT_KEY] == "degraded"
         assert a[GATE_DECISION_KEY] == b[GATE_DECISION_KEY]
         assert a[GATE_GROUPS_KEY] == b[GATE_GROUPS_KEY]
         assert a[GATE_CONTEXT_KEY] == b[GATE_CONTEXT_KEY]
@@ -782,11 +785,20 @@ class TestGraphTopology:
 
     def test_gate_conditional_edges_target_bull_and_research_manager(self):
         edges = self._edges(("market", "news"))
+        # The gate now feeds a deterministic POST-gate Confidence Sanitizer (ADR-011
+        # state persistence, no model call), which then routes to the Bull Researcher
+        # (normal/degraded) or the Research Manager (blocked).
+        gate_edges = [
+            e for e in edges if getattr(e.source, "id", e.source) == "Data Quality Gate"
+        ]
+        assert {getattr(e.target, "id", e.target) for e in gate_edges} == {
+            "Confidence Sanitizer"
+        }
         targets = {
             getattr(e.target, "id", e.target)
             for e in edges
             if getattr(e, "conditional", False)
-            and getattr(e.source, "id", e.source) == "Data Quality Gate"
+            and getattr(e.source, "id", e.source) == "Confidence Sanitizer"
         }
         assert targets == {"Bull Researcher", "Research Manager"}
 

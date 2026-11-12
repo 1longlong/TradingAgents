@@ -169,18 +169,28 @@ def _round_new_evidence(
     manifest: EvidenceManifest,
     target_date: str | None,
     manifest_index: dict[str, str] | None,
+    invalid_claimed_ids: set[str] | None = None,
 ) -> list[str]:
     """New valid evidence discovered across a completed round (both sides).
 
     Only IDs **explicitly linked to a new claim** (``eligible_ids``) can count
     as new. An ID that merely appears in a turn's cited list but is not linked
     to a claim never counts (rule 3 — fail closed on the linkage).
+
+    ADR-010: an ID that is the target of an exact claim which did **not** validate
+    (a wrong date/value/unit, ``invalid_claimed_ids``) is removed from both the
+    cited and linked sets, so a valid-but-misused citation cannot extend the
+    debate as if it were new evidence.
     """
+    invalid = set(invalid_claimed_ids or ())
     round_cited: list[str] = []
     linked: list[str] = []
     for turn in round_turns:
         round_cited.extend(turn.cited_evidence_ids)
         linked.extend(turn.linked_evidence_ids())
+    if invalid:
+        round_cited = [eid for eid in round_cited if eid not in invalid]
+        linked = [eid for eid in linked if eid not in invalid]
     new_ids, _ = collect_valid_new_evidence(
         cited_ids=round_cited,
         previously_cited=previously_cited,
@@ -270,6 +280,7 @@ def evaluate_round(
     gate_verdict: str | None = None,
     gate_group_statuses: Sequence[Mapping[str, Any]] | None = None,
     manifest_index: dict[str, str] | None = None,
+    invalid_claimed_ids: set[str] | None = None,
     prior_no_new_evidence_streak: int = 0,
     prior_bull: _SideReference | None = None,
     prior_bear: _SideReference | None = None,
@@ -291,6 +302,7 @@ def evaluate_round(
         manifest=manifest,
         target_date=target_date,
         manifest_index=manifest_index,
+        invalid_claimed_ids=invalid_claimed_ids,
     )
     open_blocking = _open_blocking_conflicts(conflicts)
     # Material change is judged per side against that side's own prior round

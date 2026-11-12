@@ -40,8 +40,7 @@ exhaustive or live-vendor blocked proof.
   asserts a raised exception becomes `blocked`, not `normal`.
 - **Fallback:** verdict is `blocked`; router routes to Research Manager; output
   pinned to Hold; final signal Hold.
-- **Enforcement gap / status:** **Enforced (code, offline)** on the covered path (blocked path proven offline; the 2026-11-06 live run was degraded, not blocked). 2026-11-10 D2 adds a narrow **controlled-fixture** blocked-path live proof (real gate + real downstream nodes; zero Bull/Bear invokes; Hold throughout) — not exhaustive/live-vendor. Degraded
-  confidence ceiling (DEBT-014) is a separate OPEN item, not a fail-closed gap.
+- **Enforcement gap / status:** **Enforced (code, offline)** on the covered path (blocked path proven offline; the 2026-11-06 live run was degraded, not blocked). 2026-11-10 D2 adds a narrow **controlled-fixture** blocked-path live proof (real gate + real downstream nodes; zero Bull/Bear invokes; Hold throughout) — not exhaustive/live-vendor. The degraded-run confidence ceiling (DEBT-014) is now enforced by ADR-011 Stage 4 (0.60 engineering ceiling; offline-verified 2026-11-11, logbook 082; awaiting independent Codex review + human acceptance) — it is a confidence/audit control, not a fail-closed gap; `blocked` runs keep their Hold discipline.
 
 ## INV-2 Determinism of the gate and evaluator
 
@@ -61,17 +60,27 @@ exhaustive or live-vendor blocked proof.
 - **Source requirements:** NFR-PIT-001, FR-DDT-005, NFR-CMP-001.
 - **Enforcer:** `tradingagents/evidence/validate.py` (look-ahead class),
   `tradingagents/dataflows/market_data_validator.py` (`as_of` boundary),
-  `tradingagents/debate/conflicts.py` (future ID never creates/keeps a conflict).
+  `tradingagents/debate/conflicts.py` (future ID never creates/keeps a conflict),
+  `tradingagents/debate/claims.py` + `tradingagents/evidence/origin.py` (ADR-010:
+  a typed exact claim's date is validated against the matching typed date role
+  only; a matched-but-future role value is a look-ahead rejection).
 - **Positive verification:** `tests/test_fundamentals_lookahead.py`,
   `tests/test_news_lookahead.py`, `tests/test_social_lookahead.py`,
-  `tests/test_memory_pointintime.py`.
+  `tests/test_memory_pointintime.py`, `tests/test_exact_claim_validation.py`
+  (role separation, target != observation, SEC filed != fiscal end, timestamp
+  granularity).
 - **Negative verification:** conflict tests assert a future-dated ID drops an
-  open conflict; look-ahead tests assert future rows are rejected.
-- **Fallback:** record rejected / conflict dropped (fail closed).
-- **Enforcement gap / status:** **Partial** — the PIT tests are date-sensitive
-  (RISK-001); a live Bull claim mislabelled a Nov-4 close as Nov-5 despite citing
-  the valid close ID (RISK-020): an allowlist verifies record eligibility, not the
-  semantic truth of every claim's date.
+  open conflict; look-ahead tests assert future rows are rejected; the exact-claim
+  tests assert a date-only source cannot prove a timestamp and a same-day-wrong-hour
+  timestamp is a mismatch.
+- **Fallback:** record rejected / conflict dropped / claim `unverified` (fail closed).
+- **Enforcement gap / status:** **Partial → improved (code, offline).** The PIT
+  tests are date-sensitive (RISK-001). The 2026-11-06 RISK-020 live defect (valid
+  close ID, wrong claim date) is now ADDRESSED offline for **typed exact claims**
+  (ADR-010, 2026-11-11): an exact claim's date/value/unit is validated against the
+  record + typed origin metadata (distinct target/observation/availability/timestamp
+  roles). This does NOT prove arbitrary natural-language semantics: prose beyond the
+  conservative inline-exact-claim parser stays `unverified` (never "verified").
 
 ## INV-4 Acyclic, JSON-safe serialization
 
@@ -134,10 +143,24 @@ exhaustive or live-vendor blocked proof.
   (`tests/test_debate_budget.py`, `test_debate_researcher_timing.py`) and
   confirmed by the 2026-11-10 bounded live D1 run (real Bull+Bear, measured
   seconds, provider tokens, `transport_attempts` null; stop `max_rounds_reached`,
-  not premature `budget_exhausted`). REMAINING GAP (explicit): cross-resume
-  hard-budget accounting is NOT solved (a failed node's usage is not persisted;
-  the sanitized failure ledger is the only durable record of an aborted call).
-  All-agent production usage totals remain untracked in the product.
+  not premature `budget_exhausted`). **2026-11-11 Stage 2 (ADR-009, offline):** the
+  cross-resume/failed-checkpoint accounting gap is now ADDRESSED offline by a
+  durable run-scoped SQLite ledger (`tradingagents/debate/usage_ledger.py`): a
+  reservation is written BEFORE every outbound call and a settlement after, so a
+  crash after the provider succeeds (but before the node/checkpoint update) is
+  recovered from the ledger; resume reconciles idempotently (never double-adds);
+  an `in_flight`/failed unknown-cost attempt is unresolved possible spend (never
+  zero / never free) and fails closed for further OPTIONAL calls; admission
+  (call+token+time+reserve+unresolved) is re-read and evaluated INSIDE a
+  `BEGIN IMMEDIATE` transaction so independent capture instances cannot both pass
+  a stale preflight; a separate summary admission consumes the reserve without a
+  second optional estimate. Whole-run usage is aggregated across all phases for
+  reporting only (never a budget limit). Proven offline
+  (`tests/test_durable_usage_ledger.py`, `tests/test_whole_run_usage.py`); NOT
+  live-confirmed. REMAINING GAP (explicit): hidden SDK transport retries are
+  unobserved (`transport_attempts` unknown); a pre-call reservation is an
+  ESTIMATE, not a physical billing bound; live cross-process concurrency is
+  offline-barrier-proven only.
 
 ## INV-8 Backward compatibility
 
@@ -206,14 +229,20 @@ exhaustive or live-vendor blocked proof.
 - **Source requirements:** FR-DDT-005, INV-1/3/5, FR-DDT-002.
 - **Enforcer:** `tradingagents/debate/conflicts.py` (create/observe/resolve/
   escalate; structured assertions only; fail-closed evidence validation),
-  `tradingagents/debate/evaluator_node.py` (persist), `research_manager.py` (inject).
+  `tradingagents/debate/evaluator_node.py` (persist), `research_manager.py` (inject),
+  `tradingagents/debate/claims.py` (ADR-010: a factual conflict on a valid ID whose
+  typed exact claim did not validate is not created / drops an open one).
 - **Positive verification:** `tests/test_debate_conflicts.py`,
-  `tests/test_debate_turn.py`, `tests/test_debate_graph.py`.
+  `tests/test_debate_turn.py`, `tests/test_debate_graph.py`,
+  `tests/test_exact_claim_runtime.py::TestConflictLifecycle`.
 - **Negative verification:** unknown/low/future ID never creates a conflict and
   drops an open one; a no-op resolve of a non-open conflict records no second
-  reason; no assertion → no conflict.
+  reason; no assertion → no conflict; a wrong-date/value/unit exact claim on a
+  valid ID cannot create or keep a factual conflict.
 - **Fallback:** conflict dropped / no-op (fail closed).
-- **Enforcement gap / status:** **Enforced (code, offline)**.
+- **Enforcement gap / status:** **Enforced (code, offline)**. ADR-010 (2026-11-11)
+  additionally excludes a valid-but-misused exact-claim citation from factual
+  conflict support; action/interpretive conflicts are unaffected.
 
 ## INV-14 Context assembly determinism and provenance (PROPOSED — not implemented)
 

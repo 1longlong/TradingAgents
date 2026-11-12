@@ -2,6 +2,7 @@ import json
 
 from .alpha_vantage_common import _make_api_request, format_datetime_for_api
 from .config import get_config
+from .evidence_capture import capture_news_articles
 
 
 def get_news(ticker, start_date, end_date) -> dict[str, str] | str:
@@ -27,7 +28,48 @@ def get_news(ticker, start_date, end_date) -> dict[str, str] | str:
         "limit": str(get_config()["news_article_limit"]),
     }
 
-    return _make_api_request("NEWS_SENTIMENT", params)
+    response = _make_api_request("NEWS_SENTIMENT", params)
+    _capture_news_sentiment_feed(response, ticker, "alpha_vantage_news", "get_news")
+    return response
+
+def _capture_news_sentiment_feed(response, ticker: str, source_name: str, tool: str) -> None:
+    """Capture Alpha Vantage NEWS_SENTIMENT articles as typed news evidence.
+
+    The endpoint returns a JSON ``feed`` of original article objects with
+    ``title``/``url``/``source``/``time_published`` and per-ticker sentiment
+    arrays. Only the article-level fields are captured here (news category); the
+    per-ticker sentiment is left to the sentiment adapters, never inferred from
+    a machine label onto an arbitrary text. A non-JSON body or an absent feed is
+    a no-op (the caller still receives the original ``response`` unchanged).
+    """
+    if not isinstance(response, str):
+        return
+    try:
+        payload = json.loads(response)
+    except (ValueError, TypeError):
+        return
+    if not isinstance(payload, dict):
+        return
+    feed = payload.get("feed")
+    if not isinstance(feed, list):
+        return
+    articles = []
+    for item in feed:
+        if not isinstance(item, dict):
+            continue
+        published = item.get("time_published")
+        # AV format is YYYYMMDDTHHMMSS; normalize to ISO date for the adapter.
+        if isinstance(published, str) and len(published) >= 8:
+            published = f"{published[0:4]}-{published[4:6]}-{published[6:8]}"
+        articles.append(
+            {
+                "title": item.get("title"),
+                "publisher": item.get("source") or "",
+                "url": item.get("url") or "",
+                "published": published,
+            }
+        )
+    capture_news_articles(ticker, articles, source_name=source_name, tool=tool)
 
 def get_global_news(curr_date, look_back_days: int | None = None, limit: int | None = None) -> dict[str, str] | str:
     """Returns global market news & sentiment data without ticker-specific filtering.
@@ -63,7 +105,9 @@ def get_global_news(curr_date, look_back_days: int | None = None, limit: int | N
         "limit": str(limit),
     }
 
-    return _make_api_request("NEWS_SENTIMENT", params)
+    response = _make_api_request("NEWS_SENTIMENT", params)
+    _capture_news_sentiment_feed(response, "GLOBAL", "alpha_vantage_global_news", "get_global_news")
+    return response
 
 
 def get_insider_transactions(symbol: str, curr_date: str | None = None) -> dict[str, str] | str:

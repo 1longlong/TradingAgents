@@ -1766,3 +1766,616 @@ date: 2026-11-10
 - **Limitations (honest):** remote GitHub CI was NOT re-run (push is not
   authorized), so this is NOT a remote-green claim. The repair proves the
   covered offline path, not live behavior; no live calls were made this round.
+
+### 079 — ADR-008 Stage 1: automatic structured optional-evidence ingestion + source-attempt lifecycle (2026-11-11; AI technical, OFFLINE ONLY, NOT acceptance)
+
+Plan + test cases explicitly approved by WANG Yiwen (60536848) in the controlling
+conversation on 2026-11-11 (plan/tests ONLY, NOT final human acceptance). This
+entry covers **Stage 1 only** of the four-item approved sequence; Stages 2–4 are
+NOT implemented. Working-tree change (no commit/push/PR); backup handled by Codex
+outside the repo.
+
+Scope implemented (ADR-008): typed request/run-scoped evidence collector
+(`tradingagents/evidence/ingest.py`), honest vendor-origin adapters
+(`tradingagents/evidence/vendor_adapters.py`), dataflow capture bridge
+(`tradingagents/dataflows/evidence_capture.py`), durable tool/analyst boundary
+capture (`tradingagents/graph/evidence_tool_node.py`), gate merge + state
+persistence (`tradingagents/graph/data_quality_gate.py`,
+`tradingagents/evidence/multi_category_gate.py`, `tradingagents/evidence/quality.py`),
+router attempt recording (`tradingagents/dataflows/interface.py`), capture wiring
+in the SEC/AV/yfinance/news/StockTwits/Reddit dataflows, versioned production
+`AgentState` channels, and run/CLI collector binding + resume seeding
+(`tradingagents/graph/trading_graph.py`, `cli/main.py`).
+
+Key properties proven offline:
+- Automatic capture from REAL vendor-origin records (fundamentals SEC facts +
+  default yfinance/AV statements; news Yahoo/AV; sentiment StockTwits/Reddit)
+  through the REAL tool path and a compiled `StateGraph` built on the **production
+  `AgentState` schema** (analyst → wrapped `ToolNode` → clear → gate → research →
+  report), with no manual ingest-state injection.
+- Durability: capture flushed at the tool-node boundary AND the analyst-node
+  boundary (Sentiment Analyst prefetches in-node), so a checkpoint right after the
+  tool/analyst retains it. Proven by `interrupt_after=["tools"]` + saver close +
+  graph rebuild + `invoke(None, cfg)` resume on the real gate.
+- Resume: collector seeds from the checkpoint state BEFORE any new tool call
+  (identity/schema guarded; foreign-symbol state quarantined), so a new call
+  appends a monotonic attempt instead of overwriting index 0 — both attempts kept
+  exactly once.
+- Attempt ledger: every actually-operated source attempt recorded (success/empty/
+  failed/skipped) with a versioned `attempt_index` (thread-safe allocation), so
+  two distinct `started_at=None` attempts never collapse; configured-but-unoperated
+  feeds go only to the explicit `not_attempted` metadata (never attempts);
+  failures sanitized (no URL/query/username/body/secret); no duplicate success
+  (route_to_vendor records only non-success; the adapter records success with data).
+- Manual `data_quality_optional_evidence` contract stays compatible but a grade
+  without captured records is clamped to Low (no self-asserted High).
+- Per-category deterministic validation with an explicit optional classifier that
+  FAILS CLOSED (empty/all-NOT_APPLICABLE validation → Blocked; mandatory checks
+  must PASS); qualitative text records are never forced through the OHLCV numeric
+  schema; amount-like fundamentals with no finite magnitude FAIL.
+- Independence counts distinct VALID eligible content lineages only (never provider
+  wrapper names or invalid rows); an optional category is never graded above Medium.
+- Excluded (future/malformed/undated/late-filed) records pruned AND tombstoned
+  (`data_quality_dropped_evidence_ids`) so a resume cannot resurrect them.
+- Preserves public tool prose and legacy non-feature behavior; Alpha Vantage
+  reported currency preserved (never hardcoded USD); default yfinance/AV
+  fundamentals are captured undated (no invented filing date) and honestly Low.
+
+Verification (offline, re-run here):
+- `tests/test_structured_evidence_ingestion.py`: **53 passed**.
+- Full strict-offline suite (`scripts/validate/strict_offline_harness.py`,
+  default command): **1897 passed, 1 skipped, 1 deselected, 22 warnings, 88
+  subtests, 0 forbidden socket attempts** (baseline before this change was 1844
+  passed; +53 new).
+- `ruff check .`: clean. Governance validator: PASS (43/43). `git diff --check`:
+  clean.
+
+Limitations (honest): independent review (Codex) of the final Stage 1 tree is
+pending; human acceptance is NOT claimed. Stages 2–4 (durable failed-call/
+cross-resume budget accounting; claim-date/value/unit consistency check;
+degraded numeric confidence cap 0.60) are NOT implemented. This is offline
+behavioral evidence only, not live-vendor or remote-CI-green proof; remote CI was
+not re-run (push not authorized). Residual gaps are recorded in
+`docs/debt-register.md` DEBT-015/DEBT-035 and `docs/architecture/risk-list.md`.
+
+### 080 — ADR-009 Stage 2: durable run-scoped usage ledger + truthful whole-run aggregation (2026-11-11; AI technical, OFFLINE ONLY, NOT acceptance)
+
+Implementation (working tree; branch `feature/data-quality-debate-control`; HEAD
+`5ecea91` baseline). Plan + test cases for all four repair items were explicitly
+approved by WANG Yiwen (60536848) on 2026-11-11 (implementation approval only).
+Only **Stage 2** implemented this turn; Stage 1 (ADR-008) preserved; Stage 3
+(claim date/value/unit) and Stage 4 (degraded confidence cap 0.60) NOT started.
+
+New modules: `tradingagents/debate/usage_ledger.py` (dependency-free SQLite
+`reservations` + `usage_events`; versioned schema; strict resume open; atomic
+admission), `tradingagents/debate/usage_capture.py` (ContextVar run-scoped
+binding; uniquely-identified instrumented model calls), and
+`tradingagents/debate/researcher_accounting.py` (researcher + summary accounting
+glue). Edited: `tradingagents/debate/budget.py` (`can_afford_summary`,
+`whole_run_usage` aggregation with unresolved reservations),
+researcher/analyst/risk/manager node instrumentation, `agents/utils/structured.py`
+(structured→free-text fallback counting + affordability/admission guards),
+`graph/{trading_graph,propagation}.py`, `agents/utils/agent_states.py`,
+`report_artifacts.py`, `cli/main.py`.
+
+Key properties proven offline:
+- A reservation is written BEFORE every outbound call and a settlement after, so
+  a crash after the provider succeeds but before the node/checkpoint update is
+  recovered from the ledger (spend is not lost; never reset to zero).
+- Resume keeps the SAME execution identity (read from the checkpoint) and retains
+  its own spend; a genuinely FRESH re-run of the same ticker+date mints a NEW
+  identity and starts at zero. Every model invocation gets a globally unique id,
+  so a resumed capture that makes a new provider call is a NEW counted attempt
+  (never silently hidden behind a settled id); re-reading the same id is
+  idempotent.
+- Unknown failed/in-flight token cost is UNRESOLVED possible spend (never 0, never
+  fabricated); it fails closed for further OPTIONAL debate calls. The summary
+  reserve is preserved, and the Research Manager summary has its OWN admission
+  (`can_afford_summary`) that consumes the reserve without a second optional
+  estimate, requires a remaining call slot, and — when unaffordable — uses a
+  deterministic auditable Hold/insufficient-evidence template with an explicit
+  reason (no extra model call).
+- Admission (call limit + token/time capacity + reserve + unresolved) is re-read
+  and evaluated INSIDE a single `BEGIN IMMEDIATE` transaction from the CURRENT
+  rows, so two independent capture/ledger instances on the same run cannot both
+  pass a stale preflight (token-only / time-only one-call capacity + a
+  settle-before-second-txn + unknown-failure interleave all admit exactly one).
+- Whole-run usage is aggregated across analysts (incl. the structured→free-text
+  fallback) + debate + Research Manager + Trader + 3 risk + Portfolio for
+  REPORTING only (never a budget limit; the debate-scoped limit is unchanged); the
+  debate call is counted once (via the ledger), not both through a tracker and a
+  second aggregate. A structured (Pydantic) result is charged the rendered length
+  (never estimated 0), and a structured→free-text fallback is two counted
+  attempts. In-flight reservations / unresolved settlements are surfaced as
+  `reserved_unconfirmed` and force `partial` (a run can never claim `complete`
+  while possible billed spend is unresolved). Per-side provenance is preserved
+  (a filled estimate is never relabelled provider); provider conflict originals
+  are retained.
+- The ledger is source-private: no prompt/response/exception text/URL/secret is
+  stored (allow-listed scalars only; asserted by reading the raw DB bytes).
+
+Verification (offline, re-run here):
+- `tests/test_durable_usage_ledger.py`: **33 passed**.
+- `tests/test_whole_run_usage.py`: **10 passed** (incl. exact 12-call default
+  4-analyst run and the independent raw-model-counter equality).
+- Full strict-offline suite (`scripts/validate/strict_offline_harness.py`,
+  default command): **1940 passed, 1 skipped, 1 deselected, 22 warnings, 88
+  subtests, 0 forbidden socket attempts** (baseline before this change 1897; +43
+  new).
+- `ruff check .`: clean. Governance validator: PASS (43/43). `git diff --check`:
+  clean.
+
+Limitations (honest): independent Codex review of the final Stage 2 tree is
+pending; human acceptance is NOT claimed. This is offline behavioral + regression
+evidence only (mocked models + real `SqliteSaver` + threading barriers), not live
+providers/separate processes. Hidden SDK transport retries are unobserved
+(`transport_attempts` unknown); a reservation is an ESTIMATE, not a physical
+billing bound; whole-run usage is reporting only. Remote CI not re-run (push not
+authorized). Residual gaps: DEBT-021 (live basis), DEBT-036 (live
+concurrency/retry), RISK-020/RISK-029.
+
+### 081 — ADR-010 Stage 3: exact claim date/value/unit validation (2026-11-11; AI technical, OFFLINE ONLY, NOT acceptance)
+
+Human approval: WANG Yiwen (60536848) explicitly approved the four-item repair
+plan AND test cases (degraded confidence cap 0.60) on 2026-11-11 in the
+controlling conversation. This is plan/test authorization ONLY and is NOT a final
+human acceptance of any item; no reapproval was required within that plan. Stage 3
+ONLY was implemented in this change; Stage 4 (cap 0.60) is NOT started.
+
+Problem (DEBT-022 / RISK-020): the citation allowlist verified a cited evidence
+ID's *eligibility* (known, High/Medium, on-or-before target, linked to a claim),
+not the *semantic truth* of a model-written exact claim. The 2026-11-06 NVDA run
+cited a valid `observed_at=2026-11-04` close ID but described the 200.13 close as
+"2026-11-05". A valid ID therefore could extend the debate, resolve a factual
+conflict, and reach the trusted plan/report with a wrong exact fact.
+
+What was built (all additive; the 20-field `EvidenceRecord` and 7-field
+`SourceAttempt` are unchanged):
+- `tradingagents/evidence/origin.py`: versioned, evidence-ID-keyed typed ORIGIN
+  metadata with distinct date roles (target/observation/availability/filed_at/
+  published_at/retrieved_at) + unit/currency/scale, and a granularity-aware
+  `dates_match` (calendar roles compare at documented day granularity; timestamp
+  roles compare as UTC instants; a date-only source can never prove a timestamp;
+  same-day-wrong-hour is a mismatch). Malformed/absent `value_scale` is UNKNOWN,
+  NEVER laundered to 1; non-date-typed/ambiguous dates (int, compact YYYYMMDD,
+  slash order) are rejected. Persisted on `data_quality_origin_metadata`; the gate
+  attaches an origin for EVERY manifest record (captured vendor origin preferred,
+  else derived honestly; no filing date invented).
+- Producers record genuine origins: SEC (fiscal `period_end` observation + `filed`
+  availability), Alpha Vantage/yfinance (period end only, availability None),
+  news (published), sentiment (posted).
+- `tradingagents/debate/models.py` + `turn.py`: additive typed `ClaimRecord`
+  envelope and an optional structured `claim:` marker field plus a conservative
+  inline exact-prose scan; the legacy v1.0 free-text `ClaimEvidenceLink` is
+  preserved but is NEVER treated as verified exact evidence.
+- `tradingagents/debate/claims.py`: pure `validate_claim` (identity/run/ticker,
+  date role, exact value, unit/currency/scale, no speculative FX, future/Low/
+  unknown-schema/duplicate-origin fail closed) + verified/rejected/unverified
+  summary + prompt block.
+- Runtime consumption (the integration that makes it real): the evaluator prunes
+  invalid-claimed IDs from valid-new-evidence (no debate extension); `conflicts.py`
+  never creates/keeps a factual conflict on an invalid-claimed ID; the Research
+  Manager receives the verified/rejected/unverified summary; the trusted Research
+  Manager plan, Trader plan and final decision have the wrong exact fact redacted
+  (`contain_rejected_exact_claims`) WITHOUT a global Hold; `debate_trace.json`
+  exports the redacted claim-validation summary.
+
+Verifier early feedback (2026-11-11) incorporated: malformed/absent scale must not
+normalize to 1; int/ambiguous dates rejected explicitly; timestamp roles compare
+as instants (date-only cannot prove a timestamp; same-day-wrong-hour is a
+mismatch); calendar roles use documented day granularity. Covered by
+`TestMalformedScaleNeverNormalizesToOne`, `TestAmbiguousDatesRejected`,
+`TestTimestampsAndGranularity`.
+
+Verification (offline, re-run here):
+- `tests/test_exact_claim_validation.py`: **73 passed** (pure validator + origin
+  matrix).
+- `tests/test_exact_claim_runtime.py`: **30 passed** (real production AgentState /
+  GraphSetup graph with scripted models that cite a valid ID but a wrong
+  date/value; real `SqliteSaver` interrupt/restart preserving origin + validation;
+  public entry report propagation).
+- Full strict-offline suite (`scripts/validate/strict_offline_harness.py`):
+  **2044 passed, 1 skipped, 1 deselected, 22 warnings, 88 subtests, 0 forbidden
+  socket attempts** (baseline before this change 1940; +104 new).
+- `ruff check .`: clean. Governance validator: PASS (43/43). `git diff --check`:
+  clean.
+
+Second independent review round (2026-11-11) incorporated: (a) `enforce_trusted_boundary` now performs FRESH per-boundary extraction + validation of each boundary's OWN exact factual prose at clause/assertion granularity (a recommendation word in one clause no longer exempts a factual clause; every date+value assertion on a line is checked so a correct fact cannot launder a wrong one; a date/value split across adjacent lines is paired over a bounded window), applied at RM/Trader/Portfolio/memory/report with empty rejected list; (b) dimension semantics for ALL numeric claims (money/shares/percent/ratio) require a KNOWN matching dimension on BOTH sides and never infer a dimension; (c) `record.value_normalized` is BASE units and a claim magnitude is normalized by its own declared scale, so `391000 million USD` and `391000000000 USD` both verify against the real SEC base value while an explicit multiplier never invents a missing record scale; (d) origin/record/requested target must all agree (foreign-but-internally-consistent -> unverified); (e) the default market adapter's `native_quote_currency` is GENUINELY UNKNOWN, so an exact monetary claim on the real default market path is honestly `unverified` (a separate labelled known-currency fixture proves the verification path; real SEC USD provides the genuine positive monetary producer proof).
+
+Limitations (honest): independent Codex review of the final Stage 3 tree is
+pending; human acceptance is NOT claimed. This is offline behavioral + regression
+evidence only, not live vendors/models. Only typed exact claims and common inline
+exact prose are deterministically validated; arbitrary natural-language semantics
+are NOT proven (unparseable prose stays `unverified`). Default yfinance/Alpha
+Vantage fundamentals remain undated and unavailable for historical exact proof.
+Remote CI not re-run (push not authorized). Stage 4 (DEBT-014, cap 0.60) NOT
+started. Residual gaps: DEBT-022 (live validation), RISK-020.
+
+### 082 — ADR-011 Stage 4: deterministic degraded-run confidence cap 0.60 (2026-11-11; AI technical, OFFLINE ONLY, NOT acceptance)
+
+Closed DEBT-014 / RISK-014 finding 4: the degraded-run confidence ceiling was
+previously only a prompt instruction. The human specified the ceiling as **0.60**
+and approved the plan + tests (not final acceptance). A pure, deterministic,
+LLM-free policy (`tradingagents/debate/confidence_policy.py`) now owns it.
+
+What is enforced (all recomputed from the authoritative fail-closed gate verdict,
+never trusted from a state audit field):
+
+- Debate turns/stances: numeric `confidence` capped before entering the debate
+  state; readable content confidence-labelled numerics capped before the next
+  speaker/evaluator reads them.
+- Evaluator snapshot, Research Manager, Trader, Portfolio Manager: typed numeric
+  confidence AND prose capped; the typed RM/Trader/PM schema confidence is capped
+  on its EXACT raw value BEFORE the lossy `:.2f` render, so a raw
+  0.6000001 / 0.604 / 0.954321 is genuinely capped (and its exact raw recorded in
+  the audit) rather than masked by the rounded rendered `.60` / `.95`.
+- Post-gate read boundary: a shared `sanitize_state_inputs` / `with_sanitized_state`
+  wraps every post-gate node (Bull, Bear, Evaluator, RM, Trader, risk×3, PM) and
+  caps a per-read COPY of the persisted analyst reports, plans, debate+risk
+  histories AND turn/stance numerics, so a legacy / direct-GraphSetup / SQLite
+  resume cannot feed a raw 0.95 to any downstream prompt. The stored analyst
+  reports (written before the gate) are exempt at analyst time but sanitized at
+  every post-gate read.
+- API resume (`TradingAgentsGraph._run_graph`) AND the CLI (`cli.main.run_analysis`
+  streaming `graph.graph.stream`) both run the SAME fail-closed resume sanitizer
+  before any model/stream call; a sanitizer/`update_state` failure raises so zero
+  resumed model calls happen; repeated safe resume is idempotent (no audit
+  duplication); malformed legacy numerics (bool/NaN/out-of-range) are quarantined.
+- Report writer independently recomputes the cap from the imported/legacy state;
+  the exported `run_summary.json` / `debate_trace.json` use effective values and a
+  merged per-section/per-turn audit (raw `.95` appears only in an explicit
+  raw_value audit/quarantine field); the memory log stores the effective decision.
+
+Scope/safety: capping is deliberately NARROW — only explicit confidence-labelled
+numerics (decimal/percent/fullwidth/leading-dot/scientific/JSON/Markdown/multiline/
+duplicate) are capped; malformed/bool/NaN/out-of-range are quarantined; a missing
+value stays missing; categorical low/medium/high stays distinct; a normal run and
+ordinary financial figures are byte-for-byte unchanged; `blocked` runs keep their
+non-numeric Hold discipline. 0.60 is an ENGINEERING ceiling, NOT a calibrated
+probability and NOT production threshold tuning. No extra LLM call.
+
+Verification (fresh final run, offline):
+- `tests/test_confidence_cap_policy.py` + `tests/test_confidence_cap_runtime.py` +
+  `tests/test_confidence_cap_cli.py`: **110 passed, 0 forbidden socket attempts**
+  (real production AgentState / GraphSetup with a genuine production gate over a
+  mocked raw OHLCV source; role-aware scripted over-confident models; structured
+  AND free-text fallback; real SQLite interrupt/close/reconstruct/resume; a direct
+  GraphSetup resume at the evaluator with a stale typed 0.95; fail-closed and
+  idempotent resume; typed raw-precision 0.6000001/0.604/0.954321 regressions;
+  public report/CLI/memory propagation; blocked Hold).
+- PERSISTED STATE: a deterministic post-gate `Confidence Sanitizer` node writes the
+  capped analyst-report / plan / history fields, and every post-gate node wrapper
+  merges its changed sanitized INPUT deltas (node outputs win) and caps its own
+  returned text (e.g. a raw risk argument), so the RETURNED state and `_log_state`
+  / public JSON carry the effective values on FRESH and direct-legacy-resume paths
+  alike (a direct SQLite resume that SKIPS the sanitizer node is covered); originals
+  survive only in the explicit audit; a normal run's report is byte-for-byte
+  unchanged.
+- Full strict-offline suite (`scripts/validate/strict_offline_harness.py`):
+  **2154 passed, 1 skipped, 1 deselected, 22 warnings, 88 subtests, 0 forbidden
+  socket attempts**. Stage 4 entry baseline is the Stage 3 final 2044 passed;
+  final 2154 = +110 vs that stage baseline, including the 13 typed-precision
+  regression cases added on top of the intermediate 2138 run (the +13 is measured
+  vs the intermediate 2138, NOT vs the stage-entry baseline 2044).
+- `ruff check .`: clean. Governance validator: PASS (43/43). `git diff --check`:
+  clean.
+
+Limitations (honest): independent Codex review of the final Stage 4 tree is
+pending; human acceptance is NOT claimed (this is implementation approval only).
+Offline behavioral + regression evidence only, not live vendors/models; capping is
+an engineering safety ceiling, not a calibration or accuracy claim; it caps
+explicit numeric confidence only, not qualitative prose. Remote CI not re-run
+(push not authorized). Residual gaps: DEBT-014 (awaiting human acceptance),
+DEBT-015 (exchange-holiday calendar, researcher char-estimate usage, append-only
+event types/audit_incomplete fallback), RISK-014.
+
+## 2026-11-11 — Two confirmed live-run defect repairs (Defect-1 origin authority, Defect-2 structured raw usage) — implementation + offline verification (logbook 083)
+
+Scope: WANG Yiwen explicitly approved this round's execution plan AND test cases
+("批准这两项修复计划和测试用例", 2026-11-11) — implementation approval ONLY, NOT final
+acceptance. Branch `feature/data-quality-debate-control`, HEAD 5ecea91; all dirty
+Stage 1-4 work preserved. No live/vendor/model calls. English docs/comments.
+
+Defect-1 (ADR-010 amendment) — origin metadata overwrite:
+- Root cause: `graph/data_quality_gate.py` built the correct 5-origin map then
+  `output.update(persisted)` overwrote it with the live collector's empty-for-market
+  origin delta (task evidence `origin-overwrite-reproduction.json`: 5 records / 5
+  origins without collector, 5 records / 0 with active collector).
+- Fix: authoritative origin merge AFTER persistence (`_merge_authoritative_origins`);
+  genuine captured roles preserved; real captured conflicts (collector duplicate
+  insertion, or state-vs-collector disagreement) RETAINED and failed closed via the
+  declared `data_quality_origin_conflicted_ids` channel; conflicted ids dropped at
+  `origin_records_from_state` and passed to the claim validator by the evaluator and
+  output boundary; conflict seeding unconditional from state (no-collector / direct
+  resume / imported report state); no first/last-wins, no derived re-trust, no
+  resurrection of pruned/tombstoned ids; 20/7 frozen records unchanged.
+
+Defect-2 (ADR-009 amendment) — structured-output usage lost before settlement:
+- Root cause: RM/Trader/PM/Sentiment typed results are Pydantic objects with no
+  `usage_metadata`; `instrumented_model_call` settled them as estimates while plain
+  risk calls retained provider usage. Blocked fixture: 6 real calls / 22,600 reported
+  tokens vs 22,067 recorded with `totals.tokens_source=provider` despite three
+  estimated structured calls.
+- Fix: `bind_structured` binds `include_raw=True` where supported (same single
+  call); usage settles from the RAW `AIMessage` (`usage_response`) while the parsed
+  typed object is rendered/capped; BINDING-ONLY fallback (no model call) when only
+  `include_raw` is rejected (any exception incl. NotImplementedError/AttributeError/
+  TypeError) so a working legacy typed provider stays typed+estimated (no free-text
+  downgrade); the billed boundary is ONLY the transport invocation so parser/
+  sanitizer/render errors after a known raw response settle EXACT usage then fall
+  back once (two distinct attempts, atomic guards); unknown transport stays unknown;
+  `SOURCE_MIXED` aggregate/report-only label (never per-call; not in the durable
+  ledger allowed sources) shown in `report_artifacts` markdown; known token sums
+  preserved; all-provider stays provider; cap 0.60 on exact raw parsed value
+  unchanged.
+
+Verification (fresh, offline; socket-disabled):
+- Focused: `tests/test_gate_origin_authority.py` 18 passed (incl. 4 real INTERRUPTED-resume tests — ambiguity and tombstone-exclusion variants — where a PENDING production Gate/Consumer node executes after saver close+rebuild+reseed, plus the scoped no-resurrection edge: a no-collector gate / direct consumer never re-trusts an already-dropped id) and `tests/test_structured_raw_usage.py` 18 passed (incl. a PUBLIC `TradingAgentsGraph._run_graph` end-to-end: real gate + mocked-raw OHLCV + role-aware raw-envelope model + real active collector + durable ledger, no manual attach; exact per-role/whole usage vs the independent invocation counter, 5 market origins, report; the memory write is exercised through a thin test adapter that calls the real `TradingMemoryLog.store_decision` (the production `record_decision`'s `_is_blocked_state`/trusted-boundary wrapper is NOT exercised here); cap 0.60 verified directly). +36 new (origin 18 + structured 18).
+- Full strict-offline (`scripts/validate/strict_offline_harness.py`): **2190 passed, 1 skipped, 1 deselected, 22 warnings, 88 subtests, 0 forbidden socket attempts** (baseline 2154 + 36). Real-shaped `AIMessage` token metadata; mocked models; real SQLite checkpoint/resume; no network.
+- `ruff check .`: clean. Governance validator: PASS (43/43). `git diff --check`: clean.
+
+Limitations (honest): independent Codex verification of this round's tree is
+pending; human acceptance is NOT claimed (implementation approval only). These are
+offline behavioral + regression repairs; the prior incomplete 2026-11-11 school-model
+live run is NOT relabelled as a fixed live proof — both fixes remain offline-only
+until a separately authorized future live verification. `mixed` is a report label,
+not a per-call telemetry source; arbitrary prose claim semantics beyond the
+conservative parser stay unverified; frozen `EvidenceRecord`(20)/`SourceAttempt`(7)
+unchanged. Remote CI not re-run (push not authorized).
+
+### Independent OFFLINE metadata replay (2026-11-11) — NOT a live proof
+
+An independent offline replay (Codex) reproduced both fixes on a separate copy:
+(a) with the cached SAME live NVDA OHLCV data and the **real gate**, the manifest
+shows **5 records / 5 origins** both with and without an active collector
+(previously 5 / 0); (b) a replay of the prior blocked-fixture's 6 actual
+provider-usage metadata through the raw structured utility for RM/Trader/PM plus
+the 3 risk calls, against a real durable ledger, accounted **22,600 = 22,600
+expected**, 6 provider calls, `tokens_source=provider`, `estimated=false`,
+completeness `complete`; reopening the ledger yielded the same totals with no
+double count; typed `.6000001` / `.954321` / `.604` capped to `.6` with the exact
+raw in the audit. No new live calls were made. Evidence:
+`/Users/wangyiwen/OpenCodeRecords/TradingAgents/2026-11-11-independent-usage-replay-t6ls2eb5/verification.json`.
+This is an **independent OFFLINE metadata replay only**; it is NEVER a current
+live proof and does not relabel the prior incomplete live run as fixed.
+
+### Independent Codex technical review of the two-defect repair tree — COMPLETED (logbook 084; NOT human acceptance, NOT a live retest)
+
+Independent AI (Codex) technical verification of the repaired tree is complete.
+No source/test changed for this record; no product/vendor/model calls; no Git
+mutations.
+
+- Full strict-offline (independent rerun): **2190 passed, 1 skipped, 1 deselected,
+  22 warnings, 88 subtests, 0 forbidden socket attempts**.
+- Focused two new files: **36 passed, 0 sockets** (18 `tests/test_gate_origin_authority.py`
+  + 18 `tests/test_structured_raw_usage.py`).
+- `ruff check .` clean; governance validator **43/43 PASS** (incl. likely-secret
+  scan PASS); `git diff --check` clean; HEAD `5ecea91` unchanged; frozen
+  governance/CI/dependency files untouched.
+- Independently reran the stale-map + state-tombstone reproduction:
+  `gate_retrusted=False`, `direct_consumer_retrusted=False` (previously True/True).
+- Logs: `/Users/wangyiwen/OpenCodeRecords/TradingAgents/2026-11-11-live-findings-repair-independent-full-offline.log`
+  and `.../2026-11-11-live-findings-repair-independent-focused.log`.
+
+This independent AI technical review — and the prior independent OFFLINE metadata
+replay — are **offline technical evidence only**. They are NOT a live retest and
+do NOT relabel the historical incomplete 2026-11-11 live run or any earlier stage
+review. Explicit human acceptance and a separately authorized live retest remain
+pending.
+
+### Two-defect repair (price-boundary + standalone typed claims) — IMPLEMENTED + offline-verified (logbook 085; NOT human acceptance, NOT a live retest)
+
+Builder (OpenCode) implemented the human-approved (2026-11-12, "批准本轮修复计
+划和测试用例" = approves this round's corrected plan AND test cases; implementation
+approval only) two-defect repair from the approved plan plus its overriding
+correction. Branch `feature/data-quality-debate-control`, HEAD `5ecea91` unchanged;
+dirty Stage 1–4 work preserved; no commit/push/PR; no reset/revert/stash; no
+product/vendor/model live calls; all product tests deterministic socket-disabled
+offline.
+
+- **Defect 1 (ADR-011 amendment):** suffix confidence literal no longer absorbs a
+  trailing sentence period; terminators are boundaries not connectors; CRLF-aware
+  soft-wrap still binds; left token boundary excludes currency/sign/date/path-clued
+  numerics. `$204.38.` preserved byte-for-byte; bare `204.38 confidence` still
+  invalid/quarantined; genuine forms still cap to 0.60.
+- **Defect 2 (ADR-010 amendment):** shared strict `extract_standalone_typed_claims`
+  recovers the 8 actual Bear lines (before/after/no-marker, no-stance FAILED branch)
+  into the SAME validation; fenced (incl. unclosed) and quoted examples never
+  admitted; contradictory `role`/`date_role` aliases unparseable; additive honest
+  coverage serialized in `DebateTurn`, `claim_validation_summary`, and
+  `debate_trace.json`; consumed at `enforce_trusted_boundary`; frozen
+  `EvidenceRecord`(20)/`SourceAttempt`(7) unchanged.
+- **Focused new files:** `tests/test_confidence_boundary.py` (49 passed) +
+  `tests/test_standalone_claims.py` (40 passed) = 89 passed.
+- **Related regressions:** confidence suites (110) + debate-turn/claims/conflicts/
+  gate (376 incl. new files); broader debate/report/guard/memory/researcher suite
+  425 passed; all 0 sockets.
+- **Full strict-offline harness:** **2279 passed, 1 skipped, 1 deselected, 22
+  warnings, 88 subtests, 0 forbidden socket attempts**
+  (`.venv/bin/python scripts/validate/strict_offline_harness.py`).
+- `ruff check` on changed source: **All checks passed**; governance validator
+  **43/43 PASS** (incl. likely-secret scan PASS); YAML/JSON parse OK;
+  `git diff --check` clean.
+
+Offline built-in verification only. This is NOT a live retest; the preserved
+2026-11-11 live evidence is unchanged and never relabelled as post-fix live proof.
+Independent Codex review and explicit human acceptance remain pending.
+
+### Two-defect repair — FINAL offlines (post independent second-pass feedback) (logbook 085, FINAL)
+
+After independent first/second-pass verifier feedback (all within the approved
+shared-contract/quoted/fence scope), the repair was tightened and re-gated on the
+FINAL tree:
+
+- **Confidence boundary** (ADR-011): CRLF soft-wrap caps (`0.95\r\nconfidence` →
+  `0.6`); date/sign/path fragments (`2026-11-05`, `2026/11/05`, `-`) are not
+  confidence candidates; `$204.38.` stays byte-for-byte; bare `204.38 confidence`
+  still quarantined. `tests/test_confidence_boundary.py`: **51 passed** (incl. a
+  real Trader-node test and a real `TradingAgentsGraph.record_decision`/memory test
+  proving price preservation + genuine cap at production boundaries).
+- **Standalone typed claims** (ADR-010): ONE shared strict grammar
+  (`parse_strict_typed_claim_payload`) is used by BOTH the canonical
+  `DEBATE_METADATA` `claim=` parser AND the standalone extractor, so a canonical
+  contradictory `role`/`date_role` no longer launders into a trusted claim; ONE
+  whole-document, fence/quote-aware walk
+  (`extract_standalone_typed_claims_indexed`) is used by the turn parser AND the
+  trusted output boundary (no per-line divergence); fence close requires the SAME
+  char and length ≥ the opener (a shorter fence never closes a longer one); a
+  narrow, documented explicit `Example:`/`Examples:`/`Example N:` block is
+  excluded; the no-manifest boundary REDACTs an explicit typed line with a
+  missing-evidence diagnostic (never silently passes it through) while ordinary
+  prose is a no-op. `tests/test_standalone_claims.py`: **49 passed** (8 verbatim
+  lines, marker/union/dedupe, fenced incl. four-backtick/unclosed/tilde, Example
+  blocks, alias contradiction, fail-closed negatives, real SQLite resume asserting
+  resumed evaluator coverage + verified summary, and malformed/rejected not stored
+  at memory/report).
+- **Related regressions:** 755 passed across confidence + debate-turn/claims/
+  conflicts/gate + report/guard/memory/evaluator/graph/researcher suites.
+- **Full strict-offline harness:** **2290 passed, 1 skipped, 1 deselected, 22
+  warnings, 88 subtests, 0 forbidden socket attempts**.
+- Ruff (changed source + tests): **All checks passed**; governance **43/43 PASS**;
+  YAML/JSON parse OK; `git diff --check` clean.
+
+Offline, deterministic verification only. NOT a live retest; preserved live
+evidence unchanged and not relabelled. Independent Codex review and explicit human
+acceptance remain pending.
+
+### Independent Codex review of the two-defect repair — COMPLETE (logbook 086; NOT human acceptance, NOT a live retest)
+
+Independent AI (Codex) technical verification of the final repair tree is
+complete. Documentation-only record; no source/test changed, no product / vendor /
+model calls, no Git mutations.
+
+- **Independent rerun:** full strict-offline **2290 passed, 1 skipped, 1
+  deselected, 22 warnings, 88 subtests, 0 forbidden socket attempts**; Ruff clean;
+  governance **43/43 PASS** incl the artifact likely-secret scan; `git diff --check`
+  clean; frozen governance/CI/dependency paths unchanged; HEAD `5ecea91` unchanged.
+- **Independent OFFLINE replay of the actual prior-school Bear text** (no new
+  product calls) now recovers all 8 claims: **1 verified (volume), 5 rejected
+  (unknown optional evidence), 2 unverified (price currency/unit genuinely
+  unknown)** — honest non-empty validation, NOT all-8-verified.
+- Independently confirmed: historical price case (`$204.38.` preserved), LF/CRLF
+  suffix soft-wraps, dates/currency/sign/path preservation, invalid bare suffix
+  quarantine, long/unclosed fences, explicit `Example:` blocks, and conflicting
+  canonical/outside `role`/`date_role` aliases.
+- Independently confirmed at REAL boundaries with the real `_is_blocked_state` (no
+  override): actual `create_trader`, report writer, and `record_decision` /
+  `TradingMemoryLog` preserved `$204.38.` and capped a genuine `0.95`; a rejected
+  wrong-volume claim was not stored in memory.
+- **Saved evidence:** `.../2026-11-12-price-claim-independent-replay.json`,
+  `.../2026-11-12-price-claim-independent-mnca0llp/`, and
+  `.../2026-11-12-price-claim-independent-full-offline.log`.
+
+This independent AI technical review — and the earlier independent OFFLINE replay
+— are **offline technical evidence only**. They are NOT a live retest and do NOT
+relabel the historical 2026-11-11 live run (which remains historical bug evidence)
+or any earlier stage review. **Explicit human acceptance remains pending.**
+
+### Verified-span repair (residual false-redaction) — IMPLEMENTED + offline-verified (logbook 087; NOT human acceptance, NOT a live rerun)
+
+Approved plan + test cases: human WANG Yiwen, 2026-11-12 ("批准本轮修复计划和测试用例";
+implementation approval ONLY). Builder (OpenCode); Codex independent verifier. Branch
+`feature/data-quality-debate-control`, HEAD `5ecea91` unchanged; dirty Stage 1–4 work
+preserved; no commit/push/PR; no dependencies/CI/permissions/prompt/human-only edits;
+no product live LLM/vendor calls; offline deterministic (0 sockets).
+
+- **Defect (evidence loss):** the 2026-11-12 school live run (26 calls / 202,941 tokens;
+  historical bug evidence, NOT post-fix proof) showed a CORRECT long-decimal typed
+  claim (`value=306127800.0000000000`, `unit=shares`) strictly VALIDATED as verified
+  but then BLANKED by the generic prose scanner (`_nearest_unit` 24-char proximity;
+  `shares` fell out of window → `claim_unit_or_currency_unknown`). Short value
+  survived. Reproduced in report + `record_decision`/memory.
+- **Fix (ADR-010 addendum):** occurrence-exact protection of a verified typed
+  ClaimRecord's own `date=`/`value=` field spans (`claims.extract_claim_span_occurrences`),
+  applied by `output_guard._verified_typed_protected_spans` to BOTH the per-line and
+  cross-line prose passes; date+value pair kept together (no cross-pairing); one
+  shared whole-document fence/Example exclusion walk for standalone AND canonical
+  (fenced/Example canonical gains no protection). No window enlargement, no
+  whole-line/document skip, no grammar widening; unparseable mixed line fails closed.
+- **Verifier mid-review corrections incorporated (same approved scope):** (a) ties
+  protection to the EXACT parsed payload occurrence, not a whole-line first match, so
+  a later verified subclaim cannot authorize an earlier rejected sibling with the
+  same date/value — mixed good/bad same-ID same-line tested in BOTH orders; (b)
+  canonical protection uses the shared fence/Example walk, not a permissive
+  per-substring parser, so fenced/Example canonical claims are never protected; (c)
+  memory tests use the REAL `_is_blocked_state` (no monkeypatch); (d) equivalent
+  numeric forms (long extra zeros, scientific `e`/`E`) are protected by locating the
+  RAW payload token offset and proving equivalence via strict `ClaimRecord`
+  normalization (not raw-text equality, float, or substring), with nearby wrong
+  values redacted and duplicate identical payloads keeping distinct offsets; (e) a
+  blockquote/quoted line (`> ...`) is excluded by the shared walker so a marker
+  substring in quoted prose never becomes a protected occurrence (fenced/Example/
+  quoted canonical AND standalone asserted to yield ZERO authorized occurrences).
+- **Tests:** `tests/test_verified_span_boundary.py` **77 passed** (positive
+  preservation of short/long/extra-zero/scientific/uppercase-key/spaced-key/
+  canonical-backtick/NFKC forms, and negatives: wrong value/nearby-wrong-value/
+  future/unit/currency/scale/unknown-ID/role-mismatch/Low/Blocked; same-line &
+  adjacent cross-pair; canonical mixed both orders; fenced/Example/quoted incl.
+  canonical (direct zero-occurrence assertions); fail-closed unparseable;
+  idempotence incl. after redaction; REAL report + production memory).
+- **Format-variant correction (final):** the raw field-offset locator now walks the
+  ORIGINAL pipe segments with the SAME `key.strip().lower()` semantics as the strict
+  parser and computes offsets against the RAW payload (including any backtick/
+  whitespace wrapper), so supported variants (`DATE=`/`VALUE=` uppercase, `date = ...`
+  spaced, canonical ``claim=`...` `` backticked) are protected — they were supported
+  syntax, not new grammar. Standalone ``claim=`...` `` (backtick directly after
+  `claim=`) is NOT accepted by the strict parser and is correctly not treated as a
+  protected claim (no grammar expansion).
+- **Field-order / wrapper-location correction (final):** the strict grammar is
+  field-order independent, so offsets are now computed on the WRAPPER-STRIPPED
+  payload the parser actually sees, then shifted back onto the ORIGINAL line by the
+  MEASURED consumed prefix: the bullet/numeric-list prefix (`- ` / `1. `) length is
+  measured (not assumed to be leading whitespace) and the canonical whitespace/
+  backtick wrapper length is measured (``sub.find(stripped)``) — so a `date=`/`value=`
+  field FIRST or LAST, with bullets/numeric-list or canonical whitespace/backticks,
+  points at the exact token and is preserved. Regressions assert exact token offsets
+  into the original text for date-first/value-last and value-first/date-last forms.
+- **Duplicate-occurrence per-token authority (final):** the generic prose pass now
+  decides blanking PER TOKEN (`_span_is_authorized`): a verified typed `date=`/`value=`
+  token span is never erased, and an unauthorized span is always blanked — regardless
+  of how the heuristic date↔value pairing associates them. This fixes two IDENTICAL
+  verified canonical subclaims joined by ``||`` (exhaustive 720 field-order
+  permutations: 0 false redactions; previously 176), where the heuristic re-paired a
+  verified value with a sibling's date. Mixed verified+wrong siblings still redact
+  ONLY the bad component (wrong value/date/unit), keeping the verified token.
+- **Related regressions:** 716 passed (verified-span + standalone + confidence +
+  exact-claim + output_guard + reporting + report-artifacts + memory + debate suites).
+- **Full strict-offline harness:** **2367 passed, 1 skipped, 1 deselected, 22
+  warnings, 88 subtests, 0 forbidden socket attempts**.
+- Ruff clean; governance 43/43 PASS; YAML/JSON OK; `git diff --check` clean; scoped
+  likely-secret scan 0.
+
+Offline, deterministic verification only. Prior 26-call / 202,941-token school run
+remains historical bug evidence; this is NOT a live rerun and NOT a claim that all
+defects are fixed. Independent Codex review + explicit human acceptance pending.
+
+### Independent Codex FINAL review of the verified-span repair — COMPLETE (logbook 088; NOT human acceptance, NOT a live rerun)
+
+Documentation/comment sync only; no behaviour/test change, no new product live call,
+no Git mutation.
+
+- **Independent rerun (supplied):** full strict-offline **2367 passed, 1 skipped
+  (optional `langchain_aws` absent), 1 deselected, 22 warnings, 88 subtests, 0 socket
+  attempts**; focused specified **8 modules = 556 passed / 0 sockets** (a DIFFERENT
+  subset from the builder's 716 related suite — counts not conflated); `ruff check .`
+  clean; governance **43/43 PASS**; `git diff --check` clean.
+- **Independent exhaustive format check:** **4320 cases** (720 field orders × 6
+  formats incl. duplicate canonical) all preserved / 0 sockets.
+- **Independent replay of the SAVED real school response:**
+  `long-value-independent-replay.json` has **19 TOTAL checks INCLUDING the 5
+  equivalent numeric variants — all 19 true** (corrected: not a 17+5 split) / 0
+  sockets. Real `write_report_tree` (trader + complete) and real
+  `record_decision`/`TradingMemoryLog` preserve the correct long typed line while
+  future-dated and unknown-ID claims are removed.
+- **Evidence saved (outside repo):** `long-value-independent-full-offline.log`,
+  `long-value-independent-focused.log`, `long-value-format-results.json`,
+  `long-value-independent-replay.json`; artifacts under
+  `2026-11-12-long-value-independent-fsd_ad80/`.
+- **Authority semantics (docs/comment sync):** final protection is PER VERIFIED TOKEN
+  OCCURRENCE, not heuristic date↔value pair membership; the unprotected partner is
+  still checked/redacted; no whole-line bypass. Stale "ONE pair" source/doc/test
+  comments were corrected (no behaviour change).
+
+Offline technical review only. **Explicit human final acceptance and any post-fix
+live retest remain pending.** The historical 2026-11-12 26-call / 202,941-token school
+run remains bug evidence only, never relabelled as post-fix live proof.

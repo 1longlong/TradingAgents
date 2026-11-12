@@ -24,6 +24,8 @@ class Propagator:
         instrument_context: str = "",
         portfolio_context: str = "",
         results_dir: str = "",
+        run_id: str | None = None,
+        usage_ledger_path: str | None = None,
     ) -> dict[str, Any]:
         """Create the initial state for the agent graph.
 
@@ -34,8 +36,12 @@ class Propagator:
         ``get_instrument_context_from_state``. ``results_dir`` (when set) lets
         the debate nodes derive default durable audit paths for aborted
         invocations and partial-debate quarantine.
+
+        ``run_id``/``usage_ledger_path`` (ADR-009) carry the real execution
+        identity and durable usage-ledger path for the run so the usage capture
+        can scope spend to exactly this execution.
         """
-        return {
+        state: dict[str, Any] = {
             "messages": [("human", company_name)],
             "company_of_interest": company_name,
             "asset_type": asset_type,
@@ -82,7 +88,13 @@ class Propagator:
             "data_quality_gate_decision": {},
             "data_quality_context": "",
             "data_quality_error": "gate not run",
+            "data_quality_source_attempts": [],
         }
+        if run_id:
+            state["run_id"] = run_id
+        if usage_ledger_path:
+            state["usage_ledger_path"] = usage_ledger_path
+        return state
 
     def get_graph_args(self, callbacks: list | None = None) -> dict[str, Any]:
         """Get arguments for the graph invocation.

@@ -37,6 +37,13 @@ SOURCE_ESTIMATED = "estimated"
 SOURCE_MISSING = "missing"
 SOURCE_UNAVAILABLE = "unavailable"
 
+# AGGREGATE/REPORT-ONLY provenance label (ADR-009 amendment, Defect-2). It marks a
+# whole-run/per-phase token total that MIXES provider-exact and estimated/unknown
+# sources. It is NEVER valid per-call provider telemetry: it is not accepted by the
+# durable ledger (``_ALLOWED_TOKEN_SOURCES``) nor by any per-call ``UsageEvent``
+# field, and must never be written to a per-call ``tokens_source``.
+SOURCE_MIXED = "mixed"
+
 # Constant reasons a caller may attach to an unavailable/estimated field. These
 # are allow-listed constants (never free-form exception strings).
 REASON_CLOCK_INVALID = "clock_invalid"
@@ -321,18 +328,33 @@ def can_afford_optional_call(
     3. The token/time figures are deterministic **estimates**, not physical
        provider guarantees; the reserve comparison is expressed in the same
        estimate units and is therefore the honest configured check.
+    4. **No unresolved possible spend** (ADR-009): when the durable usage ledger
+       reports an ``in_flight`` reservation (an attempted call whose outcome is
+       unknown) or an unreadable/corrupt accounting, this optional call is
+       refused rather than admitted as if the unknown spend were zero. The
+       resolved amount used for the check then includes the conservative
+       estimated reservation of the unresolved attempt(s), so the summary reserve
+       is preserved even under a fail-closed stop. (This estimate is NOT a
+       physical billing bound on provider spend.)
 
     A disabled config (``enabled=False``) reproduces legacy behavior and always
-    permits the call so the fixed-round baseline is unchanged.
+    permits the call so the fixed-round baseline is unchanged and gains **no**
+    hidden new global limit.
     """
     if not getattr(config, "enabled", True):
         return True
     max_calls = int(getattr(config, "max_calls", 0))
     if remaining_calls(usage, max_calls) < 1:
         return False
-    used = usage or {}
-    used_tokens = int(used.get("tokens", 0))
-    used_seconds = float(used.get("seconds", 0.0))
+    usage = usage or {}
+    unresolved_tokens, unresolved_seconds, unresolved = unresolved_spend(usage)
+    if unresolved:
+        # Fail closed on unknown possible spend: do not execute a further
+        # OPTIONAL call while an attempt's outcome is unresolved.
+        return False
+    used = usage
+    used_tokens = int(used.get("tokens", 0)) + unresolved_tokens
+    used_seconds = float(used.get("seconds", 0.0)) + unresolved_seconds
     reserve_tokens = int(getattr(config, "reserved_summary_tokens", 0))
     reserve_seconds = float(getattr(config, "reserved_summary_seconds", 0.0))
     max_tokens = int(getattr(config, "max_tokens", 0))
@@ -342,6 +364,71 @@ def can_afford_optional_call(
     if max_tokens - used_tokens < reserve_tokens + call_tokens:
         return False
     return max_time - used_seconds >= reserve_seconds + call_seconds
+
+
+def can_afford_summary(
+    usage: Mapping[str, Any] | None,
+    config: Any,
+) -> bool:
+    """Admission for the MANDATORY Research Manager summary (ADR-009).
+
+    Distinct from :func:`can_afford_optional_call`: the summary *consumes* the
+    reserved summary allowance; it does not reserve a second optional call. So it
+    is admitted when the remaining budget still covers the **reserve only**
+    (``remaining >= reserved_summary_*``), NOT ``reserve + next_optional_call``.
+    Requiring an extra optional-call estimate would wrongly deny the summary
+    exactly when only the protected reserve remains — the case the reserve exists
+    for.
+
+    It still fails closed on unresolved possible spend (an unknown failed/in-flight
+    attempt, including a previous RM attempt) so an unknown structured-miss failure
+    is not retried against the same reserve. ``usage`` should be the combined
+    debate + research_manager scope (see
+    ``derive_debate_usage_from_events(..., phases=("debate", "research_manager"))``).
+    A call hard limit still applies: the summary must have a remaining logical call
+    slot, so a structured→free-text fallback cannot exceed the configured call cap.
+    A disabled config always admits (legacy behavior).
+    """
+    if not getattr(config, "enabled", True):
+        return True
+    usage = usage or {}
+    # The summary is one logical model call: require a remaining call slot.
+    max_calls = int(getattr(config, "max_calls", 0))
+    if max_calls and remaining_calls(usage, max_calls) < 1:
+        return False
+    unresolved_tokens, unresolved_seconds, unresolved = unresolved_spend(usage)
+    if unresolved:
+        # Fail closed: unknown possible spend => do NOT make (or retry) a summary.
+        return False
+    used_tokens = int(usage.get("tokens", 0)) + unresolved_tokens
+    used_seconds = float(usage.get("seconds", 0.0)) + unresolved_seconds
+    reserve_tokens = int(getattr(config, "reserved_summary_tokens", 0))
+    reserve_seconds = float(getattr(config, "reserved_summary_seconds", 0.0))
+    max_tokens = int(getattr(config, "max_tokens", 0))
+    max_time = float(getattr(config, "max_time", 0.0))
+    # The summary consumes the reserve itself; no second optional-call estimate.
+    if max_tokens - used_tokens < reserve_tokens:
+        return False
+    return max_time - used_seconds >= reserve_seconds
+
+
+def unresolved_spend(usage: Mapping[str, Any] | None) -> tuple[int, float, bool]:
+    """The conservative (tokens, seconds, is_unresolved) possible spend.
+
+    ``is_unresolved`` is true when the usage carries an explicit
+    ``unresolved_invocations`` count greater than zero or an
+    ``accounting_unreadable`` flag — i.e. the durable ledger could not resolve an
+    attempted invocation's outcome (an ``in_flight`` reservation) or could not be
+    read at all. The token/seconds values are the **estimated reservation** of those
+    attempts (NOT a physical billing bound and not proof the attempt reached the
+    provider); they are never ``0`` pretending the spend is free.
+    """
+    usage = usage or {}
+    count = int(usage.get("unresolved_invocations", 0) or 0)
+    unreadable = bool(usage.get("accounting_unreadable", False))
+    tokens = int(usage.get("unresolved_reserved_tokens", 0) or 0)
+    seconds = float(usage.get("unresolved_reserved_seconds", 0.0) or 0.0)
+    return tokens, seconds, bool(unreadable or count > 0)
 
 
 def budget_admission_decision(
@@ -673,6 +760,415 @@ def resolve_budget_config_from_state(
         "max_debate_rounds": state.get("max_debate_rounds"),
     }
     return resolve_debate_termination_config(root)
+
+
+# The whole-run aggregation completeness labels. ``complete`` means every
+# invocation's cost is known exactly; ``partial`` means at least one invocation
+# had an estimated/unknown-cost field (or an unresolved attempt); ``unknown``
+# means no invocation was accounted at all.
+COMPLETENESS_COMPLETE = "complete"
+COMPLETENESS_PARTIAL = "partial"
+COMPLETENESS_UNKNOWN = "unknown"
+
+# The phase labels the whole-run report breaks down (matches usage_ledger).
+WHOLE_RUN_PHASES = (
+    "analyst",
+    "structured_fallback",
+    "debate",
+    "research_manager",
+    "trader",
+    "risk",
+    "portfolio",
+)
+
+
+def empty_phase_usage() -> dict[str, Any]:
+    """A zeroed per-phase usage bucket (JSON-safe, honest provenance)."""
+    return {
+        "calls": 0,
+        "tokens": 0,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "seconds": 0.0,
+        "estimated": False,
+        "unknown_cost_calls": 0,
+        # Attempted-but-unconfirmed (in_flight) calls: NOT settled with known cost.
+        # Their ESTIMATED reservation is reported separately; they never prove an
+        # outbound call happened.
+        "reserved_unconfirmed_calls": 0,
+        "reserved_estimated_tokens": 0,
+        "reserved_estimated_seconds": 0.0,
+        "tokens_source": None,
+        "seconds_source": None,
+    }
+
+
+def aggregate_whole_run_usage(events: Any, unresolved: Any = None, *, accounting_unreadable: bool = False) -> dict[str, Any]:
+    """Aggregate settled ledger events (and unresolved reservations) into whole-run usage.
+
+    ``events`` is an iterable of :class:`~tradingagents.debate.usage_ledger.UsageEvent`
+    (or their ``to_dict`` forms). ``unresolved`` is the list of still-``in_flight``
+    reservations (attempted calls whose outcome is UNKNOWN — e.g. a crash between
+    the provider invocation and settlement). Their identities, phase and estimated
+    reservation are reported SEPARATELY as ``reserved_unconfirmed`` — they are
+    NOT counted as settled calls with known cost and do NOT by themselves prove an
+    outbound call happened. They DO force completeness to ``partial`` so a run can
+    never claim ``complete`` while possible billed spend is unresolved.
+
+    The result is **reporting only** — it never limits the debate budget and it
+    never silently widens the budget to analysts/risk nodes.
+
+    Returned structure (JSON-safe)::
+
+        {
+          "by_phase": {phase: {calls, tokens, ..., unknown_cost_calls,
+                               reserved_unconfirmed_calls,
+                               reserved_estimated_tokens, reserved_estimated_seconds}},
+          "totals": {...same shape, summed...},
+          "completeness": "complete" | "partial" | "unknown",
+          "settled_calls": int,                 # confirmed settled invocations
+          "reserved_unconfirmed_calls": int,    # in_flight reservations (unknown)
+          "unresolved_invocations": int,        # settled-unknown + reserved-unconfirmed
+          "reserved_unconfirmed": [ {invocation_id, phase, speaker,
+                                     reserved_estimated_tokens,
+                                     reserved_estimated_seconds}, ... ],
+          "transport_attempts": int | None,
+          "measured_call_count": int,
+          "provider_token_call_count": int,
+          "accounting_unreadable": bool,
+        }
+
+    Completeness is never fabricated: an estimate/unknown-cost settled call or ANY
+    unresolved reservation makes the run ``partial``; zero accounted calls is
+    ``unknown``; only all-exact calls with no unresolved reservation is
+    ``complete``. ``accounting_unreadable`` forces ``partial`` at best.
+    """
+    by_phase = {phase: empty_phase_usage() for phase in WHOLE_RUN_PHASES}
+    totals = empty_phase_usage()
+    resolved_events = [_event_as_dict(ev) for ev in (events or [])]
+    unresolved_list = [_reservation_as_dict(r) for r in (unresolved or [])]
+    unresolved_invocations = 0
+    measured_calls = 0
+    provider_calls = 0
+    transport_known = True
+    transport_total = 0
+    # Per-bucket token-source bookkeeping (report-only, ADR-009 amendment): track
+    # whether each bucket saw an estimated/unknown token contribution, so a bucket
+    # that mixes provider-exact and estimated tokens is labelled ``mixed`` (never
+    # falsely ``provider``). Not part of the persisted per-call provenance.
+    _token_estimated_buckets: dict[int, bool] = {}
+
+    def _mark_token_estimated(bucket: dict[str, Any]) -> None:
+        _token_estimated_buckets[id(bucket)] = True
+
+    for ev in resolved_events:
+        if ev is None:
+            continue
+        phase = str(ev.get("phase") or "unknown_phase")
+        if phase not in by_phase:
+            by_phase[phase] = empty_phase_usage()
+        bucket = by_phase[phase]
+        status = str(ev.get("status") or "")
+        total_tokens = ev.get("total_tokens")
+        tokens_source = str(ev.get("tokens_source") or SOURCE_UNAVAILABLE)
+        seconds = ev.get("seconds")
+        seconds_source = str(ev.get("seconds_source") or SOURCE_UNAVAILABLE)
+        unresolved = bool(ev.get("unresolved"))
+
+        bucket["calls"] += 1
+        totals["calls"] += 1
+        if unresolved:
+            unresolved_invocations += 1
+
+        if total_tokens is None or tokens_source in (SOURCE_UNAVAILABLE, SOURCE_MISSING):
+            # An unknown/failed cost is NEVER added as zero-known; it is counted
+            # as an unknown-cost call so the run is honestly ``partial``.
+            bucket["unknown_cost_calls"] += 1
+            totals["unknown_cost_calls"] += 1
+            bucket["estimated"] = True
+            totals["estimated"] = True
+            _mark_token_estimated(bucket)
+            _mark_token_estimated(totals)
+        else:
+            bucket["tokens"] += int(total_tokens)
+            totals["tokens"] += int(total_tokens)
+            if tokens_source == SOURCE_ESTIMATED:
+                bucket["estimated"] = True
+                totals["estimated"] = True
+                _mark_token_estimated(bucket)
+                _mark_token_estimated(totals)
+            elif tokens_source == SOURCE_PROVIDER:
+                provider_calls += 1
+                bucket["tokens_source"] = _merge_source(bucket["tokens_source"], SOURCE_PROVIDER)
+                totals["tokens_source"] = _merge_source(totals["tokens_source"], SOURCE_PROVIDER)
+            else:
+                bucket["estimated"] = True
+                totals["estimated"] = True
+                _mark_token_estimated(bucket)
+                _mark_token_estimated(totals)
+        in_tok = ev.get("input_tokens")
+        out_tok = ev.get("output_tokens")
+        if isinstance(in_tok, int):
+            bucket["input_tokens"] += in_tok
+            totals["input_tokens"] += in_tok
+        if isinstance(out_tok, int):
+            bucket["output_tokens"] += out_tok
+            totals["output_tokens"] += out_tok
+
+        if seconds is None or seconds_source in (SOURCE_UNAVAILABLE, SOURCE_MISSING):
+            bucket["seconds_source"] = _merge_source(bucket["seconds_source"], SOURCE_UNAVAILABLE)
+            totals["seconds_source"] = _merge_source(totals["seconds_source"], SOURCE_UNAVAILABLE)
+        else:
+            bucket["seconds"] += float(seconds)
+            totals["seconds"] += float(seconds)
+            if seconds_source == SOURCE_MEASURED:
+                measured_calls += 1
+                bucket["seconds_source"] = _merge_source(bucket["seconds_source"], SOURCE_MEASURED)
+                totals["seconds_source"] = _merge_source(totals["seconds_source"], SOURCE_MEASURED)
+            else:
+                bucket["estimated"] = True
+                totals["estimated"] = True
+                bucket["seconds_source"] = _merge_source(bucket["seconds_source"], SOURCE_ESTIMATED)
+                totals["seconds_source"] = _merge_source(totals["seconds_source"], SOURCE_ESTIMATED)
+
+        transport = ev.get("transport_attempts")
+        if isinstance(transport, int) and not isinstance(transport, bool):
+            transport_total += transport
+        else:
+            transport_known = False
+
+        if status not in (_CALL_STATUS_COMPLETED, "success"):
+            bucket["estimated"] = True
+            totals["estimated"] = True
+
+    # Unresolved (in_flight) reservations: attempted calls whose outcome is
+    # UNKNOWN. They are NOT settled calls with known cost and do NOT prove an
+    # outbound call happened; report them separately as reserved-unconfirmed.
+    reserved_unconfirmed: list[dict[str, Any]] = []
+    for res in unresolved_list:
+        if res is None:
+            continue
+        phase = str(res.get("phase") or "unknown_phase")
+        if phase not in by_phase:
+            by_phase[phase] = empty_phase_usage()
+        bucket = by_phase[phase]
+        res_tokens = int(res.get("reserved_tokens", 0) or 0)
+        res_seconds = float(res.get("reserved_seconds", 0.0) or 0.0)
+        bucket["reserved_unconfirmed_calls"] += 1
+        totals["reserved_unconfirmed_calls"] += 1
+        bucket["reserved_estimated_tokens"] += res_tokens
+        totals["reserved_estimated_tokens"] += res_tokens
+        bucket["reserved_estimated_seconds"] += res_seconds
+        totals["reserved_estimated_seconds"] += res_seconds
+        reserved_unconfirmed.append(
+            {
+                "invocation_id": str(res.get("invocation_id") or ""),
+                "phase": phase,
+                "speaker": str(res.get("speaker") or ""),
+                "reserved_estimated_tokens": res_tokens,
+                "reserved_estimated_seconds": res_seconds,
+            }
+        )
+    # An unresolved reservation is possible billed spend: it makes the run
+    # partial so it can never claim complete while an attempt is unresolved.
+    reserved_count = totals["reserved_unconfirmed_calls"]
+
+    # Report-only mixed-label finalize (ADR-009 amendment, Defect-2): a bucket
+    # whose token total combines provider-exact and estimated/unknown contributions
+    # must NOT be labelled ``provider``. Relabel it ``mixed``; a bucket with only
+    # estimated contributions is ``estimated``; a genuine all-provider bucket keeps
+    # ``provider``. The KNOWN token sums are unchanged (no omitted known tokens).
+    def _finalize_token_label(bucket: dict[str, Any]) -> None:
+        source = bucket.get("tokens_source")
+        saw_estimated = _token_estimated_buckets.get(id(bucket), False)
+        if source == SOURCE_PROVIDER and saw_estimated:
+            bucket["tokens_source"] = SOURCE_MIXED
+        elif source is None and saw_estimated and bucket.get("tokens", 0) > 0:
+            bucket["tokens_source"] = SOURCE_ESTIMATED
+
+    for bucket in by_phase.values():
+        _finalize_token_label(bucket)
+    _finalize_token_label(totals)
+
+    if totals["calls"] == 0 and reserved_count == 0 and not accounting_unreadable:
+        completeness = COMPLETENESS_UNKNOWN
+    elif (
+        totals["estimated"]
+        or totals["unknown_cost_calls"] > 0
+        or unresolved_invocations > 0
+        or reserved_count > 0
+        or accounting_unreadable
+    ):
+        completeness = COMPLETENESS_PARTIAL
+    else:
+        completeness = COMPLETENESS_COMPLETE
+
+    return {
+        "by_phase": by_phase,
+        "totals": totals,
+        "completeness": completeness,
+        "settled_calls": totals["calls"],
+        "reserved_unconfirmed_calls": reserved_count,
+        "unresolved_invocations": unresolved_invocations + reserved_count,
+        "reserved_unconfirmed": reserved_unconfirmed,
+        "transport_attempts": transport_total if transport_known and totals["calls"] else None,
+        "measured_call_count": measured_calls,
+        "provider_token_call_count": provider_calls,
+        "accounting_unreadable": bool(accounting_unreadable),
+    }
+
+
+def _reservation_as_dict(reservation: Any) -> dict[str, Any] | None:
+    if isinstance(reservation, Mapping):
+        return dict(reservation)
+    to_dict = getattr(reservation, "to_dict", None)
+    if callable(to_dict):
+        try:
+            value = to_dict()
+        except Exception:  # noqa: BLE001 — a bad reservation is skipped, not zeroed
+            return None
+        return dict(value) if isinstance(value, Mapping) else None
+    return None
+
+
+def derive_debate_usage_from_events(
+    events: Any,
+    *,
+    unresolved: Any = None,
+    accounting_unreadable: bool = False,
+    phases: Any = ("debate",),
+) -> dict[str, Any]:
+    """Derive a budget-scoped usage dict from settled ledger events.
+
+    This is the reconciliation primitive: on resume the graph builds
+    ``debate_usage`` from the durable ledger for the run (idempotent — the same
+    rows always yield the same totals; nothing is added twice). Only events whose
+    ``phase`` is in ``phases`` feed the budget; every other phase is excluded so
+    a debate limit is never silently widened to analysts/risk. The default
+    ``phases=("debate",)`` reproduces the debate-scoped usage; the summary
+    admission passes ``phases=("debate", "research_manager")`` so a prior RM
+    (summary) attempt — including a failed structured summary — taints fallback
+    admission and is accounted, without widening the debate limit.
+
+    ``unresolved`` is the list of ``in_flight`` reservations (unknown possible
+    spend); their conservative estimated reservation is recorded in
+    ``unresolved_reserved_tokens``/``unresolved_reserved_seconds`` and the count in
+    ``unresolved_invocations`` so the admission guards fail closed.
+    ``accounting_unreadable`` is set when the ledger could not be read at all.
+    """
+    phase_set = frozenset(phases)
+    usage = empty_usage()
+    provenance = dict(usage["provenance"])
+    input_tokens = 0
+    output_tokens = 0
+    input_partial = False
+    output_partial = False
+    delta_flags: dict[str, Any] = {}
+    unknown_failed_calls = 0
+    for ev in (_event_as_dict(ev) for ev in (events or [])):
+        if ev is None:
+            continue
+        if str(ev.get("phase") or "") not in phase_set:
+            continue
+        status = str(ev.get("status") or "")
+        usage["calls"] = int(usage["calls"]) + 1
+        if status not in (_CALL_STATUS_COMPLETED, "success"):
+            usage["failed_calls"] = int(usage["failed_calls"]) + 1
+        total_tokens = ev.get("total_tokens")
+        tokens_source = str(ev.get("tokens_source") or SOURCE_UNAVAILABLE)
+        seconds = ev.get("seconds")
+        seconds_source = str(ev.get("seconds_source") or SOURCE_UNAVAILABLE)
+        tokens_known = isinstance(total_tokens, int) and tokens_source not in (
+            SOURCE_UNAVAILABLE,
+            SOURCE_MISSING,
+        )
+        if isinstance(total_tokens, int):
+            # KNOWN partial sums are preserved; an unknown event is excluded from
+            # the known total and counted separately (never zero-known).
+            usage["tokens"] = int(usage["tokens"]) + int(total_tokens)
+            if tokens_source == SOURCE_ESTIMATED:
+                usage["estimated"] = True
+            provenance["tokens"] = (
+                "derived_conflicted"
+                if ev.get("provider_conflict")
+                else _merge_source(provenance.get("tokens"), tokens_source)
+            )
+        else:
+            usage["estimated"] = True
+            provenance["tokens"] = _merge_source(provenance.get("tokens"), SOURCE_UNAVAILABLE)
+        # A settled event that is unresolved (failed/invalid-clock) OR whose token
+        # cost is unknown must stay a fail-closed unknown, even though it is a
+        # settled row: it is NOT an in_flight reservation but it is equally an
+        # unknown possible spend.
+        if bool(ev.get("unresolved")) or not tokens_known:
+            unknown_failed_calls += 1
+        in_tok = ev.get("input_tokens")
+        out_tok = ev.get("output_tokens")
+        in_src = ev.get("input_tokens_source")
+        out_src = ev.get("output_tokens_source")
+        if isinstance(in_tok, int):
+            input_tokens += in_tok
+            # Honor the side's OWN provenance: a filled estimate is never relabelled
+            # provider. Fall back to provider only when no per-side label exists.
+            provenance["input_tokens"] = _merge_source(
+                provenance.get("input_tokens"), in_src or SOURCE_PROVIDER
+            )
+        else:
+            input_partial = True
+        if isinstance(out_tok, int):
+            output_tokens += out_tok
+            provenance["output_tokens"] = _merge_source(
+                provenance.get("output_tokens"), out_src or SOURCE_PROVIDER
+            )
+        else:
+            output_partial = True
+        if isinstance(seconds, (int, float)) and not isinstance(seconds, bool) and seconds_source != SOURCE_UNAVAILABLE:
+            usage["seconds"] = float(usage["seconds"]) + float(seconds)
+            usage["clock"] = "measured" if seconds_source == SOURCE_MEASURED else "mixed"
+            provenance["seconds"] = _merge_source(provenance.get("seconds"), seconds_source)
+        else:
+            provenance["seconds"] = _merge_source(provenance.get("seconds"), SOURCE_UNAVAILABLE)
+            usage["clock"] = "unavailable"
+
+    usage["input_tokens"] = input_tokens
+    usage["output_tokens"] = output_tokens
+    if input_partial:
+        delta_flags["input_tokens_partial"] = True
+    if output_partial:
+        delta_flags["output_tokens_partial"] = True
+    usage["provenance"] = provenance
+    usage.update(delta_flags)
+
+    unresolved_list = list(unresolved or [])
+    # A settled-but-unresolved (failed/invalid-clock/unknown-cost) debate call is
+    # an equally fail-closed unknown: it contributes to unresolved_invocations so
+    # can_afford_optional_call refuses a further OPTIONAL call. The known partial
+    # sums above are preserved; only the UNKNOWN portion is left unquantified.
+    usage["unresolved_invocations"] = len(unresolved_list) + unknown_failed_calls
+    usage["unresolved_reserved_tokens"] = sum(
+        int(getattr(r, "reserved_tokens", 0) or 0) for r in unresolved_list
+    )
+    usage["unresolved_reserved_seconds"] = sum(
+        float(getattr(r, "reserved_seconds", 0.0) or 0.0) for r in unresolved_list
+    )
+    if unknown_failed_calls:
+        usage["unknown_failed_debate_calls"] = unknown_failed_calls
+    if accounting_unreadable:
+        usage["accounting_unreadable"] = True
+    return _with_legacy_estimated(usage)
+
+
+def _event_as_dict(event: Any) -> dict[str, Any] | None:
+    if isinstance(event, Mapping):
+        return dict(event)
+    to_dict = getattr(event, "to_dict", None)
+    if callable(to_dict):
+        try:
+            value = to_dict()
+        except Exception:  # noqa: BLE001 — a bad event is skipped, not zeroed
+            return None
+        return dict(value) if isinstance(value, Mapping) else None
+    return None
 
 
 class UsageTracker:

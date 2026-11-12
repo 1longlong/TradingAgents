@@ -133,9 +133,21 @@ class StopReason(str, Enum):
 
 
 def _norm_confidence(value: float) -> float:
-    """Validate a confidence is in ``[0, 1]``; raise otherwise."""
+    """Validate a confidence is a finite non-bool number in ``[0, 1]``; raise otherwise.
+
+    A ``bool`` (``True``/``False``) is rejected rather than launderable via
+    ``float(True) == 1.0``: a malformed boolean/bool-like input must never become a
+    valid numeric confidence (ADR-011).
+    """
+    if isinstance(value, bool):
+        raise ValueError(f"confidence must be a number, got bool {value!r}")
     confidence = float(value)
-    if confidence != confidence or confidence < 0.0 or confidence > 1.0:
+    if (
+        confidence != confidence
+        or confidence in (float("inf"), float("-inf"))
+        or confidence < 0.0
+        or confidence > 1.0
+    ):
         raise ValueError(f"confidence must be in [0, 1], got {value!r}")
     return confidence
 
@@ -148,6 +160,133 @@ def _norm_float(value: Any) -> float:
     return result
 
 
+# The exact-claim contract version (ADR-010). Versioned so a consumer can tell
+# which claim semantics an envelope was produced under; an unknown version is
+# unverifiable (fail closed), never coerced.
+CLAIM_SCHEMA_VERSION = "1.0"
+
+
+@dataclass(frozen=True)
+class ClaimRecord:
+    """A single typed, exact claim (ADR-010), validated against cited evidence.
+
+    This is the *additive, versioned* exact-claim envelope. It is deliberately
+    separate from the readable ``claim`` string: the typed fields are what a
+    deterministic validator compares against the actual manifest record and typed
+    origin metadata, so a correct cited ID cannot launder a wrong exact date,
+    value, or unit.
+
+    All fields default to empty/None so a partial or legacy envelope round-trips;
+    an incomplete envelope fails validation closed (``unverified``/``rejected``),
+    never guessed. ``value`` is stored as a JSON-safe string (a ``Decimal`` at
+    use), and a NaN/bool/unknown value is represented as ``None`` (absent), never
+    coerced to a number.
+    """
+
+    evidence_ids: list[str] = field(default_factory=list)
+    metric: str = ""
+    date_role: str = ""
+    date: str = ""
+    value: str | None = None
+    unit: str = ""
+    currency: str = ""
+    value_scale: str | None = None
+    schema_version: str = CLAIM_SCHEMA_VERSION
+    # Validity flags distinguish an ASSERTED-but-invalid constraint (which must be
+    # REJECTED, never dropped) from an OMITTED one (absent). A malformed value or
+    # scale sets the flag and is never silently treated as base/omitted.
+    value_invalid: bool = False
+    value_scale_invalid: bool = False
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "evidence_ids", list(self.evidence_ids or []))
+        object.__setattr__(self, "metric", str(self.metric or "").strip())
+        object.__setattr__(self, "date_role", str(self.date_role or "").strip().lower())
+        object.__setattr__(self, "date", str(self.date or "").strip())
+        # A bool/NaN/inf/non-numeric value is NOT a numeric magnitude. It is kept
+        # as the original raw text AND flagged invalid so the validator can REJECT
+        # it explicitly rather than the parser silently dropping the constraint.
+        value_invalid = bool(self.value_invalid)
+        if self.value is None:
+            normalized_value = None
+        elif isinstance(self.value, bool):
+            normalized_value = "true" if self.value else "false"
+            value_invalid = True
+        else:
+            from tradingagents.evidence.models import quantize_decimal
+
+            quantized = quantize_decimal(self.value)
+            if quantized is not None:
+                normalized_value = str(quantized)
+            else:
+                normalized_value = str(self.value).strip()
+                value_invalid = True
+        object.__setattr__(self, "value", normalized_value)
+        object.__setattr__(self, "value_invalid", value_invalid)
+        object.__setattr__(self, "unit", str(self.unit or "").strip())
+        object.__setattr__(self, "currency", str(self.currency or "").strip().upper())
+        scale = self.value_scale
+        scale_invalid = bool(self.value_scale_invalid)
+        if scale is None:
+            object.__setattr__(self, "value_scale", None)
+        else:
+            from tradingagents.evidence.origin import _normalize_scale
+
+            normalized_scale = _normalize_scale(scale)
+            if normalized_scale is not None:
+                object.__setattr__(self, "value_scale", str(normalized_scale))
+            else:
+                # Asserted-but-invalid scale: keep the raw for audit, flag invalid.
+                object.__setattr__(self, "value_scale", str(scale).strip())
+                scale_invalid = True
+        object.__setattr__(self, "value_scale_invalid", scale_invalid)
+        object.__setattr__(self, "schema_version", str(self.schema_version or ""))
+
+    @property
+    def has_typed_constraint(self) -> bool:
+        """True iff the envelope carries at least one typed exact constraint."""
+        return bool(
+            self.metric
+            or self.date_role
+            or self.date
+            or self.value is not None
+            or self.value_invalid
+            or self.value_scale_invalid
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "evidence_ids": list(self.evidence_ids),
+            "metric": self.metric,
+            "date_role": self.date_role,
+            "date": self.date,
+            "value": self.value,
+            "unit": self.unit,
+            "currency": self.currency,
+            "value_scale": self.value_scale,
+            "schema_version": self.schema_version,
+            "value_invalid": self.value_invalid,
+            "value_scale_invalid": self.value_scale_invalid,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ClaimRecord:
+        data = data or {}
+        return cls(
+            evidence_ids=list(data.get("evidence_ids", []) or []),
+            metric=str(data.get("metric", "") or ""),
+            date_role=str(data.get("date_role", "") or ""),
+            date=str(data.get("date", "") or ""),
+            value=data.get("value"),
+            unit=str(data.get("unit", "") or ""),
+            currency=str(data.get("currency", "") or ""),
+            value_scale=data.get("value_scale"),
+            schema_version=str(data.get("schema_version", CLAIM_SCHEMA_VERSION) or ""),
+            value_invalid=bool(data.get("value_invalid", False)),
+            value_scale_invalid=bool(data.get("value_scale_invalid", False)),
+        )
+
+
 @dataclass(frozen=True)
 class ClaimEvidenceLink:
     """A single new claim plus the evidence IDs it explicitly cites.
@@ -157,26 +296,42 @@ class ClaimEvidenceLink:
     is the bounded set the author linked to this claim; an ID that merely
     appears in the turn's prose or general citation list but is not linked here
     never counts as new.
+
+    ``exact_claim`` (ADR-010) is an optional typed :class:`ClaimRecord` parsed
+    from the structured marker. When present, the cited IDs only count as
+    verified new evidence if that exact claim validates against the record; a
+    claim with no ``exact_claim`` stays the legacy (untyped, unverified) form and
+    is not treated as verified exact evidence.
     """
 
     claim: str
     evidence_ids: list[str]
+    exact_claim: ClaimRecord | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "claim", str(self.claim))
         object.__setattr__(self, "evidence_ids", list(self.evidence_ids or []))
+        if isinstance(self.exact_claim, dict):
+            object.__setattr__(self, "exact_claim", ClaimRecord.from_dict(self.exact_claim))
+        elif self.exact_claim is not None and not isinstance(self.exact_claim, ClaimRecord):
+            object.__setattr__(self, "exact_claim", None)
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "claim": self.claim,
             "evidence_ids": list(self.evidence_ids),
         }
+        if self.exact_claim is not None:
+            payload["exact_claim"] = self.exact_claim.to_dict()
+        return payload
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ClaimEvidenceLink:
+        raw_exact = data.get("exact_claim")
         return cls(
             claim=str(data.get("claim", "")),
             evidence_ids=list(data.get("evidence_ids", [])),
+            exact_claim=ClaimRecord.from_dict(raw_exact) if isinstance(raw_exact, dict) else None,
         )
 
 
@@ -209,6 +364,18 @@ class DebateTurn:
     unresolved_questions: list[str] = field(default_factory=list)
     conflict_assertions: list[ConflictAssertion] = field(default_factory=list)
     metadata_parse_status: MetadataParseStatus = MetadataParseStatus.OK
+    # ADR-010: typed exact claims extracted from the structured ``claim:`` marker
+    # and/or the conservative prose parser. Additive/optional; empty for a legacy
+    # or qualitative turn, in which case behavior is exactly as before.
+    exact_claims: list[ClaimRecord] = field(default_factory=list)
+    # ADR-010 amendment (2026-11-12): honest coverage of standalone typed-claim
+    # recovery. ``unparsed_typed_claim_count`` is the number of typed-looking
+    # ``claim=`` lines that did NOT parse strictly (surfaced, never silently
+    # dropped). ``standalone_typed_claim_count`` is how many standalone typed lines
+    # were seen at all. Both are 0 for a legacy/qualitative turn (unchanged
+    # behavior) and serialized so a resume/report keeps the honest picture.
+    standalone_typed_claim_count: int = 0
+    unparsed_typed_claim_count: int = 0
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "speaker", str(self.speaker))
@@ -231,6 +398,19 @@ class DebateTurn:
             self,
             "conflict_assertions",
             list(self.conflict_assertions or []),
+        )
+        normalized_exact: list[ClaimRecord] = []
+        for raw in self.exact_claims or []:
+            if isinstance(raw, ClaimRecord):
+                normalized_exact.append(raw)
+            elif isinstance(raw, dict):
+                normalized_exact.append(ClaimRecord.from_dict(raw))
+        object.__setattr__(self, "exact_claims", normalized_exact)
+        object.__setattr__(
+            self, "standalone_typed_claim_count", int(self.standalone_typed_claim_count or 0)
+        )
+        object.__setattr__(
+            self, "unparsed_typed_claim_count", int(self.unparsed_typed_claim_count or 0)
         )
         if not isinstance(self.metadata_parse_status, MetadataParseStatus):
             object.__setattr__(
@@ -259,7 +439,16 @@ class DebateTurn:
             "unresolved_questions": list(self.unresolved_questions),
             "conflict_assertions": [a.to_dict() for a in self.conflict_assertions],
             "metadata_parse_status": self.metadata_parse_status.value,
+            "exact_claims": [c.to_dict() for c in self.exact_claims],
+            "standalone_typed_claim_count": self.standalone_typed_claim_count,
+            "unparsed_typed_claim_count": self.unparsed_typed_claim_count,
         }
+
+    def exact_claims_for_evidence(self, evidence_id: str) -> list[ClaimRecord]:
+        """Typed exact claims whose cited id set includes ``evidence_id``."""
+        return [
+            c for c in self.exact_claims if evidence_id in (c.evidence_ids or [])
+        ]
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> DebateTurn:
@@ -268,7 +457,7 @@ class DebateTurn:
             speaker=str(data.get("speaker", "")),
             content=str(data.get("content", "")),
             stance=Stance(data.get("stance", Stance.HOLD.value)),
-            confidence=float(data.get("confidence", 0.0)),
+            confidence=data.get("confidence", 0.0),
             cited_evidence_ids=list(data.get("cited_evidence_ids", [])),
             addressed_conflict_ids=list(data.get("addressed_conflict_ids", [])),
             new_claims=list(data.get("new_claims", [])),
@@ -284,6 +473,11 @@ class DebateTurn:
             metadata_parse_status=MetadataParseStatus(
                 data.get("metadata_parse_status", MetadataParseStatus.OK.value)
             ),
+            exact_claims=[
+                ClaimRecord.from_dict(c) for c in data.get("exact_claims", []) or []
+            ],
+            standalone_typed_claim_count=int(data.get("standalone_typed_claim_count", 0) or 0),
+            unparsed_typed_claim_count=int(data.get("unparsed_typed_claim_count", 0) or 0),
         )
 
 
@@ -499,17 +693,20 @@ class ConflictSummary:
     open_blocking_count: int = 0
     conflicts: list[ConflictRecord] = field(default_factory=list)
     resolution_notes: list[str] = field(default_factory=list)
+    denials: list[str] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "open_blocking_count", int(self.open_blocking_count))
         object.__setattr__(self, "conflicts", list(self.conflicts or []))
         object.__setattr__(self, "resolution_notes", list(self.resolution_notes or []))
+        object.__setattr__(self, "denials", list(self.denials or []))
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "open_blocking_count": self.open_blocking_count,
             "conflicts": [c.to_dict() for c in self.conflicts],
             "resolution_notes": list(self.resolution_notes),
+            "denials": list(self.denials),
         }
 
     @classmethod
@@ -522,6 +719,7 @@ class ConflictSummary:
                 for raw in data.get("conflicts", []) or []
             ],
             resolution_notes=list(data.get("resolution_notes", []) or []),
+            denials=list(data.get("denials", []) or []),
         )
 
     def to_prompt_block(self) -> str:
@@ -543,6 +741,11 @@ class ConflictSummary:
             )
         for note in self.resolution_notes:
             lines.append(f"- resolved/escalated: {note}")
+        # ADR-010: a rejected observation/resolution that cited invalid evidence
+        # did NOT change the tracked record; surface the denial so the manager does
+        # not treat it as convergence.
+        for denial in self.denials:
+            lines.append(f"- REJECTED (invalid evidence; record kept): {denial}")
         return "\n".join(lines)
 
 
@@ -574,7 +777,7 @@ class StanceSnapshot:
     def from_dict(cls, data: dict[str, Any]) -> StanceSnapshot:
         return cls(
             stance=Stance(data.get("stance", Stance.HOLD.value)),
-            confidence=float(data.get("confidence", 0.0)),
+            confidence=data.get("confidence", 0.0),
             core_evidence_ids=list(data.get("core_evidence_ids", [])),
             core_reasons=list(data.get("core_reasons", [])),
         )

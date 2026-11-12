@@ -33,7 +33,19 @@ from tradingagents.agents.utils.output_guard import is_blocked_run
 from tradingagents.dataflows.config import set_config
 from tradingagents.dataflows.utils import get_current_date, safe_ticker_component
 from tradingagents.debate.config import resolve_debate_termination_config
+from tradingagents.debate.usage_capture import (
+    UsageCapture,
+    use_usage_capture,
+)
+from tradingagents.debate.usage_ledger import (
+    LedgerError,
+    UsageLedger,
+    ledger_path_for_results_dir,
+    new_run_id,
+    policy_signature,
+)
 from tradingagents.default_config import DEFAULT_CONFIG
+from tradingagents.evidence.ingest import use_collector
 from tradingagents.llm_clients import create_llm_client
 from tradingagents.reporting import write_report_tree
 
@@ -45,6 +57,46 @@ from .setup import GraphSetup
 from .signal_processing import SignalProcessor
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_usage_run_identity(results_dir, company_name, trade_date, prior_state):
+    """Module-level ADR-009 execution identity resolver.
+
+    Kept module-level (not only a method) so it works even when the graph class is
+    exercised via a lightweight test double: a RESUME reuses the persisted
+    ``run_id`` (same execution keeps its own spend); a genuinely fresh run mints a
+    new identity (never inheriting a prior finished run's spend). Returns
+    ``(run_id, ledger_path)``.
+    """
+    ledger_path = ledger_path_for_results_dir(results_dir, company_name, str(trade_date))
+    if isinstance(prior_state, dict):
+        prior_run_id = prior_state.get("run_id")
+        if isinstance(prior_run_id, str) and prior_run_id:
+            return prior_run_id, prior_state.get("usage_ledger_path") or ledger_path
+    return new_run_id(company_name, str(trade_date)), ledger_path
+
+
+def _open_usage_ledger(ledger_path, *, strict_resume: bool = False):
+    """Module-level ADR-009 ledger opener (fresh create vs strict resume).
+
+    A FRESH run opens/creates the ledger. A RESUME opens the EXISTING ledger
+    strictly: a missing file / absent run row raises and yields ``None`` so the
+    caller keeps accounting unreadable (fail closed) rather than initializing a
+    replacement and resetting spend to zero.
+    """
+    if not ledger_path:
+        return None
+    try:
+        if strict_resume:
+            from tradingagents.debate.usage_ledger import open_ledger_strict
+
+            return open_ledger_strict(ledger_path)
+        return UsageLedger(ledger_path)
+    except (LedgerError, OSError) as exc:
+        logger.warning(
+            "Could not open usage ledger (%s); accounting unreadable", type(exc).__name__
+        )
+        return None
 
 
 def _validate_trade_date(trade_date) -> str:
@@ -500,6 +552,187 @@ class TradingAgentsGraph:
         """
         return None if self._resuming else init_state
 
+    def _usage_run_identity(self, company_name, trade_date, prior_state):
+        """Resolve the ADR-009 execution identity for this run (fresh vs resume).
+
+        Delegates to the module-level resolver so the CLI and the graph share one
+        implementation. A RESUME reuses the persisted ``run_id``; a genuinely
+        fresh run mints a new identity. Returns ``(run_id, ledger_path)``.
+        """
+        return _resolve_usage_run_identity(
+            self.config.get("results_dir"), company_name, trade_date, prior_state
+        )
+
+    def _sanitize_confidence_on_resume(self, args: dict[str, Any], prior_state: dict[str, Any]) -> None:
+        """Cap prior persisted confidence on a degraded resume, FAIL CLOSED.
+
+        Builds a bounded state delta that caps every persisted debate turn's
+        numeric confidence and readable content, every stance snapshot's
+        confidence, the readable analyst reports / debate histories / risk
+        histories and the stored plans/decisions, then applies it with
+        ``graph.update_state`` so the NEXT node reads the sanitized values.
+
+        FAIL CLOSED: if building or applying the sanitized delta raises while the
+        verdict is degraded, the exception is RE-RAISED so the caller refuses to
+        run the resumed graph (deterministic safe outcome) — an overconfident
+        legacy checkpoint is never silently continued. A non-degraded verdict is
+        untouched. The operation is idempotent (capped values carry no over-cap
+        token) and never duplicates audit entries.
+        """
+        from tradingagents.debate.confidence_policy import current_trusted_verdict
+
+        verdict = current_trusted_verdict(prior_state)
+        if verdict != "degraded":
+            return
+        delta = self._build_confidence_sanitize_delta(prior_state)
+        if not delta:
+            return
+        # Raises (and MUST propagate) if update_state fails: the resumed graph
+        # must not run against an unsanitized overconfident checkpoint.
+        self.graph.update_state(args.get("config"), delta)
+
+    @staticmethod
+    def _build_confidence_sanitize_delta(prior_state: dict[str, Any]) -> dict[str, Any]:
+        """The state delta that caps persisted confidence on a degraded resume.
+
+        Preserves per-boundary / per-turn raw+effective+reason provenance (via the
+        confidence policy sanitizers), quarantines invalid legacy numerics, and
+        sanitizes the analyst reports + debate/risk histories that downstream nodes
+        read into their prompts. Audit entries are merged (deduped by identity) so a
+        repeated safe resume does not duplicate them.
+        """
+        from tradingagents.debate.confidence_policy import (
+            boundary_id,
+            merge_audit,
+            sanitize_persisted_numeric,
+            sanitize_persisted_text,
+        )
+
+        delta: dict[str, Any] = {}
+        new_audit: list[dict[str, Any]] = []
+
+        debate = prior_state.get("investment_debate_state")
+        if isinstance(debate, dict):
+            new_debate = dict(debate)
+            turns = debate.get("turns")
+            if isinstance(turns, list):
+                capped_turns = []
+                for index, turn in enumerate(turns):
+                    if isinstance(turn, dict):
+                        new_turn = dict(turn)
+                        speaker = str(new_turn.get("speaker", "") or "debate")
+                        value, entry = sanitize_persisted_numeric(
+                            new_turn.get("confidence"),
+                            source=speaker,
+                            boundary=boundary_id("resume_turn_numeric", speaker, index),
+                        )
+                        new_turn["confidence"] = value
+                        if entry is not None:
+                            new_audit.append(entry)
+                        if isinstance(new_turn.get("content"), str):
+                            text, entries = sanitize_persisted_text(
+                                new_turn["content"],
+                                source=speaker,
+                                boundary=boundary_id("resume_turn_text", speaker, index),
+                            )
+                            new_turn["content"] = text
+                            new_audit.extend(entries)
+                        capped_turns.append(new_turn)
+                    else:
+                        capped_turns.append(turn)
+                new_debate["turns"] = capped_turns
+            stances = debate.get("stances")
+            if isinstance(stances, dict):
+                new_stances = {}
+                for speaker, snap in stances.items():
+                    if isinstance(snap, dict):
+                        new_snap = dict(snap)
+                        value, entry = sanitize_persisted_numeric(
+                            new_snap.get("confidence"),
+                            source=str(speaker),
+                            boundary=boundary_id("resume_stance", str(speaker)),
+                        )
+                        new_snap["confidence"] = value
+                        if entry is not None:
+                            new_audit.append(entry)
+                        new_stances[speaker] = new_snap
+                    else:
+                        new_stances[speaker] = snap
+                new_debate["stances"] = new_stances
+            for hist_key in ("history", "bull_history", "bear_history", "current_response", "judge_decision"):
+                if isinstance(new_debate.get(hist_key), str):
+                    text, entries = sanitize_persisted_text(
+                        new_debate[hist_key],
+                        source="debate",
+                        boundary=boundary_id("resume_debate_history", hist_key),
+                    )
+                    new_debate[hist_key] = text
+                    new_audit.extend(entries)
+            delta["investment_debate_state"] = new_debate
+
+        # Analyst reports are read into downstream prompts (e.g. trader).
+        for report_key in ("market_report", "sentiment_report", "news_report", "fundamentals_report"):
+            if isinstance(prior_state.get(report_key), str):
+                text, entries = sanitize_persisted_text(
+                    prior_state[report_key],
+                    source="report",
+                    boundary=boundary_id("resume_analyst_report", report_key),
+                )
+                delta[report_key] = text
+                new_audit.extend(entries)
+
+        for text_key in ("investment_plan", "trader_investment_plan", "final_trade_decision"):
+            if isinstance(prior_state.get(text_key), str):
+                text, entries = sanitize_persisted_text(
+                    prior_state[text_key],
+                    source="plan",
+                    boundary=boundary_id("resume_plan", text_key),
+                )
+                delta[text_key] = text
+                new_audit.extend(entries)
+
+        risk = prior_state.get("risk_debate_state")
+        if isinstance(risk, dict):
+            new_risk = dict(risk)
+            for hist_key in (
+                "history", "aggressive_history", "conservative_history",
+                "neutral_history", "current_aggressive_response",
+                "current_conservative_response", "current_neutral_response",
+                "judge_decision",
+            ):
+                if isinstance(new_risk.get(hist_key), str):
+                    text, entries = sanitize_persisted_text(
+                        new_risk[hist_key],
+                        source="risk",
+                        boundary=boundary_id("resume_risk_history", hist_key),
+                    )
+                    new_risk[hist_key] = text
+                    new_audit.extend(entries)
+            delta["risk_debate_state"] = new_risk
+
+        if new_audit:
+            delta["confidence_cap_audit"] = merge_audit(
+                prior_state.get("confidence_cap_audit"), new_audit
+            )
+        return delta
+
+    def _read_checkpoint_state(self, args: dict[str, Any]) -> dict[str, Any] | None:
+        """The latest saved graph state for the current checkpoint thread, or None.
+
+        Used to re-seed the evidence collector on a resume so a new tool call
+        appends after the already-captured evidence instead of overwriting an
+        index-0 attempt/record. Never raises: a read failure yields ``None`` and
+        the collector simply starts empty (capture is still persisted going
+        forward).
+        """
+        try:
+            snapshot = self.graph.get_state(args.get("config"))
+            values = getattr(snapshot, "values", None)
+            return dict(values) if isinstance(values, dict) else None
+        except Exception as exc:  # noqa: BLE001 — a read miss must not block resume
+            logger.warning("Could not read checkpoint state to seed collector: %s", exc)
+            return None
+
     def end_checkpoint(self):
         """Restore the plain uncheckpointed graph after a checkpointed run."""
         if self._checkpointer_ctx is not None:
@@ -539,13 +772,17 @@ class TradingAgentsGraph:
             )
         return write_report_tree(final_state, ticker, save_path)
 
-    def create_run_state(self, company_name, trade_date, asset_type: str = "stock", portfolio=None):
+    def create_run_state(self, company_name, trade_date, asset_type: str = "stock", portfolio=None,
+                         run_id: str | None = None, usage_ledger_path: str | None = None):
         """Build a run's initial state; propagate() and the CLI both start here.
 
         Settles this ticker's pending decisions first, then injects the lessons
         known by the trade date for the Portfolio Manager (#1251) and the
         resolved instrument identity for every agent (#814). An entry point that
         assembled the state itself would skip the decision log.
+
+        ``run_id``/``usage_ledger_path`` (ADR-009) carry the execution identity so
+        the usage capture scopes spend to exactly this execution.
         """
         self._resolve_pending_entries(company_name)
         return self.propagator.create_initial_state(
@@ -558,6 +795,8 @@ class TradingAgentsGraph:
             instrument_context=self.resolve_instrument_context(company_name, asset_type, trade_date),
             portfolio_context=portfolio.render(company_name) if portfolio is not None else "",
             results_dir=self.config.get("results_dir", "") or "",
+            run_id=run_id,
+            usage_ledger_path=usage_ledger_path,
         )
 
     def settle_pending(self, company_name):
@@ -594,6 +833,19 @@ class TradingAgentsGraph:
         if not decision:
             logger.warning("No final decision for %s on %s; nothing logged", company_name, trade_date)
             return
+        # ADR-010: enforce at the memory boundary too — a rejected exact fact must
+        # never be persisted as a trusted decision even if it slipped through.
+        from tradingagents.agents.utils.output_guard import enforce_trusted_boundary
+
+        decision = enforce_trusted_boundary(decision, final_state)
+        # ADR-011: the memory decision must carry the trusted EFFECTIVE confidence
+        # (a degraded run's raw over-cap confidence is never persisted).
+        from tradingagents.debate.confidence_policy import cap_agent_text
+
+        decision, _cap_entries = cap_agent_text(
+            decision, final_state,
+            source="memory", boundary="memory_decision",
+        )
         self.memory_log.store_decision(
             ticker=company_name,
             trade_date=trade_date,
@@ -601,10 +853,19 @@ class TradingAgentsGraph:
             blocked=self._is_blocked_state(final_state),
         )
 
+    def _open_usage_ledger(self, ledger_path: str | None, *, strict_resume: bool = False) -> UsageLedger | None:
+        """Open the durable usage ledger (or ``None`` when no path is configured).
+
+        Delegates to the module-level opener. A resume opens strictly (a missing
+        file is not recreated); an open failure is surfaced later as
+        ``accounting_unreadable`` so the pre-call guard fails closed for OPTIONAL
+        debate calls while the run completes its safe path.
+        """
+        return _open_usage_ledger(ledger_path, strict_resume=strict_resume)
+
     def _run_graph(self, company_name, trade_date, asset_type: str = "stock",
                    checkpoint_thread_id: str | None = None, portfolio=None):
         """Execute the graph and write the resulting state to disk and memory log."""
-        init_agent_state = self.create_run_state(company_name, trade_date, asset_type, portfolio)
         args = self.propagator.get_graph_args()
 
         # Inject the checkpoint thread_id (from checkpoint_scope) so the same
@@ -612,29 +873,101 @@ class TradingAgentsGraph:
         if checkpoint_thread_id is not None:
             args.setdefault("config", {}).setdefault("configurable", {})["thread_id"] = checkpoint_thread_id
 
+        # ADR-009: resolve the real execution identity (resume keeps its own;
+        # a fresh run mints a new one, never inheriting a prior finished run).
+        prior_state = (
+            self._read_checkpoint_state(args)
+            if self._resuming
+            else None
+        )
+        run_id, ledger_path = _resolve_usage_run_identity(
+            self.config.get("results_dir"), company_name, trade_date, prior_state
+        )
+
+        init_agent_state = self.create_run_state(
+            company_name, trade_date, asset_type, portfolio,
+            run_id=run_id, usage_ledger_path=ledger_path,
+        )
+
         # None resumes an existing checkpoint; init_agent_state starts fresh (#1249).
         graph_input = self.checkpoint_input(init_agent_state)
-        if self.debug:
-            trace = []
-            last_printed = None
-            for chunk in self.graph.stream(graph_input, **args):
-                if chunk["messages"]:
-                    msg = chunk["messages"][-1]
-                    # Nodes after the trader don't append to messages, so the
-                    # same trailing message repeats across chunks. Print it only
-                    # when it changes (#1027); the trace/state merge is unchanged.
-                    signature = (type(msg).__name__, getattr(msg, "content", None))
-                    if signature != last_printed:
-                        msg.pretty_print()
-                        last_printed = signature
-                    trace.append(chunk)
-            # Streamed chunks are per-node deltas. Merge them so the returned
-            # state matches what graph.invoke() yields in the non-debug path.
-            final_state = {}
-            for chunk in trace:
-                final_state.update(chunk)
-        else:
-            final_state = self.graph.invoke(graph_input, **args)
+
+        # ADR-011 resume defense: sanitize any PRIOR persisted debate turns /
+        # stances / history / readable plans on a degraded run BEFORE the next
+        # model prompt runs, so a resumed run cannot put a raw over-cap confidence
+        # back in front of a model even if an older checkpoint stored one. This
+        # rewrites the checkpoint in place (idempotent; capped values carry no
+        # over-cap token so a second resume is a no-op).
+        if self._resuming and prior_state is not None:
+            self._sanitize_confidence_on_resume(args, prior_state)
+
+        # ADR-009: open the durable ledger and register the run identity (idempotent
+        # on resume) BEFORE the graph runs, so reservations precede every call.
+        ledger = _open_usage_ledger(
+            ledger_path, strict_resume=bool(getattr(self, "_resuming", False))
+        )
+        if ledger is not None:
+            try:
+                ledger.begin_run(
+                    run_id,
+                    policy_signature=policy_signature(
+                        debate_config=resolve_debate_termination_config(self.config)
+                    ),
+                    # On resume the run row MUST already exist: never mint/register
+                    # a new run under an existing checkpoint identity.
+                    require_existing=bool(getattr(self, "_resuming", False)),
+                )
+            except LedgerError as exc:
+                logger.warning("Usage ledger run registration failed (%s); unreadable", type(exc).__name__)
+                ledger = None
+        capture = UsageCapture(run_id=run_id, ledger=ledger)
+        # The capture needs the debate config so a reservation stores the same
+        # estimated next-call cost the pre-call guard uses.
+        capture.debate_config = resolve_debate_termination_config(self.config)
+        # A CONFIGURED durable ledger path that could not be opened/registered (a
+        # fresh OR resumed run) must fail closed: mark accounting unreadable so
+        # further OPTIONAL calls are refused rather than silently becoming a
+        # memory-only run that spends without a durable reservation. An INTENTIONAL
+        # no-path run (``ledger_path`` falsy) stays the legitimate legacy memory-only
+        # mode with no hidden global limit.
+        if ledger_path and ledger is None:
+            capture.accounting_unreadable = True
+
+        # ADR-008: bind a request/run-scoped evidence collector for exactly this
+        # run so vendor dataflows capture structured optional evidence the gate
+        # reads. On a RESUME the collector is re-seeded from the already-saved
+        # checkpoint state (prior records/attempts/tombstones/metadata), so a new
+        # tool call appends a monotonic attempt/record instead of a fresh index-0
+        # overwriting the saved one. The binding is scoped (ContextVar) and torn
+        # down after the run, so concurrent runs cannot share records.
+        collector = use_collector(company_name, str(trade_date), prior_state=prior_state)
+        with collector, use_usage_capture(capture):
+            if self.debug:
+                trace = []
+                last_printed = None
+                for chunk in self.graph.stream(graph_input, **args):
+                    if chunk["messages"]:
+                        msg = chunk["messages"][-1]
+                        # Nodes after the trader don't append to messages, so the
+                        # same trailing message repeats across chunks. Print it only
+                        # when it changes (#1027); the trace/state merge is unchanged.
+                        signature = (type(msg).__name__, getattr(msg, "content", None))
+                        if signature != last_printed:
+                            msg.pretty_print()
+                            last_printed = signature
+                        trace.append(chunk)
+                # Streamed chunks are per-node deltas. Merge them so the returned
+                # state matches what graph.invoke() yields in the non-debug path.
+                final_state = {}
+                for chunk in trace:
+                    final_state.update(chunk)
+            else:
+                final_state = self.graph.invoke(graph_input, **args)
+
+        # ADR-009: reconcile whole-run usage from the durable ledger and attach it
+        # for reporting (reporting only; never a budget limit). The execution
+        # identity is also stamped so a downstream report can name the run.
+        self._attach_whole_run_usage(final_state, capture, run_id)
 
         # Store current state for reflection.
         self.curr_state = final_state
@@ -648,6 +981,27 @@ class TradingAgentsGraph:
         self.clear_checkpoint_on_success(company_name, trade_date, asset_type, portfolio)
 
         return final_state, self.process_signal(final_state["final_trade_decision"])
+
+    @staticmethod
+    def _attach_whole_run_usage(final_state, capture, run_id):
+        """Attach ``whole_run_usage`` (reporting only) and the execution run_id."""
+        from tradingagents.debate.budget import aggregate_whole_run_usage
+
+        if not isinstance(final_state, dict):
+            return
+        final_state.setdefault("run_id", run_id)
+        try:
+            spend = capture.reconcile()
+            whole = aggregate_whole_run_usage(spend.events, spend.unresolved)
+        except LedgerError:
+            # The durable history is unreadable, but this process may still hold
+            # KNOWN actual settled events. Retain that labelled subtotal and mark
+            # the unknown history, rather than losing the known calls entirely.
+            known = capture.settled_events()
+            whole = aggregate_whole_run_usage(known, accounting_unreadable=True)
+            whole["completeness"] = "partial" if known else "unknown"
+            whole["accounting_unreadable"] = True
+        final_state["whole_run_usage"] = whole
 
     def _log_state(self, trade_date, final_state):
         """Log the final state to a JSON file."""
