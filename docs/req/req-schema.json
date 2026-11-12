@@ -1,0 +1,264 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://localhost/req-schema.json",
+  "title": "CS5351 project requirements schema",
+  "description": "Validation schema for docs/req/requirements.yaml. Enforced by scripts/validate/validate_requirements.py, which uses the real draft-2020-12 JSON Schema (jsonschema.Draft202012Validator) when jsonschema is installed (as in CI); the deterministic subset validator is only a clearly-reported local fallback when jsonschema is unavailable (the subset fallback does NOT enforce the per-requirement fit_criterion/priority_rationale/tradeoff rules below — those are enforced only by the real schema; see docs/code-governance/ci-gate-matrix.md). LEGACY-COMPATIBLE: all 22 pre-existing IDs, the Feature/NonFunctional `type` values, the Must/Should/Could `priority` values, the `schema_version` pattern, and the stable ID pattern are preserved. This schema ADDS a product/PRD block and per-requirement machine-checkable fields.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["project", "product", "requirements"],
+  "properties": {
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "branch", "deliverable_slide_sources", "canonical_source_trees", "schema_version"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "branch": { "type": "string", "minLength": 1 },
+        "deliverable_slide_sources": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "canonical_source_trees": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "schema_version": { "type": "string", "pattern": "^v[0-9]+\\.[0-9]+$" }
+      }
+    },
+    "product": { "$ref": "#/$defs/product" },
+    "requirements": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/requirement" }
+    }
+  },
+  "$defs": {
+    "non_empty_string_list": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "minItems": 1
+    },
+    "product": {
+      "type": "object",
+      "description": "Product/PRD section (PDF p5 asks for a machine-readable PRD). It separates product-level intent from the requirement registry. Measured results and targets are distinguished explicitly; targets are NOT claims of achieved results.",
+      "additionalProperties": false,
+      "required": [
+        "stakeholders", "problem_statement", "goals", "non_goals",
+        "scope", "success_criteria", "constraints", "priorities",
+        "tradeoffs", "measured_vs_targets", "deferred_scope"
+      ],
+      "properties": {
+        "stakeholders": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "interest"],
+            "properties": {
+              "name": { "type": "string", "minLength": 1 },
+              "interest": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "problem_statement": { "type": "string", "minLength": 1 },
+        "goals": { "$ref": "#/$defs/non_empty_string_list" },
+        "non_goals": { "$ref": "#/$defs/non_empty_string_list" },
+        "scope": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["in_scope", "out_of_scope"],
+          "properties": {
+            "in_scope": { "$ref": "#/$defs/non_empty_string_list" },
+            "out_of_scope": { "$ref": "#/$defs/non_empty_string_list" }
+          }
+        },
+        "success_criteria": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "statement", "classification"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^SUCCESS-[0-9]{3}$" },
+              "statement": { "type": "string", "minLength": 1 },
+              "classification": { "enum": ["measured", "target"] }
+            }
+          }
+        },
+        "constraints": { "$ref": "#/$defs/non_empty_string_list" },
+        "priorities": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["requirement_id", "priority", "rationale"],
+            "properties": {
+              "requirement_id": { "type": "string", "pattern": "^(FR-(DQG|DDT)|NFR-[A-Z]+)-[0-9]{3}$" },
+              "priority": { "enum": ["Must", "Should", "Could"] },
+              "rationale": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "tradeoffs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["requirement_id", "decision", "rejected_or_deferred", "why"],
+            "properties": {
+              "requirement_id": { "type": "string", "pattern": "^(FR-(DQG|DDT)|NFR-[A-Z]+)-[0-9]{3}$" },
+              "decision": { "type": "string", "minLength": 1 },
+              "rejected_or_deferred": { "type": "string", "minLength": 1 },
+              "why": { "type": "string", "minLength": 1 }
+            }
+          }
+        },
+        "measured_vs_targets": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["measured", "targets", "note"],
+          "properties": {
+            "measured": { "$ref": "#/$defs/non_empty_string_list" },
+            "targets": { "$ref": "#/$defs/non_empty_string_list" },
+            "note": { "type": "string", "minLength": 1 }
+          }
+        },
+        "deferred_scope": {
+          "type": "array",
+          "description": "Explicit 'Won't / deferred' scope. This represents the Won't classification WITHOUT adding a new priority enum value or new requirement IDs, so the historical Must/Should/Could set and all 22 IDs remain intact. Each item names an item, a status, and a rationale.",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["item", "classification", "rationale"],
+            "properties": {
+              "item": { "type": "string", "minLength": 1 },
+              "classification": { "enum": ["won't (out of scope)", "deferred (blocked on authorization)"] },
+              "rationale": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
+    "fit_criterion": {
+      "type": "object",
+      "description": "Structured, machine-checkable acceptance criterion. metric+operator+threshold+unit+verification+applicability+status are ALL required; a prose-only description is not sufficient. This schema validates the CHECK CONTRACT (the tag/threshold shape); it does NOT run the verification assertions and therefore does NOT prove runtime semantics. threshold_type consistency is enforced by the allOf conditionals below: count -> nonnegative integer, numeric -> number, boolean -> boolean with an equality operator.",
+      "additionalProperties": false,
+      "required": [
+        "metric", "operator", "threshold_type", "threshold",
+        "unit", "verification", "applicability", "status"
+      ],
+      "properties": {
+        "metric": { "type": "string", "minLength": 1, "pattern": "\\S" },
+        "operator": { "enum": [">=", "<=", "==", "!=", "<", ">"] },
+        "threshold_type": { "enum": ["numeric", "boolean", "count"] },
+        "threshold": {},
+        "unit": { "type": "string", "minLength": 1 },
+        "verification": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["method", "command", "references"],
+          "properties": {
+            "method": {
+              "type": "string",
+              "minLength": 1,
+              "description": "How the metric is measured (test command, validator, manual rubric, etc.)."
+            },
+            "command": { "type": "string", "minLength": 1 },
+            "references": { "$ref": "#/$defs/non_empty_string_list" }
+          }
+        },
+        "applicability": {
+          "enum": ["runtime", "offline-test", "governance", "documentation", "manual-review"]
+        },
+        "status": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["state", "evidence"],
+          "properties": {
+            "state": {
+              "enum": ["verified", "partially_verified", "pending", "not_applicable"]
+            },
+            "evidence": { "type": "string", "minLength": 1 }
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "threshold_type": { "const": "count" } }, "required": ["threshold_type"] },
+          "then": {
+            "properties": {
+              "threshold": { "type": "integer", "minimum": 0 },
+              "operator": { "enum": ["==", "!=", ">=", "<=", "<", ">"] }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "threshold_type": { "const": "numeric" } }, "required": ["threshold_type"] },
+          "then": {
+            "properties": {
+              "threshold": { "type": "number" },
+              "operator": { "enum": ["==", "!=", ">=", "<=", "<", ">"] }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "threshold_type": { "const": "boolean" } }, "required": ["threshold_type"] },
+          "then": {
+            "properties": {
+              "threshold": { "type": "boolean" },
+              "operator": { "enum": ["==", "!="] }
+            }
+          }
+        }
+      ]
+    },
+    "requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "type", "category", "title", "description", "priority", "priority_rationale",
+        "tradeoff", "origin", "fit_criterion", "source_files",
+        "design_artifacts", "tests", "verification_evidence"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^(FR-(DQG|DDT)|NFR-[A-Z]+)-[0-9]{3}$" },
+        "type": { "enum": ["Feature", "NonFunctional"] },
+        "category": {
+          "description": "Requirement category (additive; does not change the historical type values or IDs).",
+          "enum": ["functional", "invariant-zero-tolerance", "quality", "performance", "cost", "governance", "security"]
+        },
+        "title": { "type": "string", "minLength": 1 },
+        "description": { "type": "string", "minLength": 1 },
+        "priority": { "enum": ["Must", "Should", "Could"] },
+        "priority_rationale": { "type": "string", "minLength": 1 },
+        "tradeoff": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["decision", "rejected_or_deferred", "why"],
+          "properties": {
+            "decision": { "type": "string", "minLength": 1 },
+            "rejected_or_deferred": { "type": "string", "minLength": 1 },
+            "why": { "type": "string", "minLength": 1 }
+          }
+        },
+        "origin": {
+          "enum": ["course-clause", "user-design", "inherited-system", "governance"]
+        },
+        "fit_criterion": { "$ref": "#/$defs/fit_criterion" },
+        "source_files": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "design_artifacts": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "tests": { "type": "array", "items": { "type": "string" }, "minItems": 0 },
+        "verification_evidence": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+        "status": { "enum": ["Implemented", "Partially"] },
+        "owner": { "type": "string", "minLength": 1 }
+      }
+    }
+  }
+}

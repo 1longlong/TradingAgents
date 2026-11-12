@@ -1,0 +1,247 @@
+# AGENT PERMISSIONS PROPOSAL — NOT ACTIVE CONFIGURATION
+#
+# STATUS: PROPOSAL ONLY. This file is NOT read by OpenCode and does NOT change
+# any permission. The presence of .opencode/permissions.jsonc on disk is NOT
+# evidence that it is loaded or enforced; that file is UNVERIFIED as active
+# configuration. See docs/debt-register.md DEBT-004. Any adoption requires an
+# explicit HUMAN edit of the active config, which no agent may perform.
+#
+# ---------------------------------------------------------------------------
+# EVIDENCE (reported separately; none of these alone proves enforcement)
+# ---------------------------------------------------------------------------
+# 2026-11-06, safe read-only local inspection:
+#   - OpenCode BINARY version: 1.18.25 (`opencode --version`).
+#   - ~/.config/opencode/package.json pins @opencode-ai/PLUGIN at 1.18.25 (NOT
+#       the sdk directly). node_modules/@opencode-ai/plugin/package.json =
+#       1.18.25; node_modules/@opencode-ai/sdk/package.json = 1.18.25 (present
+#       transitively, not a direct pin). These are STATIC package/type metadata,
+#       not the binary; they do not prove the binary uses this exact SDK at
+#       runtime or loads the shipped config.
+#   - STATIC TYPE SHAPE observed in the SDK .d.ts: a per-agent `permission`
+#       object with keys edit: "ask"|"allow"|"deny",
+#       bash: "ask"|"allow"|"deny" | { "<pattern>": "ask"|"allow"|"deny" },
+#       webfetch / doom_loop / external_directory: "ask"|"allow"|"deny".
+#   - NOT observed in the type: a top-level allow/ask/deny ARRAY-of-patterns
+#       form, a plain `read` key, or a per-path `edit` map.
+# LOAD/ENFORCEMENT STATUS: UNVERIFIED. JSON parsing is NOT enforcement. Only a
+# benign behavior probe (see the protocol in
+# docs/architecture/permission-model.md) can move this to verified.
+#
+# ---------------------------------------------------------------------------
+# ROLE × PATH INTENT (deny by default; explicit allow lists only)
+# ---------------------------------------------------------------------------
+# Precedence (evaluated top to bottom; FIRST match wins, and DENY always beats
+# ALLOW regardless of order):
+#   1. always_denied (below) -> deny
+#   2. role path allow-list -> allow
+#   3. anything unmatched -> deny
+# Authorization is the INTERSECTION of (role grant) AND (approved task scope). A
+# path allowed by role but outside the approved task scope is still denied.
+# Read and edit are enumerated per explicit path/glob; there is NO blanket "**".
+
+proposal_version: "0.2-proposed"
+active_configuration: false
+awaiting_human_adoption_by: "WANG Yiwen (60536848)"
+
+# Explicit path globs only (no inline conditions/comments in the path strings).
+# Conditions for tests/** (human-approved plan+test cases) are stated separately
+# in `preconditions` below, not embedded in the path.
+roles:
+  planner:
+    read:
+      - "AGENTS.md"
+      - "architecture-blueprint.md"
+      - "Prompt.md"
+      - "README.md"
+      - "Report.md"
+      - ".agent/rules.md"
+      - "adr/**"
+      - "prompts/**"
+      - "docs/**"
+      - "tradingagents/**"
+      - "cli/**"
+      - "tests/**"
+      - "scripts/**"
+      - "src/**"
+      - "test/**"
+      - "pyproject.toml"
+    edit: []
+    execute: ["git diff", "git status", "ruff check", "pytest"]
+  builder:
+    read:
+      - "AGENTS.md"
+      - "architecture-blueprint.md"
+      - "Prompt.md"
+      - "README.md"
+      - "Report.md"
+      - ".agent/rules.md"
+      - "adr/**"
+      - "prompts/**"
+      - "docs/**"
+      - "tradingagents/**"
+      - "cli/**"
+      - "tests/**"
+      - "scripts/**"
+      - "src/**"
+      - "test/**"
+      - "pyproject.toml"
+    edit:
+      - "AGENTS.md"
+      - "architecture-blueprint.md"
+      - "Prompt.md"
+      - "README.md"
+      - "Report.md"
+      - "adr/**"
+      - "prompts/**"
+      - ".agent/rules.md"
+      - "docs/**"
+      - "tradingagents/**"
+      - "cli/**"
+      - "tests/**"
+      - "scripts/validate/**"
+    execute: ["pytest", "ruff", "scripts/validate/validate_requirements.py", "git diff", "git status"]
+  verifier:
+    read:
+      - "AGENTS.md"
+      - "architecture-blueprint.md"
+      - "Prompt.md"
+      - "README.md"
+      - "Report.md"
+      - ".agent/rules.md"
+      - "adr/**"
+      - "prompts/**"
+      - "docs/**"
+      - "tradingagents/**"
+      - "cli/**"
+      - "tests/**"
+      - "scripts/**"
+      - "src/**"
+      - "test/**"
+      - "pyproject.toml"
+    edit: []
+    execute: ["pytest", "ruff", "scripts/validate/validate_requirements.py", "git diff", "git status"]
+  human_only:
+    edit:
+      - ".opencode/rules.md"
+      - ".opencode/permissions.jsonc"
+      - ".github/**"
+      - "pyproject.toml"
+      - "requirements.txt"
+    execute: ["git commit", "git push", "git tag", "network / paid API / live LLM (if authorized)"]
+
+# Additional preconditions that path globs cannot express (kept OUT of paths).
+preconditions:
+  builder.edit.tests/**:
+    requires: "human-approved execution plan AND human-approved test cases (plan-first STOP)."
+  builder.edit.root_docs:
+    paths: ["README.md", "Report.md"]
+    requires: "explicitly scoped approval that includes documenting the change in the root docs (e.g. the 2026-11-10 approved plan); edit only to keep the root docs truthful, never to expand scope."
+  safety_critical_paths:
+    paths: ["tradingagents/evidence/**", "tradingagents/debate/**", "tradingagents/agents/utils/output_guard.py", "tradingagents/agents/utils/memory.py", ".opencode/**", ".agent/**", "prompts/**"]
+    requires: "ADR + explicit human approval before merge."
+
+# Expressibility gap for planner execution (honest, not fabricated support).
+# The planner role's EXECUTE *intent* above is read-only inspection
+# (git diff / git status / ruff check / pytest). The inspected schema can only
+# express a bash pattern map, and a prefix allowlist is NOT a security boundary
+# (see shell_pattern_caveat), so the expressible map below denies ALL bash for the
+# planner. This is a deliberate conservative mismatch: the read-only execute
+# intent is process-enforced only, while the expressible subset just denies. It is
+# NOT a claim that the planner's read-only commands are enforced by the schema.
+planner_execute_expressibility: "INTENT is read-only execute; EXPRESSIBLE map is deny-all bash (prefix patterns are not a boundary). Process-enforced only; NOT schema-enforced."
+
+# Read-before-edit invariant: every EDITABLE path must also be READABLE by the
+# same role (a role cannot edit what it may not read), EXCEPT human-only/frozen
+# paths which no agent may edit anyway. The builder read list therefore includes
+# every builder edit target (.agent/rules.md, AGENTS.md, architecture-blueprint.md,
+# Prompt.md, README.md, Report.md, adr/**, prompts/**, docs/**, tradingagents/**,
+# cli/**, tests/**, scripts/**). Root README.md/Report.md are editable ONLY under
+# the "builder.edit.root_docs" precondition (explicitly scoped approval), never to
+# expand scope.
+read_before_edit_invariant: "builder.edit ⊆ builder.read (excluding human-only/frozen). Verified by process; the schema/expressible subset cannot enforce it."
+
+# Deny precedence: these are always denied to agents, overriding any allow above.
+always_denied:
+  read:
+    - ".env"
+    - ".env.*"
+    - "*.pem"
+    - "*.key"
+    - "<outside-repository>"
+  edit:
+    - ".opencode/rules.md"
+    - ".opencode/permissions.jsonc"
+    - ".github/**"
+    - "pyproject.toml"
+    - "requirements.txt"
+    - "<outside-repository>"
+  execute:
+    - "git commit"
+    - "git push"
+    - "git tag"
+    - "git rebase"
+    - "git reset --hard"
+    - "network / paid API / live LLM"
+
+# ---------------------------------------------------------------------------
+# Express-able part of the recognized schema (per-agent `permission` maps).
+# Default for any UNMATCHED execution is DENY (not ask). Shell allow-patterns are
+# NOT a security boundary on their own (see shell_pattern_caveat).
+# ---------------------------------------------------------------------------
+expressible_permission_maps:
+  builder:
+    edit: "ask"
+    bash:
+      "git commit*": "deny"
+      "git push*": "deny"
+      "git rebase*": "deny"
+      "git reset --hard*": "deny"
+      "curl*": "deny"
+      "wget*": "deny"
+      "pytest*": "allow"
+      "ruff*": "allow"
+      "git diff*": "allow"
+      "git status*": "allow"
+      "*": "deny"
+    webfetch: "deny"
+    external_directory: "deny"
+  verifier:
+    edit: "deny"
+    bash:
+      "pytest*": "allow"
+      "ruff*": "allow"
+      "git diff*": "allow"
+      "git status*": "allow"
+      "*": "deny"
+    webfetch: "deny"
+    external_directory: "deny"
+  planner:
+    edit: "deny"
+    bash:
+      "*": "deny"
+    webfetch: "deny"
+    external_directory: "deny"
+
+shell_pattern_caveat: >
+  Shell allow-patterns such as "pytest*" matching a command prefix are INSUFFICIENT
+  to prevent bypass by compound commands (e.g. "pytest; curl ..."), shell
+  chaining/redirection, or alternate tools (python -c, subprocess, env). Pattern
+  matching on the first token does not constrain the whole command line. Safe
+  confinement requires the sandbox/deny-by-default execution model of a benign
+  probe-verified configuration, not prefix patterns alone. Until that is proven,
+  this is a defense-in-depth input, not a guarantee.
+
+# ---------------------------------------------------------------------------
+# Things this schema cannot express (all enforced by process, marked UNVERIFIED
+# when a runtime guarantee would be claimed). Kept as a mapping (not a list) so
+# the structure is unambiguous.
+# ---------------------------------------------------------------------------
+not_expressible:
+  per_path_edit: "Schema exposes `edit` as one ask/allow/deny, not a path map; path-level edit scoping is process-enforced only."
+  read_key: "No plain `read` key in the inspected type; secret/read denial relies on bash rules + the validator secret scan."
+  default_deny_execution: "Whether an unmatched command is denied by default is a runtime behavior; only a probe can confirm it."
+  enforcement: "Load + enforcement of any of the above by the installed binary is UNVERIFIED until a benign probe proves it."
+
+enforcement_status: "UNVERIFIED"
+json_parses_is_not_enforcement: true
+benign_enforcement_test: "see docs/architecture/permission-model.md 'Benign enforcement-test protocol' (pending; requires human approval)"

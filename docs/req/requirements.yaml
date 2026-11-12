@@ -1,0 +1,1439 @@
+# CS5351 project requirements (machine-readable PRD + requirement registry).
+# Validated against docs/req/req-schema.json by scripts/validate/validate_requirements.py.
+# Stable IDs are reused in docs/architecture/trace-matrix.md. Do not reuse or
+# reassign IDs out of band. The schema is backward compatible with the original
+# v1.0 registry: all 22 IDs, the Feature/NonFunctional `type` values, the
+# Must/Should/Could priorities, and the schema_version / ID patterns are
+# preserved. This revision ADDS (a) a product/PRD block (stakeholders, problem,
+# goals/non-goals, scope, success, constraints, priorities, tradeoffs) and
+# (b) a per-requirement structured `fit_criterion`, `priority_rationale`,
+# `tradeoff`, and `origin`. Measured results are kept distinct from targets.
+#
+# NOTE: Numeric thresholds below are either (i) the existing configured budget
+# assertions already enforced in code/tests, or (ii) measurable ZERO-TOLERANCE
+# safety targets (exactly 0 defects/violations). No approved production
+# performance threshold is invented. Estimated token/time savings are NOT
+# promised as live performance.
+#
+# CATEGORIES: each requirement carries a `category` (functional,
+# invariant-zero-tolerance, quality, performance, cost, governance, security).
+# Six of the seven are populated by genuine requirements. `performance` has NO
+# genuine requirement because no production performance threshold has been
+# approved or measured (Phase 4B is unauthorized); it is intentionally absent
+# rather than filled with a fabricated performance target.
+#
+# The schema validates the fit_criterion CHECK CONTRACT (metric/operator/
+# threshold_type/threshold/unit/verification/applicability/status and the
+# type-consistency conditionals). Validating the schema does NOT run the
+# verification assertions and therefore does NOT prove runtime semantics.
+
+project:
+  name: "TradingAgents downstream fork — deterministic Data Quality Gate and dynamic debate termination"
+  branch: "feature/data-quality-debate-control"
+  deliverable_slide_sources:
+    - "src/"
+    - "test/offline/"
+    - "test/live/"
+  canonical_source_trees:
+    - "tradingagents/"
+    - "cli/"
+  schema_version: "v1.1"
+
+product:
+  stakeholders:
+    - name: "Student author (WANG Yiwen, 60536848)"
+      interest: "Complete the CS5351 project honestly under deterministic, offline-verifiable governance."
+    - name: "CS5351 course instructors"
+      interest: "Assess requirements→design→build→verify traceability, governance, and honest evidence."
+    - name: "Downstream maintainers of this fork"
+      interest: "A safe, fail-closed, backward-compatible extension of the upstream TradingAgents graph."
+    - name: "Human operator / reviewer"
+      interest: "Retain authority over safety-critical, git, network, and scope decisions."
+  problem_statement: >
+    An LLM multi-agent trading pipeline can open a Bull/Bear debate on stale,
+    missing, or low-quality market evidence and can run a fixed number of rounds
+    regardless of whether evidence is still changing. This risks directional
+    recommendations built on unverified data and wasted token/time budget. The
+    project adds a deterministic Data Quality Gate that can stop the debate
+    before it opens, and a deterministic evidence-aware termination evaluator
+    that ends the debate when it is no longer productive — both fail-closed,
+    offline-testable, and backward-compatible.
+  goals:
+    - "Fail closed on missing/low-quality evidence before a directional debate."
+    - "Terminate the debate on evidence-aware, budget-safe, deterministic rules."
+    - "Keep all new logic pure, deterministic, and offline-testable (no network/LLM)."
+    - "Preserve legacy fixed-round behavior when the new feature is disabled."
+    - "Make every decision auditable (reason codes, policy version, evidence IDs, trace)."
+  non_goals:
+    - "Improving first-party forecasting accuracy or alpha claims."
+    - "Live-provider benchmarking or production threshold tuning (Phase 4B)."
+    - "Adding new data vendors, LLM providers, or UI features."
+    - "Relocating or duplicating the inherited source tree."
+  scope:
+    in_scope:
+      - "Deterministic Data Quality Gate (FR-DQG-001..006)."
+      - "Dynamic debate termination + conflict lifecycle (FR-DDT-001..005)."
+      - "Non-functional guarantees (NFR-DET/FC/PIT/AUD/BUD/BC/OFF/SEC-001)."
+      - "Phase 4A deterministic offline baseline comparison (NFR-CMP-001..003)."
+    out_of_scope:
+      - "Phase 4B live-provider benchmarking (requires separate human authorization)."
+      - "Production threshold tuning (requires separate human authorization)."
+      - "Unrequested features, new vendors/providers, source-tree relocation."
+  success_criteria:
+    - id: SUCCESS-001
+      statement: "A blocked gate never yields a directional final signal (Hold enforced downstream)."
+      classification: measured
+    - id: SUCCESS-002
+      statement: "Every new gate/evaluator output is deterministic and JSON-safe."
+      classification: measured
+    - id: SUCCESS-003
+      statement: "The debate never exhausts budget mid-round without its summary reserve."
+      classification: measured
+    - id: SUCCESS-004
+      statement: "Disabled config reproduces legacy fixed-round routing."
+      classification: measured
+    - id: SUCCESS-005
+      statement: "Default pytest -q stays offline (no network / no paid LLM)."
+      classification: measured
+    - id: SUCCESS-006
+      statement: "Live end-to-end school-model run would reduce mean tokens/time vs the fixed-round baseline across a benchmark set."
+      classification: target
+    - id: SUCCESS-007
+      statement: "Human-entered traceability scores would reach a rubric-defined threshold."
+      classification: target
+  constraints:
+    - "All prompts, comments, commits, and reviews in English."
+    - "No secrets in committed files; no network/paid API in the default test run."
+    - "No commit/push/PR, live benchmark, or production tuning without explicit human approval."
+    - "Preserve all pre-existing user-authored changes; minimal, scoped diffs."
+  priorities:
+    - requirement_id: FR-DQG-001
+      priority: Must
+      rationale: "The gate is the primary safety mechanism; without it the debate can run on unverified data."
+    - requirement_id: FR-DQG-002
+      priority: Must
+      rationale: "Fail-closed precedence is a zero-tolerance safety property."
+    - requirement_id: FR-DQG-003
+      priority: Should
+      rationale: "Determinism of IDs/serialization supports reproducibility but is not itself a safety veto."
+    - requirement_id: FR-DQG-004
+      priority: Must
+      rationale: "Multi-category evaluation is what makes the gate meaningful at runtime."
+    - requirement_id: FR-DQG-005
+      priority: Must
+      rationale: "Auditable, redacted artifacts are required for any trustworthy review."
+    - requirement_id: FR-DQG-006
+      priority: Must
+      rationale: "A blocked verdict must survive to the final output or the gate is cosmetic."
+    - requirement_id: FR-DDT-001
+      priority: Must
+      rationale: "Evidence-aware termination is the second requested improvement and is safety-relevant."
+    - requirement_id: FR-DDT-002
+      priority: Must
+      rationale: "Citation allowlisting prevents fabricated-evidence-driven continuation."
+    - requirement_id: FR-DDT-003
+      priority: Must
+      rationale: "Budget safety guarantees a report is always produced."
+    - requirement_id: FR-DDT-004
+      priority: Should
+      rationale: "Backward compatibility protects existing users but is not a security hazard if violated only at the edge."
+    - requirement_id: FR-DDT-005
+      priority: Must
+      rationale: "Conflict lifecycle must be derived structurally and fail closed; otherwise conflicts are fabricated."
+    - requirement_id: NFR-DET-001
+      priority: Must
+      rationale: "Determinism is a zero-tolerance property for a gate/evaluator used in decisions."
+    - requirement_id: NFR-FC-001
+      priority: Must
+      rationale: "Fail-closed is the core safety invariant of the project."
+    - requirement_id: NFR-PIT-001
+      priority: Must
+      rationale: "Look-ahead leakage corrupts any decision; inherited invariant preserved."
+    - requirement_id: NFR-AUD-001
+      priority: Must
+      rationale: "Auditability is required to verify any other claim."
+    - requirement_id: NFR-BUD-001
+      priority: Must
+      rationale: "Budget exhaustion without a report is a hard failure."
+    - requirement_id: NFR-BC-001
+      priority: Should
+      rationale: "Compatibility matters for adoption but is lower severity than a safety breach."
+    - requirement_id: NFR-OFF-001
+      priority: Must
+      rationale: "Offline testability is a governance mandate (no network in default tests)."
+    - requirement_id: NFR-SEC-001
+      priority: Must
+      rationale: "Secret leakage is a zero-tolerance security property."
+    - requirement_id: NFR-CMP-001
+      priority: Must
+      rationale: "The Phase 4A comparison is the approved evidence vehicle; it must be honest and fail-closed."
+    - requirement_id: NFR-CMP-002
+      priority: Must
+      rationale: "Measured vs estimated must never be conflated, or the comparison misleads."
+    - requirement_id: NFR-CMP-003
+      priority: Should
+      rationale: "Honest labeling/traceability is important for integrity but is a presentation-layer property."
+  tradeoffs:
+    - requirement_id: FR-DQG-001
+      decision: "Deterministic LLM-free gate."
+      rejected_or_deferred: "LLM-based quality judge."
+      why: "LLM judging is non-deterministic, costly, and unauditable offline (see option-ledger DQG-ALT-1)."
+    - requirement_id: FR-DQG-002
+      decision: "Tiered blocked>degraded>normal, exception→blocked."
+      rejected_or_deferred: "Binary pass/fail that aborts on any low quality."
+      why: "Binary would block runs a human tolerates; tiering preserves fail-closed safety with a degraded path."
+    - requirement_id: FR-DQG-004
+      decision: "Optional categories can degrade but never block; market category always blocks if missing."
+      rejected_or_deferred: "Treat every category as equally critical."
+      why: "Only the market snapshot is a trustworthy structured source today; inventing parity would fabricate criticality."
+    - requirement_id: FR-DQG-006
+      decision: "Pin decision fields to Hold; preserve rationale as prose."
+      rejected_or_deferred: "Rewrite the whole report to a neutral essay."
+      why: "Rewriting destroys auditability; pinning the executable field is the minimal safe intervention."
+    - requirement_id: FR-DDT-001
+      decision: "Deterministic evaluate_round rule ordering."
+      rejected_or_deferred: "LLM-judged 'is the debate over?'."
+      why: "LLM judging is non-deterministic and cannot be regression-tested offline."
+    - requirement_id: FR-DDT-002
+      decision: "Structured DEBATE_METADATA with best-effort prose fallback that never extends the debate."
+      rejected_or_deferred: "Opportunistic prose parsing that can extend/shorten the debate arbitrarily."
+      why: "A missed marker must never silently add a round or fabricate evidence."
+    - requirement_id: FR-DDT-003
+      decision: "Explicit summary reserve + hard max tokens/time/calls + pre-call admission guard."
+      rejected_or_deferred: "Wall-clock-only control with no reserve."
+      why: "Without a reserve a run can exhaust budget mid-debate and lose its report."
+    - requirement_id: FR-DDT-004
+      decision: "enabled=False reproduces legacy routing."
+      rejected_or_deferred: "Default to dynamic unconditionally (upstream-breaking)."
+      why: "Compatibility keeps the upstream contract and default test run stable."
+    - requirement_id: FR-DDT-005
+      decision: "Conflicts only from structured assertions; unverifiable evidence drops the conflict."
+      rejected_or_deferred: "Derive conflicts from prose/chain-of-thought."
+      why: "Prose-derived conflicts are fabricated and unverifiable."
+    - requirement_id: NFR-PIT-001
+      decision: "As-of boundary on every dated path."
+      rejected_or_deferred: "Trust vendor 'latest' data without an as-of cut."
+      why: "Look-ahead leakage corrupts decisions; this is an inherited invariant."
+    - requirement_id: NFR-BUD-001
+      decision: "Reserve summary budget and refuse overcalls before dispatch."
+      rejected_or_deferred: "Best-effort accounting that lets one extra call slip through."
+      why: "A guaranteed report outweighs one extra debate hop."
+    - requirement_id: NFR-OFF-001
+      decision: "Default pytest -q is offline; live tests are opt-in integration."
+      rejected_or_deferred: "Always run vendor/LLM calls in CI."
+      why: "Network/paid calls are non-deterministic, costly, and unauthorized by default."
+    - requirement_id: NFR-CMP-003
+      decision: "Unscored traceability stays pending (None); never fabricate a score."
+      rejected_or_deferred: "Auto-estimate a traceability score."
+      why: "Only a human may enter rubric scores; an AI-estimated score would be fabricated."
+  measured_vs_targets:
+    measured:
+      - "Blocked-gate final signal is Hold (offline regression, tests/test_output_guard.py)."
+      - "Determinism/JSON-safety of gate + evaluator (offline tests)."
+      - "Pre-call budget guard blocks over-budget calls (offline tests, tests/test_debate_precall_budget.py)."
+      - "enabled=False reproduces legacy routing (offline tests, tests/test_debate_config.py)."
+      - "Default pytest -q needs no network (offline suite; live tests integration-marked)."
+      - "Phase 4A scripted-fixture comparison (offline) — labelled scripted, not live."
+    targets:
+      - "Live mean token/time reduction vs fixed-round baseline over a benchmark set (NOT measured; Phase 4B, requires authorization)."
+      - "Human traceability scores reaching a rubric threshold (NOT entered; pending a human)."
+      - "Production threshold values (NOT tuned; prohibited pending authorization)."
+    note: >
+      Measured items are backed by the referenced offline commands/tests. Targets
+      are aspirations only and must never be reported as achieved. Estimated
+      token/time savings shown in scripted fixtures are estimates, not live
+      performance promises.
+  deferred_scope:
+    - item: "Phase 4B live-provider benchmarking."
+      classification: "deferred (blocked on authorization)"
+      rationale: "Requires separate explicit human authorization; not started, not measured."
+    - item: "Production threshold tuning."
+      classification: "deferred (blocked on authorization)"
+      rationale: "Prohibited without separate explicit human authorization; no threshold invented."
+    - item: "Degraded-run numeric confidence ceiling (DEBT-014)."
+      classification: "deferred (blocked on authorization)"
+      rationale: "A ceiling must be specified by policy before enforcement; not invented here. (Stage 3 of the 2026-11-11 approved four-item plan; NOT yet implemented.)"
+    - item: "Live latency/token accounting basis for debate budget (DEBT-021/RISK-021)."
+      classification: "deferred (blocked on authorization)"
+      rationale: "The 2026-11-06 live finding is reproduced and recorded but NOT fixed (source unchanged); requires an authorized implementation round."
+    - item: "Claim-date semantic validation of cited evidence (DEBT-022/RISK-020)."
+      classification: "deferred (blocked on authorization)"
+      rationale: "The 2026-11-06 live finding is recorded but NOT fixed; an allowlist checks eligibility, not claim-date truth."
+    - item: "Relocating or duplicating the source tree into src/ or test/."
+      classification: "won't (out of scope)"
+      rationale: "Inherited layout is mapped via README pointers; the mapping remains an upstream-layout exception pending instructor agreement."
+
+requirements:
+  # ---- Deterministic Data Quality Gate (FR-DQG-*) ----
+  - id: FR-DQG-001
+    type: Feature
+    category: functional
+    title: Deterministic Data Quality Gate
+    description: >
+      Provide an LLM-free, pure node that validates the verified market snapshot
+      against the five deterministic validation classes (completeness, format,
+      freshness, look-ahead, cross-source consistency) and emits a GateDecision
+      before the Bull/Bear debate opens.
+    priority: Must
+    priority_rationale: "See product.priorities for the rationale; Must-level because a violation is a safety/correctness veto."
+    tradeoff:
+      decision: "Deterministic LLM-free gate."
+      rejected_or_deferred: "LLM-based quality judge."
+      why: "Non-deterministic, costly, unauditable offline (DQG-ALT-1)."
+    origin: user-design
+    fit_criterion:
+      metric: "Count of failing gate-purity/validation assertions in the named gate test files (no LLM/network call; deterministic five-class validation)."
+      operator: "=="
+      threshold_type: count
+      threshold: 0
+      unit: "failing assertions in tests/test_data_quality_gate_graph.py, tests/test_market_evidence_gate.py, tests/test_evidence_models.py"
+      verification:
+        method: "The three offline gate test files must report zero failures; a nonzero failure count is a criterion violation. Scope: offline unit/integration of the gate only (not a live path)."
+        command: ".venv/bin/python -m pytest tests/test_data_quality_gate_graph.py tests/test_market_evidence_gate.py tests/test_evidence_models.py -q"
+        references:
+          - "tests/test_data_quality_gate_graph.py"
+          - "tests/test_market_evidence_gate.py"
+          - "tests/test_evidence_models.py"
+      applicability: offline-test
+      status:
+        state: verified
+        evidence: "The whole module's tests pass in the offline suite (logbook 043/065); this criterion counts failing assertions in these files, not a distinct-decision value."
+    status: Implemented
+    source_files:
+      - tradingagents/graph/data_quality_gate.py
+      - tradingagents/evidence/gate.py
+      - tradingagents/evidence/models.py
+      - tradingagents/evidence/validate.py
+      - tradingagents/evidence/quality.py
+      - tradingagents/evidence/adapter.py
+      - tradingagents/evidence/policy.py
+    design_artifacts:
+      - docs/architecture/adr/001-data-quality-gate.md
+      - docs/architecture/invariants.md
+    tests:
+      - tests/test_data_quality_gate_graph.py
+      - tests/test_market_evidence_gate.py
+      - tests/test_evidence_models.py
+      - tests/test_market_data_validator_structured.py
+    verification_evidence:
+      - "Stage-2 relevant suite: 402 passed (current tree)."
+      - "OpenCode-related suite: 420 passed (supplied)."
+    owner: 60536848-WANG-Yiwen
+
+  - id: FR-DQG-002
+    type: Feature
+    category: invariant-zero-tolerance
+    title: Fail-closed gate verdict precedence
+    description: >
+      The gate must rank decisions blocked > degraded > normal, convert any
+      internal exception into a blocked decision, and never silently return
+      normal on missing evidence or error.
+    priority: Must
+    priority_rationale: "See product.priorities for the rationale; Must-level because a violation is a safety/correctness veto."
+    tradeoff:
+      decision: "Tiered blocked>degraded>normal with exception->blocked."
+      rejected_or_deferred: "Binary pass/fail abort."
+      why: "Binary blocks tolerable degraded runs (DQG-ALT-4)."
+    origin: user-design
+    fit_criterion:
+      metric: "Runs where a missing/malformed gate state or raised exception yields a non-blocked verdict."
+      operator: "=="
+      threshold_type: count
+      threshold: 0
+      unit: "offline fail-closed tests passing (0 regressions)"
+      verification:
+        method: "Fail-closed precedence offline tests."
+        command: ".venv/bin/python -m pytest tests/test_data_quality_gate_graph.py tests/test_market_evidence_gate.py -q"
+        references:
+          - "tests/test_data_quality_gate_graph.py"
+          - "tests/test_market_evidence_gate.py"
+      applicability: offline-test
+      status:
+        state: verified
+        evidence: "Observed PASS (logbook 043)."
+    status: Implemented
+    source_files:
+      - tradingagents/evidence/gate.py
+      - tradingagents/graph/data_quality_gate.py
+      - tradingagents/graph/conditional_logic.py
+    design_artifacts:
+      - docs/architecture/adr/001-data-quality-gate.md
+      - docs/architecture/invariants.md
+    tests:
+      - tests/test_data_quality_gate_graph.py
+      - tests/test_market_evidence_gate.py
+    verification_evidence:
+      - "Stage-2 relevant suite: 402 passed (current tree)."
+    owner: 60536848-WANG-Yiwen
+
+  - id: FR-DQG-003
+    type: Feature
+    category: quality
+    title: Deterministic gate identifiers and serialization
+    description: >
+      The run_id must be derived from (trade_date, normalized symbol) and the
+      gate output must be JSON/checkpoint-serializable with deterministic
+      ordering and ISO-8601 decided_at validation.
+    priority: Should
+    priority_rationale: "See product.priorities for the rationale; Should-level because impact is bounded but quality-relevant."
+    tradeoff:
+      decision: "run_id from (trade_date, normalized symbol)."
+      rejected_or_deferred: "Random run_id."
+      why: "Random IDs break reproducibility (DQG-ALT-5)."
+    origin: user-design
+    fit_criterion:
+      metric: "run_id/evidence IDs derived from random values or non-JSON-serializable gate output."
+      operator: "=="
+      threshold_type: count
+      threshold: 0
+      unit: "serialization/identifier regression failures"
+      verification:
+        method: "Deterministic ID + JSON-safety tests."
+        command: ".venv/bin/python -m pytest tests/test_evidence_models.py tests/test_evidence_step2_regressions.py -q"
+        references:
+          - "tests/test_evidence_models.py"
+          - "tests/test_evidence_step2_regressions.py"
+      applicability: offline-test
+      status:
+        state: verified
+        evidence: "Observed PASS (logbook 043)."
+    status: Implemented
+    source_files:
+      - tradingagents/evidence/models.py
+      - tradingagents/evidence/adapter.py
+      - tradingagents/graph/data_quality_gate.py
+    design_artifacts:
+      - docs/architecture/adr/001-data-quality-gate.md
+      - docs/architecture/memory-design.md
+    tests:
+      - tests/test_evidence_models.py
+      - tests/test_evidence_step2_regressions.py
+    verification_evidence:
+      - "Stage-2 relevant suite: 402 passed (current tree)."
+    owner: 60536848-WANG-Yiwen
+
+  - id: FR-DQG-004
+    type: Feature
+    category: functional
+    title: Multi-category data-quality gate engine
+    description: >
+      Extend the gate to evaluate exactly one critical market group plus the
+      optional categories (fundamentals, news, sentiment). Optional categories
+      without a trustworthy structured source produce an explicit deterministic
+      unavailable/insufficient result with stable reason codes (fabrication of
+      source/date/unit and analyst-prose parsing are prohibited); under a
+      versioned multi-category policy they may degrade the verdict but never
+      block, while a missing/blocked market category always fails closed to
+      blocked. Output is JSON-safe and deterministic (run_id from
+      (trade_date, normalized symbol)).
+    priority: Must
+    priority_rationale: "See product.priorities for the rationale; Must-level because a violation is a safety/correctness veto."
+    tradeoff:
+      decision: "Optional categories degrade, never block; market blocks if missing."
+      rejected_or_deferred: "Equal criticality for all categories."
+      why: "Only market is a trustworthy structured source; parity would fabricate criticality."
+    origin: user-design
+    fit_criterion:
+      metric: "Multi-category integration defects where real gate records fail to reach the manifest allowlist, or a null evidence result is fabricated."
+      operator: "=="
+      threshold_type: count
+      threshold: 0
+      unit: "gate->debate integration failures"
+      verification:
+        method: "Engine + real-gate integration tests."
+        command: ".venv/bin/python -m pytest tests/test_stage2_multicategory_gate.py tests/test_gate_debate_integration.py tests/test_data_quality_gate_graph.py -q"
+        references:
+          - "tests/test_stage2_multicategory_gate.py"
+          - "tests/test_gate_debate_integration.py"
+      applicability: offline-test
+      status:
+        state: verified
+        evidence: "26 + 9 passed; real gate->manifest chain proven (logbook 043/065)."
+    status: Implemented
+    source_files:
+      - tradingagents/evidence/multi_category_gate.py
+      - tradingagents/evidence/gate.py
+      - tradingagents/evidence/policy.py
+      - tradingagents/graph/data_quality_gate.py
+      - tradingagents/evidence/ingest.py
+      - tradingagents/evidence/vendor_adapters.py
+      - tradingagents/dataflows/evidence_capture.py
+      - tradingagents/graph/evidence_tool_node.py
+    design_artifacts:
+      - docs/architecture/adr/001-data-quality-gate.md
+      - docs/architecture/adr/008-automatic-structured-evidence-ingestion.md
+      - docs/architecture/invariants.md
+    tests:
+      - tests/test_stage2_multicategory_gate.py
+      - tests/test_gate_debate_integration.py
+      - tests/test_structured_evidence_ingestion.py
+    verification_evidence:
+      - "tests/test_stage2_multicategory_gate.py: 26 passed (current tree)."
+      - "2026-11-06 review finding 2 fix: the engine now applies EACH record's own computed QualityStatus, quality reasons, and validation results before serializing (the aggregator's per-record map is no longer discarded); a normal gate with a Medium market group yields citable valid IDs, and genuinely Low/Blocked/future records stay invalid. A real gate -> manifest/allowlist -> researcher -> evaluator -> report regression proves qualified Medium/High evidence counts as new while Low/Blocked/future does not (tests/test_gate_debate_integration.py, 9 passed)."
+      - "2026-11-11 Stage 1 (ADR-008, approved plan+tests ONLY, NOT human acceptance): automatic structured optional-evidence ingestion (fundamentals/news/sentiment) from real vendor-origin records through the real tool path + a compiled StateGraph (analyst -> wrapped ToolNode -> clear -> gate -> research -> report), with source-attempt lifecycle, manual-grade clamping, per-category validation and lineage-based independence. tests/test_structured_evidence_ingestion.py: 53 passed; full strict-offline suite 1897 passed / 1 skipped / 1 deselected / 88 subtests / 0 socket attempts (logbook 079)."
+    owner: 60536848-WANG-Yiwen
+
+  - id: FR-DQG-005
+    type: Feature
+    category: quality
+    title: Shared deterministic redacted report artifacts
+    description: >
+      The shared CLI/API report writer (write_report_tree) must emit, for a
+      completed run, deterministic redacted artifacts derived only from
+      structured run state: 0_quality/evidence_manifest.json,
+      0_quality/gate_summary.md, 2_research/debate_trace.json, and
+      run_summary.json, plus concise Data Quality / Run Summary sections in
+      complete_report.md. No analyst prose (chain-of-thought / hidden prompts)
+      is persisted and every value is passed through secret redaction; absent
+      gate/debate state (legacy or empty) yields safe defaults, not invented
+      values. CLI and programmatic save_reports produce identical output.
+    priority: Must
+    priority_rationale: "See product.priorities for the rationale; Must-level because a violation is a safety/correctness veto."
+    tradeoff:
+      decision: "Redacted JSON-safe shared artifacts."
+      rejected_or_deferred: "Persist raw analyst prose/chain-of-thought."
+      why: "Persisting prose leaks hidden prompts and is non-deterministic."
+    origin: user-design
+    fit_criterion:
+      metric: "Report-artifact defects in per-evidence validation association, identity/provenance, or redaction."
+      operator: "=="
+      threshold_type: count
+      threshold: 0
+      unit: "report-artifact audit failures"
+      verification:
+        method: "Artifact audit tests (deterministic, offline)."
+        command: ".venv/bin/python -m pytest tests/test_report_artifacts_stage2.py tests/test_report_artifacts_audit.py tests/test_reporting.py -q"
+        references:
+          - "tests/test_report_artifacts_audit.py"
+          - "tests/test_report_artifacts_stage2.py"
+      applicability: offline-test
+      status:
+        state: verified
+        evidence: "16 + 20 passed (logbook 061/063)."
+    status: Implemented
+    source_files:
+      - tradingagents/report_artifacts.py
+      - tradingagents/reporting.py
+      - tradingagents/graph/trading_graph.py
+      - cli/main.py
+    design_artifacts:
+      - docs/architecture/adr/001-data-quality-gate.md
+      - docs/architecture/adr/002-dynamic-debate-termination.md
+      - docs/code-governance/verification-constraints.md
+    tests:
+      - tests/test_report_artifacts_stage2.py
+      - tests/test_reporting.py
+      - tests/test_report_artifacts_audit.py
+    verification_evidence:
+      - "tests/test_report_artifacts_stage2.py: 16 passed (current tree)."
+      - "Audit export (review finding 3): evidence_manifest exports each record's per-evidence validations by evidence_id plus the separate validation_results_by_evidence_id map; a record without a map entry keeps its own embedded validations (never another ID's); run_summary adds identity/snapshot/quality counts and usage provenance with explicit unavailable values and ambiguous identity flagged. tests/test_report_artifacts_audit.py 20 passed (logbook 061/063)."
+    owner: 60536848-WANG-Yiwen
+
+  - id: FR-DQG-006
+    type: Feature
+    category: invariant-zero-tolerance
+    title: Authoritative blocked verdict at the output boundary
+    description: >
+      A blocked Data Quality Gate verdict must remain authoritative through the
+      downstream stored recommendations and the final signal/report. A single
+      deterministic, LLM-free output guard reads the gate state fail-closed
+      (missing/malformed/inconsistent -> blocked) and pins the executable
+      decision field (Recommendation / Rating / Action) to Hold on blocked runs,
+      for both structured and free-text output, plus every repeated decision
+      header and every Final Transaction Proposal marker; it never rewrites
+      arbitrary rationale prose. On a blocked Trader output, executable
+      entry/stop/position-sizing values are neutralised (a documented narrow
+      rule) while the quoted rationale is preserved. A degraded (not blocked) run
+      additionally enforces a deterministic confidence ceiling (ADR-011 Stage 4,
+      approved 0.60 engineering ceiling) on explicit confidence-labelled numerics
+      across the debate, managers, trader, portfolio decision, every post-gate
+      model prompt read, the saved report and the memory log; it is not applied to
+      a blocked run (which keeps its non-numeric Hold discipline) and is not a
+      calibrated probability or production threshold tuning.
+    priority: Must
+    priority_rationale: "See product.priorities for the rationale; Must-level because a violation is a safety/correctness veto."
+    tradeoff:
+      decision: "Pin decision fields to Hold, preserve rationale."
+      rejected_or_deferred: "Rewrite entire report neutral."
+      why: "Full rewrite destroys auditability."
+    origin: user-design
+    fit_criterion:
+      metric: "Blocked-run outputs whose parsed/plain final signal is not Hold (structured or free-text)."
+      operator: "=="
+      threshold_type: count
+      threshold: 0
+      unit: "blocked-signal escape regressions"
+      verification:
+        method: "Output-guard tests incl. full graph and fullwidth/long/proposal formats."
+        command: ".venv/bin/python -m pytest tests/test_output_guard.py -q"
+        references:
+          - "tests/test_output_guard.py"
+      applicability: offline-test
+      status:
+        state: verified
+        evidence: "130 passed, includes stored-plan + saved-report cases (logbook 067); awaits human review."
+    status: Implemented
+    source_files:
+      - tradingagents/agents/utils/output_guard.py
+      - tradingagents/agents/utils/rating.py
+      - tradingagents/agents/managers/research_manager.py
+      - tradingagents/agents/managers/portfolio_manager.py
+      - tradingagents/agents/trader/trader.py
+      - tradingagents/graph/signal_processing.py
+      - tradingagents/agents/utils/memory.py
+    design_artifacts:
+      - docs/architecture/adr/001-data-quality-gate.md
+      - docs/architecture/invariants.md
+    tests:
+      - tests/test_output_guard.py
+      - tests/test_research_manager_hold_contract.py
+      - tests/test_structured_agents.py
+      - tests/test_memory_log.py
+    verification_evidence:
+      - "tests/test_output_guard.py + hold-contract/structured/memory-log: 184 passed; independent-review demo yields final_signal Hold (logbook 058/059)."
+      - "2026-11-06 review findings 1 and 3 fix: the guard now recognizes the same decision-header grammar the rating extractor reads (fullwidth colon, prefixed labels such as 'Final rating', unicode dashes, repeated/trailing alternative labels) and preserves the semantic whitespace separator so 'Rating: Buy because ...' pins to 'Rating: Hold because ...' rather than 'Holdbecause'. The final signal boundary is also gate-aware: SignalProcessor.process_signal(text, state) returns Hold on a blocked run, and the memory log records Hold for a blocked run."
+      - "2026-11-06 operator executable-instruction maintenance: decision recognition is a single shared linear scan (rating.decision_header/_split_header: NFKC-first, arbitrary plain descriptor with no cap, required separator, single-word value; blockquote/narrative mentions excluded). It pins fullwidth/NFKC labels and values, long descriptors ('My final ... recommendation rating: Buy'), repeated/trailing labels, Markdown wrapping, and executable 'FINAL TRANSACTION PROPOSAL: BUY because ...' markers to '**<Label>**: Hold' while preserving the explanation; a blocked Trader's fullwidth entry/stop/position-sizing fields neutralise to 'not applicable' with the rationale kept. Quoted/narrative alternatives survive and no longer override the decision because extract_rating takes the last structural header as authoritative before its looser fallback, so the plain textual signal, report decision and memory body agree. tests/test_output_guard.py: 130 passed; focused affected suite 520 passed; strict offline suite 4 failed / 1661 passed (same known baselines; not all-green; logbook 067)."
+    owner: 60536848-WANG-Yiwen
+
+  # ---- Dynamic debate termination (FR-DDT-*) ----
+  - id: FR-DDT-001
+    type: Feature
+    category: functional
+    title: Dynamic evidence-aware debate termination
+    description: >
+      Provide a deterministic Debate Evaluator that runs after each completed
+      Bull+Bear round and routes to continue/summarize using the authoritative
+      rule ordering (gate blocked, budget exhaustion, max rounds, no new
+      evidence, consensus, new evidence, material change, diminishing returns).
+    priority: Must
+    priority_rationale: "See product.priorities for the rationale; Must-level because a violation is a safety/correctness veto."
+    tradeoff:
+      decision: "Deterministic evaluate_round ordering."
+      rejected_or_deferred: "LLM-judged end-of-debate."
+      why: "LLM judged end is non-deterministic (DDT-ALT-2)."
+    origin: user-design
+    fit_criterion:
+      metric: "Nondeterministic evaluator decisions across identical inputs (shuffled/clock-varying)."
+      operator: "=="
+      threshold_type: count
+      threshold: 0
+      unit: "evaluator determinism/ordering failures"
+      verification:
+        method: "Evaluator/graph/turn tests."
+        command: ".venv/bin/python -m pytest tests/test_debate_evaluator.py tests/test_debate_graph.py tests/test_debate_turn.py -q"
+        references:
+          - "tests/test_debate_evaluator.py"
+          - "tests/test_debate_graph.py"
+      applicability: offline-test
+      status:
+        state: verified
+        evidence: "Observed PASS (logbook 043)."
+    status: Implemented
+    source_files:
+      - tradingagents/debate/evaluator.py
+      - tradingagents/debate/evaluator_node.py
+      - tradingagents/debate/config.py
+      - tradingagents/debate/models.py
+      - tradingagents/graph/setup.py
+    design_artifacts:
+      - docs/architecture/adr/002-dynamic-debate-termination.md
+      - docs/architecture/invariants.md
+    tests:
+      - tests/test_debate_evaluator.py
+      - tests/test_debate_graph.py
+      - tests/test_debate_turn.py
+    verification_evidence:
+      - "Stage-2 relevant suite: 402 passed (current tree)."
+      - "OpenCode-related suite: 420 passed (supplied)."
+    owner: 60536848-WANG-Yiwen
+
+  - id: FR-DDT-002
+    type: Feature
+    category: quality
+    title: Valid-new-evidence manifest and citation allowlist
+    description: >
+      Debate turns may only cite evidence IDs allowed by the gate/manifest;
+      turns with no valid new evidence (respecting patience) terminate the
+      debate and a metadata parse failure never extends it.
+    priority: Must
+    priority_rationale: "See product.priorities for the rationale; Must-level because a violation is a safety/correctness veto."
+    tradeoff:
+      decision: "Structured DEBATE_METADATA + safe fallback."
+      rejected_or_deferred: "Opportunistic prose parsing."
+      why: "Prose can extend/shorten debate arbitrarily (DDT-ALT-3)."
+    origin: user-design
+    fit_criterion:
+      metric: "Debate turns citing an ineligible (unknown/Low/Blocked/future) ID counted as valid-new-evidence."
+      operator: "=="
+      threshold_type: count
+      threshold: 0
+      unit: "allowlist eligibility violations"
+      verification:
+        method: "Manifest/turn/gate-integration tests."
+        command: ".venv/bin/python -m pytest tests/test_debate_evidence_manifest.py tests/test_debate_turn.py tests/test_gate_debate_integration.py tests/test_exact_claim_validation.py tests/test_exact_claim_runtime.py tests/test_standalone_claims.py -q"
+        references:
+          - "tests/test_gate_debate_integration.py"
+          - "tests/test_debate_evidence_manifest.py"
+          - "tests/test_exact_claim_runtime.py"
+          - "tests/test_standalone_claims.py"
+      applicability: offline-test
+      status:
+        state: verified
+        evidence: "9 passed real-chain; Low/Blocked/future never count (logbook 065). Stage 3 (ADR-010): a valid cited ID whose typed exact claim does not validate is NOT valid new evidence and cannot extend the debate (tests/test_exact_claim_validation.py 73 + tests/test_exact_claim_runtime.py 30 passed; logbook 081). 2026-11-12 (ADR-010 amendment): standalone typed lines outside the marker are recovered into the SAME fail-closed validation (unknown/future/wrong/foreign rejected; fenced/quoted examples never trusted; honest coverage; legacy path unchanged) — tests/test_standalone_claims.py 49 passed; full strict-offline 2290 passed / 0 sockets (logbook 085)."
+    status: Implemented
+    source_files:
+      - tradingagents/debate/evidence_manifest.py
+      - tradingagents/debate/turn.py
+      - tradingagents/debate/claims.py
+      - tradingagents/evidence/origin.py
+      - tradingagents/agents/researchers/bull_researcher.py
+      - tradingagents/agents/researchers/bear_researcher.py
+    design_artifacts:
+      - docs/architecture/adr/002-dynamic-debate-termination.md
+      - docs/architecture/adr/010-exact-claim-validation.md
+    tests:
+      - tests/test_debate_evidence_manifest.py
+      - tests/test_debate_turn.py
+      - tests/test_researchers_verdict_gate.py
+      - tests/test_exact_claim_validation.py
+      - tests/test_exact_claim_runtime.py
+    verification_evidence:
+      - "Stage-2 relevant suite: 442 passed (current tree, logbook 043)."
+      - "2026-11-06 review finding 2 fix: real gate -> manifest/allowlist -> researcher -> evaluator -> report integration proven (tests/test_gate_debate_integration.py, 9 passed); a real Medium/High gate record cited and linked counts as new valid evidence, while Low/Blocked/future records do not."
+      - "2026-11-11 Stage 3 (ADR-010): a valid cited ID whose typed exact claim is wrong (date/value/unit) is excluded from valid-new-evidence; a correct typed exact claim and the qualitative no-claim path are unchanged (tests/test_exact_claim_validation.py 73 + tests/test_exact_claim_runtime.py 30 passed; full strict-offline 2044 passed / 0 sockets; logbook 081). NOT human acceptance."
+    owner: 60536848-WANG-Yiwen
+
+  - id: FR-DDT-003
+    type: Feature
+    category: cost
+    title: Budget-safe debate termination with summary reserve
+    description: >
+      The evaluator must reserve summary tokens/time and enforce max
+      tokens/time/calls so a run never exhausts budget mid-debate without a
+      report, and must emit an explicit decision trace.
+    priority: Must
+    priority_rationale: "See product.priorities for the rationale; Must-level because a violation is a safety/correctness veto."
+    tradeoff:
+      decision: "Summary reserve + hard caps + pre-call guard."
+      rejected_or_deferred: "Wall-clock-only, no reserve."
+      why: "No reserve loses the report (DDT-ALT-4)."
+    origin: user-design
+    fit_criterion:
+      metric: "Pre-call admission allowing a call when remaining budget < reserved_summary + next_call_estimate."
+      operator: "=="
+      threshold_type: count
+      threshold: 0
+      unit: "over-budget admitted calls"
+      verification:
+        method: "Pre-call/budget/evaluator tests with exact token+time boundaries, plus the durable-ledger reservation/settlement/resume and atomic-admission tests."
+        command: ".venv/bin/python -m pytest tests/test_debate_precall_budget.py tests/test_debate_budget.py tests/test_debate_evaluator.py tests/test_durable_usage_ledger.py tests/test_whole_run_usage.py -q"
+        references:
+          - "tests/test_debate_precall_budget.py"
+          - "tests/test_debate_budget.py"
+          - "tests/test_durable_usage_ledger.py"
+          - "tests/test_whole_run_usage.py"
+      applicability: offline-test
+      status:
+        state: verified
+        evidence: "22 passed exact-boundary (logbook 060/063); Stage 2 durable ledger/summary-reserve/atomic-admission 33 + whole-run 10 passed (logbook 080). Live accounting basis OPEN (DEBT-021); live concurrency/retry unobserved (DEBT-036)."
+    status: Implemented
+    source_files:
+      - tradingagents/debate/budget.py
+      - tradingagents/debate/config.py
+      - tradingagents/debate/usage_ledger.py
+      - tradingagents/debate/usage_capture.py
+      - tradingagents/debate/researcher_accounting.py
+      - tradingagents/debate/evaluator.py
+      - tradingagents/agents/researchers/bull_researcher.py
+      - tradingagents/agents/researchers/bear_researcher.py
+      - tradingagents/graph/setup.py
+      - tradingagents/graph/conditional_logic.py
+      - tradingagents/graph/trading_graph.py
+    design_artifacts:
+      - docs/architecture/adr/002-dynamic-debate-termination.md
+      - docs/architecture/adr/009-durable-run-usage-ledger.md
+      - docs/architecture/runtime-policy-catalog.md
+    tests:
+      - tests/test_debate_budget.py
+      - tests/test_debate_config.py
+      - tests/test_debate_evaluator.py
+      - tests/test_debate_precall_budget.py
+      - tests/test_durable_usage_ledger.py
+      - tests/test_whole_run_usage.py
+    verification_evidence:
+      - "Stage-2 relevant suite: 402 passed (current tree)."
+      - "Pre-call guard: tests/test_debate_precall_budget.py 22 passed (second review makes the token/time check require remaining >= reserved_summary + estimated next-call cost, with exact boundaries before Bull/Bear); max_calls=1 executes exactly one debate call and skips to the manager with budget_exhausted; enabled=False keeps the legacy baseline (logbook 060/063)."
+      - "2026-11-11 Stage 2 (ADR-009): durable per-run reservation/settlement ledger (reserve-before-call, settle-after, idempotent resume reconcile), unknown/in-flight spend fail-closed, summary admission distinct from the optional guard (consumes the reserve, requires a call slot), and atomic admission (call+token+time+reserve+unresolved re-read inside a BEGIN IMMEDIATE txn across independent capture instances); tests/test_durable_usage_ledger.py 33 passed + tests/test_whole_run_usage.py 10 passed; full strict-offline 1940 passed / 0 sockets (logbook 080). NOT live-confirmed; not final acceptance."
+    owner: 60536848-WANG-Yiwen
+
+  - id: FR-DDT-004
+    type: Feature
+    category: governance
+    title: Backward-compatible debate termination configuration
+    description: >
+      debate_termination.enabled=False must reproduce the legacy
+      fixed-max_debate_rounds routing, and the config group must validate types
+      and cross-constraints before graph execution.
+    priority: Should
+    priority_rationale: "See product.priorities for the rationale; Should-level because impact is bounded but quality-relevant."
+    tradeoff:
+      decision: "enabled=False -> legacy routing."
+      rejected_or_deferred: "Always dynamic."
+      why: "Upstream-breaking (DDT-ALT-5)."
+    origin: user-design
+    fit_criterion:
+      metric: "enabled=False divergence from legacy fixed-round routing."
+      operator: "=="
+      threshold_type: count
+      threshold: 0
+      unit: "legacy-routing compatibility failures"
+      verification:
+        method: "Debate config tests."
+        command: ".venv/bin/python -m pytest tests/test_debate_config.py -q"
+        references:
+          - "tests/test_debate_config.py"
+      applicability: offline-test
+      status:
+        state: verified
+        evidence: "Observed PASS (logbook 043/046)."
+    status: Implemented
+    source_files:
+      - tradingagents/debate/config.py
+      - tradingagents/graph/setup.py
+    design_artifacts:
+      - docs/architecture/adr/002-dynamic-debate-termination.md
+    tests:
+      - tests/test_debate_config.py
+    verification_evidence:
+      - "Stage-2 relevant suite: 402 passed (current tree)."
+    owner: 60536848-WANG-Yiwen
+
+  - id: FR-DDT-005
+    type: Feature
+    category: invariant-zero-tolerance
+    title: Deterministic ConflictRecord runtime lifecycle
+    description: >
+      A pure, LLM-free conflict tracker (tradingagents/debate/conflicts.py) must
+      create, observe (deduplicate/merge), resolve, and escalate ConflictRecord
+      objects deriving conflicts ONLY from the structured conflict_assertions a
+      DebateTurn carries (parsed by turn.py from the DEBATE_METADATA conflict_a
+      marker). Stable deterministic conflict IDs derive from (normalized topic,
+      kind). Evidence validation fails closed: an assert citing an unknown, Low,
+      or future evidence ID never creates a conflict, and a re-observation that
+      cites such an ID drops the otherwise-open conflict (never kept on
+      unverifiable footing). Empty evidence on a new factual/interpretive
+      conflict does not create it; a turn with no assertions (missing metadata)
+      contributes no conflict. Action-only disagreement is tracked (so the
+      Research Manager can weigh it) but never blocks debate termination. A
+      resolve/escalate closes or promotes an open conflict and records the
+      human-readable reason; resolving a non-open conflict is a no-op (no second
+      misleading reason). Malformed assertions/under-defined state are skipped,
+      never guessed. The evaluator node persists the derived conflicts and a
+      safe, structured, prose-free ConflictSummary (with the resolve/escalate
+      resolution notes and an authoritative open-blocking count) to the debate
+      state, and the Research Manager injects that summary safely (empty when no
+      tracked conflict, so a bare action-only divergence is not presented as a
+      fabricated disagreement).
+    priority: Must
+    priority_rationale: "See product.priorities for the rationale; Must-level because a violation is a safety/correctness veto."
+    tradeoff:
+      decision: "Conflicts only from structured assertions."
+      rejected_or_deferred: "Prose/CoT-derived conflicts."
+      why: "Prose conflicts are fabricated."
+    origin: user-design
+    fit_criterion:
+      metric: "Conflict records derived from prose, or created/kept on unverifiable evidence."
+      operator: "=="
+      threshold_type: count
+      threshold: 0
+      unit: "conflict-lifecycle safety failures"
+      verification:
+        method: "Conflict tracker tests."
+        command: ".venv/bin/python -m pytest tests/test_debate_conflicts.py tests/test_debate_turn.py tests/test_exact_claim_runtime.py -q"
+        references:
+          - "tests/test_debate_conflicts.py"
+          - "tests/test_exact_claim_runtime.py"
+      applicability: offline-test
+      status:
+        state: verified
+        evidence: "39 passed (logbook 046). Stage 3 (ADR-010): a factual conflict on a valid ID whose typed exact claim did not validate is not created/drops an open one (tests/test_exact_claim_runtime.py::TestConflictLifecycle; logbook 081)."
+    status: Implemented
+    source_files:
+      - tradingagents/debate/conflicts.py
+      - tradingagents/debate/claims.py
+      - tradingagents/evidence/origin.py
+      - tradingagents/debate/turn.py
+      - tradingagents/debate/models.py
+      - tradingagents/debate/evaluator_node.py
+      - tradingagents/agents/managers/research_manager.py
+    design_artifacts:
+      - docs/architecture/adr/002-dynamic-debate-termination.md
+      - docs/architecture/adr/010-exact-claim-validation.md
+      - docs/architecture/invariants.md
+    tests:
+      - tests/test_debate_conflicts.py
+      - tests/test_exact_claim_runtime.py
+      - tests/test_debate_turn.py
+      - tests/test_debate_evaluator.py
+      - tests/test_debate_graph.py
+    verification_evidence:
+      - "Conflict/debate/graph/Stage-2 relevant suite: 490 passed (current tree, logbook 046)."
+      - "tests/test_debate_conflicts.py: 39 passed (logbook 046)."
+    owner: 60536848-WANG-Yiwen
+
+  # ---- Non-functional requirements (NFR-*) ----
+  - id: NFR-DET-001
+    type: NonFunctional
+    category: invariant-zero-tolerance
+    title: Determinism of gate and debate logic
+    description: >
+      The evidence gate and debate evaluator must be pure and LLM-free;
+      identical inputs produce identical outputs independent of insertion order,
+      clock, or environment. Only validated ISO-8601 decided_at is injected.
+    priority: Must
+    priority_rationale: "See product.priorities for the rationale; Must-level because a violation is a safety/correctness veto."
+    tradeoff:
+      decision: "Determinism across order/clock."
+      rejected_or_deferred: "Order/clock-sensitive logic."
+      why: "Non-determinism makes verification impossible."
+    origin: user-design
+    fit_criterion:
+      metric: "Gate/evaluator differing output for identical inputs under shuffled order or clock variance."
+      operator: "=="
+      threshold_type: count
+      threshold: 0
+      unit: "determinism failures across repeat runs"
+      verification:
+        method: "Determinism tests (repeat/shuffle)."
+        command: ".venv/bin/python -m pytest tests/test_evidence_models.py tests/test_debate_evaluator.py tests/test_debate_conflicts.py -q"
+        references:
+          - "tests/test_evidence_models.py"
+          - "tests/test_debate_evaluator.py"
+      applicability: offline-test
+      status:
+        state: verified
+        evidence: "Observed PASS (logbook 046)."
+    status: Implemented
+    source_files:
+      - tradingagents/evidence/quality.py
+      - tradingagents/evidence/gate.py
+      - tradingagents/debate/evaluator.py
+    design_artifacts:
+      - docs/architecture/invariants.md
+    tests:
+      - tests/test_evidence_models.py
+      - tests/test_debate_evaluator.py
+    verification_evidence:
+      - "Stage-2 relevant suite: 402 passed (current tree)."
+    owner: 60536848-WANG-Yiwen
+
+  - id: NFR-FC-001
+    type: NonFunctional
+    category: invariant-zero-tolerance
+    title: Fail closed
+    description: >
+      Any internal error or missing evidence must fail closed (gate -> blocked;
+      evaluator -> summarize/insufficient_evidence). A low-quality run must
+      never proceed as normal or continue the debate.
+    priority: Must
+    priority_rationale: "See product.priorities for the rationale; Must-level because a violation is a safety/correctness veto."
+    tradeoff:
+      decision: "Fail closed (error/missing -> blocked/summarize)."
+      rejected_or_deferred: "Fail open to a normal run."
+      why: "Fail-open is a safety hazard."
+    origin: user-design
+    fit_criterion:
+      metric: "Internal-error/missing-evidence runs that proceed as normal or continue a debate."
+      operator: "=="
+      threshold_type: count
+      threshold: 0
+      unit: "fail-open escapes (offline)"
+      verification:
+        method: "Gate + evaluator + output-guard fail-closed tests."
+        command: ".venv/bin/python -m pytest tests/test_market_evidence_gate.py tests/test_debate_evaluator.py tests/test_output_guard.py -q"
+        references:
+          - "tests/test_output_guard.py"
+          - "tests/test_market_evidence_gate.py"
+      applicability: offline-test
+      status:
+        state: verified
+        evidence: "Observed PASS (logbook 046/065)."
+    status: Implemented
+    source_files:
+      - tradingagents/evidence/gate.py
+      - tradingagents/graph/data_quality_gate.py
+      - tradingagents/debate/evaluator.py
+    design_artifacts:
+      - docs/architecture/invariants.md
+    tests:
+      - tests/test_market_evidence_gate.py
+      - tests/test_debate_evaluator.py
+    verification_evidence:
+      - "Stage-2 relevant suite: 402 passed (current tree)."
+    owner: 60536848-WANG-Yiwen
+
+  - id: NFR-PIT-001
+    type: NonFunctional
+    category: invariant-zero-tolerance
+    title: Point-in-time integrity
+    description: >
+      No future (look-ahead) data may reach a decision; every dated market,
+      news, macro, and social path is evaluated as of the requested trade date.
+    priority: Must
+    priority_rationale: "See product.priorities for the rationale; Must-level because a violation is a safety/correctness veto."
+    tradeoff:
+      decision: "As-of boundary on every dated path."
+      rejected_or_deferred: "Trust vendor latest without as-of."
+      why: "Look-ahead corrupts decisions."
+    origin: inherited-system
+    fit_criterion:
+      metric: "Dated paths evaluated with a future (post-trade-date) record reaching a decision."
+      operator: "=="
+      threshold_type: count
+      threshold: 0
+      unit: "look-ahead leaks in point-in-time tests"
+      verification:
+        method: "Point-in-time/look-ahead tests (date-sensitive)."
+        command: ".venv/bin/python -m pytest tests/test_fundamentals_lookahead.py tests/test_news_lookahead.py tests/test_social_lookahead.py tests/test_memory_pointintime.py tests/test_exact_claim_validation.py -q"
+        references:
+          - "tests/test_fundamentals_lookahead.py"
+          - "tests/test_news_lookahead.py"
+          - "tests/test_social_lookahead.py"
+      applicability: runtime
+      status:
+        state: partially_verified
+        evidence: "Existing PIT tests pass within offline suite; re-run date-sensitive (RISK-001). Stage 3 (ADR-010): typed exact-claim dates validated against the matching date role only; a matched-but-future role value is a look-ahead rejection; SEC filed != fiscal end; news publication != figure date; date-only source cannot prove a timestamp (tests/test_exact_claim_validation.py 48 passed; logbook 081)."
+    status: Implemented
+    source_files:
+      - tradingagents/evidence/validate.py
+      - tradingagents/evidence/origin.py
+      - tradingagents/debate/claims.py
+      - tradingagents/dataflows/market_data_validator.py
+    design_artifacts:
+      - docs/architecture/memory-design.md
+      - docs/architecture/invariants.md
+      - docs/architecture/adr/010-exact-claim-validation.md
+    tests:
+      - tests/test_fundamentals_lookahead.py
+      - tests/test_news_lookahead.py
+      - tests/test_social_lookahead.py
+      - tests/test_memory_pointintime.py
+      - tests/test_exact_claim_validation.py
+    verification_evidence:
+      - "Existing point-in-time tests pass within the offline suite (re-run is date-sensitive)."
+      - "2026-11-11 Stage 3 (ADR-010): exact-claim date roles are validated distinctly (target/observation/availability/timestamp); a date-only source cannot prove a timestamp; a matched-but-future role value is rejected. Offline (tests/test_exact_claim_validation.py 48 passed; logbook 081); NOT human acceptance."
+    owner: 60536848-WANG-Yiwen
+
+  - id: NFR-AUD-001
+    type: NonFunctional
+    category: quality
+    title: Auditability
+    description: >
+      Gate verdicts and debate decisions carry stable reason codes, policy
+      version, critical evidence IDs, a human-readable reason, and an explicit
+      decision trace so any run can be audited.
+    priority: Must
+    priority_rationale: "See product.priorities for the rationale; Must-level because a violation is a safety/correctness veto."
+    tradeoff:
+      decision: "Stable codes/policy version/evidence IDs/trace."
+      rejected_or_deferred: "Opaque opaque verdict."
+      why: "Unauditable decisions cannot be reviewed."
+    origin: user-design
+    fit_criterion:
+      metric: "Decisions lacking stable reason codes / policy version / critical evidence IDs / decision trace."
+      operator: "=="
+      threshold_type: count
+      threshold: 0
+      unit: "audit-field omissions in exported records"
+      verification:
+        method: "Evidence-model + evaluator + artifact-audit tests."
+        command: ".venv/bin/python -m pytest tests/test_evidence_models.py tests/test_debate_evaluator.py tests/test_report_artifacts_audit.py tests/test_exact_claim_validation.py tests/test_exact_claim_runtime.py -q"
+        references:
+          - "tests/test_report_artifacts_audit.py"
+      applicability: offline-test
+      status:
+        state: verified
+        evidence: "Observed PASS (logbook 046/061). Stage 3 (ADR-010): every exact-claim verdict (verified/rejected/unverified + reason + asserted date/value/unit/ids) exported in debate_trace.json and injected into the Research Manager; rejected facts redacted from trusted plan without a global Hold (tests/test_exact_claim_runtime.py 9 passed; logbook 081)."
+    status: Implemented
+    source_files:
+      - tradingagents/evidence/models.py
+      - tradingagents/debate/models.py
+      - tradingagents/debate/evaluator.py
+      - tradingagents/debate/claims.py
+      - tradingagents/report_artifacts.py
+    design_artifacts:
+      - docs/architecture/invariants.md
+      - docs/architecture/adr/010-exact-claim-validation.md
+    tests:
+      - tests/test_evidence_models.py
+      - tests/test_debate_evaluator.py
+      - tests/test_report_artifacts_audit.py
+      - tests/test_exact_claim_validation.py
+      - tests/test_exact_claim_runtime.py
+    verification_evidence:
+      - "Stage-2 relevant suite: 402 passed (current tree)."
+      - "Per-evidence validations and run-summary identity/provenance exported (logbook 061)."
+    owner: 60536848-WANG-Yiwen
+
+  - id: NFR-BUD-001
+    type: NonFunctional
+    category: cost
+    title: Budget safety
+    description: >
+      Debate termination must reserve summary tokens/time and enforce
+      max tokens/time/calls so a run cannot exhaust budget mid-debate and lose
+      its report.
+    priority: Must
+    priority_rationale: "See product.priorities for the rationale; Must-level because a violation is a safety/correctness veto."
+    tradeoff:
+      decision: "Reserve + refuse overcalls pre-dispatch."
+      rejected_or_deferred: "Best-effort, one-call slack."
+      why: "Guaranteed report outweighs a hop."
+    origin: user-design
+    fit_criterion:
+      metric: "Count of summary-reserve violations: a pre-call admission where remaining budget < reserved_summary + estimated next-call cost, or a mid-debate exhaustion that loses the summary. A nonnegative configured reserve value is NOT itself evidence of enforcement; only the admission-guard outcome is counted."
+      operator: "=="
+      threshold_type: count
+      threshold: 0
+      unit: "summary-reserve violations in the offline admission-guard tests (estimate-based scope)"
+      verification:
+        method: "Offline budget + pre-call guard tests (reserve + estimated next-call cost, exact token/time boundaries) must show zero reserve violations. SCOPE: OFFLINE, ESTIMATE-BASED admission only — this does not measure real provider latency/token accounting. Real latency/token integration behavior is PARTIALLY VERIFIED at best and is recorded OPEN in DEBT-021: a 2026-11-06 live run showed the estimate (2171.77 s vs actual 12.72 s; 16,289 est vs 18,058 reported tokens) exhausted the time budget before Bear with 0 complete rounds."
+        command: ".venv/bin/python -m pytest tests/test_debate_budget.py tests/test_debate_precall_budget.py tests/test_durable_usage_ledger.py tests/test_whole_run_usage.py -q"
+        references:
+          - "tests/test_debate_precall_budget.py"
+          - "tests/test_debate_budget.py"
+          - "tests/test_durable_usage_ledger.py"
+          - "tests/test_whole_run_usage.py"
+      applicability: offline-test
+      status:
+        state: partially_verified
+        evidence: "Offline estimate-based guard: 22 pre-call tests pass with zero reserve violations (logbook 060/063); Stage 2 durable ledger fail-closed unresolved/atomic admission + summary-reserve 33 + whole-run 10 passed (logbook 080). Real latency/token accounting is UNVERIFIED and OPEN (DEBT-021 / RISK-021); live concurrency/retry unobserved (DEBT-036)."
+    status: Implemented
+    source_files:
+      - tradingagents/debate/budget.py
+      - tradingagents/debate/config.py
+      - tradingagents/debate/usage_ledger.py
+      - tradingagents/debate/usage_capture.py
+      - tradingagents/debate/researcher_accounting.py
+      - tradingagents/agents/researchers/bull_researcher.py
+      - tradingagents/agents/researchers/bear_researcher.py
+      - tradingagents/graph/setup.py
+      - tradingagents/graph/conditional_logic.py
+      - tradingagents/graph/trading_graph.py
+    design_artifacts:
+      - docs/architecture/adr/009-durable-run-usage-ledger.md
+      - docs/architecture/runtime-policy-catalog.md
+    tests:
+      - tests/test_debate_budget.py
+      - tests/test_debate_precall_budget.py
+      - tests/test_durable_usage_ledger.py
+      - tests/test_whole_run_usage.py
+    verification_evidence:
+      - "Stage-2 relevant suite: 402 passed (current tree)."
+      - "Pre-call guard prevents over-budget optional calls and preserves the summary reserve; the token/time check includes the estimated next-call cost, not only the reserve (logbook 060/063)."
+      - "2026-11-11 Stage 2 (ADR-009): a durable run-scoped SQLite ledger reserves spend before every outbound call and settles after, so a failed/billed attempt survives a crash and resume reconciles idempotently; unresolved/unknown spend makes optional calls fail closed; the summary reserve is protected per attempt without a second optional estimate; admission re-reads and enforces the full policy inside a BEGIN IMMEDIATE transaction. tests/test_durable_usage_ledger.py 33 passed + tests/test_whole_run_usage.py 10 passed; full strict-offline 1940 passed / 0 sockets (logbook 080). Offline-only; a reservation is an estimate, not a physical billing bound (DEBT-036)."
+    owner: 60536848-WANG-Yiwen
+
+  - id: NFR-BC-001
+    type: NonFunctional
+    category: governance
+    title: Backward compatibility
+    description: >
+      New config groups default to safe values and preserve legacy routing when
+      disabled; no regression to existing default `pytest -q` behavior.
+    priority: Should
+    priority_rationale: "See product.priorities for the rationale; Should-level because impact is bounded but quality-relevant."
+    tradeoff:
+      decision: "Safe defaults; legacy when disabled."
+      rejected_or_deferred: "Unconditional new behavior."
+      why: "Regresses default run/users."
+    origin: user-design
+    fit_criterion:
+      metric: "Regression in default pytest -q routing behavior when feature disabled."
+      operator: "=="
+      threshold_type: count
+      threshold: 0
+      unit: "backward-compatibility regressions"
+      verification:
+        method: "Debate config/graph tests + default run behavior."
+        command: ".venv/bin/python -m pytest tests/test_debate_config.py tests/test_debate_graph.py -q"
+        references:
+          - "tests/test_debate_config.py"
+          - "tests/test_debate_graph.py"
+      applicability: offline-test
+      status:
+        state: verified
+        evidence: "Observed PASS (logbook 043)."
+    status: Implemented
+    source_files:
+      - tradingagents/debate/config.py
+      - tradingagents/graph/setup.py
+    design_artifacts:
+      - docs/architecture/runtime-policy-catalog.md
+    tests:
+      - tests/test_debate_config.py
+      - tests/test_debate_graph.py
+    verification_evidence:
+      - "Stage-2 relevant suite: 402 passed (current tree)."
+    owner: 60536848-WANG-Yiwen
+
+  - id: NFR-OFF-001
+    type: NonFunctional
+    category: governance
+    title: Offline testability
+    description: >
+      The default `pytest -q` run must require no network or paid API. Vendor and
+      live tests are marked `@pytest.mark.integration` and are opt-in.
+    priority: Must
+    priority_rationale: "See product.priorities for the rationale; Must-level because a violation is a safety/correctness veto."
+    tradeoff:
+      decision: "Offline default; live opt-in integration."
+      rejected_or_deferred: "Network/LLM in CI."
+      why: "Non-deterministic, costly, unauthorized."
+    origin: governance
+    fit_criterion:
+      metric: "Count of outbound network connection attempts (socket.socket.connect / socket.socket.connect_ex / socket.create_connection) attempted by the default non-integration pytest run, measured by the count-and-fail strict-offline harness."
+      operator: "=="
+      threshold_type: count
+      threshold: 0
+      unit: "network connection attempts during the socket-disabled non-integration run"
+      verification:
+        method: "The documented count-and-fail harness (`scripts/validate/strict_offline_harness.py`) disables socket.socket.connect, socket.socket.connect_ex and socket.create_connection with a recorder that COUNTS each attempt and raises OSError, then asserts zero attempts and runs `pytest -q -p no:cacheprovider -m 'not integration'`. SCOPE + HONEST LIMITATION: an INTERCEPTED attempt is OBSERVED today — one attempt from the EXISTING baseline `tests/test_no_data_handling.py::TestLoadOhlcvNoPoison::test_empty_download_raises_and_does_not_cache` (vendor-reachability probe via requests/urllib3). No connection is made (the recorder raises), but the attempt count is NOT zero, so NFR-OFF-001 is NOT fully satisfied and stays OPEN (DEBT-002/RISK-002). The harness fails closed on any attempt; it does NOT assert the run is green (known cache/network baselines may fail and are recorded separately). No baseline test/CI/waiver is modified."
+        command: ".venv/bin/python scripts/validate/strict_offline_harness.py"
+        references:
+          - "tests/conftest.py"
+          - "scripts/validate/strict_offline_harness.py"
+      applicability: offline-test
+      status:
+        state: partially_verified
+        evidence: "OFFLINE PROPERTY PARTIAL: the harness records and fails closed on every forbidden attempt; the observed baseline test makes 1 intercepted vendor-reachability attempt (no connection made), so zero-attempt is NOT achieved (DEBT-002/RISK-002 OPEN; not modified). The non-integration run is also not all-green (4 known baselines: 3 date-sensitive ohlcv cache + the no-data vendor-reachability baseline). Recorded truthfully, not hidden."
+    status: Implemented
+    source_files:
+      - tests/conftest.py
+      - scripts/validate/strict_offline_harness.py
+    design_artifacts:
+      - docs/code-governance/verification-constraints.md
+    tests:
+      - tests/test_data_quality_gate_graph.py
+      - tests/test_debate_evaluator.py
+      - tests/test_governance_scaffold.py
+    verification_evidence:
+      - "Stage-2 relevant suite: 402 passed offline (current tree)."
+      - "Count-and-fail harness (scripts/validate/strict_offline_harness.py): records and fails closed on every forbidden socket attempt. OBSERVED today: 1 intercepted vendor-reachability attempt from the existing tests/test_no_data_handling.py baseline (no connection made); zero-attempt NOT achieved — NFR-OFF-001 PARTIAL/OPEN (DEBT-002/RISK-002), not modified."
+    owner: 60536848-WANG-Yiwen
+
+  - id: NFR-SEC-001
+    type: NonFunctional
+    category: security
+    title: Secret safety
+    description: >
+      No API key, token, or Bearer/sk- string may appear in committed files;
+      secrets stay in environment variables or gitignored .env.
+    priority: Must
+    priority_rationale: "See product.priorities for the rationale; Must-level because a violation is a safety/correctness veto."
+    tradeoff:
+      decision: "Secrets only in env/gitignored .env."
+      rejected_or_deferred: "Secrets in committed files."
+      why: "Zero-tolerance security property."
+    origin: governance
+    fit_criterion:
+      metric: "Secret-like strings present in committed governance artifacts (sk-/Bearer/long key values)."
+      operator: "=="
+      threshold_type: count
+      threshold: 0
+      unit: "secret-scan hits"
+      verification:
+        method: "Deterministic secret scan in validator (reports location only)."
+        command: ".venv/bin/python scripts/validate/validate_requirements.py"
+        references:
+          - "scripts/validate/validate_requirements.py"
+      applicability: governance
+      status:
+        state: verified
+        evidence: "'secret scan: no likely secrets found' (validator PASS)."
+    status: Implemented
+    source_files:
+      - .env.example
+      - AGENTS.md
+      - .opencode/permissions.jsonc
+    design_artifacts:
+      - docs/code-governance/verification-constraints.md
+    tests: []
+    verification_evidence:
+      - "Deterministic secret scan of new files found no secrets (see scripts/validate)."
+    owner: 60536848-WANG-Yiwen
+
+  # ---- Phase 4A offline baseline comparison (NFR-CMP-*) ----
+  - id: NFR-CMP-001
+    type: NonFunctional
+    category: quality
+    title: Deterministic offline baseline comparison
+    description: >
+      Provide a pure, LLM-free, network-free comparison model/runner that
+      contrasts the legacy fixed-round debate-termination baseline with the
+      dynamic policy over identical scripted case identity (ticker, target_date,
+      evidence_snapshot_id, policy_version) and identical scripted Bull/Bear
+      turn sequences. Both strategies are replayed over the same evidence
+      snapshot; any identity mismatch, missing strategy partner, or duplicate
+      result fails closed with PairingError so the two strategies are never
+      compared on an unequal footing. No live provider, wall clock, or paid API
+      is involved. A replayed run records the ACTUAL deterministic stop reason
+      (e.g. no_new_evidence, budget_exhausted, max_rounds_reached) and must
+      distinguish a genuinely early-stopped dynamic run from a scripted input
+      that simply ran out of rounds (input_exhausted): the latter is never a
+      dynamic-policy early stop and is never mislabelled as one.
+    priority: Must
+    priority_rationale: "See product.priorities for the rationale; Must-level because a violation is a safety/correctness veto."
+    tradeoff:
+      decision: "Scripted, fail-closed pairing; actual stop reason."
+      rejected_or_deferred: "Compare on unequal footing."
+      why: "Unequal comparison is meaningless."
+    origin: user-design
+    fit_criterion:
+      metric: "Comparison pairing/identity mismatches silently compared, or input_exhausted mislabelled as a dynamic stop."
+      operator: "=="
+      threshold_type: count
+      threshold: 0
+      unit: "pairing/stop-reason integrity failures"
+      verification:
+        method: "Comparison runner/schema tests + scripted run."
+        command: ".venv/bin/python -m pytest tests/test_comparison_runner.py tests/test_comparison_schemas.py -q"
+        references:
+          - "tests/test_comparison_runner.py"
+          - "tests/test_comparison_schemas.py"
+      applicability: offline-test
+      status:
+        state: verified
+        evidence: "90 passed (logbook 055); scripted, not live."
+    status: Implemented
+    source_files:
+      - tradingagents/comparison/runner.py
+      - tradingagents/comparison/schemas.py
+      - tradingagents/comparison/fixtures.py
+      - scripts/run_phase4a_comparison.py
+    design_artifacts:
+      - docs/architecture/adr/003-phase4a-offline-comparison.md
+      - docs/architecture/invariants.md
+    tests:
+      - tests/test_comparison_runner.py
+      - tests/test_comparison_schemas.py
+    verification_evidence:
+      - "tests/test_comparison_runner.py + tests/test_comparison_schemas.py: 90 passed (current tree; correction round 73 logbook 054; narrow fail-closed correction 90 logbook 055)."
+      - "scripts/run_phase4a_comparison.py: 3 scripted cases written to evaluation-output/ (logbook 049); stop_reason now preserved (no_new_evidence / budget_exhausted / max_rounds_reached) in results, JSON/aggregates, and Markdown (correction round, logbook 054)."
+      - "Narrow fail-closed correction: CaseResult.__post_init__ rejects a contradictory strategy/early_stopped/stop_reason combination (FIXED is never early-stopped; an early-stopped DYNAMIC result must carry a genuine _DYNAMIC_STOP_REASONS reason) so an inconsistent result can never reach the aggregate/report (logbook 055)."
+      - "Human review decision: Phase 4A approved with limitations (WANG Yiwen 60536848, 2026-10-23; logbook 056; docs/review-memo.md). Subject to the four recorded limitations (offline-only, cache baselines remain, traceability pending, no production threshold tuning)."
+    owner: 60536848-WANG-Yiwen
+
+  - id: NFR-CMP-002
+    type: NonFunctional
+    category: quality
+    title: Machine-readable measured-vs-estimated comparison metrics
+    description: >
+      Comparison metrics must be derived deterministically from explicit
+      numerators and denominators with documented zero-denominator behavior
+      (returns None, never raises or fabricates). Measured provider-reported
+      values are separated from deterministic char-based estimates via an
+      explicit estimated flag; evidence-citation coverage is derived from valid
+      cited evidence IDs (known, High/Medium, on-or-before target, linked to a
+      claim) over the snapshot's eligible IDs; false-strong-conclusion rate is
+      computed from an explicit strong_conclusion flag plus the gate/quality
+      outcome, never inferred from prose; and aggregate sums/rates must be
+      derived deterministically and reproducible across runs. Tool-call counts
+      (per case and aggregate) and the estimated/measured usage provenance must
+      be preserved in the aggregate and surfaced in both the JSON and Markdown
+      reports so an estimated value is never presented as measured.
+    priority: Must
+    priority_rationale: "See product.priorities for the rationale; Must-level because a violation is a safety/correctness veto."
+    tradeoff:
+      decision: "Explicit estimated flag; separate measured/estimated."
+      rejected_or_deferred: "Conflate estimated as measured."
+      why: "Conflation misleads (NFR-CMP-002)."
+    origin: user-design
+    fit_criterion:
+      metric: "Aggregates presenting an estimated usage value as measured, or nondeterministic aggregate metrics."
+      operator: "=="
+      threshold_type: count
+      threshold: 0
+      unit: "measured/estimated conflation errors"
+      verification:
+        method: "Comparison schema/runner tests + report inspection."
+        command: ".venv/bin/python -m pytest tests/test_comparison_schemas.py tests/test_comparison_runner.py -q"
+        references:
+          - "tests/test_comparison_schemas.py"
+          - "tests/test_comparison_runner.py"
+      applicability: offline-test
+      status:
+        state: verified
+        evidence: "90 passed (logbook 055)."
+    status: Implemented
+    source_files:
+      - tradingagents/comparison/metric_formulas.py
+      - tradingagents/comparison/schemas.py
+      - tradingagents/comparison/runner.py
+      - tradingagents/comparison/report.py
+    design_artifacts:
+      - docs/architecture/adr/003-phase4a-offline-comparison.md
+    tests:
+      - tests/test_comparison_schemas.py
+      - tests/test_comparison_runner.py
+    verification_evidence:
+      - "tests/test_comparison_schemas.py + tests/test_comparison_runner.py: 90 passed (correction round 73 logbook 054; narrow fail-closed correction 90 logbook 055)."
+      - "evaluation-output/comparison_results.json + comparison_report.md include Total tool calls, per-case Tool calls/Source, Estimated (not measured) cases, and the actual stop reason per case and in the stop-reason aggregate."
+      - "Narrow fail-closed correction: early_stop_rate / the early-stop label can never be produced for a contradictory strategy/early_stopped/stop_reason combination (logbook 055)."
+      - "Human review decision: Phase 4A approved with limitations (WANG Yiwen 60536848, 2026-10-23; logbook 056; docs/review-memo.md)."
+    owner: 60536848-WANG-Yiwen
+
+  - id: NFR-CMP-003
+    type: NonFunctional
+    category: governance
+    title: Human traceability rubric and honest scripted-result labeling
+    description: >
+      Human traceability uses a documented rubric with human-entered
+      per-dimension scores in [0, 1]; an unscored case stays pending with None
+      scores rather than fabricating a rating. A SCORED traceability result
+      requires exactly four non-null scores, one for each
+      TRACEABILITY_DIMENSIONS dimension, in that exact positional order; a
+      missing, extra, null, duplicate, or reordered dimension set fails closed
+      rather than silently mis-reporting a rating. The Phase 4A comparison output and
+      reports must be labeled clearly as deterministic offline scripted-fixture
+      results, not live-provider measurements, and must state that no production
+      thresholds were tuned and that human score-based traceability is pending a
+      human.
+    priority: Should
+    priority_rationale: "See product.priorities for the rationale; Should-level because impact is bounded but quality-relevant."
+    tradeoff:
+      decision: "Pending stays pending; human-only scores."
+      rejected_or_deferred: "Auto-estimate traceability."
+      why: "An AI score would be fabricated."
+    origin: course-clause
+    fit_criterion:
+      metric: "Unscored traceability reported as scored, or non-live results labelled as live measurements."
+      operator: "=="
+      threshold_type: count
+      threshold: 0
+      unit: "traceability/labeling violations"
+      verification:
+        method: "Schema tests requiring exactly four non-null scores in order; pending stays pending."
+        command: ".venv/bin/python -m pytest tests/test_comparison_schemas.py tests/test_comparison_runner.py -q"
+        references:
+          - "tests/test_comparison_schemas.py"
+      applicability: offline-test
+      status:
+        state: verified
+        evidence: "90 passed (logbook 054/055); human scores remain pending (not fabricated)."
+    status: Implemented
+    source_files:
+      - tradingagents/comparison/schemas.py
+      - tradingagents/comparison/report.py
+      - tradingagents/comparison/runner.py
+    design_artifacts:
+      - docs/architecture/adr/003-phase4a-offline-comparison.md
+    tests:
+      - tests/test_comparison_schemas.py
+      - tests/test_comparison_runner.py
+    verification_evidence:
+      - "evaluation-output/comparison_report.md states offline/scripted scope, not a live-provider result; traceability reported as pending (logbook 049)."
+      - "tests/test_comparison_schemas.py proves a SCORED result requires exactly four non-null scores in TRACEABILITY_DIMENSIONS order and rejects missing/extra/null/reordered sets; PENDING results stay pending (correction round; logbook 054)."
+      - "tests/test_comparison_schemas.py + tests/test_comparison_runner.py: 90 passed incl. fail-closed strategy/early_stopped/stop_reason consistency (narrow correction, logbook 055)."
+      - "Human review decision: Phase 4A approved with limitations (WANG Yiwen 60536848, 2026-10-23; logbook 056; docs/review-memo.md); human traceability scores remain pending, not entered."
+    owner: 60536848-WANG-Yiwen

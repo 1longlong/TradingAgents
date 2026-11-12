@@ -42,6 +42,7 @@ __all__ = [
     "build_instrument_context",
     "resolve_instrument_identity",
     "get_instrument_context_from_state",
+    "get_data_quality_context_from_state",
     "get_language_instruction",
     "create_msg_delete",
 ]
@@ -230,6 +231,37 @@ def report_or_absent(text: str, source: str) -> str:
     return f"(No {source} report in this run: it is not available, not an empty finding.)"
 
 
+def get_data_quality_context_from_state(state: Mapping[str, Any]) -> str:
+    """Return the Data Quality Gate's human-readable constraint/context string.
+
+    Prefers the gate context stored on the state by the Data Quality Gate node.
+    When the field is absent (a bare programmatic state or a legacy checkpoint
+    that predates Phase 3A), it returns a fail-closed block notice rather than an
+    empty string, so the downstream Bull/Bear/Research Manager prompt always
+    states that the debate is restricted — never silently unrestricted (#1088).
+
+    Existing direct unit tests that build minimal state dicts keep working: the
+    gate context simply reads as a block, and the prompt remains safe to render.
+    """
+    context = state.get("data_quality_context")
+    if isinstance(context, str) and context.strip():
+        return context
+    verdict = state.get("data_quality_verdict")
+    if verdict == "normal":
+        return (
+            "[Data Quality Gate] Verdict: normal. Market quality is adequate: "
+            "the standard bull/bear debate may proceed with normal confidence, "
+            "citing the validated evidence."
+        )
+    # Absent or non-normal gate state fails closed: never present as unrestricted.
+    return (
+        "[Data Quality Gate] Verdict: blocked. Critical market data is missing or "
+        "conflicting; the standard bull/bear debate was skipped. Only an "
+        "evidence-insufficient conclusion may be produced. No directional Buy or "
+        "Sell is permitted."
+    )
+
+
 def get_portfolio_context_from_state(state: Mapping[str, Any]) -> str:
     """Return the caller's portfolio block, or a notice that none was given.
 
@@ -269,7 +301,16 @@ def create_msg_delete():
                 f"{instrument_context} The analysis date is {trade_date}."
             )
         )
-        return {"messages": removal_operations + [placeholder]}
+        # Durability (ADR-008): this clear node runs immediately after the
+        # analyst's tool node in the same graph invocation, so the run-scoped
+        # collector still holds any structured vendor evidence the tools
+        # captured. Flush it into the returned state delta so it is checkpointed
+        # at the tool boundary (a ContextVar alone is not durable). A no-op when
+        # no run is active or nothing was captured; never changes messages.
+        from tradingagents.graph.evidence_tool_node import capture_into_state
+
+        captured_state = capture_into_state(state)
+        return {"messages": removal_operations + [placeholder], **captured_state}
 
     return delete_messages
 

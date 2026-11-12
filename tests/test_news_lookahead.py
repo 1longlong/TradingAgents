@@ -5,6 +5,9 @@ Regressions for #992 (flat articles bypassed the date filter), #1007 (global
 news injected future articles), #993 (empty-after-filter returned a blank body),
 and #1126 (inclusive upper bound leaked the midnight-after article; host-local
 timestamp parsing made filtering machine-dependent).
+
+Traceability: NFR-PIT-001 (point-in-time integrity); supports INV-3 (no
+look-ahead).
 """
 from datetime import datetime, timezone
 

@@ -1,5 +1,7 @@
 import logging
 
+from tradingagents.evidence.models import SourceResultStatus
+
 from .alpha_vantage import (
     get_balance_sheet as get_alpha_vantage_balance_sheet,
     get_cashflow as get_alpha_vantage_cashflow,
@@ -152,6 +154,31 @@ VENDOR_METHODS = {
     },
 }
 
+def _record_router_attempt(method, vendor, result_status, *, error_type=None):
+    """Record a router-level source attempt (sanitized; no-op outside a run).
+
+    Records the vendors the router actually operated but that did NOT produce
+    data (failure / rate-limit / not-configured / no-data / skipped-after-success).
+    The authoritative *success* attempt is recorded by the dataflow adapter WITH
+    the captured data, so this never double-counts a successful fetch. Errors are
+    a short classification only (never the raw exception text, URL, key, or body).
+    """
+    try:
+        from tradingagents.evidence.ingest import capture_attempt
+        from tradingagents.evidence.vendor_adapters import make_source_attempt
+
+        capture_attempt(
+            make_source_attempt(
+                source=str(vendor),
+                tool=str(method),
+                result_status=result_status,
+                error_type=error_type,
+            )
+        )
+    except Exception:  # noqa: BLE001 — attempt recording must never break routing
+        return
+
+
 def get_category_for_method(method: str) -> str:
     """Get the category that contains the specified method."""
     for category, info in TOOLS_CATEGORIES.items():
@@ -209,20 +236,26 @@ def route_to_vendor(method: str, *args, **kwargs):
         impl_func = vendor_impl[0] if isinstance(vendor_impl, list) else vendor_impl
 
         try:
-            return impl_func(*args, **kwargs)
+            result = impl_func(*args, **kwargs)
         except VendorRateLimitError as e:
             logger.warning("Vendor %r unavailable for %s: %s; trying next vendor.", vendor, method, e)
             # Kept so an all-unavailable chain can say the vendor was the
             # problem, rather than reporting nothing about the symbol.
             last_unavailable = e
+            _record_router_attempt(method, vendor, SourceResultStatus.SKIPPED,
+                                   error_type="rate_limited")
             continue
         except VendorNotConfiguredError as e:
             logger.warning("Vendor %r not configured for %s; trying next vendor.", vendor, method)
             if first_error is None:
                 first_error = e  # Surface it if no other vendor can serve the call.
+            _record_router_attempt(method, vendor, SourceResultStatus.SKIPPED,
+                                   error_type="unconfigured")
             continue
         except NoMarketDataError as e:
             last_no_data = e  # No data here; another configured vendor may have it
+            _record_router_attempt(method, vendor, SourceResultStatus.EMPTY,
+                                   error_type="no_data")
             continue
         except Exception as e:
             # Don't let one vendor's failure crash the call when another can
@@ -231,7 +264,17 @@ def route_to_vendor(method: str, *args, **kwargs):
             logger.warning("Vendor %r failed for %s: %s", vendor, method, e)
             if first_error is None:
                 first_error = e
+            _record_router_attempt(method, vendor, SourceResultStatus.FAILED,
+                                   error_type=type(e).__name__)
             continue
+        else:
+            # Success: the dataflow adapter records the authoritative success
+            # attempt WITH the captured data. The router must NOT fabricate an
+            # attempt for vendors it did not operate (the remaining vendors are
+            # not attempts); configured-but-unreached feeds are recorded only in
+            # the separate, explicitly non-operated ``not_attempted`` metadata
+            # channel by the adapters, never as operated attempts.
+            return result
 
     # If any vendor reported "no data", the symbol is genuinely unavailable.
     # Return one explicit, instructive sentinel rather than a vendor-specific

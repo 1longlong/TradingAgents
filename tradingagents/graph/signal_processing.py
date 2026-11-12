@@ -12,8 +12,10 @@ This module exists for backwards compatibility with callers that expect a
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
+from tradingagents.agents.utils.output_guard import HOLD, is_blocked_run
 from tradingagents.agents.utils.rating import RATING_REVIEW, extract_rating
 
 
@@ -26,13 +28,22 @@ class SignalProcessor:
         # rendered markdown without a second LLM call, so it is not stored.
         pass
 
-    def process_signal(self, full_signal: str) -> str:
+    def process_signal(self, full_signal: str, state: Mapping[str, Any] | None = None) -> str:
         """Return one of Buy / Overweight / Hold / Underweight / Sell, or REVIEW.
 
-        An unrecognizable decision yields ``REVIEW`` rather than a fabricated
-        ``Hold``, so a parsing failure is visible instead of masquerading as a
-        tradeable neutral signal (#1170). Consumers that map the result onto the
-        5-tier enum should guard with :func:`~tradingagents.agents.utils.rating.is_review`.
+        When the structured gate ``state`` proves the run is blocked, the
+        authoritative final signal is ``Hold`` regardless of what text the model
+        produced. This is the structured enforcement at the signal boundary: even
+        if a decision-header format the guard did not anticipate slips through as
+        text, a blocked run can never end as a directional call.
+
+        Otherwise an unrecognizable decision yields ``REVIEW`` rather than a
+        fabricated ``Hold``, so a parsing failure is visible instead of
+        masquerading as a tradeable neutral signal (#1170). Consumers that map
+        the result onto the 5-tier enum should guard with
+        :func:`~tradingagents.agents.utils.rating.is_review`.
         """
+        if state is not None and is_blocked_run(state):
+            return HOLD
         rating = extract_rating(full_signal)
         return rating if rating is not None else RATING_REVIEW
