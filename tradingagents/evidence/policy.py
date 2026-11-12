@@ -32,6 +32,7 @@ dependency to model an exchange calendar.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
@@ -295,6 +296,49 @@ class MarketRecordPolicy:
         return Criticality.IMPORTANT
 
 
+# A legitimate extended ``YYYY-MM-DD`` date followed by exactly one separator
+# character (``T``, a space, or the ``Z`` single-character separator that
+# ``datetime.fromisoformat`` accepts) and then a time payload of AT LEAST an hour
+# component, ending in a single terminal uppercase ``Z``. This is a
+# *date+time-shape* test, independent of which separator character is used, so
+# the terminal ``Z`` is normalized on ``2026-05-10T12:00:00Z`` and also on
+# ``2026-05-10Z12:00:00Z`` (whose separator ``Z`` is left untouched) while a
+# date-only ``2026-05-10Z`` never matches and stays rejected.
+#
+# The time body is ``\d{2}`` (the two-hour-digit minimum: ``HH``) OR a longer tail
+# that itself ends in a digit (``HH:MM``, ``HH:MM:SS``, fractions). The hour-only
+# form (``...T12Z``) is thus accepted, matching the approved at-least-HH guard.
+#
+# The ``[+-]\d{2}:?\d{2}$`` offset exclusion and the shape above are deliberate:
+# a repeated/lowercase ``Z`` suffix (``...ZZ``/``...zZ``) or a pre-existing offset
+# before the ``Z`` (``...+00:00Z``) is NOT rewritten. Rewriting those would turn a
+# parser-rejected raw string into a parser-accepted one on some interpreters
+# (e.g. 3.9 accepts ``...+00:00`` but rejects the raw doubled suffix), which would
+# *introduce* malformed acceptance instead of preserving rejection. The final
+# ``fromisoformat`` parse remains authoritative (so an interpreter-specific
+# fraction/compact-form rejection still yields ``None``).
+_TERMINAL_Z_DATETIME = re.compile(r"^\d{4}-\d{2}-\d{2}.(?:\d{2}|.*[0-9])Z$")
+_OFFSET_BEFORE_Z = re.compile(r"[+-]\d{2}:?\d{2}$")
+
+
+def _normalize_terminal_utc_z(text: str) -> str:
+    """Replace a terminal uppercase ``Z`` with ``+00:00`` on a date+time string.
+
+    Only applied when ``text`` is date+time-shaped; ``None`` input (already
+    stripped) is unchanged. This preserves the parser-supported formats and
+    offset calendar semantics: a normal ``Z``/``+00:00`` is the same instant, so
+    no UTC date shifting is introduced. Malformed dates/times, a lone
+    date-only ``Z``, a repeated ``Z`` suffix, and a lowercase ``z`` are left for
+    the parser to reject.
+    """
+    if _TERMINAL_Z_DATETIME.match(text):
+        core = text[:-1]
+        if _OFFSET_BEFORE_Z.search(core):
+            return text
+        return core + "+00:00"
+    return text
+
+
 def to_date(value) -> date | None:
     """Parse ``YYYY-MM-DD`` (or ISO datetime) to a :class:`date` or ``None``."""
     if value is None:
@@ -307,7 +351,7 @@ def to_date(value) -> date | None:
     if not text:
         return None
     try:
-        return datetime.fromisoformat(text).date()
+        return datetime.fromisoformat(_normalize_terminal_utc_z(text)).date()
     except ValueError:
         return None
 

@@ -1194,3 +1194,93 @@ Git mutations.
   202,941-token school run remains historical bug evidence only and is NOT relabelled
   as post-fix live proof. This record is independent technical review, NOT AI/human
   approval.
+
+### 2026-11-12 — Python 3.10 CI repair: human PLAN/TEST approval + builder implementation report
+
+- **Human decision (recorded):** the human explicitly approved this round's Python
+  3.10 repair plan AND test cases ("批准本轮 Python 3.10 修复计划和测试用例"). This is
+  implementation approval only — **NOT final human feature acceptance.**
+- **Scope implemented (baseline `668b46a`, clean `feature/data-quality-debate-control`):**
+  - `tradingagents/evidence/policy.py` — narrow `to_date` repair: a
+    `_normalize_terminal_utc_z` helper guarded by a date+time-shape regex
+    (`^\\d{4}-\\d{2}-\\d{2}.(?:\\d{2}|.*[0-9])Z$`, at least an hour component, so
+    HH-only/HH:MM/HH:MM:SS/fractions all match) plus `_OFFSET_BEFORE_Z` (excludes a
+    pre-existing offset before the `Z`) replaces only a legitimate terminal uppercase
+    `Z` with `+00:00`; the final `datetime.fromisoformat` remains authoritative.
+    Date-only `Z`, repeated `ZZ`, `zZ`/`Zz`, `+00:00Z`, and malformed dates/times are
+    **not** rewritten; the raw parser behavior is retained (not universal rejection —
+    native 3.12 natively accepts raw `...zZ`, native 3.9 rejects it); terminal lowercase
+    `z` and repeated uppercase `ZZ` tested rejection still holds; offsets keep
+    calendar-date semantics; legacy
+    non-`Z` numeric/compact `to_date` behavior is preserved per interpreter
+    (unchanged by this repair; compact `YYYYMMDD` acceptance expanded in 3.11, and
+    the observed 3.12 acceptance is historical baseline only).
+  - `tests/test_policy_to_date_python310.py` (new, additive) — 39 tests: `Z`≡`+00:00`
+    ≡calendar date; separator variants (`T`, space, `Z`); time-granularity variants
+    (HH-only/HH:MM/HH:MM:SS/fraction); date/datetime/offset unchanged; negatives
+    (date-only `Z`, `ZZ`, `Zz`, `+00:00Z`, `z`, malformed, empty, None);
+    **helper-boundary regression** proving malformed repeated/lowercase-`Z`/
+    offset-before-`Z` suffixes are not rewritten; legitimate terminal-`Z` helper
+    rewrites; interpreter-native parity for non-terminal-`Z` forms (`20260510`,
+    `...zZ`); legacy numeric/compact **per-interpreter parity** with the unpatched
+    native parser (bool rejected universally); deterministic pre-3.11 simulation
+    (incl. HH-only/HH:MM); `_iso_date` numeric/bool boundary; real mocked StockTwits
+    `fetch → capture → gate` (Medium/native-label/allowlist/privacy); future
+    terminal-`Z` source rejection as `lookahead`.
+- **Independent native old-parser findings (fixed):** an independent review extracted
+  the production guard/helper/`to_date` AST and ran it under the local stdlib
+  **Python 3.9.25** (a real older parser, NOT project 3.10 and not a 3.10 proof). It
+  found (1) the original `...Z$` guard rewrote malformed `...ZZ` into `...Z+00:00`,
+  which 3.9 accepted; and (2) a follow-up `\d{2}.*[0-9]Z` tightening rejected the
+  supported HH-only/HH:MM shapes. The final guard keeps the two-hour-digit minimum
+  with the pre-`Z` digit as a separate alternative so HH-only/HH:MM/HH:MM:SS/fractions
+  normalize while `ZZ`/`zZ`/`+00:00Z` are not rewritten. Re-running the extracted
+  production code on 3.9.25 (22-case accepted/rejected matrix) gave **0 failures**.
+- **Verification outcomes:** new tests 39 passed; the two original CI-failing tests
+  pass under the pre-3.11 simulation (2 passed / 0 sockets); focused/regression 191
+  passed; `test_structured_evidence_ingestion.py` 53 passed; full strict-offline
+  **2406 passed / 1 skipped / 1 deselected / 22 warnings / 88 subtests / 0 socket
+  attempts**; `ruff check .` clean; governance **43/43 PASS**; `git diff --check`
+  clean plus separate untracked-file whitespace check clean.
+- **Limitations:** the pre-3.11 behavior is proven by a deterministic simulation plus
+  extracted production-code execution under local Python 3.9.25 (a real older parser,
+  never labelled 3.10 proof), not an actual Python 3.10 run; no 3.10 runtime is
+  installed and none was authorized.
+
+### 2026-11-12 — Independent Codex technical verification (COMPLETE) + `zZ` wording correction
+
+- **Status:** independent Codex technical verification of the CURRENT covered offline
+  scope is **COMPLETE**. This is **offline technical evidence only**, NOT a live/3.10
+  CI proof and NOT human acceptance. Human plan+test approval remains
+  **implementation-only**.
+- **Independent results (supplied; recorded, not re-guessed):**
+  - full strict-offline → **2406 passed / 1 skipped / 1 deselected / 22 warnings / 88
+    subtests / 0 forbidden socket attempts**;
+  - focused **5-module** subset (`test_policy_to_date_python310.py` +
+    `test_structured_evidence_ingestion.py` + `test_market_evidence_gate.py` +
+    `test_exact_claim_validation.py` + `test_debate_evidence_manifest.py`) → **240
+    passed / 0 sockets** (a **different subset** than the builder's 191; not conflated);
+  - the exact original 2 CI tests under the simulated pre-3.11 terminal-`Z` restriction
+    → **2 passed / 0 sockets**;
+  - extracted actual production helper+`to_date` AST with real **Python 3.9.25** stdlib →
+    **22/22 checks pass**; same 22-case probe on **3.12.7** passes (NOT actual 3.10 or
+    full-project 3.9 proof);
+  - `ruff check .` clean; governance **43/43 PASS**; `git diff --check` clean; new
+    untracked test file separately checked (trailing whitespace / extra EOF blank /
+    secrets) → clean; SHA verification confirms the tested behavior; frozen files
+    unchanged.
+- **Honest `zZ` wording (docs-only correction):** the original **unmodified** 3.12
+  `policy.to_date("2026-05-10T12:00:00zZ")` **already returns 2026-05-10**, whereas
+  native 3.9 rejects it. The current helper leaves `zZ` unchanged, preserving that
+  interpreter-native legacy behavior; **no new rejection was introduced in source** and
+  `zZ` is **not** claimed globally rejected. Accurate claim: "malformed suffix is not
+  rewritten and raw parser behavior is retained", with native-3.9 rejection documented
+  specifically. Terminal lowercase `z` and repeated uppercase `ZZ` tested rejection
+  still holds. The independent 22-case probe records `zZ` as **NATIVE PARITY**, not
+  universal `None`.
+- **Artifacts (backed up outside repo to
+  `/Users/wangyiwen/OpenCodeRecords/TradingAgents`):** `python310-independent-full-offline.log`,
+  `python310-independent-focused.log`, `python310-original-ci-simulation.log`,
+  `python310-native39-date-checks.json`, `python310-native312-date-checks.json`.
+- **Still pending:** explicit final **HUMAN acceptance** and the **actual new remote
+  Python 3.10 CI** (no push authorized). No commit/push/new PR/merge/product live call.
