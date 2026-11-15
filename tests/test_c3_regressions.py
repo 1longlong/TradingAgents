@@ -20,6 +20,11 @@ import textwrap
 import pytest
 from pathlib import Path
 
+#: The registered batch this round runs. Specs fixtures point at a real
+#: registered directory because the gate derives a run's arm from it.
+SPECS_FIXTURE = (Path(__file__).resolve().parent.parent
+                 / "token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/specs")
+
 from tradingagents.observability import _extract_usage_metadata
 
 
@@ -216,12 +221,40 @@ _GOOD_SCOPE = {"company_news": "finnhub", "global_news": "finnhub:CONFIG_DISABLE
                "gdelt": "excluded"}
 
 
+def _conforming_spec(**overrides):
+    """A spec carrying every field the gate now requires (audit A H-B).
+
+    The pre-flight used to accept a spec with most frozen fields *absent*,
+    because every check was written ``if field is not None``. Omitting a field
+    therefore skipped its check: a spec with no ``switches`` ran at
+    ``DEFAULT_CONFIG`` -- the AB arm -- while its directory claimed C0. The
+    fields are mandatory now, and each must still agree with the registration,
+    so this fixture is derived from the real R01 registration rather than
+    hand-written: hand-writing it merely tested a spec that disagrees with the
+    study.
+    """
+    import scripts.token_benchmark as tb
+    import json
+
+    registration_dir = SPECS_FIXTURE / "R01_NVDA_C0"
+    registration = json.loads((registration_dir / "experiment.json").read_text())
+    spec = {key: registration[key] for key in tb.REGISTERED_HASH_FIELDS
+            if key in registration}
+    spec.update({
+        "config_sha256": registration["config_sha256"],
+        "registration_dir": str(registration_dir),
+        "case": registration["cases"][0],
+        "_spec_path": str(registration_dir / "spec.json"),
+    })
+    spec.update(overrides)
+    assert set(tb._SPEC_REQUIRED_FIELDS) <= set(spec)
+    return spec
+
+
 def test_preflight_accepts_a_conforming_spec():
     import scripts.token_benchmark as tb
 
-    assert tb._preflight_gate(
-        {"switches": dict(_GOOD_SWITCHES), "news_scope": dict(_GOOD_SCOPE)}
-    ) == {"checked": True}
+    assert tb._preflight_gate(_conforming_spec()) == {"checked": True}
 
 
 @pytest.mark.parametrize("scope", [
@@ -234,7 +267,7 @@ def test_preflight_refuses_a_non_finnhub_news_scope(scope):
     import scripts.token_benchmark as tb
 
     with pytest.raises(tb.RunRefused):
-        tb._preflight_gate({"switches": dict(_GOOD_SWITCHES), "news_scope": scope})
+        tb._preflight_gate(_conforming_spec(news_scope=scope))
 
 
 def test_preflight_refuses_s2_downstream_false():
@@ -242,7 +275,8 @@ def test_preflight_refuses_s2_downstream_false():
 
     switches = dict(_GOOD_SWITCHES, s2_downstream=False)
     with pytest.raises(tb.RunRefused):
-        tb._preflight_gate({"switches": switches})
+        tb._preflight_gate(_conforming_spec(switches=switches,
+                                            switches_required=switches))
 
 
 def test_a_run_refusal_is_raised_not_recorded_as_metrics(tmp_path):
@@ -416,13 +450,19 @@ def test_registration_hash_is_recomputed_not_trusted(tmp_path):
     assert tb._preflight_gate(spec)["checked"] is True
 
     zeroed = dict(spec, config_sha256="0" * 64)
-    with pytest.raises(tb.RunRefused, match="config_sha256 mismatch"):
+    # The spec now disagrees with the registration it names, which is a sharper
+    # statement than "the hash does not match": the hash never could match,
+    # because the spec is not the definition.
+    with pytest.raises(tb.RunRefused, match="disagrees with its registration"):
         tb._preflight_gate(zeroed)
 
     # Editing the definition after registration invalidates the old hash.
     edited = dict(experiment, deep_model="evil-model")
     (tmp_path / "experiment.json").write_text(json.dumps(edited))
-    with pytest.raises(tb.RunRefused, match="config_sha256 mismatch"):
+    # The spec now disagrees with the definition it points at *and* the
+    # definition no longer hashes to the declared value; the cross-check names
+    # both sides, which is the more actionable of the two.
+    with pytest.raises(tb.RunRefused, match="disagrees with its registration"):
         tb._preflight_gate(spec)
 
 
@@ -767,6 +807,7 @@ def test_parent_refuses_a_consistently_rehashed_arm_swap():
     experiment = json.loads((spec_dir / "experiment.json").read_text())
     spec = {key: experiment[key] for key in tb.REGISTERED_HASH_FIELDS}
     spec.update({"experiment_id": experiment["experiment_id"],
+                 "config_sha256": experiment["config_sha256"],
                  "registration_dir": str(spec_dir),
                  "case": experiment["cases"][0]})
     tb._preflight_gate(spec)
@@ -775,6 +816,11 @@ def test_parent_refuses_a_consistently_rehashed_arm_swap():
     # true (there is no OFF implementation), and this is a real arm swap.
     swapped["switches"] = {**frozen["R01"], "batch_macro": True}
     assert swapped["switches"] != frozen["R01"]
+    # A real attacker rehashes, or the hash check catches it before the matrix
+    # is ever consulted -- the point of this test is the check *after* that.
+    swapped = dict(swapped, config_sha256=swapped["switches"] and tb.registration_sha256(
+        {**swapped, "switches": swapped["switches"],
+         "cases": experiment["cases"]}))
     with pytest.raises(tb.RunRefused, match="SWITCH_MATRIX.csv froze"):
         tb._preflight_gate(swapped)
 
@@ -799,12 +845,23 @@ def test_a_copied_run_id_cannot_be_measured_twice(tmp_path):
     # The registered directory is accepted.
     tb._preflight_registration(src, experiment, experiment["cases"][0])
 
+    # The dangerous copy is one that stays *inside* the batch's ``specs/``:
+    # there it still looks like a registered run, so only its path distinguishes
+    # it. A copy elsewhere is not a batch registration at all and is refused
+    # for that reason instead.
+    copy = src.parent / "R01_NVDA_C0_COPY"
+    try:
+        shutil.copytree(src, copy)
+        with pytest.raises(tb.RunRefused,
+                           match="not that run's registered directory"):
+            tb._preflight_registration(copy, experiment, experiment["cases"][0])
+    finally:
+        shutil.rmtree(copy, ignore_errors=True)
+    assert not copy.exists(), "the test must not leave a copy in the batch"
+
+    # The child refuses a spec derived from a copy too, before any paid call.
     copy = tmp_path / "exp_B" / "R01_NVDA_C0"
     shutil.copytree(src, copy)
-    with pytest.raises(tb.RunRefused, match="not that run's registered directory"):
-        tb._preflight_registration(copy, experiment, experiment["cases"][0])
-
-    # The child would refuse it too, so a copied spec cannot reach a paid call.
     spec = json.loads(tb.prepare_run_spec(
         copy, experiment, experiment["cases"][0], 1, attempt=0).read_text())
     with pytest.raises(tb.RunRefused, match="not from that run's registered directory"):
@@ -922,3 +979,164 @@ def test_per_agent_usage_completeness_is_reported():
     complete = tb._extract_agent_metrics(
         {"reported_input_tokens_sum": 100, "reported_output_tokens_sum": 50, "llm_calls": 2})
     assert complete["usage_complete"] is True and complete["total_tokens"] == 150
+
+
+# ---------------------------------------------------------------------------
+# Audit B round 4, B-15: the fingerprint must cover the registration
+# ---------------------------------------------------------------------------
+def test_the_fingerprint_covers_the_frozen_registration():
+    """B-15: the fingerprint covered zero registered artefacts.
+
+    It included ``tradingagents/``, ``cli/``, ``scripts/`` and ``tests/``, and
+    nothing under the batch directory except the excluded ``c3/``. Editing a
+    registration -- ``deep_model``, a trade date, an arm -- therefore left the
+    fingerprint unchanged, and re-running the freeze writer re-certified the
+    edited experiment as a valid release.
+    """
+    import scripts.token_benchmark as tb
+
+    prefix = "token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/"
+    covered = {
+        m["path"][len(prefix):]
+        for m in tb._working_tree_manifest() if m["path"].startswith(prefix)
+    }
+    for expected in ("SWITCH_MATRIX.csv", "experiment.json"):
+        assert expected in covered
+    assert sum(1 for c in covered if c.startswith("specs/")) >= 32
+    # The record states the fingerprint; fingerprinting it is unsatisfiable.
+    assert not any(c.startswith("c3/") for c in covered)
+
+
+def test_editing_a_registration_moves_the_fingerprint():
+    """...and the consequence, tested directly rather than by inspection."""
+    import json
+
+    import scripts.token_benchmark as tb
+
+    batch = tb._frozen_batch_dir()
+    experiment = json.loads((batch / "experiment.json").read_text())
+    registration = batch / "specs/R01_NVDA_C0/experiment.json"
+    original = registration.read_text(encoding="utf-8")
+    before = tb.compute_code_state(batch, experiment)["working_tree_sha256"]
+    try:
+        mutated = json.loads(original)
+        mutated["deep_model"] = "evil-model"
+        registration.write_text(json.dumps(mutated, indent=2), encoding="utf-8")
+        after = tb.compute_code_state(batch, experiment)["working_tree_sha256"]
+        assert after != before, (
+            "a registration edit must move the fingerprint, or re-freezing "
+            "launders it into a valid release")
+    finally:
+        registration.write_text(original, encoding="utf-8")
+    assert tb.compute_code_state(batch, experiment)["working_tree_sha256"] == before
+
+
+def test_a_sealed_release_is_not_resealed_by_accident(tmp_path):
+    """B-15's other half: the writer refuses to re-certify without intent."""
+    import os
+    import subprocess
+
+    script = (Path(__file__).resolve().parent.parent / "scripts" /
+              "c3_write_freeze_record.py")
+    source = script.read_text(encoding="utf-8")
+    probe = tmp_path / "probe.py"
+    probe.write_text(source, encoding="utf-8")
+    # The guard is what is under test, and it runs before any generation.
+    assert "C3_I_MEAN_TO_RESEAL" in source
+    assert "REFUSED: a sealed release already exists" in source
+    assert "_refuse_to_overwrite_sealed_release()" in source
+    env = {k: v for k, v in os.environ.items() if k != "C3_I_MEAN_TO_RESEAL"}
+    result = subprocess.run([__import__("sys").executable, str(script)],
+                            capture_output=True, text=True, env=env, cwd=tmp_path)
+    assert result.returncode == 3, result.stdout + result.stderr
+    assert "C3_I_MEAN_TO_RESEAL" in result.stderr
+
+
+@pytest.mark.parametrize("field", ["switches", "news_scope", "config_sha256",
+                                   "provider", "deep_model", "case"])
+def test_deleting_a_frozen_field_is_refused(field):
+    """H-B: a *missing* field skipped its check; it must refuse instead.
+
+    Every guard in ``_preflight_gate`` was conditional, so the cheapest way to
+    defeat one was to delete the field it looked at. A spec with no ``switches``
+    was accepted and then ran at ``DEFAULT_CONFIG`` -- the AB arm -- while its
+    directory called it C0.
+    """
+    import scripts.token_benchmark as tb
+
+    spec = _conforming_spec()
+    spec.pop(field)
+    with pytest.raises(tb.RunRefused, match="missing required field"):
+        tb._preflight_gate(spec)
+
+
+# ---------------------------------------------------------------------------
+# Audit A round 4, H-A: the spending child enforces the freeze itself
+# ---------------------------------------------------------------------------
+def test_the_spending_child_refuses_an_unfrozen_tree(tmp_path, monkeypatch):
+    """H-A: the freeze checks lived only in the gate script.
+
+    Nothing on the spending path consulted them, so a run could start from a
+    checkout that had never passed the gate -- Audit A reached ``propagate``
+    from a dirty tree. A control the paying process does not check is advice.
+    """
+    import scripts.token_benchmark as tb
+
+    monkeypatch.delenv("TRADINGAGENTS_SKIP_FREEZE_CHECK", raising=False)
+    # No frozen commit recorded: the tree claims no release at all.
+    fake_batch = tmp_path / "batch"
+    (fake_batch / "c3").mkdir(parents=True)
+    (fake_batch / "specs").mkdir()
+    monkeypatch.setattr(tb, "_frozen_batch_dir", lambda: fake_batch)
+    with pytest.raises(tb.RunRefused, match="no frozen commit recorded"):
+        tb.verify_frozen_tree()
+
+    # A recorded commit that is not HEAD is refused by name.
+    (fake_batch / "c3" / "FROZEN_COMMIT").write_text("0" * 40 + "\n")
+    with pytest.raises(tb.RunRefused, match="not the code that was audited"):
+        tb.verify_frozen_tree()
+
+
+def test_the_frozen_tree_check_is_on_the_child_path():
+    """...and it is actually called before any graph is built."""
+    import inspect
+
+    import scripts.token_benchmark as tb
+
+    source = inspect.getsource(tb._run_single)
+    assert "verify_frozen_tree()" in source
+    # Before the imports that build a client, not after.
+    assert source.index("verify_frozen_tree()") < source.index("StatsCallbackHandler")
+
+
+def test_delivered_provenance_states_true_ancestry():
+    """H-D: every delivered code_state.json claimed to *precede* the freeze.
+
+    All 16 named a commit that is a descendant of the frozen one, so the label
+    was not merely stale -- it was the opposite of the truth, and nothing
+    checked it. The relation is now computed from git ancestry and asserted
+    here against git itself.
+    """
+    import json
+    import subprocess
+
+    batch = _batch_dir()
+    frozen = (batch / "c3" / "FROZEN_COMMIT").read_text().strip()
+    for directory in sorted((batch / "specs").iterdir()):
+        if not directory.is_dir():
+            continue
+        state = json.loads((directory / "code_state.json").read_text())
+        relation = state["git_head_relation_to_freeze"]
+        assert state["frozen_commit"] == frozen, directory.name
+        head = state["git_head_commit"]
+        is_ancestor = subprocess.run(
+            ["git", "-C", str(Path(__file__).resolve().parent.parent),
+             "merge-base", "--is-ancestor", head, frozen],
+            capture_output=True).returncode == 0
+        if head == frozen:
+            assert relation == "is_frozen_commit", directory.name
+        elif is_ancestor:
+            assert relation == "precedes_frozen_commit", directory.name
+        else:
+            assert relation != "precedes_frozen_commit", (
+                f"{directory.name} claims to precede {frozen[:8]} but does not")

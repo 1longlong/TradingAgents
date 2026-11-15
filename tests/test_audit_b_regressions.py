@@ -300,10 +300,16 @@ def test_delivered_specs_pass_the_product_guard(spec_path):
 
 
 def _run_single_with_stub_graph(tmp_path, monkeypatch, spec: dict, ambient: dict):
-    """Run the real ``_run_single``; return the config the graph would get."""
+    """Run the real ``_run_single``; return the config the graph would get.
+
+    The freeze-release check is skipped: this test is about which switches
+    reach the graph, and it deliberately runs the child outside a frozen
+    release. That check has its own tests (``test_c3_regressions``).
+    """
     import sys
     import types
 
+    monkeypatch.setenv("TRADINGAGENTS_SKIP_FREEZE_CHECK", "1")
     captured = {}
 
     class _StubGraph:

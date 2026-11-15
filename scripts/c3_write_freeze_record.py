@@ -39,7 +39,38 @@ def _git(*args: str) -> str:
                           text=True, check=True).stdout.strip()
 
 
+def _refuse_to_overwrite_sealed_release() -> None:
+    """A sealed release is replaced only on purpose, never by re-running.
+
+    The record is *generated*, so running this script again silently re-certifies
+    whatever tree is checked out. Audit B round 4 (B-15) verified the
+    consequence directly: edit a registration, commit, re-run this writer, and
+    the gate printed "GATE PASSED -- safe to spend money" for a different
+    experiment. Refusing by default makes the dangerous invocation impossible
+    to perform by accident, which is the same lesson the legacy launcher taught
+    (``INCIDENT_20261115_legacy_launcher.md``).
+    """
+    import os
+
+    old = BATCH_DIR / "c3" / "RELEASE_SEAL.sha256"
+    if not old.is_file():
+        return
+    if os.environ.get("C3_I_MEAN_TO_RESEAL") == "yes":
+        print("!! re-sealing an existing release on explicit instruction "
+              "(C3_I_MEAN_TO_RESEAL=yes)")
+        return
+    print("REFUSED: a sealed release already exists and this script would "
+          "silently re-certify the current tree.", file=sys.stderr)
+    print(f"  existing seal: {old}", file=sys.stderr)
+    print("  Re-sealing is legitimate only on a deliberate release. If this "
+          "is one, re-run with:", file=sys.stderr)
+    print("    C3_I_MEAN_TO_RESEAL=yes python scripts/c3_write_freeze_record.py",
+          file=sys.stderr)
+    raise SystemExit(3)
+
+
 def main() -> int:
+    _refuse_to_overwrite_sealed_release()
     experiment = json.loads((BATCH_DIR / "experiment.json").read_text(encoding="utf-8"))
     state = tb.compute_code_state(BATCH_DIR, experiment)
     head = _git("rev-parse", "HEAD")

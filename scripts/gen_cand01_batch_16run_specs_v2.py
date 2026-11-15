@@ -377,10 +377,27 @@ def code_state(experiment_sha: str) -> dict:
         text = frozen_file.read_text(encoding="utf-8").strip()
         if text:
             frozen = text
-    if frozen and head == frozen:
+    # "Precedes" is a claim about ancestry, not about inequality. Comparing the
+    # two hashes for equality and calling every difference "precedes" labelled a
+    # commit that is a *descendant* of the freeze as though it came before it --
+    # Audit A round 4 (H-D) found all 16 delivered files saying so. Ask git.
+    def _is_ancestor(older: str, newer: str) -> bool:
+        result = subprocess.run(
+            ["git", "-C", str(root), "merge-base", "--is-ancestor", older, newer],
+            capture_output=True, text=True, check=False,
+        )
+        return result.returncode == 0
+
+    if not head:
+        head_relation = "unknown"
+    elif frozen and head == frozen:
         head_relation = "is_frozen_commit"
-    elif frozen:
+    elif frozen and _is_ancestor(head, frozen):
         head_relation = "precedes_frozen_commit"
+    elif frozen and _is_ancestor(frozen, head):
+        head_relation = "follows_frozen_commit"
+    elif frozen:
+        head_relation = "unrelated_to_frozen_commit"
     else:
         head_relation = "unfrozen"
     return {

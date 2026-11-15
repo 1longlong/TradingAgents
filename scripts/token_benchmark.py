@@ -119,6 +119,23 @@ FINGERPRINT_ALGORITHM = f"working-tree-sha256-v{TOOL_SCHEMA_VERSION}"
 # generated output and the benchmark artifacts themselves are excluded by
 # policy (see ``_FINGERPRINT_EXCLUDE_PREFIXES``), so the harness can refresh a
 # cache or write telemetry without invalidating its own fingerprint.
+#: The registered batch. Its specs, switch matrix and protocol *are* the
+#: experiment: the fingerprint has to cover them or it describes code that ran
+#: a study nobody registered. It did not cover them, and audit B round 4
+#: (B-15) showed the consequence: edit a registration's ``deep_model``, commit,
+#: rewrite the untracked ``FROZEN_COMMIT``, re-run the freeze writer, and the
+#: gate printed "GATE PASSED -- safe to spend money" for a different
+#: experiment. ``c3/`` stays excluded (see below) because it *states* the
+#: fingerprint.
+_FINGERPRINT_BATCH_PREFIX = "token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/"
+_FINGERPRINT_BATCH_INCLUDE = (
+    "specs/",
+    "SWITCH_MATRIX.csv",
+    "experiment.json",
+    "CAND01_BATCH_2X2_PROTOCOL_V2.md",
+    "C3_PROTOCOL_FREEZE.md",
+    "RUN_MANIFEST_TEMPLATE.csv",
+)
 _FINGERPRINT_INCLUDE_PREFIXES = (
     "tradingagents/",
     "cli/",
@@ -126,6 +143,7 @@ _FINGERPRINT_INCLUDE_PREFIXES = (
     "tests/",
     "token_benchmarks/baseline_v1/experiment.json",
     "token_benchmarks/baseline_v2/experiment.json",
+    *(_FINGERPRINT_BATCH_PREFIX + name for name in _FINGERPRINT_BATCH_INCLUDE),
 )
 _FINGERPRINT_ROOT_FILES = (
     "pyproject.toml",
@@ -907,17 +925,49 @@ def write_summary_md(summary: dict, experiment: dict, path: Path) -> None:
 
     lines.append("## Individual runs")
     lines.append("")
-    lines.append("| Run | Input | Output | Total | LLM | Tools | Rounds | Runtime | Status | Valid |")
-    lines.append("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |")
+    lines.append("| Run | Input | Output | Total | LLM | Tools | Rounds | Runtime | Status | Valid | Spend |")
+    lines.append("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |")
     for m in summary["runs"]:
         lines.append(
             f"| {m['run_index']:02d} | {_fmt(m['reported_input_tokens_sum'])} | "
             f"{_fmt(m['reported_output_tokens_sum'])} | {_fmt(m['total_tokens'])} | "
             f"{_fmt(m['llm_calls'])} | {_fmt(m['tool_calls'])} | {_fmt(m['tool_rounds'])} | "
-            f"{_fmt(m['duration_ms'])} | {m['run_status']} | {_validity_label(m)} |"
+            f"{_fmt(m['duration_ms'])} | {m['run_status']} | {_validity_label(m)} | "
+            f"{_budget_label(_budget(m))} |"
         )
     lines.append("")
     path.write_text("\n".join(lines), encoding="utf-8")
+
+
+def _budget(metric: dict) -> dict:
+    """The run's spend summary, or an empty dict when it recorded none."""
+    value = metric.get("budget")
+    return value if isinstance(value, dict) else {}
+
+
+def _budget_cell(cap) -> str:
+    """Render a token cap for a CSV cell, keeping ``None`` distinct from blank."""
+    return "null" if cap is None else str(cap)
+
+
+def _budget_label(budget: dict) -> str:
+    """One markdown cell describing the run's spend state.
+
+    ``UNCAPPED`` and ``UNKNOWN_SPEND`` are different claims and must not both
+    render as an empty cell: the first says the cap is absent by design, the
+    second says the spend could not be measured (audit C-04b/c/d).
+    """
+    state = budget.get("state") or "UNKNOWN"
+    used = budget.get("used_tokens")
+    if state == "UNCAPPED":
+        return "uncapped"
+    if state == "UNKNOWN_SPEND":
+        return "UNKNOWN_SPEND (lower bound)" if budget.get("used_is_lower_bound") \
+            else "UNKNOWN_SPEND"
+    if state == "EXHAUSTED":
+        return "EXHAUSTED"
+    cap = budget.get("max_total_tokens")
+    return f"{used}/{cap}" if cap is not None else state
 
 
 def write_summary_csv(summary: dict, experiment: dict, path: Path) -> None:
@@ -927,6 +977,12 @@ def write_summary_csv(summary: dict, experiment: dict, path: Path) -> None:
         "cached_input_tokens", "llm_calls", "tool_calls", "tool_rounds",
         "runtime_ms", "usage_complete", "attribution_complete", "telemetry_complete",
         "valid", "invalid_reason", "llm_errors", "telemetry_path",
+        # Budget state belongs in the primary table, not only in JSON: an
+        # UNKNOWN_SPEND or EXHAUSTED run must be visible to anyone reading the
+        # CSV, and a null cap must be distinguishable from a missing one
+        # (audit C-04b/c/d).
+        "budget_state", "budget_max_total_tokens", "budget_used_tokens",
+        "budget_used_is_lower_bound",
     ]
     with open(path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -955,6 +1011,12 @@ def write_summary_csv(summary: dict, experiment: dict, path: Path) -> None:
                 "invalid_reason": m.get("invalid_reason") or m.get("error") or "",
                 "llm_errors": m.get("llm_error_count", ""),
                 "telemetry_path": m["telemetry_path"] or "",
+                "budget_state": _budget(m).get("state", ""),
+                "budget_max_total_tokens": _budget_cell(
+                    _budget(m).get("max_total_tokens")),
+                "budget_used_tokens": _budget(m).get("used_tokens", ""),
+                "budget_used_is_lower_bound": _budget(m).get(
+                    "used_is_lower_bound", ""),
             }
             writer.writerow(row)
 
@@ -1644,6 +1706,18 @@ def _run_single_process_args(run_dir: Path) -> list[str]:
             "--spec", str(spec_path)]
 
 
+def _is_frozen_batch_registration(exp_dir: Path) -> bool:
+    """Is ``exp_dir`` one of the 16 registered directories of this batch?"""
+    try:
+        resolved = Path(exp_dir).resolve()
+    except OSError:
+        return False
+    specs = _frozen_batch_dir() / "specs"
+    if not specs.is_dir():
+        return False
+    return resolved.parent.resolve() == specs.resolve()
+
+
 def prepare_run_spec(exp_dir: Path, experiment: dict, case: dict, run_index: int,
                      attempt: int = 1) -> Path:
     """Write the run spec JSON the child reads to run one measurement."""
@@ -1675,7 +1749,23 @@ def prepare_run_spec(exp_dir: Path, experiment: dict, case: dict, run_index: int
     for inherited in ("switches", "config_sha256", "news_scope", "budget"):
         if inherited in experiment:
             spec[inherited] = experiment[inherited]
-    if "switches" in experiment:
+    # The arm travels unconditionally. ``prepare_run_spec`` used to copy these
+    # only when present, so an armless registration produced an armless spec,
+    # which the child then accepted and ran at ``DEFAULT_CONFIG`` (AB) while
+    # labelled with whatever arm the directory name implied (audit A round 4,
+    # H-B). A registration that cannot state its arm must fail here, loudly.
+    # Enforced only for a registration that belongs to the frozen batch. A
+    # registration outside it (a test fixture, a non-arm ablation) is not an
+    # arm of this study, so it is not this function's job to invent one.
+    if _is_frozen_batch_registration(exp_dir):
+        absent = [key for key in ("switches", "config_sha256", "news_scope")
+                  if key not in spec]
+        if absent:
+            raise RunRefused(
+                f"registration {experiment.get('experiment_id')!r} does not state "
+                f"{absent}; a run spec cannot carry an arm it was never given"
+            )
+    if "switches" in spec:
         spec["switches_source"] = "registered"
     spec_path = run_dir / "spec.json"
     spec_path.write_text(json.dumps(spec, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -2046,9 +2136,16 @@ def _preflight_registration(exp_dir: Path, experiment: dict, case: dict) -> None
         # with *itself*: audit B-10 showed that editing the switches and
         # rehashing produces a self-consistent file that runs another arm. The
         # matrix is tracked and covered by the freeze fingerprint.
+        # Only a registration that lives in the frozen batch is one of *this
+        # study's* arms. Applying the matrix to every experiment that happens
+        # to declare switches would make the rule about the field rather than
+        # about the study, and would refuse legitimate non-batch experiments
+        # (and the wrapper's own sandbox) for carrying a Run ID they never
+        # claimed.
+        in_batch = _is_frozen_batch_registration(exp_dir)
         run_id = getattr(exp_dir, "name", "").split("_", 1)[0]
-        frozen = _frozen_switch_matrix().get(run_id)
-        if frozen is None:
+        frozen = _frozen_switch_matrix().get(run_id) if in_batch else None
+        if in_batch and frozen is None:
             raise RunRefused(
                 f"{getattr(exp_dir, 'name', exp_dir)}: Run ID {run_id!r} is not "
                 f"in SWITCH_MATRIX.csv; an unregistered arm cannot be a sample"
@@ -2062,13 +2159,13 @@ def _preflight_registration(exp_dir: Path, experiment: dict, case: dict) -> None
         expected_dir = (_frozen_batch_dir() / "specs" / f"{run_id}_"
                         f"{_frozen_run_ticker(run_id)}_"
                         f"{_frozen_run_arm(run_id)}")
-        if Path(exp_dir).resolve() != expected_dir.resolve():
+        if in_batch and Path(exp_dir).resolve() != expected_dir.resolve():
             raise RunRefused(
                 f"{exp_dir}: carries Run ID {run_id} but is not that run's "
                 f"registered directory ({expected_dir}); a Run ID names exactly "
                 f"one run, and a copy elsewhere would be counted twice"
             )
-        if switches != frozen:
+        if in_batch and switches != frozen:
             raise RunRefused(
                 f"{getattr(exp_dir, 'name', exp_dir)}: SWITCH_MATRIX.csv froze "
                 f"{frozen} for {run_id}, but the registration declares {switches}"
@@ -2467,6 +2564,21 @@ EFFECTIVE_CONFIG_FILE = "effective_config.json"
 #: ``gen_cand01_batch_16run_specs_v2.HASHED_FIELDS`` and lives here so the run
 #: path can *recompute* a registration's hash without importing the generator.
 #: A test asserts the two tuples are identical.
+#: Fields a run spec must carry to be a sample at all. These are the frozen
+#: definition: a spec that omits one is not "an experiment at its defaults", it
+#: is a spec that cannot prove which arm it runs (audit A round 4, H-B).
+_SPEC_REQUIRED_FIELDS = (
+    "config_sha256", "switches", "news_scope", "provider", "quick_model",
+    "deep_model", "output_language", "cache_policy", "case",
+)
+
+#: Spec fields that legitimately differ from the registration: they describe
+#: *this* invocation rather than the study, or they are the spec's own path.
+_SPEC_VOLATILE_FIELDS = frozenset({
+    "results_dir", "registration_dir", "_spec_path", "run_index", "attempt",
+    "schema_version",  # the spec body is hashed without it in some formats
+})
+
 REGISTERED_HASH_FIELDS = (
     "experiment_id",
     "schema_version",
@@ -2707,6 +2819,21 @@ def _preflight_gate(spec: dict) -> dict:
     # is *recomputed* from the hashed fields and compared. Merely carrying a
     # ``config_sha256`` string proves nothing -- audit B2 demonstrated a spec
     # with ``"0"*64`` running happily.
+    #
+    # Every guard below used to be conditional (``if ... is not None``), so
+    # *deleting* a field skipped its check entirely: a spec with no
+    # ``switches`` was accepted and the graph then fell back to
+    # ``DEFAULT_CONFIG``, running the AB arm while the spec called itself R01 /
+    # C0 (audit A round 4, H-B). The fields the protocol freezes are now
+    # mandatory, and each one must still agree with the registration -- the
+    # hash vouches for the registration, not for the spec that points at it.
+    missing_required = [key for key in _SPEC_REQUIRED_FIELDS if key not in spec]
+    if missing_required:
+        raise RunRefused(
+            f"spec is missing required field(s) {missing_required}; omitting a "
+            f"frozen field is not the same as leaving it at its default"
+        )
+
     declared_hash = spec.get("config_sha256")
     if declared_hash is not None:
         definition = {key: spec[key] for key in REGISTERED_HASH_FIELDS if key in spec}
@@ -2721,6 +2848,21 @@ def _preflight_gate(spec: dict) -> dict:
                     f"(missing {missing}) and no registration was found"
                 )
             definition = _load_json(registration)
+        # ``registration_sha256(definition)`` is independent of the spec, so on
+        # its own it cannot notice that the spec file disagrees with the
+        # registration it points at. Compare every field the two share.
+        if isinstance(definition, dict):
+            disagreement = {
+                key: (spec[key], definition[key])
+                for key in set(spec) & set(definition)
+                if key not in _SPEC_VOLATILE_FIELDS and spec[key] != definition[key]
+            }
+            if disagreement:
+                raise RunRefused(
+                    f"spec disagrees with its registration on {sorted(disagreement)}; "
+                    f"the registration is the frozen definition and the spec may "
+                    f"only repeat it"
+                )
         actual = registration_sha256(definition)
         if actual != declared_hash:
             raise RunRefused(
@@ -2806,6 +2948,74 @@ def _preflight_gate(spec: dict) -> dict:
     return {"checked": True}
 
 
+def verify_frozen_tree() -> None:
+    """Refuse to spend money on a tree that is not the frozen release.
+
+    The freeze checks lived only in ``scripts/c3_preflight_gate.py``, which the
+    operator runs as a separate step. Nothing on the spending path enforced
+    them, so a run could start from any checkout; Audit A round 4 (H-A) reached
+    ``propagate`` from a dirty tree that had never passed the gate. A separate
+    gate that the paying process does not consult is advice, not a control.
+
+    This is deliberately the same two facts the gate checks -- HEAD is the
+    frozen commit, and the working tree hashes to the recorded fingerprint --
+    recomputed here rather than delegated, so the child refuses on its own even
+    when nobody ran the gate beforehand.
+    """
+    import os
+    import subprocess
+
+    # The only way past this is an explicit, test-scoped opt-out. Production
+    # never sets it, and it is named so that an operator who sees it in an
+    # environment knows they are running unfrozen code.
+    if os.environ.get("TRADINGAGENTS_SKIP_FREEZE_CHECK") == "1":
+        return
+
+    batch = _frozen_batch_dir()
+    frozen_file = batch / "c3" / "FROZEN_COMMIT"
+    record_file = batch / "c3" / "code_freeze.txt"
+    if not frozen_file.is_file():
+        raise RunRefused(
+            f"no frozen commit recorded at {frozen_file}; a paid run must be "
+            f"evidence from a frozen release, not from whatever is checked out"
+        )
+    expected = frozen_file.read_text(encoding="utf-8").strip()
+    if not expected:
+        raise RunRefused(f"{frozen_file} is empty")
+    head = subprocess.run(["git", "-C", str(_PROJECT_ROOT), "rev-parse", "HEAD"],
+                          capture_output=True, text=True, check=False).stdout.strip()
+    if head != expected:
+        raise RunRefused(
+            f"HEAD is {head[:12] or 'unknown'}, but the frozen commit is "
+            f"{expected[:12]}; the code that would run is not the code that "
+            f"was audited"
+        )
+    dirty = subprocess.run(["git", "-C", str(_PROJECT_ROOT), "status",
+                            "--porcelain", "--untracked-files=no"],
+                           capture_output=True, text=True, check=False).stdout.strip()
+    if dirty:
+        raise RunRefused(
+            f"the tracked tree has uncommitted changes:\n{dirty}"
+        )
+    if not record_file.is_file():
+        raise RunRefused(f"no freeze record at {record_file}")
+    declared = None
+    for line in record_file.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("working_tree_sha256") and "=" not in stripped:
+            declared = stripped.split(":", 1)[-1].strip()
+            break
+    if not declared:
+        raise RunRefused(f"{record_file.name} records no working_tree_sha256")
+    everything = json.loads((batch / "experiment.json").read_text(encoding="utf-8"))
+    actual = compute_code_state(batch, everything).get("working_tree_sha256")
+    if actual != declared:
+        raise RunRefused(
+            f"this tree fingerprints to {actual[:16]}…, but the freeze record "
+            f"declares {declared[:16]}…; the code is not the frozen release"
+        )
+
+
 def _run_single(spec_path: str) -> int:
     """Execute ONE measured TradingAgents run inside the current process.
 
@@ -2823,6 +3033,10 @@ def _run_single(spec_path: str) -> int:
     _expected_root = spec.get("experiment_root") or _PROJECT_ROOT
     try:
         verify_import_root(_expected_root)
+        # The expensive refusal: only a run of the *frozen release* may spend
+        # money. Checked here, on the spending path, not only in the gate
+        # script (audit A round 4, H-A).
+        verify_frozen_tree()
         _preflight_gate(spec)
     except (RunRefused, RuntimeError) as exc:
         reason = f"{type(exc).__name__}: {exc}"
@@ -3092,6 +3306,24 @@ def build_measurement_experiment(template: dict, *, experiment_id: str,
     for key in ("switches", "switches_required"):
         if key in template:
             exp[key] = template[key]
+    # The news scope is part of the frozen definition too. Deriving a
+    # measurement that dropped it produced a registration the child refused,
+    # because `news_scope` is a required spec field (audit A round 4, H-B).
+    if "news_scope" in template:
+        exp["news_scope"] = template["news_scope"]
+    if "budget" in template:
+        exp["budget"] = template["budget"]
+    if "checkpoint_enabled" in template:
+        exp["checkpoint_enabled"] = template["checkpoint_enabled"]
+    # The hash names this *derived* definition, which differs from the template
+    # in its id and case, so the template's value cannot be copied -- it would
+    # describe a definition that is not this one. A legacy template that does
+    # not carry the full frozen field set has no hash to give; it is left
+    # unhashed rather than hashed over defaults nobody registered.
+    try:
+        exp["config_sha256"] = registration_sha256(exp)
+    except KeyError:
+        exp.pop("config_sha256", None)
     return exp
 
 

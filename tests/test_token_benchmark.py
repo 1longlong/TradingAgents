@@ -9,6 +9,7 @@ from __future__ import annotations
 import csv
 import json
 import sys
+import types
 from pathlib import Path
 
 import pytest
@@ -1733,6 +1734,31 @@ class TestMeasurementVerification:
         assert status["valid_runs"] == 1 and status["ok"] is True
 
 
+def _r01_registration_dir():
+    return (Path(__file__).resolve().parent.parent / "token_benchmarks" /
+            "live_pilot_2x2" / "cand01_batch_16run_v2" / "specs" / "R01_NVDA_C0")
+
+
+def _r01_registration():
+    import json
+    return json.loads((_r01_registration_dir() / "experiment.json").read_text())
+
+
+def _r01_registration_fields():
+    """The R01 registration as a run spec, exactly as the child expects it."""
+    import scripts.token_benchmark as tb
+
+    registration = _r01_registration()
+    spec = {key: registration[key] for key in tb.REGISTERED_HASH_FIELDS
+            if key in registration}
+    spec.update({
+        "config_sha256": registration["config_sha256"],
+        "registration_dir": str(_r01_registration_dir()),
+        "case": registration["cases"][0],
+    })
+    return spec
+
+
 class TestMeasurementRunChild:
     def test_ambient_env_cannot_override_the_spec(self, tmp_path, monkeypatch):
         """The run child applies the spec over ambient TRADINGAGENTS_* vars.
@@ -1742,18 +1768,20 @@ class TestMeasurementRunChild:
         could make the recorded configuration describe a run that never happened.
         """
         spec = {
-            "experiment_id": "t",
+            # The ID must be the registration's own: a spec cannot borrow
+            # another run's registration to vouch for its hash.
+            "experiment_id": _r01_registration()["experiment_id"],
             "case": {"case_id": "nvda_2026_09_23", "ticker": "NVDA",
                      "trade_date": "2026-09-23", "analysts": ["market"],
                      "research_rounds": 1, "risk_rounds": 1},
-            "provider": "openai_compatible",
-            "quick_model": "spec-quick",
-            "deep_model": "spec-deep",
-            "output_language": "English",
-            "cache_policy": "preserve_existing",
-            "results_dir": str(tmp_path / "rt"),
-            "run_index": 1,
+            # Every field here is the registration's own, because the child
+            # now refuses a spec that disagrees with the registration it
+            # names. The precedence this test asserts is therefore checked by
+            # pointing the *environment* somewhere else, below.
+            **_r01_registration_fields(),
         }
+        assert spec["switches"]["structured"] is True
+        spec.update({"results_dir": str(tmp_path / "rt"), "run_index": 1})
         run_dir = tmp_path / tb.RUNS_DIR / "run_01" / "attempt_01"
         run_dir.mkdir(parents=True)
         spec_path = run_dir / "spec.json"
@@ -1762,14 +1790,21 @@ class TestMeasurementRunChild:
         captured = {}
 
         class FakeGraph:
+            # The child records the switches the graph *actually received*, so
+            # the stub has to expose the setup object it reads them from.
+            graph_setup = types.SimpleNamespace(config={})
+
             def __init__(self, selected_analysts=None, config=None, callbacks=None):
                 captured["config"] = dict(config)
+                FakeGraph.graph_setup = types.SimpleNamespace(config=dict(config))
 
             def propagate(self, ticker, date):
                 return {}, "hold"
 
         import tradingagents.graph.trading_graph as tg
         monkeypatch.setattr(tg, "TradingAgentsGraph", FakeGraph)
+        # See _run_single_with_stub_graph: the release check is tested apart.
+        monkeypatch.setenv("TRADINGAGENTS_SKIP_FREEZE_CHECK", "1")
         monkeypatch.setenv("TRADINGAGENTS_QUICK_THINK_LLM", "ambient-quick")
         monkeypatch.setenv("TRADINGAGENTS_DEEP_THINK_LLM", "ambient-deep")
         monkeypatch.setenv("TRADINGAGENTS_LLM_PROVIDER", "some_other_provider")
@@ -1778,10 +1813,12 @@ class TestMeasurementRunChild:
         tb._run_single(str(spec_path))
 
         cfg = captured["config"]
-        assert cfg["quick_think_llm"] == "spec-quick"
-        assert cfg["deep_think_llm"] == "spec-deep"
-        assert cfg["llm_provider"] == "openai_compatible"
-        assert cfg["max_risk_discuss_rounds"] == 1
+        spec_quick = spec["quick_model"]
+        assert spec_quick != "ambient-quick"
+        assert cfg["quick_think_llm"] == spec_quick
+        assert cfg["deep_think_llm"] == spec["deep_model"]
+        assert cfg["llm_provider"] == spec["provider"]
+        assert cfg["max_risk_discuss_rounds"] == spec["case"]["risk_rounds"]
         assert cfg["checkpoint_enabled"] is False
 
 

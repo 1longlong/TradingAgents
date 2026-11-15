@@ -12,6 +12,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -32,6 +33,26 @@ def _sandbox(tmp_path: Path) -> Path:
     tmpl.mkdir(parents=True)
     shutil.copy2(REPO_ROOT / "token_benchmarks" / "baseline_v2" / "experiment.json",
                  tmpl / "experiment.json")
+    # ``baseline_v2`` predates the 2x2 study and states no arm, so the harness
+    # (correctly) refuses to derive a spec from it. This sandbox tests the
+    # wrapper's failure reporting, not the arm, so give it the frozen arm and
+    # note explicitly that the experiment only runs because it now says which
+    # arm it is -- the H-B hole was a spec that ran at DEFAULT_CONFIG instead.
+    experiment = json.loads((tmpl / "experiment.json").read_text())
+    experiment["switches"] = {"batch_macro": True, "structured": True,
+                              "single_pass": False, "s2_downstream": True}
+    experiment["switches_required"] = dict(experiment["switches"])
+    experiment["news_scope"] = {"company_news": "finnhub",
+                                "global_news": "finnhub:CONFIG_DISABLED",
+                                "gdelt": "excluded"}
+    experiment["budget"] = {"max_total_tokens": 1000}
+    experiment["checkpoint_enabled"] = False
+    # The hash is computed here exactly as the harness computes it: a handed
+    # value would make this sandbox test the fixture rather than the code.
+    sys.path.insert(0, str(root / "scripts"))
+    import token_benchmark as sandbox_harness
+    experiment["config_sha256"] = sandbox_harness.registration_sha256(experiment)
+    (tmpl / "experiment.json").write_text(json.dumps(experiment, indent=2))
     # The wrapper requires the project virtualenv; reuse the real interpreter.
     venv_root = root / ".venv"
     venv_root.mkdir(parents=True, exist_ok=True)
@@ -75,6 +96,11 @@ def _run(root: Path, *args: str, cwd: Path | None = None, secrets: Path | None =
         env.pop(name, None)
     if secrets is not None:
         env["TRADINGAGENTS_BENCHMARK_SECRETS"] = str(secrets)
+    # The sandbox is not a frozen release, and these tests are about the
+    # wrapper's argument handling and failure reporting. The freeze-release
+    # refusal has its own tests; skipping it here keeps that control from being
+    # quietly untested by making every wrapper test depend on it.
+    env["TRADINGAGENTS_SKIP_FREEZE_CHECK"] = "1"
     return subprocess.run(
         [str(root / "scripts" / WRAPPER.name), *args],
         cwd=str(cwd or root.parent), capture_output=True, text=True, env=env,
