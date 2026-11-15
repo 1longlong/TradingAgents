@@ -385,3 +385,28 @@ the imported package. 71 tests pass from `/tmp` and from the repository root.
 excludes only itself and the post-commit release metadata. The freeze verifier
 checks every entry, so a stale manifest is now a certification failure rather
 than a claim.
+
+### Additional defects found while closing the above (this round)
+
+1. **The manifest did not cover untracked evidence.** `c3_build_manifest.py`
+   built its list from `git ls-files` alone, so a new evidence file that was not
+   staged yet was silently omitted — the manifest "verified" while covering only
+   part of the tree. Found when `--check` reported the round's own mutation log
+   as missing. Fixed: the builder lists `--cached` **and** `--others
+   --exclude-standard`; a test asserts the manifest equals the set of batch files
+   that ship.
+2. **`spec_body_sha256` counted runtime markers.** The child adds `_spec_path`
+   to its in-memory spec; the digest recorded in `effective_config.json`
+   therefore differed from the release's, breaking the only link from a run back
+   to its registered artefact. Fixed in both implementations (they are pinned to
+   each other by a test): keys beginning with `_` are excluded.
+3. **A dry run left directories behind.** Constructing the real graph creates
+   `results_dir`, `data_cache_dir` and the memory log's parent. The rehearsal now
+   redirects all three into a temporary sandbox and removes it in a `finally`.
+   A test proves the sandbox existed during construction and is gone afterwards,
+   and that the experiment directory is untouched.
+4. **A batch rehearsal could disable the frozen-release check.** The seam test
+   in `verify_frozen_tree` looks at the spec's path; an in-memory spec passed
+   `None`, so `TRADINGAGENTS_SKIP_FREEZE_CHECK=1` would have been honoured for a
+   rehearsal of a registered run. The rehearsal now derives the path from
+   `_spec_path` / the registration directory, and a test requires the refusal.

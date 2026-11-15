@@ -26,6 +26,9 @@ from pathlib import Path
 
 import pytest
 
+_REHEARSAL_SWITCHES = {"batch_macro": False, "single_pass": True,
+                       "structured": True, "s2_downstream": True}
+
 _SPEC_FOR_PROBE: dict = {"switches": {"batch_macro": False, "single_pass": True,
                                       "structured": True, "s2_downstream": True}}
 
@@ -453,6 +456,44 @@ class TestDryRunRehearsal:
                                     dry_run=True)
         assert list(exp.iterdir()) == []
 
+    def test_a_rehearsal_cannot_disable_the_freeze_check(self, monkeypatch):
+        """The seam is a test-only hole; a batch rehearsal may not use it."""
+        spec = json.loads((BATCH / "specs/R01_NVDA_C0/spec.json").read_text())
+        spec["_spec_path"] = str(BATCH / "specs/R01_NVDA_C0/spec.json")
+        monkeypatch.setenv("TRADINGAGENTS_SKIP_FREEZE_CHECK", "1")
+        with pytest.raises(tb.RunRefused, match="cannot be disabled"):
+            tb.rehearse_run_spec(spec)
+
+    def test_a_rehearsal_sandboxes_the_graph_directories(self, tmp_path, monkeypatch):
+        """Constructing the real graph creates directories; a rehearsal must not."""
+        exp = tmp_path / "exp"
+        exp.mkdir()
+        experiment = _rehearsal_experiment()
+        seen = {}
+
+        def _construct(spec, config):
+            seen.update(config)
+            seen["sandbox_existed"] = Path(config["results_dir"]).parent.exists()
+            return _StubGraph(spec["switches"])
+
+        import tradingagents.graph.switch_verification as switch_mod
+
+        monkeypatch.setattr(tb, "_construct_graph", _construct)
+        monkeypatch.setattr(
+            switch_mod, "consume_switches_from_setup",
+            lambda setup: getattr(setup, "observed", None)
+            or expected_analyst_kwargs(_REHEARSAL_SWITCHES))
+        monkeypatch.setattr(tb, "verify_frozen_tree", lambda *a, **k: None)
+
+        metrics = tb.execute_measured_run(
+            exp, experiment, experiment["cases"][0], 1, dry_run=True)
+        assert metrics["rehearsal"]["graph_rehearsed"] is True
+        assert seen["sandbox_existed"] is True
+        # The sandbox is gone and the experiment directory is untouched.
+        assert not Path(seen["results_dir"]).exists()
+        assert not Path(seen["cache"] if "cache" in seen else seen["data_cache_dir"]).exists()
+        assert list(exp.iterdir()) == []
+
     def test_a_dry_run_without_a_provider_reports_the_scope(self, tmp_path, monkeypatch):
         exp = tmp_path / "exp"
         exp.mkdir()
@@ -466,6 +507,41 @@ class TestDryRunRehearsal:
                                           1, dry_run=True)
         assert metrics["rehearsal"]["graph_rehearsed"] is False
         assert "no provider" in metrics["rehearsal"]["reason"]
+
+
+class TestSpecBodyDigest:
+    def test_runtime_markers_do_not_change_the_release_digest(self):
+        """The child adds ``_spec_path``; the digest must still match the release."""
+        from scripts import gen_cand01_batch_16run_specs_v2 as gen
+
+        spec = json.loads((BATCH / "specs/R01_NVDA_C0/spec.json").read_text())
+        delivered = tb.spec_body_sha256(spec)
+        with_marker = tb.spec_body_sha256({**spec, "_spec_path": "/anywhere"})
+        assert delivered == with_marker
+        # ...and the run path and the generator agree on the value.
+        assert delivered == gen.spec_body_sha256(spec)
+
+
+# ---------------------------------------------------------------------------
+# The manifest covers what ships
+# ---------------------------------------------------------------------------
+class TestManifestCoverage:
+    def test_the_manifest_covers_every_batch_file_that_ships(self):
+        """A manifest that omits a file "verifies" while covering nothing."""
+        from c3_build_manifest import POST_COMMIT_METADATA, build_manifest
+
+        listed = {line.split("  ", 1)[1] for line in build_manifest()}
+        present = set()
+        for line in subprocess.run(
+                ["git", "-C", str(REPO_ROOT), "ls-files", "--cached", "--others",
+                 "--exclude-standard", "--", BATCH.relative_to(REPO_ROOT).as_posix()],
+                capture_output=True, text=True, check=True).stdout.splitlines():
+            relative = Path(line).relative_to(BATCH.relative_to(REPO_ROOT)).as_posix()
+            if relative == "MANIFEST.sha256" or relative in POST_COMMIT_METADATA:
+                continue
+            present.add(relative)
+        assert listed == present, sorted(present - listed)
+        assert "logs/mutation_final_freeze.txt" in listed
 
 
 # ---------------------------------------------------------------------------

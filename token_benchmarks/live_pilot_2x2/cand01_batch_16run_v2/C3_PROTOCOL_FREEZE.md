@@ -1,7 +1,6 @@
 # Protocol Freeze Declaration — CAND-01 × Batch-Macro 2×2
 
-**Status: FROZEN by the final freeze commit. No paid call was made before or
-during this declaration.**
+**Status: FROZEN by the final freeze commit. No paid call was made before this document was committed, and none was made before or during this declaration.**
 
 | Field | Value |
 | --- | --- |

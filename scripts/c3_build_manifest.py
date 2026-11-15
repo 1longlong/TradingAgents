@@ -47,23 +47,32 @@ def _sha256(path: Path) -> str:
 
 
 def build_manifest() -> list[str]:
-    """One ``<digest>  <relative path>`` line per tracked batch file."""
+    """One ``<digest>  <relative path>`` line per batch file that will ship.
+
+    Tracked *and* untracked-but-not-ignored files, because the manifest must
+    describe the tree that is about to be committed, and a new evidence file is
+    untracked until it is staged. Building from ``git ls-files`` alone silently
+    omitted such a file -- the manifest then "verified" while not covering
+    everything present, which is precisely the stale-record failure this round
+    is closing (found while rebuilding the manifest for the freeze).
+    """
     import subprocess
 
     listing = subprocess.run(
-        ["git", "-C", str(REPO_ROOT), "ls-files", "--", BATCH_REL],
+        ["git", "-C", str(REPO_ROOT), "ls-files", "--cached", "--others",
+         "--exclude-standard", "--", BATCH_REL],
         capture_output=True, text=True, check=True).stdout.splitlines()
     lines: list[str] = []
-    for tracked in sorted(listing):
-        relative = Path(tracked).relative_to(BATCH_REL).as_posix()
+    for name in sorted(set(listing)):
+        relative = Path(name).relative_to(BATCH_REL).as_posix()
         if relative == MANIFEST or relative in POST_COMMIT_METADATA:
             continue
         path = BATCH_DIR / relative
         if not path.is_file():
-            raise SystemExit(f"tracked file is missing: {path}")
+            raise SystemExit(f"listed file is missing: {path}")
         lines.append(f"{_sha256(path)}  {relative}")
     if not lines:
-        raise SystemExit("no tracked files under the batch directory")
+        raise SystemExit("no files under the batch directory")
     return lines
 
 

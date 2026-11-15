@@ -1847,13 +1847,20 @@ def compute_working_tree_fingerprint() -> dict:
 
 
 def spec_body_sha256(spec: dict) -> str:
-    """SHA-256 of a run spec minus the machine-specific ``results_dir``.
+    """SHA-256 of a run spec minus the machine-specific / internal fields.
 
     The same definition the spec generator and the delivered ``MANIFEST.sha256``
     use; a test pins the two implementations together, because a run's recorded
     value is only useful if it can be matched against the release.
+
+    Excluded: ``results_dir`` (host-specific) and any key beginning with ``_``
+    (runtime markers such as ``_spec_path``, which the child adds to its own
+    copy). Including a marker made the value recorded in
+    ``effective_config.json`` differ from the release's, so the one link back to
+    the registered artefact was broken for every real run.
     """
-    body = {k: v for k, v in spec.items() if k != "results_dir"}
+    body = {k: v for k, v in spec.items()
+            if k != "results_dir" and not str(k).startswith("_")}
     canonical = json.dumps(body, sort_keys=True, ensure_ascii=False,
                            separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -3805,6 +3812,29 @@ def _guard_spending_path(spec: dict, spec_path: Path | None = None) -> None:
     _preflight_gate(spec)
 
 
+def _rehearsal_spec_path(spec: dict, spec_path: Path | None) -> Path | None:
+    """Where this spec *would* live, for the freeze seam's batch test.
+
+    ``verify_frozen_tree`` decides whether ``TRADINGAGENTS_SKIP_FREEZE_CHECK``
+    may disable the frozen-release check by looking at the spec's path. A
+    rehearsal built in memory has no path, so passing ``None`` would let a
+    batch rehearsal disable the check that a paid run may never disable. The
+    registration directory is an equally good signal and cannot be omitted for
+    a registered spec.
+    """
+    if spec_path is not None:
+        return Path(spec_path)
+    recorded = spec.get("_spec_path")
+    if recorded:
+        # A spec loaded by the child carries its own path; use it rather than
+        # inventing one.
+        return Path(recorded)
+    registration = _registration_dir_for(spec)
+    if registration is not None:
+        return Path(registration).parent / "spec.json"
+    return None
+
+
 def rehearse_run_spec(spec: dict, *, spec_path: Path | None = None) -> dict:
     """Offline rehearsal of one paid run: everything except the LLM call.
 
@@ -3812,9 +3842,13 @@ def rehearse_run_spec(spec: dict, *, spec_path: Path | None = None) -> dict:
     spec, resolves the *real* config, constructs the *real* graph and asserts
     that the graph consumed exactly the registered arm, then verifies the
     ``effective_config`` record that a paid run would write. No client is
-    asked for a completion, no tool runs, nothing is written to disk.
+    asked for a completion, no tool runs, and nothing is left on disk: the
+    graph's own directories are redirected into a temporary sandbox that is
+    removed afterwards (constructing the real graph creates
+    ``results_dir``, ``data_cache_dir`` and the memory log's parent, and a
+    rehearsal must not leave those behind).
     """
-    _guard_spending_path(spec, spec_path)
+    _guard_spending_path(spec, _rehearsal_spec_path(spec, spec_path))
     config, applied = _config_for_spec(spec)
     if not (spec.get("provider") and spec.get("quick_model")
             and spec.get("deep_model")):
@@ -3832,6 +3866,15 @@ def rehearse_run_spec(spec: dict, *, spec_path: Path | None = None) -> dict:
             "effective_config_verified": {"verified": False},
             "effective_config_sha256": None,
         }
+    import shutil
+    import tempfile
+
+    sandbox = Path(tempfile.mkdtemp(prefix="c3-rehearsal-"))
+    # The *rehearsal* runs against a scratch tree. A paid run keeps the spec's
+    # own results_dir, which is what makes its telemetry land in the attempt.
+    config["results_dir"] = str(sandbox / "results")
+    config["data_cache_dir"] = str(sandbox / "cache")
+    config["memory_log_path"] = str(sandbox / "memory" / "trading_memory.md")
     try:
         graph = _construct_graph(spec, config)
         observed = _verify_graph_consumed_switches(spec, graph, applied)
@@ -3842,9 +3885,12 @@ def rehearse_run_spec(spec: dict, *, spec_path: Path | None = None) -> dict:
     except Exception as exc:  # noqa: BLE001 - a rehearsal failure is a refusal
         raise RunRefused(
             f"offline rehearsal failed: {type(exc).__name__}: {exc}") from None
+    finally:
+        shutil.rmtree(sandbox, ignore_errors=True)
     return {
         "rehearsed": True,
         "graph_rehearsed": True,
+        "sandbox": "temporary (removed)",
         "switches_applied": applied,
         "switches_observed": observed,
         "effective_config_verified": verification,

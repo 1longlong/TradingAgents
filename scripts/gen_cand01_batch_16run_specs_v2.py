@@ -178,12 +178,15 @@ def config_sha256(experiment: dict) -> str:
 
 
 def spec_body_sha256(spec: dict) -> str:
-    """SHA-256 of a run spec minus the machine-specific ``results_dir``.
+    """SHA-256 of a run spec minus the machine-specific / internal fields.
 
     Two roots on two machines produce the same ``spec_body_sha256`` for the same
-    run; they never share ``spec_sha256`` or ``results_dir``.
+    run; they never share ``spec_sha256`` or ``results_dir``. Keys beginning
+    with ``_`` are runtime markers the child adds to its own copy and must not
+    change the value, or the recorded digest would not match the release.
     """
-    body = {k: v for k, v in spec.items() if k != "results_dir"}
+    body = {k: v for k, v in spec.items()
+            if k != "results_dir" and not str(k).startswith("_")}
     return hashlib.sha256(canonical_json(body).encode("utf-8")).hexdigest()
 
 
