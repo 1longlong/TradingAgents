@@ -222,7 +222,11 @@ def check_fingerprint_matches_record() -> None:
     recorded = None
     for line in text.splitlines():
         if line.strip().startswith("Commit at write time:"):
-            recorded = line.split(":", 1)[-1].strip()
+            # The line is human-readable ("<sha>   (the parent of the freeze
+            # commit, by construction)"), so take the first token: passing the
+            # prose to git made `merge-base --is-ancestor` exit 128 and the gate
+            # fail on a perfectly good release (audit round 2).
+            recorded = line.split(":", 1)[-1].strip().split()[0]
             break
     if not recorded:
         _fail("freeze record", f"{record.name} names no write-time commit")
@@ -468,6 +472,35 @@ def _as_bool(text: str) -> bool:
     _fail("manifest", f"unparseable boolean {text!r} in SWITCH_MATRIX.csv")
 
 
+def check_spec_location(spec_path: Path, run_id: str) -> None:
+    """The spec must be the registration of *this* run, in its own directory.
+
+    Audit round 2 (M1): a self-consistent copy of R01 with a different
+    ``deep_model``, rehashed and placed in ``/tmp/R01_NVDA_C0``, passed the
+    spec-hash, arm and news checks. The paid child already refuses it (its
+    registration path is not the frozen one), so this is defence in depth --
+    but a gate that prints "safe to spend" for a copy is not doing its job.
+    """
+    import csv
+
+    path = BATCH_DIR / "SWITCH_MATRIX.csv"
+    row = {}
+    if path.is_file():
+        with path.open(newline="", encoding="utf-8") as handle:
+            row = next((r for r in csv.DictReader(handle)
+                        if (r.get("run_id") or "").strip() == run_id), {})
+    ticker, arm = (row.get("ticker") or "").strip(), (row.get("arm") or "").strip()
+    if not ticker or not arm:
+        _fail("spec location", f"Run ID {run_id} is not in SWITCH_MATRIX.csv")
+    expected = (BATCH_DIR / "specs" / f"{run_id}_{ticker}_{arm}").resolve()
+    actual = Path(spec_path).resolve().parent
+    if actual != expected:
+        _fail("spec location",
+              f"{spec_path} is in {actual}, but {run_id} is registered at "
+              f"{expected}; a copy elsewhere is not the registered run")
+    _ok("spec location", str(actual.name))
+
+
 def _run_arm_map() -> dict[str, dict]:
     """``{run_id: switches}`` for all 16 registered runs.
 
@@ -553,8 +586,21 @@ def main(argv: list[str] | None = None) -> int:
     if spec_dir.split("_", 1)[0] != args.run_id:
         _fail("spec path", f"{args.spec} belongs to {spec_dir!r}, "
                            f"not to run {args.run_id}")
+    check_spec_location(spec_path, args.run_id)
 
-    frozen = args.expected_commit or _frozen_commit()
+    # An override may only *restate* the frozen reference (audit A round 5,
+    # R-5-D; audit round 2, L1: the flag used to bypass that assertion).
+    frozen = _frozen_commit()
+    if args.expected_commit and args.expected_commit != frozen:
+        _fail("frozen commit",
+              f"--expected-commit {args.expected_commit[:12]} does not restate "
+              f"the frozen reference {frozen[:12]}; the reference is a recorded "
+              f"fact, not an argument")
+    if args.skip_network and os.environ.get("C3_I_MEAN_TO_SKIP_NETWORK") != "yes":
+        _fail("network probes",
+              "--skip-network exists for offline verification only. A run whose "
+              "Finnhub/FRED probes never ran is not authorised to spend; set "
+              "C3_I_MEAN_TO_SKIP_NETWORK=yes to acknowledge that explicitly")
     check_frozen_commit(frozen)
     check_fingerprint_matches_record()
     check_release_seal()
@@ -567,7 +613,11 @@ def main(argv: list[str] | None = None) -> int:
         check_finnhub(spec["case"]["ticker"], spec["case"]["trade_date"])
         check_fred(spec["case"]["trade_date"])
 
-    print("\nGATE PASSED — safe to spend money on this run")
+    if args.skip_network:
+        print("\nGATE PASSED (OFFLINE ONLY) — this is NOT authorisation to spend: "
+              "the Finnhub/FRED probes did not run")
+    else:
+        print("\nGATE PASSED — safe to spend money on this run")
     return 0
 
 

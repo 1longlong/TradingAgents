@@ -594,7 +594,14 @@ def usage_verdict(payload: dict, *, replay_used: int | None = None) -> dict:
     audit = payload.get("audit_quality") or {}
     checks = payload.get("usage_checks") or {}
     raw_events = payload.get("llm_call_events")
-    events = [e for e in (raw_events or []) if isinstance(e, dict)]
+    events = [e for e in (raw_events or []) if isinstance(e, dict)] if isinstance(
+        raw_events, (list, tuple)) else []
+    # A payload produced by the current observability layer always carries
+    # ``usage_checks`` *and* a list of per-call records. If it carries the
+    # checks but the records are not a list, the usage cannot be attributed at
+    # all -- that is a contradiction, not the legacy aggregate shape.
+    malformed_events = ("usage_checks" in payload
+                        and not isinstance(raw_events, (list, tuple)))
     # Per-call cross-checks need per-call records. A payload with no records at
     # all is the legacy/aggregate shape: its replay is *inconclusive*, not
     # contradictory, and saying so is more honest than inventing a mismatch.
@@ -630,6 +637,9 @@ def usage_verdict(payload: dict, *, replay_used: int | None = None) -> dict:
                 f"{without_usage} without != {calls} calls")
     elif calls is not None:
         mismatch.append("usage coverage counts are missing")
+    if malformed_events:
+        mismatch.append(
+            "per-call usage records are malformed (llm_call_events is not a list)")
     negative_preserved = _as_count(checks.get("negative_token_counts"))
     if negative_preserved:
         mismatch.append(
@@ -914,12 +924,49 @@ def _experiment_budget(exp_dir: Path | None = None) -> dict:
     return load_budget_state(path)
 
 
-def _experiment_token_cap() -> int | None:
-    """This round's token cap, from a *validated* budget contract.
+def _budget_for_run(exp_dir: Path, experiment: dict | None = None) -> tuple[dict | None, int | None]:
+    """The budget contract for one run directory, and its cap.
 
-    ``None`` now means the registration explicitly authorised an uncapped
-    round; it is never the fallback for a missing or broken file (U-2). Callers
-    that need to distinguish the two use :func:`_experiment_budget`.
+    ``(None, None)`` means the registration states no contract at all (a
+    generic experiment that never opted into the spend gate). A *present* block
+    that cannot be interpreted is returned as a non-ok state so the caller can
+    fail closed; it is never silently flattened to "uncapped". Used by the run
+    path and by re-summarisation so both classify a stored attempt the same way
+    (audit round 2, F3: re-summarising could otherwise report UNCAPPED for a
+    registration whose contract was unreadable).
+    """
+    exp_dir = Path(exp_dir)
+    if _is_frozen_batch_registration(exp_dir):
+        state = _experiment_budget(exp_dir)
+        return state, state["max_total_tokens"]
+    if experiment is not None:
+        if "budget" not in experiment:
+            return None, None
+        state = budget_state_from_experiment(
+            experiment, source=f"{exp_dir}/{EXPERIMENT_FILE}")
+        return state, state["max_total_tokens"]
+    path = exp_dir / EXPERIMENT_FILE
+    if not path.is_file():
+        return None, None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        return ({"ok": False, "state": BUDGET_MALFORMED, "mode": None,
+                 "max_total_tokens": None, "source": str(path),
+                 "detail": f"cannot read the registration: {exc}"}, None)
+    if not isinstance(data, dict) or "budget" not in data:
+        return None, None
+    state = budget_state_from_experiment(data, source=str(path))
+    return state, state["max_total_tokens"]
+
+
+def _experiment_token_cap() -> int | None:
+    """This round's cap **if** the budget contract is usable, else ``None``.
+
+    This is a convenience accessor, not a validity decision: ``None`` here can
+    mean either "explicitly uncapped" or "the contract is unusable", which is
+    why the run path uses :func:`_budget_for_run` and reports the state instead
+    of calling this. Kept for callers that only need the number.
     """
     state = _experiment_budget()
     if not state["ok"]:
@@ -981,7 +1028,11 @@ def _budget_summary(payload: dict, run_totals: dict, usage_coverage: dict,
     # must know about rather than see silently resolved.
     totals_in = _as_count(run_totals.get("reported_input_tokens_sum"))
     totals_out = _as_count(run_totals.get("reported_output_tokens_sum"))
+    calls = _as_count(usage_coverage.get("llm_calls"))
+    with_usage = _as_count(usage_coverage.get("calls_with_provider_usage"))
+    no_usage_measured = bool(calls) and with_usage == 0
     telemetry_total = (None if totals_in is None or totals_out is None
+                       or no_usage_measured
                        else totals_in + totals_out)
     info["telemetry_total_tokens"] = telemetry_total
     info["telemetry_total_known"] = telemetry_total is not None
@@ -1846,6 +1897,15 @@ def compute_working_tree_fingerprint() -> dict:
     }
 
 
+#: Fields that describe *this invocation* rather than the registered definition.
+#: ``results_dir`` and ``registration_dir`` are absolute host paths;
+#: ``switches_source`` is provenance wording ("declared" in the delivered spec,
+#: "registered" in a spec the parent builds) that cannot change the experiment.
+#: Excluding them is what makes the digest recorded in ``effective_config.json``
+#: match the released spec (audit round 2: it did not).
+_SPEC_BODY_EXCLUDED = frozenset({"results_dir", "registration_dir", "switches_source"})
+
+
 def spec_body_sha256(spec: dict) -> str:
     """SHA-256 of a run spec minus the machine-specific / internal fields.
 
@@ -1860,7 +1920,7 @@ def spec_body_sha256(spec: dict) -> str:
     the registered artefact was broken for every real run.
     """
     body = {k: v for k, v in spec.items()
-            if k != "results_dir" and not str(k).startswith("_")}
+            if k not in _SPEC_BODY_EXCLUDED and not str(k).startswith("_")}
     canonical = json.dumps(body, sort_keys=True, ensure_ascii=False,
                            separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -2380,18 +2440,7 @@ def execute_measured_run(exp_dir: Path, experiment: dict, case: dict,
     # state the contract; a generic experiment that never uses the spend gate
     # (no ``budget`` block) keeps the pre-existing behaviour and is not
     # invalidated for lacking a field it never had.
-    if _is_frozen_batch_registration(exp_dir):
-        budget_state = _experiment_budget(exp_dir)
-        budget_cap = budget_state["max_total_tokens"]
-    else:
-        candidate = budget_state_from_experiment(
-            experiment, source=f"{exp_dir}/experiment.json")
-        if "budget" in experiment:
-            budget_state = candidate
-            budget_cap = candidate["max_total_tokens"]
-        else:
-            budget_state = None
-            budget_cap = None
+    budget_state, budget_cap = _budget_for_run(exp_dir, experiment)
     if copied_path is not None:
         payload = _load_json(copied_path)
         metrics = extract_run_metrics(payload, telemetry_path, run_index,
@@ -2538,9 +2587,22 @@ def _read_attempt(run_dir: Path, run_index: int) -> dict | None:
     tele_path = run_dir / TELEMETRY_FILE
     if not tele_path.exists():
         return None
+    exp_dir = run_dir.parent.parent.parent
+    budget_state, budget_cap = _budget_for_run(exp_dir)
     metrics = extract_run_metrics(_load_json(tele_path), tele_path, run_index,
-                                   base_dir=run_dir.parent.parent.parent,
-                                   max_total_tokens=_experiment_token_cap())
+                                   base_dir=exp_dir,
+                                   max_total_tokens=budget_cap,
+                                   budget_state=budget_state)
+    if budget_state is not None and not budget_state["ok"]:
+        # A stored attempt whose registration has no usable budget contract is
+        # not a sample, exactly as on the run path (fail closed, not UNCAPPED).
+        metrics["invalid_reason"] = metrics.get("invalid_reason") or INVALID_BUDGET_CONFIG
+        metrics["valid"] = False
+        metrics["budget_error"] = {
+            "state": budget_state["state"],
+            "detail": budget_state["detail"],
+            "source": budget_state["source"],
+        }
     metrics["attempt"] = run_dir.name
     metrics["telemetry_path"] = _portable_path(
         tele_path, run_dir.parent.parent.parent)

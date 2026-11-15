@@ -19,8 +19,15 @@ one before. A tree that re-signs itself necessarily adds a new entry, and the
 first entry still names the original commit -- so the recorded designation
 survives, and ``verify_frozen_tree`` can require HEAD to be it.
 
-This file is tracked, so it is inside the code fingerprint and inside
-``MANIFEST.sha256``: editing it changes the tree it would be used to certify.
+The history is **release metadata**: it names the commit it was written after,
+so it cannot live inside that commit, and it is listed in ``.gitignore``. It is
+not the load-bearing anchor — ``refs/tags/c3-final-freeze`` is, because a tag's
+object hash is content-addressed and is published in ``c3/FREEZE_RECORD.json``
+and in the final report. The verifier requires the tag, the record, the history
+and ``HEAD`` to name the same commit, so a re-designation that only rewrites this
+file is caught by the tag check. (Audit round 2 correctly noted that the older
+docstring claimed this file was tracked; that claim was false and is corrected
+here.)
 
 Usage::
 

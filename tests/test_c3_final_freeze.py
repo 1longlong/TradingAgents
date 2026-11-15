@@ -174,6 +174,16 @@ class TestUsageVerdict:
         assert tb.usage_verdict(payload)["state"] == tb.USAGE_INCOMPLETE
         assert tb.extract_run_metrics(payload, None, 0)["valid"] is False
 
+    def test_malformed_per_call_records_fail_closed(self):
+        """New-format payload with unusable records is not "legacy"."""
+        payload = _payload(calls=2, with_usage=2, total_in=100, total_out=20)
+        payload["usage_checks"] = {"raw_usage_preserved": 2,
+                                   "raw_usage_expected": 2,
+                                   "negative_token_counts": 0}
+        payload["llm_call_events"] = "garbage"
+        assert tb.usage_verdict(payload)["state"] == tb.USAGE_MISMATCH
+        assert tb.extract_run_metrics(payload, None, 0)["valid"] is False
+
     def test_a_payload_without_per_call_records_is_inconclusive_not_a_mismatch(self):
         payload = _payload(events=False)
         verdict = tb.usage_verdict(payload)
@@ -318,6 +328,29 @@ class TestBudgetContract:
             budget = registration["budget"]
             assert budget["budget_mode"] == "uncapped_authorized", directory.name
             assert budget["max_total_tokens"] is None, directory.name
+
+    def test_an_unusable_contract_is_not_flattened_to_uncapped(self, tmp_path):
+        """Re-summarisation must classify a stored attempt like the run did."""
+        exp = tmp_path / "exp"
+        exp.mkdir()
+        (exp / "experiment.json").write_text(json.dumps({
+            "experiment_id": "e", "measured_runs": 1,
+            "budget": {"max_total_tokens": None},  # no budget_mode
+            "cases": [], "provider": "p", "quick_model": "q", "deep_model": "d",
+            "cache_policy": "preserve_existing",
+        }), encoding="utf-8")
+        state, cap = tb._budget_for_run(exp)
+        assert cap is None
+        assert state is not None and state["ok"] is False
+        assert state["state"] == tb.BUDGET_MODE_MISSING
+
+    def test_a_missing_usage_run_has_no_known_telemetry_total(self):
+        payload = _payload(calls=2, with_usage=0, complete=False,
+                           total_in=0, total_out=0, events=False)
+        metrics = tb.extract_run_metrics(payload, None, 0)
+        assert metrics["budget"]["telemetry_total_tokens"] is None
+        assert metrics["budget"]["telemetry_total_known"] is False
+        assert metrics["budget"]["agrees_with_telemetry"] is False
 
     def test_the_summary_reports_the_contract_not_just_the_cap(self):
         payload = _payload()
@@ -510,6 +543,26 @@ class TestDryRunRehearsal:
 
 
 class TestSpecBodyDigest:
+    def test_the_spec_the_child_runs_hashes_like_the_released_spec(self):
+        """The recorded digest must match the release, not just itself.
+
+        Audit round 2 proved the opposite: the child's spec adds
+        ``registration_dir`` (and renames ``switches_source``), so the value
+        written into ``effective_config.json`` differed from the released
+        spec's for all 16 runs while ``verify_effective_config`` compared it
+        against the same child spec and therefore self-passed.
+        """
+        for directory in sorted((BATCH / "specs").iterdir()):
+            if not directory.is_dir():
+                continue
+            registration = json.loads(
+                (directory / "experiment.json").read_text(encoding="utf-8"))
+            delivered = json.loads((directory / "spec.json").read_text(encoding="utf-8"))
+            child = tb.build_run_spec(directory, registration,
+                                      registration["cases"][0], 1, 1)
+            assert tb.spec_body_sha256(child) == tb.spec_body_sha256(delivered), (
+                directory.name)
+
     def test_runtime_markers_do_not_change_the_release_digest(self):
         """The child adds ``_spec_path``; the digest must still match the release."""
         from scripts import gen_cand01_batch_16run_specs_v2 as gen
@@ -614,6 +667,60 @@ class TestEffectiveConfig:
 
 
 # ---------------------------------------------------------------------------
+# The gate itself (path containment, override and skip-network semantics)
+# ---------------------------------------------------------------------------
+class TestGateHardening:
+    def test_the_gate_parses_the_prose_after_the_recorded_commit(self, tmp_path, monkeypatch):
+        """A human-readable suffix must not reach git as part of the SHA."""
+        from scripts import c3_preflight_gate as gate
+
+        head = subprocess.run(["git", "-C", str(REPO_ROOT), "rev-parse", "HEAD"],
+                              capture_output=True, text=True, check=True).stdout.strip()
+        batch = tmp_path / "batch"
+        (batch / "c3").mkdir(parents=True)
+        (batch / "experiment.json").write_text("{}", encoding="utf-8")
+        (batch / "c3" / "code_freeze.txt").write_text(
+            "  working_tree_sha256   : " + "a" * 64 + "\n"
+            f"Commit at write time: {head}   (the parent of the freeze commit, "
+            "by construction)\n", encoding="utf-8")
+        monkeypatch.setattr(gate, "BATCH_DIR", batch)
+        monkeypatch.setattr(tb, "compute_code_state",
+                            lambda *a, **k: {"working_tree_sha256": "a" * 64})
+        # Would raise SystemExit via _fail if the prose were passed to git.
+        gate.check_fingerprint_matches_record()
+
+    def test_a_spec_outside_its_registered_directory_is_refused(self, tmp_path):
+        from scripts import c3_preflight_gate as gate
+
+        copy = tmp_path / "R01_NVDA_C0"
+        copy.mkdir()
+        with pytest.raises(SystemExit):
+            gate.check_spec_location(copy / "spec.json", "R01")
+
+    def test_the_expected_commit_may_only_restate_the_reference(self, tmp_path, monkeypatch):
+        from scripts import c3_preflight_gate as gate
+
+        reference = tmp_path / "FROZEN_COMMIT"
+        reference.write_text("a" * 40 + "\n", encoding="utf-8")
+        monkeypatch.setattr(gate, "FROZEN_COMMIT_FILE", reference)
+        spec = BATCH / "specs/R01_NVDA_C0/spec.json"
+        with pytest.raises(SystemExit):
+            gate.main(["--run-id", "R01", "--spec", str(spec),
+                       "--expected-commit", "b" * 40, "--skip-network"])
+
+    def test_skip_network_needs_an_explicit_acknowledgement(self, tmp_path, monkeypatch):
+        from scripts import c3_preflight_gate as gate
+
+        reference = tmp_path / "FROZEN_COMMIT"
+        reference.write_text("a" * 40 + "\n", encoding="utf-8")
+        monkeypatch.setattr(gate, "FROZEN_COMMIT_FILE", reference)
+        monkeypatch.delenv("C3_I_MEAN_TO_SKIP_NETWORK", raising=False)
+        spec = BATCH / "specs/R01_NVDA_C0/spec.json"
+        with pytest.raises(SystemExit):
+            gate.main(["--run-id", "R01", "--spec", str(spec), "--skip-network"])
+
+
+# ---------------------------------------------------------------------------
 # The freeze record names this tree, not an ancestor
 # ---------------------------------------------------------------------------
 class TestFreezeDesignation:
@@ -632,6 +739,15 @@ class TestFreezeDesignation:
         assert 'record.get("commit") != head' in source
         assert 'recorded_commit != head' in source
         assert 'tag_object != head' in source
+
+    def test_the_verifier_recomputes_every_recorded_digest(self):
+        source = (SCRIPTS / "c3_verify_final_freeze.py").read_text(encoding="utf-8")
+        for field in ("code_freeze_sha256", "release_seal_sha256",
+                      "tag_message_sha256", "manifest_sha256",
+                      "protocol_sha256", "generator_sha256"):
+            assert field in source, field
+        # ...and each is compared, not merely mentioned.
+        assert source.count("!= record.get(") >= 6
 
     def test_a_tree_without_a_record_is_not_a_freeze(self, tmp_path):
         from c3_verify_final_freeze import verify

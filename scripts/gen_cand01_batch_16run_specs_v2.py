@@ -185,8 +185,9 @@ def spec_body_sha256(spec: dict) -> str:
     with ``_`` are runtime markers the child adds to its own copy and must not
     change the value, or the recorded digest would not match the release.
     """
+    excluded = {"results_dir", "registration_dir", "switches_source"}
     body = {k: v for k, v in spec.items()
-            if k != "results_dir" and not str(k).startswith("_")}
+            if k not in excluded and not str(k).startswith("_")}
     return hashlib.sha256(canonical_json(body).encode("utf-8")).hexdigest()
 
 

@@ -72,6 +72,12 @@ def _git(root: Path, *args: str) -> str:
                           capture_output=True, text=True, check=False).stdout.strip()
 
 
+def _git_raw(root: Path, *args: str) -> str:
+    """Like :func:`_git` but without stripping: tag-object digests need bytes."""
+    return subprocess.run(["git", "-C", str(root), *args],
+                          capture_output=True, text=True, check=False).stdout
+
+
 def _sha256(path: Path) -> str | None:
     return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else None
 
@@ -275,7 +281,7 @@ def verify(root: Path = REPO_ROOT) -> dict:
         ok(f"{len(spec_dirs)} specs: config_sha256 recomputed, manifests agree, "
            f"budget uncapped_authorized, paths inside the tree")
 
-    # -- 7. protocol / generator ------------------------------------------
+    # -- 7. protocol / generator / sealed release files --------------------
     if _sha256(PROTOCOL_FILE) != record.get("protocol_sha256"):
         bad("CAND01_BATCH_2X2_PROTOCOL_V2.md has changed since certification")
     else:
@@ -284,6 +290,15 @@ def verify(root: Path = REPO_ROOT) -> dict:
         bad("gen_cand01_batch_16run_specs_v2.py has changed since certification")
     else:
         ok("generator digest matches the record")
+    # Audit round 2 (F5): these fields were recorded and never recomputed.
+    if _sha256(c3 / "code_freeze.txt") != record.get("code_freeze_sha256"):
+        bad("c3/code_freeze.txt has changed since certification")
+    else:
+        ok("code_freeze.txt digest matches the record")
+    if _sha256(c3 / "RELEASE_SEAL.sha256") != record.get("release_seal_sha256"):
+        bad("c3/RELEASE_SEAL.sha256 has changed since certification")
+    else:
+        ok("RELEASE_SEAL.sha256 digest matches the record")
 
     # -- 10. tag + history -------------------------------------------------
     tag_object = _git(root, "rev-parse", f"refs/tags/{TAG}^{{commit}}")
@@ -298,11 +313,20 @@ def verify(root: Path = REPO_ROOT) -> dict:
             f"{str(record.get('tag_object_sha'))[:12]}")
     else:
         ok("tag object digest matches the record")
-    tag_message = _git(root, "cat-file", "tag", TAG)
+    tag_message = _git_raw(root, "cat-file", "tag", TAG)
     if str(recorded_fingerprint) not in tag_message:
         bad("the tag message does not carry the certified fingerprint")
     else:
         ok("tag message carries the fingerprint")
+    # The message digest is what pins the tag's *content*; the tag object SHA
+    # pins it too, but only if this value is actually compared.
+    message_body = (tag_message.split("\n\n", 1)[1]
+                    if "\n\n" in tag_message else tag_message)
+    if hashlib.sha256(message_body.encode("utf-8")).hexdigest() != \
+            record.get("tag_message_sha256"):
+        bad("the tag message has changed since certification")
+    else:
+        ok("tag message digest matches the record")
 
     history = c3 / "FREEZE_HISTORY.jsonl"
     if not history.is_file():
