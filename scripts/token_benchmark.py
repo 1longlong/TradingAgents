@@ -516,8 +516,81 @@ def run_invalidity_reason(payload: dict) -> str | None:
     return _usage_coverage_problem(payload)
 
 
+def _experiment_token_cap() -> int | None:
+    """This round's token cap, read from the frozen protocol file.
+
+    ``None`` means uncapped, which is this round's deliberate configuration. The
+    value is read (never defaulted, never guessed) so the spend gate the report
+    shows is the one the protocol defines: a ``null`` here stays ``null`` and
+    must not be replaced by a fallback that would silently describe a different
+    experiment.
+    """
+    here = Path(__file__).resolve().parent.parent
+    path = here / "token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2" / EXPERIMENT_FILE
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    budget = data.get("budget")
+    if isinstance(budget, dict):
+        return budget.get("max_total_tokens")
+    return None
+
+
+def _budget_summary(payload: dict, run_totals: dict, usage_coverage: dict,
+                    *, max_total_tokens: int | None = None) -> dict:
+    """Report the spend gate's state for one run (``BUDGET_GUARD_DESIGN.md``).
+
+    The gate is built from the run's own telemetry: every recorded call is
+    replayed into it so ``used`` counts each call once and an unmeasured call
+    makes the total a lower bound. The cap comes from the experiment's
+    ``budget.max_total_tokens``, which is ``null`` this round -- so the state is
+    ``UNCAPPED`` unless usage was missing, in which case ``UNKNOWN_SPEND`` is
+    reported even though nothing blocks.
+
+    This is reporting, not enforcement: the cap is absent by design and a
+    ``null`` cap must never be replaced with a fallback (see the design doc §1).
+    """
+    from tradingagents.budget_guard import BudgetGate
+
+    gate = BudgetGate(max_total_tokens=max_total_tokens)
+    events = payload.get("llm_call_events") or []
+    seen: dict[str, dict] = {}
+    for ev in events:
+        if not isinstance(ev, dict):
+            # Older payloads carry bare values in this section; they describe no
+            # call this gate can attribute, so they are not replayed.
+            continue
+        rid = ev.get("callback_run_id") or ev.get("telemetry_run_id")
+        if rid is None:
+            continue
+        seen[rid] = {
+            "run_id": rid,
+            "input": ev.get("reported_input_tokens"),
+            "output": ev.get("reported_output_tokens"),
+            "reported": ev.get("usage_source") is not None,
+        }
+    gate.record_calls(seen.values())
+    info = gate.describe()
+    # Cross-check against the telemetry totals the report also publishes; a
+    # disagreement means the replay and the aggregate disagree, which the reader
+    # must know about rather than see silently resolved.
+    info["telemetry_total_tokens"] = (
+        (run_totals.get("reported_input_tokens_sum") or 0)
+        + (run_totals.get("reported_output_tokens_sum") or 0)
+    )
+    info["agrees_with_telemetry"] = info["used_tokens"] == info["telemetry_total_tokens"]
+    info["calls_without_provider_usage"] = (
+        usage_coverage.get("calls_without_provider_usage") or 0
+    )
+    return info
+
+
 def extract_run_metrics(payload: dict, telemetry_path: Path | None,
-                        run_index: int, *, base_dir: Path | None = None) -> dict:
+                        run_index: int, *, base_dir: Path | None = None,
+                        max_total_tokens: int | None = None) -> dict:
     """Normalize one telemetry payload into the benchmark's per-run metric dict.
 
     ``total_tokens`` is exactly reported input + reported output. Reasoning and
@@ -541,6 +614,9 @@ def extract_run_metrics(payload: dict, telemetry_path: Path | None,
     agents_metrics = {}
     for agent_id, agg in (payload.get("agents", {}) or {}).items():
         agents_metrics[agent_id] = _extract_agent_metrics(agg)
+
+    budget = _budget_summary(payload, run_totals, usage_coverage,
+                            max_total_tokens=max_total_tokens)
 
     event_counts = {
         "llm_call_events": len(payload.get("llm_call_events") or []),
@@ -576,6 +652,7 @@ def extract_run_metrics(payload: dict, telemetry_path: Path | None,
         "llm_error_count": llm_error_count(payload),
         "invalid_reason": invalid_reason,
         "valid": invalid_reason is None,
+        "budget": budget,
         "event_counts": event_counts,
         "agents": agents_metrics,
         "telemetry_path": _portable_path(telemetry_path, base_dir),
@@ -1738,13 +1815,15 @@ def execute_measured_run(exp_dir: Path, experiment: dict, case: dict,
     if copied_path is not None:
         payload = _load_json(copied_path)
         metrics = extract_run_metrics(payload, telemetry_path, run_index,
-                                      base_dir=exp_dir)
+                                      base_dir=exp_dir,
+                                      max_total_tokens=_experiment_token_cap())
         metrics["telemetry_path"] = _portable_path(copied_path, exp_dir)
         if runner_error:
             # Keep the diagnostic, but do not let it erase recorded metrics.
             metrics["runner_error"] = runner_error
     else:
-        metrics = extract_run_metrics({}, None, run_index)
+        metrics = extract_run_metrics({}, None, run_index,
+                                      max_total_tokens=_experiment_token_cap())
         metrics["run_status"] = "failed"
         metrics["valid"] = False
         metrics["error"] = runner_error
@@ -1866,7 +1945,8 @@ def _read_attempt(run_dir: Path, run_index: int) -> dict | None:
     if not tele_path.exists():
         return None
     metrics = extract_run_metrics(_load_json(tele_path), tele_path, run_index,
-                                   base_dir=run_dir.parent.parent.parent)
+                                   base_dir=run_dir.parent.parent.parent,
+                                   max_total_tokens=_experiment_token_cap())
     metrics["attempt"] = run_dir.name
     metrics["telemetry_path"] = _portable_path(
         tele_path, run_dir.parent.parent.parent)

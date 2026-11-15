@@ -1580,3 +1580,49 @@ class TestStatsHandlerSummary:
         agg = stats["agents"][o.AGENT_TRADER]
         assert agg["node_invocations"] == 1
         assert agg["tool_rounds"] == 1
+
+
+# ---------------------------------------------------------------------------
+# A partial usage payload is not a zero-token measurement (audit C)
+# ---------------------------------------------------------------------------
+class TestPartialUsageIsNotZero:
+    """A provider that reports usage but omits a field reported *nothing*.
+
+    ``sum += payload or 0`` turned that omission into a measured 0, which
+    understates the total while looking complete. The omission is counted
+    instead and leaves the sum untouched.
+    """
+
+    def _collector_with(self, usage_metadata):
+        collector = o.RunMetricsCollector()
+        handler = o.ObservabilityCallbackHandler(collector=collector)
+        with o.observe_run(collector, o.AGENT_NEWS_ANALYST):
+            _invoke_llm(["x"], [handler],
+                        usage={"usage_metadata": usage_metadata})
+        return collector
+
+    def test_omitted_input_tokens_are_counted_not_zeroed(self):
+        collector = self._collector_with(
+            {"output_tokens": 7, "total_tokens": 7})
+        snap = collector.snapshot()
+        assert snap["llm_calls_missing_input_tokens"] == 1
+        # The sum stays 0 because nothing was added -- not because a 0 was.
+        assert snap["reported_input_tokens_sum"] == 0
+        assert snap["reported_output_tokens_sum"] == 7
+
+    def test_partial_payload_does_not_count_as_complete_coverage(self):
+        collector = self._collector_with({"output_tokens": 7})
+        telemetry = collector.build_telemetry()
+        assert telemetry["usage_coverage"]["complete"] is False
+        assert telemetry["usage_coverage"]["calls_missing_input_tokens"] == 1
+        agent = telemetry["agents"][o.AGENT_NEWS_ANALYST]
+        assert agent["calls_missing_input_tokens"] == 1
+        assert agent["usage_complete"] is False
+
+    def test_complete_payload_still_reports_complete(self):
+        collector = self._collector_with(
+            {"input_tokens": 3, "output_tokens": 7, "total_tokens": 10})
+        telemetry = collector.build_telemetry()
+        assert telemetry["usage_coverage"]["complete"] is True
+        assert telemetry["run_totals"]["reported_input_tokens_sum"] == 3
+        assert telemetry["run_totals"]["reported_output_tokens_sum"] == 7

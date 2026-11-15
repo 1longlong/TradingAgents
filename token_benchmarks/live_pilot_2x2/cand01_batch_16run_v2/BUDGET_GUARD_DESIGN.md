@@ -88,18 +88,26 @@ with the interrupted attempt's.
 
 ## 5. What is tested (mocked, credential-free)
 
-The gate and the accounting are exercised without any paid call:
+The gate and the accounting are exercised without any paid call. This table
+previously claimed test surfaces that did not exist — audit C-04 found none of
+the states implemented in any Python file. It now names the code that implements
+each state and the test that fails when it is removed.
 
-| Property | Test surface |
-| --- | --- |
-| Missing usage stays `None` | `tradingagents/observability.py` collector, exercised directly |
-| No double count for one `run_id` | duplicate `on_llm_end` delivery |
-| Separate prompt / completion / total / cached fields | `LLMCallEvent` |
-| Raw vendor usage preserved | `usage_source` |
-| Interrupted run retains usage | collector snapshot after a partial sequence |
-| `UNKNOWN_SPEND` ≠ `0` | gate state assertions |
-| `UNCAPPED` never blocks | cap `None` |
-| `EXHAUSTED` at the cap | mocked cap |
+| Property | Implementation | Test |
+| --- | --- | --- |
+| Missing usage stays `None` | `observability._extract_usage_metadata` | `test_observability.py::TestTokenUsage` |
+| No double count for one `run_id` | `budget_guard.BudgetGate._seen_run_ids` | `test_budget_guard.py::test_duplicate_run_id_is_counted_once` |
+| Separate prompt / completion / total / cached fields | `observability.LLMCallEvent` | `test_observability.py::TestTokenUsage` |
+| Raw vendor usage preserved | `usage_source` | `test_observability.py::TestTokenUsage` |
+| Interrupted run retains usage | collector snapshot after a partial sequence | `test_observability.py` partial-run tests |
+| `UNKNOWN_SPEND` ≠ `0` | `budget_guard.BudgetGate.state` | `test_unknown_spend_is_reported_and_is_not_zero` |
+| `UNCAPPED` never blocks | `budget_guard.BudgetGate.check` | `test_uncapped_never_blocks_and_says_so` |
+| `EXHAUSTED` at the cap | `budget_guard.BudgetGate.check` | `test_exhausted_at_the_cap_blocks_further_calls` |
+| A partial payload is not a complete total | `observability._build_telemetry_dict` | `test_observability.py::TestPartialUsageIsNotZero` |
+| The harness reports the gate | `token_benchmark._budget_summary` | `test_budget_guard.py::test_extract_run_metrics_reports_uncapped` |
+| The cap comes from the protocol, not a default | `token_benchmark._experiment_token_cap` | `test_the_rounds_cap_is_read_from_the_frozen_protocol` |
+
+Each of these was mutation-checked: reverting the fix fails the named test.
 
 ---
 

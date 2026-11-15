@@ -641,6 +641,9 @@ class RunMetricsCollector:
         self.llm_error_count = 0
         self.llm_calls_with_provider_usage = 0
         self.llm_calls_without_provider_usage = 0
+        # Usage payloads that omitted a field: counted, never coerced to 0.
+        self.llm_calls_missing_input_tokens = 0
+        self.llm_calls_missing_output_tokens = 0
         self.reported_input_tokens_sum = 0
         self.reported_output_tokens_sum = 0
         self.reported_reasoning_tokens_sum = 0
@@ -784,8 +787,19 @@ class RunMetricsCollector:
             has_usage = event.usage_source is not None
             if has_usage:
                 self.llm_calls_with_provider_usage += 1
-                self.reported_input_tokens_sum += event.reported_input_tokens or 0
-                self.reported_output_tokens_sum += event.reported_output_tokens or 0
+                # A provider that reports usage but omits a field has not
+                # reported zero tokens for it -- it has reported nothing. Adding
+                # ``None or 0`` would turn "unmeasured" into a measured 0 and
+                # silently understate the total. Count the omission instead and
+                # leave the sum alone, so the field means what it says.
+                if event.reported_input_tokens is None:
+                    self.llm_calls_missing_input_tokens += 1
+                else:
+                    self.reported_input_tokens_sum += event.reported_input_tokens
+                if event.reported_output_tokens is None:
+                    self.llm_calls_missing_output_tokens += 1
+                else:
+                    self.reported_output_tokens_sum += event.reported_output_tokens
                 if event.reported_reasoning_tokens is not None:
                     self.reported_reasoning_tokens_sum += event.reported_reasoning_tokens
                 if event.reported_cached_input_tokens is not None:
@@ -865,6 +879,8 @@ class RunMetricsCollector:
                 "llm_error_count": self.llm_error_count,
                 "llm_calls_with_provider_usage": self.llm_calls_with_provider_usage,
                 "llm_calls_without_provider_usage": self.llm_calls_without_provider_usage,
+                "llm_calls_missing_input_tokens": self.llm_calls_missing_input_tokens,
+                "llm_calls_missing_output_tokens": self.llm_calls_missing_output_tokens,
                 "reported_input_tokens_sum": self.reported_input_tokens_sum,
                 "reported_output_tokens_sum": self.reported_output_tokens_sum,
                 "reported_reasoning_tokens_sum": self.reported_reasoning_tokens_sum,
@@ -1499,6 +1515,8 @@ def _new_agent_aggregate() -> dict[str, Any]:
         "llm_error_count": 0,
         "calls_with_provider_usage": 0,
         "calls_without_provider_usage": 0,
+        "calls_missing_input_tokens": 0,
+        "calls_missing_output_tokens": 0,
         "reported_input_tokens_sum": 0,
         "reported_output_tokens_sum": 0,
         "reported_reasoning_tokens_sum": 0,
@@ -1541,8 +1559,15 @@ def _build_telemetry_dict(collector: RunMetricsCollector) -> dict[str, Any]:
             a["llm_error_count"] += 1
         if ev.usage_source is not None:
             a["calls_with_provider_usage"] += 1
-            a["reported_input_tokens_sum"] += ev.reported_input_tokens or 0
-            a["reported_output_tokens_sum"] += ev.reported_output_tokens or 0
+            # An omitted field is unmeasured, not zero; see the collector above.
+            if ev.reported_input_tokens is None:
+                a["calls_missing_input_tokens"] += 1
+            else:
+                a["reported_input_tokens_sum"] += ev.reported_input_tokens
+            if ev.reported_output_tokens is None:
+                a["calls_missing_output_tokens"] += 1
+            else:
+                a["reported_output_tokens_sum"] += ev.reported_output_tokens
             if ev.reported_reasoning_tokens is not None:
                 a["reported_reasoning_tokens_sum"] += ev.reported_reasoning_tokens
             if ev.reported_cached_input_tokens is not None:
@@ -1604,6 +1629,8 @@ def _build_telemetry_dict(collector: RunMetricsCollector) -> dict[str, Any]:
         "llm_error_count": sum(a["llm_error_count"] for a in agents.values()),
         "calls_with_provider_usage": sum(a["calls_with_provider_usage"] for a in agents.values()),
         "calls_without_provider_usage": sum(a["calls_without_provider_usage"] for a in agents.values()),
+        "llm_calls_missing_input_tokens": sum(a["calls_missing_input_tokens"] for a in agents.values()),
+        "llm_calls_missing_output_tokens": sum(a["calls_missing_output_tokens"] for a in agents.values()),
         "reported_input_tokens_sum": sum(a["reported_input_tokens_sum"] for a in agents.values()),
         "reported_output_tokens_sum": sum(a["reported_output_tokens_sum"] for a in agents.values()),
         "reported_reasoning_tokens_sum": sum(a["reported_reasoning_tokens_sum"] for a in agents.values()),
@@ -1629,11 +1656,22 @@ def _build_telemetry_dict(collector: RunMetricsCollector) -> dict[str, Any]:
     total_llm = run_totals["llm_calls"]
     with_usage = run_totals["calls_with_provider_usage"]
     without_usage = run_totals["calls_without_provider_usage"]
-    usage_complete = bool(without_usage == 0 and total_llm > 0 and with_usage == total_llm)
+    missing_input = run_totals["llm_calls_missing_input_tokens"]
+    missing_output = run_totals["llm_calls_missing_output_tokens"]
+    # Complete means every call carried a usage payload *and* that payload
+    # carried both token counts. A payload that omits ``input_tokens`` is not a
+    # zero-token call; treating coverage as completeness would let a partial
+    # vendor response be summarized as a full measurement.
+    usage_complete = bool(
+        without_usage == 0 and total_llm > 0 and with_usage == total_llm
+        and missing_input == 0 and missing_output == 0
+    )
     usage_coverage = {
         "llm_calls": total_llm,
         "calls_with_provider_usage": with_usage,
         "calls_without_provider_usage": without_usage,
+        "calls_missing_input_tokens": missing_input,
+        "calls_missing_output_tokens": missing_output,
         "complete": usage_complete,
     }
 
