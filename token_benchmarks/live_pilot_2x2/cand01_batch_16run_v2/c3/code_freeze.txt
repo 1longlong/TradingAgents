@@ -1,17 +1,17 @@
 PLAN C3 — CODE FREEZE RECORD
-generated: 2026-11-15T15:40:35.366378+00:00
+generated: 2026-11-15T15:46:54.667486+00:00
 
 This file cannot name the commit it is committed in (a commit cannot contain
 its own hash). It therefore records the code fingerprint, which is identical
 before and after the freeze commit, plus the commit it was written on.
 
 Branch              : exp/cand01-batch-v2
-Commit at write time: f00735744d35396f74a98fd2c3c8edda30db7d0d
+Commit at write time: e1d018e96f074e514f68622359327e43fc8a938f
 Working tree at write: clean
 
 Fingerprint (the authority -- the gate recomputes this and refuses on a mismatch)
   fingerprint_algorithm : working-tree-sha256-v2
-  working_tree_sha256   : b5d40e9233f2c84049e5ab6187d33e21c0ca5d3b4910c114f7ff09469f0864d4
+  working_tree_sha256   : 936916c62b936f5ee7c8edec41b6e049a1a3d821bff83135be070131c14b0704
   git_working_tree_dirty: False
   files fingerprinted   : 247 (247 tracked)
   tool_schema_version   : 2
@@ -27,9 +27,9 @@ Runtime
   max_total_tokens: null  (uncapped; usage recorded in full, never estimated)
 
 Invocation (every run)
-  TZ=UTC PYTHONSAFEPATH=1 PYTHONPATH=/tmp/opencode/planC2_wt \
+  TZ=UTC PYTHONSAFEPATH=1 PYTHONPATH=/tmp/opencode/_attest_probe \
     /tmp/opencode/expvenv/bin/python scripts/c3_preflight_gate.py ...
-  TZ=UTC PYTHONSAFEPATH=1 PYTHONPATH=/tmp/opencode/planC2_wt \
+  TZ=UTC PYTHONSAFEPATH=1 PYTHONPATH=/tmp/opencode/_attest_probe \
     /tmp/opencode/expvenv/bin/python scripts/token_benchmark.py ...
 
 Remediation history (each audit blocker, fixed before any paid call)
