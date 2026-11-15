@@ -477,3 +477,81 @@ def test_truncation_reaches_the_analyst_facing_text():
 
     assert "Coverage note" in text
     assert "record cap" in text
+
+
+# ---------------------------------------------------------------------------
+# Truncation must keep the newest articles, not the oldest
+# ---------------------------------------------------------------------------
+def _items(n_days: list[tuple[str, int]]) -> dict[str, list[dict]]:
+    """``[(date, count)]`` -> per-day canned Finnhub payloads, oldest first."""
+    by_date: dict[str, list[dict]] = {}
+    for day, count in n_days:
+        by_date[day] = [
+            {
+                "headline": f"NVDA item {i} on {day}",
+                "summary": "NVIDIA news",
+                "url": f"https://example.test/{day}/{i}",
+                # Spread the day's items across it: 30 items must not walk past
+                # hour 23, and each timestamp must stay inside the window.
+                "datetime": _epoch(f"{day} {i // 2:02d}:{(i % 2) * 30:02d}"),
+                "related": "NVDA",
+            }
+            for i in range(count)
+        ]
+    return by_date
+
+
+def test_article_limit_keeps_the_newest_articles():
+    """Regression: ``admitted[:limit]`` kept the *oldest* articles.
+
+    Finnhub returns records oldest-first, so slicing off the tail discarded the
+    days immediately before the trade date -- exactly the coverage a dated
+    decision depends on. Live evidence before the fix: NVDA 2026-09-23 saw
+    20 articles whose newest was 2026-09-16, while 63 in-window articles from
+    the final two days were dropped.
+    """
+    by_date = _items([("2026-09-16", 30), ("2026-09-21", 30), ("2026-09-22", 30)])
+    with patch.object(fn, "_request") as request, \
+            patch.object(fn, "get_api_key", return_value="test-key"), \
+            patch.object(fn, "get_config", return_value={"news_article_limit": 10}), \
+            patch.object(fn.time, "sleep"):
+        from urllib.parse import parse_qs, urlparse
+
+        def _fake(url, *_a, **_k):
+            day = parse_qs(urlparse(url).query)["from"][0]
+            return 200, json.dumps(by_date.get(day, [])), ""
+
+        request.side_effect = _fake
+        outcome = fn.fetch_news_finnhub("NVDA", START, END, as_of_cutoff=CUTOFF)
+
+    kept = outcome.articles
+    assert len(kept) == 10
+    # The kept set is the ten newest, i.e. the whole of the final day.
+    assert all(a["published_at"].date().isoformat() == "2026-09-22" for a in kept)
+    # And it is chronological, so rendering does not have to reorder.
+    stamps = [a["published_at"] for a in kept]
+    assert stamps == sorted(stamps)
+    # Nothing from the oldest day survives.
+    assert not any(a["published_at"].date().isoformat() == "2026-09-16"
+                   for a in kept)
+
+
+def test_article_limit_still_respects_the_pit_cutoff():
+    """Keeping the newest must never reach past the point-in-time cutoff."""
+    by_date = _items([("2026-09-22", 5)])
+    with patch.object(fn, "_request") as request, \
+            patch.object(fn, "get_api_key", return_value="test-key"), \
+            patch.object(fn, "get_config", return_value={"news_article_limit": 50}), \
+            patch.object(fn.time, "sleep"):
+        from urllib.parse import parse_qs, urlparse
+
+        def _fake(url, *_a, **_k):
+            day = parse_qs(urlparse(url).query)["from"][0]
+            return 200, json.dumps(by_date.get(day, [])), ""
+
+        request.side_effect = _fake
+        outcome = fn.fetch_news_finnhub("NVDA", START, END, as_of_cutoff=CUTOFF)
+
+    cutoff_dt = datetime(2026, 9, 23, 20, 0, tzinfo=timezone.utc)
+    for article in outcome.articles:
+        assert article["published_at"] < cutoff_dt

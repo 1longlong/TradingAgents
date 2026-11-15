@@ -33,13 +33,31 @@ def _sandbox(tmp_path: Path) -> Path:
     shutil.copy2(REPO_ROOT / "token_benchmarks" / "baseline_v2" / "experiment.json",
                  tmpl / "experiment.json")
     # The wrapper requires the project virtualenv; reuse the real interpreter.
-    venv = root / ".venv" / "bin"
-    venv.mkdir(parents=True)
-    (venv / "python").symlink_to(REPO_ROOT / ".venv" / "bin" / "python")
-    # The harness imports the application package; link it in rather than
-    # copying the tree (the sandbox stays read-only for app code).
-    (root / "tradingagents").symlink_to(REPO_ROOT / "tradingagents",
-                                        target_is_directory=True)
+    venv_root = root / ".venv"
+    venv_root.mkdir(parents=True, exist_ok=True)
+    # A bare symlink to the interpreter is not a virtualenv: the interpreter
+    # finds its ``site-packages`` through the ``pyvenv.cfg`` beside it, so a
+    # symlinked binary in a temp directory silently falls back to the base
+    # Python and cannot import the project's dependencies. Mirror the real
+    # venv's layout instead, which keeps the sandbox a genuine environment.
+    real_venv = REPO_ROOT / ".venv"
+    if (real_venv / "pyvenv.cfg").is_file():
+        shutil.copy2(real_venv / "pyvenv.cfg", venv_root / "pyvenv.cfg")
+        for name in ("bin", "lib", "lib64"):
+            if (real_venv / name).exists():
+                (venv_root / name).symlink_to(real_venv / name,
+                                              target_is_directory=True)
+    else:  # pragma: no cover - a checkout without its own venv
+        (venv_root / "bin").mkdir()
+        (venv_root / "bin" / "python").symlink_to(
+            Path(sys.executable).resolve(), target_is_directory=False)
+    # The harness imports the application package, and C3-03 refuses to run
+    # unless ``tradingagents`` really lives under the experiment root. A symlink
+    # elsewhere would (correctly) be refused, so copy the tree in. The copy is
+    # what makes this sandbox a faithful root rather than a pointer at one.
+    shutil.copytree(REPO_ROOT / "tradingagents", root / "tradingagents",
+                    symlinks=True,
+                    ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     (root / "cli").symlink_to(REPO_ROOT / "cli", target_is_directory=True)
     return root
 
@@ -47,6 +65,14 @@ def _sandbox(tmp_path: Path) -> Path:
 def _run(root: Path, *args: str, cwd: Path | None = None, secrets: Path | None = None):
     env = dict(os.environ)
     env.pop("TRADINGAGENTS_BENCHMARK_SECRETS", None)
+    # Never inherit provider credentials from the developer's shell: a "dead
+    # endpoint" probe must actually be dead. Before this, pytest's ``.env``
+    # export put the live API key and base URL in ``os.environ``, so the
+    # unreachable-endpoint test dialled the *real, paid* endpoint (observed as
+    # established sockets to :443) instead of failing fast.
+    for name in ("CITYU_FOUNDRY_API_KEY", "CITYU_FOUNDRY_BASE_URL",
+                 "OPENAI_API_KEY", "OPENAI_BASE_URL"):
+        env.pop(name, None)
     if secrets is not None:
         env["TRADINGAGENTS_BENCHMARK_SECRETS"] = str(secrets)
     return subprocess.run(

@@ -328,3 +328,182 @@ def test_compute_code_state_does_not_write(tmp_path):
     state = tb.compute_code_state(tmp_path)
     assert state["code_state_phase"] == "start_of_measurement"
     assert list(tmp_path.iterdir()) == []
+
+
+# ---------------------------------------------------------------------------
+# Audit-B blockers found after the first freeze
+# ---------------------------------------------------------------------------
+#: The three audit findings are recorded here by name because each one would
+#: have produced *plausible* paid data that measured the wrong thing. They are
+#: the reason the batch was not allowed to run on the first freeze.
+def _registration(run_dir_name: str = "R01_NVDA_C0") -> dict:
+    import json
+    from pathlib import Path
+
+    path = (Path(__file__).resolve().parent.parent / "token_benchmarks" /
+            "live_pilot_2x2" / "cand01_batch_16run_v2" / "specs" /
+            run_dir_name / "experiment.json")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def test_prepare_run_spec_carries_the_registered_arm(tmp_path):
+    """B-01: the child spec omitted ``switches``, so every arm ran as AB.
+
+    ``_apply_spec_switches`` reads switches off the *spec*; with none present it
+    returned ``{}`` and ``default_config`` supplied ``batch_macro=True,
+    single_pass=False``. All 16 labels would have produced one arm.
+    """
+    import json
+
+    import scripts.token_benchmark as tb
+
+    experiment = _registration()
+    (tmp_path / "experiment.json").write_text(json.dumps(experiment))
+
+    spec = json.loads(
+        tb.prepare_run_spec(tmp_path, experiment, experiment["cases"][0], 1).read_text()
+    )
+    assert spec["switches"] == experiment["switches"]
+    assert spec["config_sha256"] == experiment["config_sha256"]
+    assert spec["switches_source"] == "registered"
+    # And those switches must actually reach the config the graph receives.
+    from tradingagents.default_config import DEFAULT_CONFIG
+
+    applied = tb._apply_spec_switches(spec, {}, DEFAULT_CONFIG)
+    assert applied["batch_macro_enabled"] is experiment["switches"]["batch_macro"]
+    assert applied["single_pass_finalization_enabled"] is experiment["switches"]["single_pass"]
+
+
+@pytest.mark.parametrize("field, tampered", [
+    ("deep_model", "evil-model"),
+    ("quick_model", "evil-model"),
+    ("switches", {"batch_macro": True, "s2_downstream": True,
+                  "single_pass": False, "structured": True}),
+])
+def test_prepare_run_spec_inherits_only_registered_values(tmp_path, field, tampered):
+    """A spec can never carry a value the registration does not have."""
+    import json
+
+    import scripts.token_benchmark as tb
+
+    experiment = _registration()
+    (tmp_path / "experiment.json").write_text(json.dumps(experiment))
+    spec = json.loads(
+        tb.prepare_run_spec(tmp_path, experiment, experiment["cases"][0], 1).read_text()
+    )
+    if field in spec:
+        assert spec[field] == experiment[field]
+        assert spec[field] != tampered
+
+
+def test_registration_hash_is_recomputed_not_trusted(tmp_path):
+    """B-02: a spec carrying ``"0"*64`` used to run.
+
+    The gate must recompute ``config_sha256`` from the hashed fields. A string
+    that is merely present -- or that matches a definition edited after
+    registration -- is refused.
+    """
+    import json
+
+    import scripts.token_benchmark as tb
+
+    experiment = _registration()
+    (tmp_path / "experiment.json").write_text(json.dumps(experiment))
+    spec = json.loads(
+        tb.prepare_run_spec(tmp_path, experiment, experiment["cases"][0], 1).read_text()
+    )
+    assert tb._preflight_gate(spec)["checked"] is True
+
+    zeroed = dict(spec, config_sha256="0" * 64)
+    with pytest.raises(tb.RunRefused, match="config_sha256 mismatch"):
+        tb._preflight_gate(zeroed)
+
+    # Editing the definition after registration invalidates the old hash.
+    edited = dict(experiment, deep_model="evil-model")
+    (tmp_path / "experiment.json").write_text(json.dumps(edited))
+    with pytest.raises(tb.RunRefused, match="config_sha256 mismatch"):
+        tb._preflight_gate(spec)
+
+
+def test_registration_hash_fields_agree_across_modules():
+    """Three modules must hash the same subset or the verification is theatre."""
+    import scripts.token_benchmark as tb
+    from scripts import c3_preflight_gate as gate
+    from scripts import gen_cand01_batch_16run_specs_v2 as gen
+
+    assert tuple(tb.REGISTERED_HASH_FIELDS) == tuple(gen.HASHED_FIELDS)
+    assert tuple(gate.HASHED_FIELDS) == tuple(gen.HASHED_FIELDS)
+
+
+def test_all_registered_specs_verify_against_their_registration():
+    """B-03: the delivered specs, MANIFEST and per-run CSV must agree."""
+    import csv
+    import hashlib
+    import json
+    from pathlib import Path
+
+    import scripts.token_benchmark as tb
+    from scripts import c3_preflight_gate as gate
+
+    batch = (Path(__file__).resolve().parent.parent / "token_benchmarks" /
+             "live_pilot_2x2" / "cand01_batch_16run_v2")
+
+    manifest = batch / "MANIFEST.sha256"
+    for line in manifest.read_text().splitlines():
+        if not line.strip():
+            continue
+        digest, rel = line.split("  ", 1)
+        actual = hashlib.sha256((batch / rel.lstrip("./")).read_bytes()).hexdigest()
+        assert actual == digest, f"{rel} does not match MANIFEST.sha256"
+
+    with (batch / "RUN_MANIFEST_TEMPLATE.csv").open() as fh:
+        for row in csv.DictReader(fh):
+            body = hashlib.sha256((batch / row["spec_path"]).read_bytes()).hexdigest()
+            assert body == row["spec_body_sha256"], row["run_id"]
+            reg = json.loads((batch / row["experiment_path"]).read_text())
+            assert tb.registration_sha256(reg) == row["config_sha256"], row["run_id"]
+
+
+def test_refused_registration_consumes_no_attempt(tmp_path):
+    """A refused run must not burn ``attempt_01``."""
+    import json
+
+    import scripts.token_benchmark as tb
+
+    experiment = _registration()
+    with pytest.raises(tb.RunRefused):
+        tb._preflight_registration(tmp_path, dict(experiment, switches=None),
+                                   experiment["cases"][0])
+    assert tb.attempt_dirs(tmp_path, 1) == []
+
+    # The discard helper keeps a directory that already holds telemetry.
+    run_dir = tb._attempt_dir(tmp_path, 1, 1)
+    run_dir.mkdir(parents=True)
+    (run_dir / "spec.json").write_text("{}")
+    tb._discard_refused_attempt(tmp_path, 1, 1)
+    assert not run_dir.exists()
+    run_dir.mkdir(parents=True)
+    (run_dir / "telemetry.json").write_text("{}")
+    tb._discard_refused_attempt(tmp_path, 1, 1)
+    assert run_dir.exists(), "a directory holding telemetry is evidence, never delete it"
+
+
+def test_gate_rejects_a_spec_field_that_disagrees_with_its_registration(tmp_path):
+    """C-01: recomputing from the registration alone let a tampered spec pass."""
+    import json
+    from pathlib import Path
+
+    from scripts import c3_preflight_gate as gate
+
+    batch = (Path(__file__).resolve().parent.parent / "token_benchmarks" /
+             "live_pilot_2x2" / "cand01_batch_16run_v2" / "specs" / "R01_NVDA_C0")
+    (tmp_path / "experiment.json").write_bytes((batch / "experiment.json").read_bytes())
+    spec = json.loads((batch / "spec.json").read_text())
+    spec["_spec_path"] = str(tmp_path / "spec.json")
+    gate.check_spec_hash(spec)
+
+    for field, value in [("deep_model", "evil"),
+                         ("news_scope", {"company_news": "gdelt", "gdelt": "excluded"}),
+                         ("switches", dict(spec["switches"], batch_macro=True))]:
+        with pytest.raises(SystemExit):
+            gate.check_spec_hash(dict(spec, **{field: value}))

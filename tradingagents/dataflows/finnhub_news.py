@@ -584,7 +584,11 @@ def fetch_news_finnhub(
         return _Outcome(status=NewsStatus.EMPTY_VALID)
 
     if article_limit:
-        admitted = admitted[: int(article_limit)]
+        # Keep the most *recent* articles, then restore chronological order for
+        # rendering. Finnhub returns records oldest-first, so slicing the raw
+        # list kept the oldest 20 of 153 and dropped every article from the two
+        # days before the trade date -- the ones a dated decision depends on.
+        admitted = sorted(admitted, key=lambda a: a["published_at"])[-int(article_limit):]
     return _Outcome(articles=admitted, detail=detail)
 
 

@@ -21,6 +21,7 @@ Exit code 0 means "safe to spend money on this run"; anything else means stop.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -97,16 +98,69 @@ def check_import_root(expected_root: Path = REPO_ROOT) -> None:
     _ok("import root", str(actual.parent))
 
 
+#: The fields ``config_sha256`` covers. Mirrors
+#: ``gen_cand01_batch_16run_specs_v2.HASHED_FIELDS`` and
+#: ``token_benchmark.REGISTERED_HASH_FIELDS``; a test asserts the three agree.
+HASHED_FIELDS = (
+    "experiment_id", "schema_version", "switches_required", "provider",
+    "quick_model", "deep_model", "output_language", "cache_policy",
+    "checkpoint_enabled", "budget", "cases", "switches", "news_scope",
+)
+
+
+def registration_sha256(definition: dict) -> str:
+    """Recompute a registration's ``config_sha256``."""
+    missing = [k for k in HASHED_FIELDS if k not in definition]
+    if missing:
+        raise KeyError(f"missing hashed field(s): {missing}")
+    subset = {k: definition[k] for k in HASHED_FIELDS}
+    payload = json.dumps(subset, sort_keys=True, ensure_ascii=False,
+                         separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
 def check_spec_hash(spec: dict) -> None:
-    """The spec must still carry the hash its registration declared."""
+    """The spec must still carry the hash its registration declares.
+
+    The hash is **recomputed** from the registration's hashed fields and
+    compared. Checking only that a 64-character string is present lets a
+    tampered ``deep_model`` run -- audit C-01 demonstrated exactly that.
+    """
     registered = spec.get("config_sha256")
     if not registered:
         _fail("spec hash", "spec has no config_sha256")
-    # The registration lives on the experiment, and the spec must agree with it.
-    exp_path = BATCH_DIR / "specs" / f"{spec['experiment_id']}" / "experiment.json"
-    if not exp_path.exists():
-        exp_path = BATCH_DIR / "experiment.json"
-    _ok("spec hash", f"{registered[:16]}… (from {exp_path.parent.name})")
+
+    registration_path = (Path(spec["_spec_path"]).resolve().parent
+                         / "experiment.json")
+    if not registration_path.is_file():
+        _fail("spec hash", f"no registration beside {registration_path.parent}")
+    registration = json.loads(registration_path.read_text(encoding="utf-8"))
+
+    if registration.get("config_sha256") != registered:
+        _fail("spec hash", f"spec carries {registered[:12]}… but its "
+                           f"registration carries "
+                           f"{str(registration.get('config_sha256'))[:12]}…")
+    try:
+        actual = registration_sha256(registration)
+    except KeyError as exc:
+        _fail("spec hash", f"registration lacks hashed fields: {exc}")
+    if actual != registered:
+        _fail("spec hash", f"registration hashes to {actual[:12]}…, not the "
+                           f"declared {registered[:12]}…; the definition "
+                           f"changed after it was registered")
+    # The hash vouches for the *registration*, not for this spec file. A spec
+    # can still disagree with it field-by-field (audit C-01: tampering the
+    # spec's own ``deep_model`` passed a recompute-only check), so every field
+    # both files carry must be identical.
+    for key in sorted(set(registration) & set(spec)):
+        if key == "config_sha256":
+            continue
+        if registration[key] != spec[key]:
+            _fail("spec hash", f"spec field {key!r} disagrees with the "
+                               f"registration: spec has {spec[key]!r}, "
+                               f"registration has {registration[key]!r}")
+    _ok("spec hash", f"{registered[:16]}… (recomputed, and every shared field "
+                     f"matches the registration)")
 
 
 def check_arm_matches_manifest(spec: dict, want: dict) -> None:
@@ -199,7 +253,9 @@ def main(argv: list[str] | None = None) -> int:
                     help="skip the Finnhub/FRED probes (not for paid runs)")
     args = ap.parse_args(argv)
 
-    spec = json.loads(Path(args.spec).read_text(encoding="utf-8"))
+    spec_path = Path(args.spec).resolve()
+    spec = json.loads(spec_path.read_text(encoding="utf-8"))
+    spec["_spec_path"] = str(spec_path)
     arms_by_run = _run_arm_map()
     if args.run_id not in arms_by_run:
         _fail("manifest", f"run {args.run_id} is not a registered run ID")
@@ -209,7 +265,7 @@ def main(argv: list[str] | None = None) -> int:
     # The spec file the gate is pointed at must be the registration for this run
     # ID. Specs carry no run ID field, so the directory name is the authority;
     # a truncated-prefix match would let R1 match R10.
-    spec_dir = Path(args.spec).resolve().parent.name
+    spec_dir = spec_path.parent.name
     if spec_dir.split("_", 1)[0] != args.run_id:
         _fail("spec path", f"{args.spec} belongs to {spec_dir!r}, "
                            f"not to run {args.run_id}")

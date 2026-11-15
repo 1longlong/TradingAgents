@@ -1552,12 +1552,16 @@ class TestMeasurementCredentials:
         assert "UNRELATED" not in env
         assert env["OPENAI_COMPATIBLE_API_KEY"] == "sk-secret-value"
 
-    def test_existing_environment_wins(self, tmp_path):
+    def test_the_named_secrets_file_wins_over_the_environment(self, tmp_path):
+        # The operator names this file on the command line, so it is the
+        # authority. Letting the ambient environment win meant a shell that
+        # exported a base URL silently redirected the measurement: a probe
+        # aimed at http://127.0.0.1:9 dialled the real paid endpoint instead.
         secrets = tmp_path / "env"
         secrets.write_text("CITYU_FOUNDRY_API_KEY=from-file\n")
         env = {"OPENAI_COMPATIBLE_API_KEY": "from-shell"}
-        assert tb.apply_cityu_env(env, secrets) == []
-        assert env["OPENAI_COMPATIBLE_API_KEY"] == "from-shell"
+        assert tb.apply_cityu_env(env, secrets) == ["OPENAI_COMPATIBLE_API_KEY"]
+        assert env["OPENAI_COMPATIBLE_API_KEY"] == "from-file"
 
     def test_secrets_file_is_parsed_not_executed(self, tmp_path):
         secrets = tmp_path / "env"
@@ -1588,12 +1592,12 @@ class TestMeasurementCredentials:
         assert env["FRED_API_KEY"] == "0123456789abcdef0123456789abcdef"
         assert "UNRELATED" not in env
 
-    def test_existing_fred_key_wins_over_the_file(self, tmp_path):
+    def test_the_named_secrets_file_wins_for_passthrough_keys_too(self, tmp_path):
         secrets = tmp_path / "env"
         secrets.write_text("FRED_API_KEY=from-file\n")
         env = {"FRED_API_KEY": "from-shell"}
-        assert tb.apply_cityu_env(env, secrets) == []
-        assert env["FRED_API_KEY"] == "from-shell"
+        assert tb.apply_cityu_env(env, secrets) == ["FRED_API_KEY"]
+        assert env["FRED_API_KEY"] == "from-file"
 
     def test_credential_state_reports_configured_without_values(self, tmp_path):
         secrets = tmp_path / "env"

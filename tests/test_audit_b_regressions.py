@@ -328,6 +328,15 @@ def _run_single_with_stub_graph(tmp_path, monkeypatch, spec: dict, ambient: dict
     monkeypatch.setattr(dc, "DEFAULT_CONFIG", patched_defaults)
 
     spec_path = tmp_path / "spec.json"
+    # A spec may only claim the hash of the run it belongs to, so give the
+    # helper the registration beside it. C3 recomputes ``config_sha256`` from
+    # the definition rather than trusting the string, so a bare spec with no
+    # registration is (correctly) refused before reaching this point.
+    registration = SPEC_DIR / spec.get("_dir", "") / "experiment.json"
+    if registration.is_file():
+        (tmp_path / "experiment.json").write_bytes(registration.read_bytes())
+        spec = dict(spec, registration_dir=str(tmp_path))
+    spec.pop("_dir", None)
     spec_path.write_text(json.dumps(spec), encoding="utf-8")
     return harness._run_single(str(spec_path)), captured
 

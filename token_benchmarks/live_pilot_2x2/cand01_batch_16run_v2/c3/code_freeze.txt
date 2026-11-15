@@ -1,0 +1,45 @@
+PLAN C3 — CODE FREEZE RECORD
+generated: 2026-11-15T12:56:31Z
+
+branch        : exp/cand01-batch-v2
+commit        : 99f670932cd578bcd80c9bf7dd35838da741203a
+parent (RC1)  : 9948bf8545cceeb0d7a60cda913a04826a06c007
+subject       : feat(cand01): freeze the CAND-01 x batch-macro 2x2 apparatus for paid runs
+
+python        : Python 3.14.7
+venv          : /tmp/opencode/expvenv (dedicated; NOT the shared /home venv)
+tradingagents : /tmp/opencode/planC2_wt/tradingagents/__init__.py
+
+provider      : openai_compatible
+endpoint      : https://llm.cs.cityu.edu.hk/v1
+quick model   : CS5351/DeepSeek-V4-Flash
+deep model    : CS5351/DeepSeek-V4-Flash
+
+=== dependency versions (top-level, from the experiment venv) ===
+langchain-core              1.6.12
+langchain-openai            1.7.2
+langgraph                   1.2.16
+pandas                      3.0.6
+pytest                      9.1.1
+pytest-subtests             0.15.0
+python-dotenv               1.2.4
+pytz                        2026.5
+questionary                 2.1.1
+requests                    2.34.2
+rich                        15.0.0
+stockstats                  0.6.9
+typer                       0.27.3
+yfinance                    1.7.0
+
+=== FROZEN SOURCE FINGERPRINT ===
+git_head_commit       : 99f670932cd578bcd80c9bf7dd35838da741203a
+git_branch            : exp/cand01-batch-v2
+git_working_tree_dirty: False
+working_tree_sha256   : 577c4bce3c97213e969af2c8b03e93b8475ad8d2e1e2b129cfff4514ea0d5a20
+fingerprint_algorithm : working-tree-sha256-v2
+file_count            : 205
+tracked_file_count    : 205
+untracked_file_count  : 0
+python_version        : 3.14.7 | packaged by Anaconda, Inc. | (main, Aug 14 2026, 10:21:40) [GCC 14.3.0]
+
+This fingerprint is recomputed before every run; a change aborts the batch.

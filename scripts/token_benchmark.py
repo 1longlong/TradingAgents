@@ -1550,8 +1550,21 @@ def prepare_run_spec(exp_dir: Path, experiment: dict, case: dict, run_index: int
         # Pinned into the spec so the child can prove it imported the tree this
         # experiment was registered against, instead of trusting its cwd.
         "experiment_root": str(_PROJECT_ROOT),
+        # Where this run's registration lives, so the child can recompute
+        # config_sha256 against the full definition rather than trusting a
+        # 64-character string it was handed.
+        "registration_dir": str(Path(exp_dir).resolve()),
         "run_index": run_index,
     }
+    # The registered arm must travel with the spec. Omitting ``switches`` here
+    # made ``_apply_spec_switches`` return ``{}``, so every arm silently ran
+    # ``default_config`` -- four labels, one arm, 16 paid runs wasted. The
+    # registration is the authority; copy it rather than re-deriving it.
+    for inherited in ("switches", "config_sha256", "news_scope", "budget"):
+        if inherited in experiment:
+            spec[inherited] = experiment[inherited]
+    if "switches" in experiment:
+        spec["switches_source"] = "registered"
     spec_path = run_dir / "spec.json"
     spec_path.write_text(json.dumps(spec, indent=2, ensure_ascii=False), encoding="utf-8")
     return spec_path
@@ -1875,6 +1888,48 @@ def _summarized_attempt(exp_dir: Path, run_index: int) -> dict | None:
     return attempts[-1] if attempts else None
 
 
+def _preflight_registration(exp_dir: Path, experiment: dict, case: dict) -> None:
+    """Refuse an invalid registration before any attempt directory exists.
+
+    Checks everything the child would check, plus the registration-level facts
+    only the parent knows (the experiment must declare switches, and the
+    declared hash must equal the hash of the definition as it stands now).
+    """
+    from tradingagents.graph.switch_verification import (
+        SwitchNotConsumed,
+        validate_spec_switches,
+    )
+
+    switches = experiment.get("switches")
+    if switches is None:
+        # A study that registers the switch apparatus must say which arm it
+        # runs; a study that never opted in (older benchmark templates) has no
+        # arm to be consistent with, so there is nothing to refuse.
+        if experiment.get("switches_required"):
+            raise RunRefused(
+                f"{getattr(exp_dir, 'name', exp_dir)}: registration requires "
+                f"switches but declares none; a run without an arm cannot be a "
+                f"sample"
+            )
+    else:
+        try:
+            validate_spec_switches(switches)
+        except SwitchNotConsumed as exc:
+            raise RunRefused(f"registration switches rejected: {exc}") from None
+
+    declared = experiment.get("config_sha256")
+    if declared is not None:
+        try:
+            actual = registration_sha256(experiment)
+        except KeyError as exc:
+            raise RunRefused(f"registration is missing hashed fields: {exc}") from None
+        if actual != declared:
+            raise RunRefused(
+                f"registration config_sha256 mismatch: declares "
+                f"{declared[:12]}…, hashes to {actual[:12]}…"
+            )
+
+
 def _mark_run_started(exp_dir: Path, experiment: dict, case: dict, run_index: int,
                       attempt: int) -> None:
     path = _run_state_path(_attempt_dir(exp_dir, run_index, attempt))
@@ -1889,6 +1944,28 @@ def _mark_run_started(exp_dir: Path, experiment: dict, case: dict, run_index: in
         "started_at": datetime.now(timezone.utc).isoformat(),
         "status": "started",
     }, indent=2, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+
+
+def _discard_refused_attempt(exp_dir: Path, run_index: int, attempt: int) -> None:
+    """Remove the directory of an attempt that was refused before it ran.
+
+    Only the run-state marker and the spec the parent itself wrote may exist;
+    if telemetry appeared the run did start and the directory is kept, so this
+    can never delete evidence.
+    """
+    import shutil
+
+    run_dir = _attempt_dir(exp_dir, run_index, attempt)
+    if not run_dir.is_dir():
+        return
+    produced = [
+        p for p in run_dir.rglob("*")
+        if p.is_file() and p.name not in {"run_state.json", "spec.json",
+                                         REFUSAL_FILE}
+    ]
+    if produced:
+        return
+    shutil.rmtree(run_dir, ignore_errors=True)
 
 
 def _record_refusal(exp_dir: Path, case: dict, run_index: int, exc: Exception) -> Path:
@@ -1956,6 +2033,10 @@ def run_experiment(exp_dir: Path, experiment: dict, *, runner=None,
                         continue
             attempt = None
             if not dry_run:
+                # Refusals are decided *before* an attempt is numbered. Doing it
+                # (as the child also does) in the parent means a refused run
+                # leaves no attempt directory and cannot consume attempt_01.
+                _preflight_registration(exp_dir, experiment, case)
                 attempt = len(attempt_dirs(exp_dir, run_index)) + 1
                 _mark_run_started(exp_dir, experiment, case, run_index, attempt)
             print(f"[bench] run {run_index} of {n_runs_total} for {case_label(case)}")
@@ -1970,6 +2051,11 @@ def run_experiment(exp_dir: Path, experiment: dict, *, runner=None,
                 # number and no sample to lose. It is recorded under its own
                 # log and the study stops, because a spec that the harness
                 # now refuses must be fixed rather than skipped.
+                if attempt is not None:
+                    # The parent numbered this attempt before the child looked
+                    # at the spec. Un-number it, so the next real run reuses
+                    # attempt_01 and the study shows no phantom attempt.
+                    _discard_refused_attempt(exp_dir, run_index, attempt)
                 _record_refusal(exp_dir, case, run_index, exc)
                 raise
             except Exception as exc:  # noqa: BLE001
@@ -2206,6 +2292,45 @@ def _exported_switch_keys() -> set[str]:
 
 EFFECTIVE_CONFIG_FILE = "effective_config.json"
 
+#: The fields ``config_sha256`` covers. This mirrors
+#: ``gen_cand01_batch_16run_specs_v2.HASHED_FIELDS`` and lives here so the run
+#: path can *recompute* a registration's hash without importing the generator.
+#: A test asserts the two tuples are identical.
+REGISTERED_HASH_FIELDS = (
+    "experiment_id",
+    "schema_version",
+    "switches_required",
+    "provider",
+    "quick_model",
+    "deep_model",
+    "output_language",
+    "cache_policy",
+    "checkpoint_enabled",
+    "budget",
+    "cases",
+    "switches",
+    "news_scope",
+)
+
+
+def canonical_json(obj) -> str:
+    """The canonical serialisation used for every experiment hash."""
+    return json.dumps(obj, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+
+
+def registration_sha256(definition: dict) -> str:
+    """Recompute the ``config_sha256`` a definition should carry.
+
+    Raises ``KeyError`` if a hashed field is missing, so a truncated definition
+    fails loudly instead of hashing a smaller object and matching by accident.
+    """
+    unknown = set(REGISTERED_HASH_FIELDS) - set(definition)
+    if unknown:
+        raise KeyError(f"missing hashed field(s): {sorted(unknown)}")
+    subset = {key: definition[key] for key in REGISTERED_HASH_FIELDS}
+    return hashlib.sha256(canonical_json(subset).encode("utf-8")).hexdigest()
+
+
 #: Marker file a child writes when it refuses to run, and the status string the
 #: orchestrator maps it to. A refusal is not a measurement: it never produces
 #: telemetry and must never be counted as an attempt of the study.
@@ -2304,6 +2429,28 @@ def _write_effective_config(run_dir: Path, *, config: dict, spec: dict,
     return path
 
 
+def _registration_dir_for(spec: dict) -> Path | None:
+    """Locate the per-run registration a spec belongs to.
+
+    ``prepare_run_spec`` records the experiment directory in the spec, and the
+    registration file lives there. The declared ``experiment_id`` must match, so
+    a spec cannot borrow another run's registration.
+    """
+    raw = spec.get("registration_dir")
+    if not raw:
+        return None
+    path = Path(raw) / "experiment.json"
+    if not path.is_file():
+        return None
+    try:
+        registered_id = _load_json(path).get("experiment_id")
+    except Exception:  # noqa: BLE001 - a broken registration is not usable
+        return None
+    if registered_id != spec.get("experiment_id"):
+        return None
+    return path
+
+
 def _preflight_gate(spec: dict) -> dict:
     """Refuse a spec that cannot be a valid sample, before any paid call.
 
@@ -2318,6 +2465,32 @@ def _preflight_gate(spec: dict) -> dict:
         SwitchNotConsumed,
         validate_spec_switches,
     )
+
+    # A spec must prove it is the registration for its run: the recorded hash
+    # is *recomputed* from the hashed fields and compared. Merely carrying a
+    # ``config_sha256`` string proves nothing -- audit B2 demonstrated a spec
+    # with ``"0"*64`` running happily.
+    declared_hash = spec.get("config_sha256")
+    if declared_hash is not None:
+        definition = {key: spec[key] for key in REGISTERED_HASH_FIELDS if key in spec}
+        missing = [key for key in REGISTERED_HASH_FIELDS if key not in spec]
+        if missing:
+            # Fall back to the registration on disk: the run spec is a subset
+            # of the definition, so it cannot hash itself.
+            registration = _registration_dir_for(spec)
+            if registration is None:
+                raise RunRefused(
+                    f"spec declares config_sha256 but carries no definition "
+                    f"(missing {missing}) and no registration was found"
+                )
+            definition = _load_json(registration)
+        actual = registration_sha256(definition)
+        if actual != declared_hash:
+            raise RunRefused(
+                f"config_sha256 mismatch: spec declares {declared_hash[:12]}…, "
+                f"registration hashes to {actual[:12]}…; the definition changed "
+                f"after it was registered"
+            )
 
     switches = spec.get("switches")
     if switches is not None:
@@ -2735,19 +2908,25 @@ def _unquote(value: str) -> str:
 def apply_cityu_env(env: MutableMapping[str, str], secrets_path: Path) -> list[str]:
     """Map the CityU secrets onto the app's env vars. Returns the names applied.
 
-    Existing values in ``env`` win, so an explicitly exported variable is never
-    silently overridden. Names are returned, never values.
+    Values from the *explicitly named* secrets file win over the ambient
+    environment. The opposite precedence (ambient wins) meant a shell that
+    happened to export ``CITYU_FOUNDRY_BASE_URL`` silently redirected a
+    measurement away from the endpoint its operator named on the command line:
+    a probe pointed at ``http://127.0.0.1:9`` was observed dialling the real
+    paid endpoint on port 443, because the ambient value took precedence. The
+    file the operator passed is the authority; the environment is only a
+    fallback for names the file does not mention.
     """
     file_values = _env_file_values(Path(secrets_path))
     applied = []
     for source, target in _CITYU_ENV_MAP:
         value = file_values.get(source)
-        if value and not env.get(target):
+        if value:
             env[target] = value
             applied.append(target)
     for name in _PASSTHROUGH_ENV:
         value = file_values.get(name)
-        if value and not env.get(name):
+        if value:
             env[name] = value
             applied.append(name)
     return applied
