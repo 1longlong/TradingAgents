@@ -2887,6 +2887,32 @@ def _preflight_gate(spec: dict) -> dict:
                     f"the registration is the frozen definition and the spec may "
                     f"only repeat it"
                 )
+            # A run spec carries its case as ``case``; the registration lists
+            # them as ``cases``, so the loop above never compares them and any
+            # trade date, ticker or analyst set was accepted (audit A round 5,
+            # H-C). That is the one substitution that silently changes *what*
+            # is measured, so it is compared field by field.
+            if "case" in spec and isinstance(definition.get("cases"), list):
+                registered = [c for c in definition["cases"]
+                              if isinstance(c, dict)
+                              and c.get("case_id") == spec["case"].get("case_id")]
+                if len(registered) != 1:
+                    raise RunRefused(
+                        f"spec case {spec['case'].get('case_id')!r} is not one of "
+                        f"the registration's cases "
+                        f"{[c.get('case_id') for c in definition['cases']]}"
+                    )
+                case_diff = {
+                    key: (spec["case"].get(key), registered[0].get(key))
+                    for key in set(spec["case"]) | set(registered[0])
+                    if spec["case"].get(key) != registered[0].get(key)
+                }
+                if case_diff:
+                    raise RunRefused(
+                        f"spec case disagrees with its registration on "
+                        f"{sorted(case_diff)}; the ticker, trade date and analyst "
+                        f"set are the experiment, not parameters of it"
+                    )
         actual = registration_sha256(definition)
         if actual != declared_hash:
             raise RunRefused(
