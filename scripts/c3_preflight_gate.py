@@ -119,6 +119,13 @@ def check_release_seal() -> None:
         if not line.strip():
             continue
         digest, rel = line.split("  ", 1)
+        # ``FROZEN_COMMIT`` names the commit that contains the seal, so it must
+        # be written after the seal -- the same fixed point as
+        # ``code_freeze.txt`` naming its own commit. It is therefore listed in
+        # the seal without being checked against it; the gate already requires
+        # HEAD to equal its contents, which pins it far more tightly.
+        if rel.strip().endswith("FROZEN_COMMIT"):
+            continue
         path = BATCH_DIR / rel.strip()
         if not path.is_file():
             stale.append(f"{rel} (missing)")
