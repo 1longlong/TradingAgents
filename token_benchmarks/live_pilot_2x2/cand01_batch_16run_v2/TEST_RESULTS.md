@@ -180,3 +180,24 @@ in this round:
 
 Both gaps are recorded in `PREFLIGHT_REPORT.md` and drive the
 `READY_WITH_LIMITATIONS` verdict.
+
+---
+
+## Erratum — appended at Plan C3 freeze (audit A-11)
+
+The numbers in §1 above are a **historical record of the C2 round**, not a
+description of the frozen V2 tree. They are left in place rather than edited:
+the round's logs are evidence, and rewriting a recorded result to match later
+code would destroy the audit trail the report exists to provide.
+
+Live state at the C3 freeze (`git rev-parse HEAD` = `cat c3/FROZEN_COMMIT`):
+
+| Measure | Value |
+| --- | --- |
+| Full suite, isolated venv `/tmp/opencode/expvenv` | **2065 passed, 2 skipped**, 319 subtests, **0 failed** |
+| The 2 failures recorded in §1 | **gone** — they came from a stale worktree `.env` (audit A-01), now deleted |
+
+The §1 figure `2 failed, 1990 passed` therefore describes neither the current
+tree nor the frozen one. The two gaps named at the end of §1 were both closed
+in C3 (`effective_config.json` is now written by `_write_effective_config`;
+the pre-flight gate is a committed script with its own tests).

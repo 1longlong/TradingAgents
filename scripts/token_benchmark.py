@@ -2001,6 +2001,38 @@ def _preflight_registration(exp_dir: Path, experiment: dict, case: dict) -> None
             validate_spec_switches(switches)
         except SwitchNotConsumed as exc:
             raise RunRefused(f"registration switches rejected: {exc}") from None
+        # The arm must equal the one SWITCH_MATRIX.csv froze for this Run ID.
+        # Recomputing ``config_sha256`` below only proves the definition agrees
+        # with *itself*: audit B-10 showed that editing the switches and
+        # rehashing produces a self-consistent file that runs another arm. The
+        # matrix is tracked and covered by the freeze fingerprint.
+        run_id = getattr(exp_dir, "name", "").split("_", 1)[0]
+        frozen = _frozen_switch_matrix().get(run_id)
+        if frozen is None:
+            raise RunRefused(
+                f"{getattr(exp_dir, 'name', exp_dir)}: Run ID {run_id!r} is not "
+                f"in SWITCH_MATRIX.csv; an unregistered arm cannot be a sample"
+            )
+        # The Run ID must name *this* directory, not merely borrow its prefix.
+        # A copy of ``R01_NVDA_C0`` placed in another experiment directory
+        # carries the right name, the right switches and a matching hash, and
+        # would otherwise be measured as a second, independent R01 -- doubling
+        # one arm's weight and silently corrupting the 4x4 comparison (audit
+        # B-06). The registration is only reachable from its frozen home.
+        expected_dir = (_frozen_batch_dir() / "specs" / f"{run_id}_"
+                        f"{_frozen_run_ticker(run_id)}_"
+                        f"{_frozen_run_arm(run_id)}")
+        if Path(exp_dir).resolve() != expected_dir.resolve():
+            raise RunRefused(
+                f"{exp_dir}: carries Run ID {run_id} but is not that run's "
+                f"registered directory ({expected_dir}); a Run ID names exactly "
+                f"one run, and a copy elsewhere would be counted twice"
+            )
+        if switches != frozen:
+            raise RunRefused(
+                f"{getattr(exp_dir, 'name', exp_dir)}: SWITCH_MATRIX.csv froze "
+                f"{frozen} for {run_id}, but the registration declares {switches}"
+            )
 
     declared = experiment.get("config_sha256")
     if declared is not None:
@@ -2550,6 +2582,72 @@ def _registration_dir_for(spec: dict) -> Path | None:
     return path
 
 
+def _frozen_batch_dir() -> Path:
+    """The registered batch directory that owns the Run IDs."""
+    return (Path(__file__).resolve().parent.parent
+            / "token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2")
+
+
+def _frozen_run_ticker(run_id: str) -> str:
+    return _frozen_switch_matrix_rows().get(run_id, {}).get("ticker", "")
+
+
+def _frozen_run_arm(run_id: str) -> str:
+    return _frozen_switch_matrix_rows().get(run_id, {}).get("arm", "")
+
+
+def _frozen_switch_matrix_rows() -> dict[str, dict]:
+    """Every ``SWITCH_MATRIX.csv`` row, as strings, keyed by Run ID."""
+    import csv
+
+    path = _frozen_batch_dir() / "SWITCH_MATRIX.csv"
+    if not path.is_file():
+        return {}
+    with path.open(newline="", encoding="utf-8") as fh:
+        return {(row.get("run_id") or "").strip(): row
+                for row in csv.DictReader(fh) if (row.get("run_id") or "").strip()}
+
+
+def _run_id_for_spec(spec: dict) -> str | None:
+    """The Run ID a spec belongs to: its registration directory's name prefix.
+
+    ``R01_NVDA_C0`` -> ``R01``. The name is the only place a Run ID appears;
+    the spec body carries a case and an index, not the study's identifier.
+    """
+    registration = _registration_dir_for(spec)
+    if registration is None:
+        return None
+    return Path(registration).parent.name.split("_", 1)[0] or None
+
+
+def _frozen_switch_matrix() -> dict[str, dict]:
+    """``{run_id: switches}`` from the tracked ``SWITCH_MATRIX.csv``.
+
+    Written when the batch was registered (``b00dd00``) and covered by the
+    tracked tree the freeze fingerprint hashes. It is the authority for *which
+    arm a Run ID runs*; the per-run ``experiment.json`` is only a restatement,
+    and a restatement that agrees with itself proves nothing (audit B-10).
+    """
+    import csv
+
+    path = (Path(__file__).resolve().parent.parent
+            / "token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2"
+            / "SWITCH_MATRIX.csv")
+    if not path.is_file():
+        return {}
+    out: dict[str, dict] = {}
+    with path.open(newline="", encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            run_id = (row.get("run_id") or "").strip()
+            if not run_id:
+                continue
+            out[run_id] = {
+                key: (row.get(key) or "").strip().lower() in {"true", "1", "yes"}
+                for key in ("batch_macro", "single_pass", "structured", "s2_downstream")
+            }
+    return out
+
+
 def _preflight_gate(spec: dict) -> dict:
     """Refuse a spec that cannot be a valid sample, before any paid call.
 
@@ -2597,6 +2695,33 @@ def _preflight_gate(spec: dict) -> dict:
             validate_spec_switches(switches)
         except SwitchNotConsumed as exc:
             raise RunRefused(f"spec switches rejected: {exc}") from None
+        # The arm must be the one SWITCH_MATRIX.csv froze for this Run ID.
+        # Recomputing ``config_sha256`` above proves the definition agrees with
+        # itself and nothing more: audit B-10 showed that editing the switches
+        # and rehashing yields a self-consistent file that runs another arm.
+        # The matrix is tracked and covered by the freeze fingerprint.
+        run_id = _run_id_for_spec(spec)
+        frozen = _frozen_switch_matrix().get(run_id) if run_id else None
+        if frozen is not None and switches != frozen:
+            raise RunRefused(
+                f"SWITCH_MATRIX.csv froze {frozen} for {run_id}, but the spec "
+                f"declares {switches}"
+            )
+        # ...and the spec must come from that run's registered directory. A
+        # copied experiment carries the same name, switches and hash; only the
+        # path distinguishes a real sample from a duplicate (audit B-06).
+        registration = _registration_dir_for(spec)
+        if frozen is not None and registration is not None:
+            expected = (_frozen_batch_dir() / "specs" / f"{run_id}_"
+                        f"{_frozen_run_ticker(run_id)}_"
+                        f"{_frozen_run_arm(run_id)}")
+            actual = Path(registration).parent.resolve()
+            if actual != expected.resolve():
+                raise RunRefused(
+                    f"spec for {run_id} was prepared from {actual}, not from "
+                    f"that run's registered directory ({expected}); a Run ID "
+                    f"names exactly one run"
+                )
         # Mirror the ambient check ``_apply_spec_switches`` performs, but fail
         # here so the refusal happens before a graph is constructed.
         from tradingagents.default_config import DEFAULT_CONFIG
@@ -2917,6 +3042,16 @@ def build_measurement_experiment(template: dict, *, experiment_id: str,
     }
     for key in _TEMPLATE_KEYS:
         exp[key] = template.get(key)
+    # A template that names an arm must keep naming it. ``_TEMPLATE_KEYS``
+    # covers the plain configuration, and leaving the switch block out here
+    # made ``measure`` silently derive an armless experiment from an armed
+    # template -- the derived run would then be refused (or, before the
+    # refusal existed, measured under DEFAULT_CONFIG while the operator
+    # believed it ran the registered arm). Carried verbatim; the pre-flight
+    # validates it like any other registration.
+    for key in ("switches", "switches_required"):
+        if key in template:
+            exp[key] = template[key]
     return exp
 
 
@@ -3286,8 +3421,18 @@ def _cmd_measure(args) -> int:
     print(f"experiment: {experiment['experiment_id']}", flush=True)
     print(f"results:    {exp_dir}", flush=True)
     if args.dry_run:
-        code_state = write_code_state(exp_dir, experiment)
-        result = run_experiment(exp_dir, experiment, dry_run=True)
+        # A rehearsal that is refused must leave the directory exactly as it
+        # found it. Writing ``code_state.json`` here, before the pre-flight,
+        # left a refused dry run looking like the start of a measurement --
+        # the same impurity the per-case pre-flight was moved to fix (audit
+        # B-07), just one layer further out. ``run_experiment`` computes the
+        # fingerprint without persisting it.
+        try:
+            result = run_experiment(exp_dir, experiment, dry_run=True)
+        except RunRefused as exc:
+            print(f"refused: {exc}", file=sys.stderr)
+            print(f"dry run refused; nothing was written")
+            return 2
         print(f"dry run completed; no LLM called, no telemetry produced")
         print(f"planned runs: {len(result.get('metrics') or [])}")
         return 0

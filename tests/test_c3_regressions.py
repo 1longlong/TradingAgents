@@ -18,6 +18,7 @@ import inspect
 import textwrap
 
 import pytest
+from pathlib import Path
 
 from tradingagents.observability import _extract_usage_metadata
 
@@ -444,6 +445,7 @@ def test_all_registered_specs_verify_against_their_registration():
 
     import scripts.token_benchmark as tb
     from scripts import c3_preflight_gate as gate
+    from scripts import gen_cand01_batch_16run_specs_v2 as gen
 
     batch = (Path(__file__).resolve().parent.parent / "token_benchmarks" /
              "live_pilot_2x2" / "cand01_batch_16run_v2")
@@ -458,7 +460,13 @@ def test_all_registered_specs_verify_against_their_registration():
 
     with (batch / "RUN_MANIFEST_TEMPLATE.csv").open() as fh:
         for row in csv.DictReader(fh):
-            body = hashlib.sha256((batch / row["spec_path"]).read_bytes()).hexdigest()
+            # ``spec_body_sha256`` is the generator's definition: the canonical
+            # JSON of the spec minus ``results_dir`` -- NOT the hash of the file
+            # bytes. Comparing against the file bytes was a self-consistent
+            # mistake: the CSV had been rewritten with that formula, so the test
+            # passed while disagreeing with the generator that produced it.
+            spec = json.loads((batch / row["spec_path"]).read_text())
+            body = gen.spec_body_sha256(spec)
             assert body == row["spec_body_sha256"], row["run_id"]
             reg = json.loads((batch / row["experiment_path"]).read_text())
             assert tb.registration_sha256(reg) == row["config_sha256"], row["run_id"]
@@ -572,11 +580,20 @@ def test_gate_rejects_a_duplicated_run_id(tmp_path, monkeypatch):
     specs = tmp_path / "specs"
     specs.mkdir()
     real = _batch_dir() / "specs"
+    # The gate anchors arms to the protocol table and the frozen matrix, so
+    # both must be present in the sandbox.
+    shutil.copy(_batch_dir() / "CAND01_BATCH_2X2_PROTOCOL_V2.md", tmp_path)
+    shutil.copy(_batch_dir() / "SWITCH_MATRIX.csv", tmp_path)
     # All 16 real runs, plus one extra directory that claims an existing ID.
     # The count then still reaches 16 only because of the duplicate, so a check
     # that merely counts would pass; the duplicate must be named explicitly.
     names = [p.parent.name for p in sorted(real.glob("*/experiment.json"))]
-    names.append("R01_NVDA_AB")
+    # The duplicate is the *same arm* as the original: two directories both
+    # named C0 for R01. The matrix alone would accept both (each carries the
+    # frozen C0 switches), so only an explicit duplicate-ID check refuses this.
+    # An AB duplicate would be caught by the arm anchor and prove nothing about
+    # the duplicate detector.
+    names.append("R01_NVDA_C0_duplicate")
     for name in names:
         src = next(real.glob(f"{name.split('_')[0]}_*/experiment.json"))
         dst = specs / name
@@ -588,7 +605,7 @@ def test_gate_rejects_a_duplicated_run_id(tmp_path, monkeypatch):
         gate._run_arm_map()
     # Prove the *reason* is the duplicate, not the count: with the extra
     # directory removed the same 16 must be accepted.
-    shutil.rmtree(specs / "R01_NVDA_AB")
+    shutil.rmtree(specs / "R01_NVDA_C0_duplicate")
     assert len(gate._run_arm_map()) == 16
 
 
@@ -597,3 +614,230 @@ def test_gate_accepts_the_real_registration_set(monkeypatch):
     from scripts import c3_preflight_gate as gate
 
     assert len(gate._run_arm_map()) == 16
+
+
+# ---------------------------------------------------------------------------
+# Audit B-10/B-11: a consistently edited registration must not run another arm
+# ---------------------------------------------------------------------------
+def _rewrite_run_consistently(specs: "pathlib.Path", src_name: str, dst_name: str,
+                              switches: dict) -> None:
+    """Copy a run and give it ``switches`` *including* a matching rehash.
+
+    This is the B-10 attack: every internal check still passes, because the
+    registration agrees with itself. Only an authority outside the file can
+    catch it.
+    """
+    import json
+    import shutil
+
+    import scripts.token_benchmark as tb
+
+    src, dst = specs / src_name, specs / dst_name
+    shutil.copytree(src, dst)
+    reg = json.loads((dst / "experiment.json").read_text())
+    spec = json.loads((dst / "spec.json").read_text())
+    reg["switches"] = dict(switches)
+    reg["config_sha256"] = tb.registration_sha256(reg)
+    spec["switches"] = dict(switches)
+    spec["config_sha256"] = reg["config_sha256"]
+    (dst / "experiment.json").write_text(json.dumps(reg, indent=2))
+    (dst / "spec.json").write_text(json.dumps(spec, indent=2))
+
+
+def test_gate_refuses_an_arm_swapped_in_place_with_a_consistent_rehash(
+        tmp_path, monkeypatch):
+    """B-10: R01 is named C0; running it as CC must be refused.
+
+    Before the fix the expected switches were read from the same registration
+    being validated, so an edit that also rehashed was self-consistent and the
+    gate printed "GATE PASSED — safe to spend money".
+    """
+    import shutil
+    from pathlib import Path
+
+    from scripts import c3_preflight_gate as gate
+
+    specs = tmp_path / "specs"
+    specs.mkdir()
+    real = (Path(__file__).resolve().parent.parent / "token_benchmarks" /
+            "live_pilot_2x2" / "cand01_batch_16run_v2" / "specs")
+    for d in sorted(real.iterdir()):
+        shutil.copytree(d, specs / d.name)
+    shutil.copy((Path(__file__).resolve().parent.parent / "token_benchmarks" /
+                 "live_pilot_2x2" / "cand01_batch_16run_v2" /
+                 "CAND01_BATCH_2X2_PROTOCOL_V2.md"), tmp_path)
+    shutil.copy((Path(__file__).resolve().parent.parent / "token_benchmarks" /
+                 "live_pilot_2x2" / "cand01_batch_16run_v2" /
+                 "SWITCH_MATRIX.csv"), tmp_path)
+    monkeypatch.setattr(gate, "BATCH_DIR", tmp_path)
+
+    # Baseline: the real registrations are accepted.
+    assert len(gate._run_arm_map()) == 16
+
+    # Swap R01 (named C0) to the CC switches, consistently rehashed.
+    import json
+    import scripts.token_benchmark as tb
+    ep = specs / "R01_NVDA_C0" / "experiment.json"
+    reg = json.loads(ep.read_text())
+    reg["switches"] = {"batch_macro": True, "s2_downstream": True,
+                       "single_pass": True, "structured": True}
+    reg["config_sha256"] = tb.registration_sha256(reg)
+    ep.write_text(json.dumps(reg, indent=2))
+
+    with pytest.raises(SystemExit):
+        gate._run_arm_map()
+
+
+def test_gate_refuses_an_arm_renamed_into_another_arm(tmp_path, monkeypatch):
+    """Renaming the directory does not help: the ID is now duplicated."""
+    import shutil
+    from pathlib import Path
+
+    from scripts import c3_preflight_gate as gate
+
+    specs = tmp_path / "specs"
+    specs.mkdir()
+    real = (Path(__file__).resolve().parent.parent / "token_benchmarks" /
+            "live_pilot_2x2" / "cand01_batch_16run_v2" / "specs")
+    for d in sorted(real.iterdir()):
+        shutil.copytree(d, specs / d.name)
+    shutil.copy((Path(__file__).resolve().parent.parent / "token_benchmarks" /
+                 "live_pilot_2x2" / "cand01_batch_16run_v2" /
+                 "CAND01_BATCH_2X2_PROTOCOL_V2.md"), tmp_path)
+    shutil.copy((Path(__file__).resolve().parent.parent / "token_benchmarks" /
+                 "live_pilot_2x2" / "cand01_batch_16run_v2" /
+                 "SWITCH_MATRIX.csv"), tmp_path)
+    monkeypatch.setattr(gate, "BATCH_DIR", tmp_path)
+
+    cc = {"batch_macro": True, "s2_downstream": True,
+          "single_pass": True, "structured": True}
+    # Drop a different run so the count still reaches 16.
+    shutil.rmtree(specs / "R16_XOM_AB")
+    _rewrite_run_consistently(specs, "R01_NVDA_C0", "R01_NVDA_CC", cc)
+
+    with pytest.raises(SystemExit):
+        gate._run_arm_map()
+
+
+def test_gate_arm_map_matches_the_protocol_table():
+    """The expected arm comes from the protocol, not from the registration."""
+    from scripts import c3_preflight_gate as gate
+
+    assert gate._protocol_arm_table() == gate.ARMS
+    assert gate._run_arm_map()["R01"] == gate.ARMS["C0"]
+    assert gate._run_arm_map()["R02"] == gate.ARMS["AB"]
+
+
+def test_parent_refuses_a_consistently_rehashed_arm_swap():
+    """B-10 on the harness path: the parent checks the frozen matrix too.
+
+    ``_preflight_gate`` used to recompute ``config_sha256`` and stop there,
+    which proves only that the definition agrees with itself. A registration
+    edited *and* rehashed reaches a different arm, so the parent needs the same
+    independent anchor the gate uses.
+
+    ``prepare_run_spec`` writes into the directory it is given, so it is never
+    pointed at the frozen batch (that created 16 ``runs/`` directories inside
+    the delivered specs -- Audit B's B-14). The swap is therefore built by
+    editing a local *copy* of the spec's switches, which is what a tampered
+    registration produces.
+    """
+    import json
+
+    import scripts.token_benchmark as tb
+
+    batch = _batch_dir()
+    frozen = tb._frozen_switch_matrix()
+    assert set(frozen) == {f"R{i:02d}" for i in range(1, 17)}
+
+    # Each real registration carries its Run ID's frozen arm, and the parent's
+    # registration pre-flight (which knows the directory) accepts it.
+    for run_id, expected in sorted(frozen.items()):
+        spec_dir = next(d for d in (batch / "specs").iterdir()
+                        if d.name.split("_", 1)[0] == run_id)
+        experiment = json.loads((spec_dir / "experiment.json").read_text())
+        assert experiment["switches"] == expected, run_id
+        tb._preflight_registration(spec_dir, experiment, experiment["cases"][0])
+
+    # A registration that moved to another arm is refused by name. The spec the
+    # child would receive is the registration plus the run's case, as
+    # ``prepare_run_spec`` builds it; it is assembled here rather than written
+    # into the frozen tree.
+    spec_dir = batch / "specs/R01_NVDA_C0"
+    experiment = json.loads((spec_dir / "experiment.json").read_text())
+    spec = {key: experiment[key] for key in tb.REGISTERED_HASH_FIELDS}
+    spec.update({"experiment_id": experiment["experiment_id"],
+                 "registration_dir": str(spec_dir),
+                 "case": experiment["cases"][0]})
+    tb._preflight_gate(spec)
+    swapped = dict(spec)
+    # C0 -> CC: flip batch_macro only. ``structured``/``s2_downstream`` must stay
+    # true (there is no OFF implementation), and this is a real arm swap.
+    swapped["switches"] = {**frozen["R01"], "batch_macro": True}
+    assert swapped["switches"] != frozen["R01"]
+    with pytest.raises(tb.RunRefused, match="SWITCH_MATRIX.csv froze"):
+        tb._preflight_gate(swapped)
+
+
+
+def test_a_copied_run_id_cannot_be_measured_twice(tmp_path):
+    """B-06: a Run ID names exactly one directory, not just one name.
+
+    Copying ``R01_NVDA_C0`` into another experiment directory preserves the
+    name, the switches and the hash, so every content check passes. Measured
+    there it would be a second, independent R01 -- doubling one arm's weight
+    and silently corrupting the 4x4 comparison. Only the path distinguishes
+    the real sample from the copy.
+    """
+    import json
+    import shutil
+
+    import scripts.token_benchmark as tb
+
+    src = _batch_dir() / "specs/R01_NVDA_C0"
+    experiment = _load(src / "experiment.json")
+    # The registered directory is accepted.
+    tb._preflight_registration(src, experiment, experiment["cases"][0])
+
+    copy = tmp_path / "exp_B" / "R01_NVDA_C0"
+    shutil.copytree(src, copy)
+    with pytest.raises(tb.RunRefused, match="not that run's registered directory"):
+        tb._preflight_registration(copy, experiment, experiment["cases"][0])
+
+    # The child would refuse it too, so a copied spec cannot reach a paid call.
+    spec = json.loads(tb.prepare_run_spec(
+        copy, experiment, experiment["cases"][0], 1, attempt=0).read_text())
+    with pytest.raises(tb.RunRefused, match="not from that run's registered directory"):
+        tb._preflight_gate(spec)
+
+
+def _load(path):
+    import json
+
+    return json.loads(path.read_text())
+
+
+def test_legacy_launcher_refuses_without_explicit_opt_in():
+    """B-09 made safe: the money-spending legacy launcher is opt-in only.
+
+    Deriving ``REPO_ROOT`` from the script location fixed the wrong-tree half
+    of B-09, but left the launcher runnable -- and the natural way to verify
+    that fix was to run it, which spent a campaign on 2026-11-15 (see
+    ``INCIDENT_20261115_legacy_launcher.md``). Refusing by default makes the
+    verification invocation free.
+    """
+    import os
+    import subprocess
+    from pathlib import Path
+
+    script = (Path(__file__).resolve().parent.parent
+              / "scripts/campaign_ablation_launch.sh")
+    env = {k: v for k, v in os.environ.items()
+           if k != "CAMPAIGN_ABLATION_I_MEAN_IT"}
+    result = subprocess.run(["bash", str(script)], capture_output=True,
+                            text=True, env=env, timeout=30)
+    assert result.returncode == 1
+    assert "spends money" in result.stderr
+    assert "CAMPAIGN_ABLATION_I_MEAN_IT" in result.stderr
+    # ...and it did not start anything.
+    assert "started campaign" not in result.stdout

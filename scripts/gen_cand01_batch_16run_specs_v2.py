@@ -589,12 +589,18 @@ def main(argv: list[str] | None = None) -> int:
                 # property of the generator *file* — so editing the generator
                 # legitimately changes it while every hash-bearing artefact
                 # (specs, matrices, manifests) stays byte-identical. ``--check``
-                # reports these three as ``volatile`` lines and does not fail on
-                # them; a real drift in any other field still fails the check.
+                # reports these as ``volatile`` lines and does not fail on them;
+                # a real drift in any other field still fails the check.
+                #
+                # ``git_head_commit`` and ``git_branch`` are the same kind of
+                # property: they record the checkout that generated the specs.
+                # Every later commit moves HEAD, so treating them as stable made
+                # ``--check`` fail on every tree that is not the registration
+                # commit -- which is every clean checkout (audit B-03).
                 current = json.loads(path.read_text(encoding="utf-8"))
                 fresh = json.loads(content)
                 volatile = {"timestamp_utc", "git_working_tree_dirty",
-                            "generator_sha256"}
+                            "generator_sha256", "git_head_commit", "git_branch"}
                 differences = {
                     key for key in set(current) | set(fresh)
                     if current.get(key) != fresh.get(key)

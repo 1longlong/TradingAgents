@@ -7,7 +7,7 @@
 | Protocol | [`CAND01_BATCH_2X2_PROTOCOL_V2.md`](./CAND01_BATCH_2X2_PROTOCOL_V2.md) (V2, unchanged from registration) |
 | Branch | `exp/cand01-batch-v2` (off RC1 `9948bf85…`) |
 | Frozen commit | `c3/FROZEN_COMMIT` (untracked release metadata; see "Why the SHA is not in this file") |
-| Code fingerprint | `3355168c45719285…` — recomputed by `c3_preflight_gate.py` on every run |
+| Code fingerprint | whatever `c3/code_freeze.txt` currently says — recomputed by `c3_preflight_gate.py` on every run, never copied here (see §4) |
 | Trade date | `2026-09-23` for every ticker in every arm (one date, four stocks) |
 | Seed | `20261114` |
 | Models | `CS5351/DeepSeek-V4-Flash` (quick and deep, identical across arms) |
@@ -69,7 +69,7 @@ perturb the pre-registered sequence: R01 is already first.
 | Gate, live, R01 | PASS (Finnhub `NVDA: 8582 chars`; FRED `fed_funds_rate` real observations) |
 | News scope | Finnhub-only in every spec; `gdelt: excluded`; `get_global_news` disabled |
 | Imports | `tradingagents` resolves under the worktree, not the shared checkout |
-| Full test suite | 2059 passed, 2 skipped, 319 subtests |
+| Full test suite | 2065 passed, 2 skipped, 319 subtests |
 
 ## 3. Stopping conditions (from protocol §11, restated)
 

@@ -24,6 +24,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -57,6 +58,16 @@ ARMS = {
 
 FORBIDDEN_NEWS_VENDORS = {"gdelt", "alpha_vantage", "yahoo"}
 
+#: One row of the protocol's arm table: ``| `CC` | true | true | true | true |``.
+_ARM_ROW = re.compile(
+    r"^\|\s*`(?P<arm>B|AB|C0|CC)`\s*\|"
+    r"\s*(?P<batch>true|false)\s*\|"
+    r"\s*(?P<single>true|false)\s*\|"
+    r"\s*(?P<structured>true|false)\s*\|"
+    r"\s*(?P<s2>true|false)\s*\|",
+    re.MULTILINE,
+)
+
 
 class GateFailure(SystemExit):
     """A precondition failed; the batch must not proceed."""
@@ -88,7 +99,41 @@ def check_frozen_commit(expected: str) -> None:
     _ok("tracked tree clean")
 
 
-def check_fingerprint_matches_record(expected: str) -> None:
+def check_release_seal() -> None:
+    """The ``c3/`` release files must be one consistent set (audit B-08).
+
+    ``FROZEN_COMMIT``, ``code_freeze.txt`` and ``env_credential_audit.txt`` are
+    release metadata: ``FROZEN_COMMIT`` cannot live in the commit it names, so
+    the three cannot cross-reference each other by git. ``RELEASE_SEAL.sha256``
+    is generated *with* them and is therefore the only artefact that pins all
+    three to one issuance: regenerating any of them breaks the seal, and the
+    gate refuses rather than trusting a record that may lag or disagree.
+    """
+    import hashlib
+
+    seal = BATCH_DIR / "c3" / "RELEASE_SEAL.sha256"
+    if not seal.is_file():
+        _fail("release seal", f"{seal.name} is missing; the c3/ files are unpinned")
+    stale: list[str] = []
+    for line in seal.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        digest, rel = line.split("  ", 1)
+        path = BATCH_DIR / rel.strip()
+        if not path.is_file():
+            stale.append(f"{rel} (missing)")
+            continue
+        actual = hashlib.sha256(path.read_bytes()).hexdigest()
+        if actual != digest:
+            stale.append(f"{rel} (changed since the seal was written)")
+    if stale:
+        _fail("release seal",
+              "the c3/ release files no longer match RELEASE_SEAL.sha256: "
+              + "; ".join(stale) + " -- regenerate the seal with the record")
+    _ok("release seal", f"{len(seal.read_text().splitlines())} c3/ files pinned")
+
+
+def check_fingerprint_matches_record() -> None:
     """The committed freeze record must describe *this* tree, not an older one.
 
     ``c3/code_freeze.txt`` cannot name the commit it is committed in (a commit
@@ -281,13 +326,83 @@ def check_fred(trade_date: str) -> None:
     _ok("fred", "fed_funds_rate returned real observations")
 
 
+def _protocol_arm_table() -> dict[str, dict]:
+    """The arm table from the frozen protocol document.
+
+    This is the independent authority for what each arm means. Reading the
+    expected switches from the same registration being validated was circular:
+    audit B-10/B-11 showed a registration edited consistently (switches *and*
+    ``config_sha256`` rehashed) ran a different arm, and the gate printed
+    "GATE PASSED — safe to spend money", because it had only checked the file
+    against itself. The protocol is not editable by a spec edit, so a swap now
+    has to disagree with a document that says otherwise.
+    """
+    text = (BATCH_DIR / "CAND01_BATCH_2X2_PROTOCOL_V2.md").read_text(encoding="utf-8")
+    table: dict[str, dict] = {}
+    for m in _ARM_ROW.finditer(text):
+        table[m["arm"]] = {
+            "batch_macro": m["batch"] == "true",
+            "single_pass": m["single"] == "true",
+            "structured": m["structured"] == "true",
+            "s2_downstream": m["s2"] == "true",
+        }
+    if set(table) != {"B", "AB", "C0", "CC"}:
+        _fail("protocol", f"could not parse the 4-arm table; got {sorted(table)}")
+    # The hard-coded ``ARMS`` below is a second copy; refuse if they disagree.
+    # Two sources of truth that may drift are worse than one that is checked.
+    if table != ARMS:
+        _fail("protocol",
+              f"the parsed arm table {table} disagrees with the compiled-in "
+              f"ARMS {ARMS}; one of them has drifted from the protocol")
+    return table
+
+
+def _frozen_switch_matrix() -> dict[str, dict]:
+    """``{run_id: switches}`` from the tracked ``SWITCH_MATRIX.csv``.
+
+    ``SWITCH_MATRIX.csv`` was written in the registration commit
+    (``b00dd00``) and is covered by the tracked tree the gate hashes, so it is
+    an authority that a spec edit cannot silently rewrite: changing it changes
+    ``working_tree_sha256`` and the freeze record stops matching.
+    """
+    import csv
+
+    path = BATCH_DIR / "SWITCH_MATRIX.csv"
+    if not path.is_file():
+        _fail("manifest", f"{path} is missing; cannot anchor the arms")
+    out: dict[str, dict] = {}
+    with path.open(newline="", encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            run_id = (row.get("run_id") or "").strip()
+            if not run_id:
+                continue
+            out[run_id] = {
+                "batch_macro": _as_bool(row["batch_macro"]),
+                "single_pass": _as_bool(row["single_pass"]),
+                "structured": _as_bool(row["structured"]),
+                "s2_downstream": _as_bool(row["s2_downstream"]),
+            }
+    return out
+
+
+def _as_bool(text: str) -> bool:
+    value = (text or "").strip().lower()
+    if value in {"true", "1", "yes"}:
+        return True
+    if value in {"false", "0", "no"}:
+        return False
+    _fail("manifest", f"unparseable boolean {text!r} in SWITCH_MATRIX.csv")
+
+
 def _run_arm_map() -> dict[str, dict]:
     """``{run_id: switches}`` for all 16 registered runs.
 
-    The batch manifest does not carry a run_id -> arm table (arms are keyed by
-    name and each run has its own registered experiment file), so the map is
-    rebuilt from the per-run registrations, which are the authority.
+    The expected switches come from the **frozen protocol's** arm table keyed by
+    the arm the directory names -- not from the registration file itself, which
+    would make the check circular. The registration is then required to agree.
     """
+    table = _protocol_arm_table()
+    frozen = _frozen_switch_matrix()
     out: dict[str, dict] = {}
     seen_dirs: dict[str, list[str]] = {}
     for spec_dir in sorted((BATCH_DIR / "specs").iterdir()):
@@ -306,10 +421,33 @@ def _run_arm_map() -> dict[str, dict]:
                   f"run ID {run_id} is registered {len(seen_dirs[run_id])} "
                   f"times ({', '.join(seen_dirs[run_id])}); one run ID must "
                   f"name exactly one run")
+        parts = spec_dir.name.split("_")
+        if len(parts) < 3:
+            _fail("manifest", f"{spec_dir.name}: cannot read an arm from the name")
+        arm = parts[2]
+        if arm not in table:
+            _fail("manifest", f"{spec_dir.name}: {arm!r} is not an arm of this protocol")
         switches = data.get("switches")
         if not switches:
             _fail("manifest", f"{spec_dir.name}: registration declares no switches")
-        out[run_id] = switches
+        # The registration must equal the protocol row for the arm it is named as.
+        if switches != table[arm]:
+            _fail("arm",
+                  f"{spec_dir.name} is named arm {arm}, whose protocol switches "
+                  f"are {table[arm]}, but its registration declares {switches}")
+        # ...and must equal the arm SWITCH_MATRIX.csv froze for this Run ID.
+        # The protocol says what an arm means; the matrix says which arm this
+        # Run ID runs. A consistent in-place edit plus a directory rename would
+        # satisfy the protocol check only if the ID moved to another arm, which
+        # this catches.
+        if run_id not in frozen:
+            _fail("arm", f"{spec_dir.name}: Run ID {run_id} is absent from "
+                         f"SWITCH_MATRIX.csv")
+        if switches != frozen[run_id]:
+            _fail("arm",
+                  f"{spec_dir.name}: SWITCH_MATRIX.csv froze {frozen[run_id]} for "
+                  f"{run_id}, but the registration declares {switches}")
+        out[run_id] = frozen[run_id]
     if len(out) != 16:
         _fail("manifest", f"expected 16 run registrations, found {len(out)}")
     return out
@@ -344,7 +482,8 @@ def main(argv: list[str] | None = None) -> int:
 
     frozen = args.expected_commit or _frozen_commit()
     check_frozen_commit(frozen)
-    check_fingerprint_matches_record(frozen)
+    check_fingerprint_matches_record()
+    check_release_seal()
     check_import_root()
     check_spec_hash(spec)
     check_arm_matches_manifest(spec, expected_switches)

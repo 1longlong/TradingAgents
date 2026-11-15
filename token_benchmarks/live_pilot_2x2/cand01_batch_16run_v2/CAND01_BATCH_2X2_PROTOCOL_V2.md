@@ -417,13 +417,25 @@ per-agent tokens, wall-clock duration, and decision agreement across arms.
 
 This protocol and the 16 generated specs are frozen as of registration. The 16
 specs are **derived** by `scripts/gen_cand01_batch_16run_specs_v2.py` and
-reproducible byte-for-byte. `--check` reports *53 artefacts reproduce; 16 differ
-only in volatile fields* — the 16 `code_state.json` files carry `timestamp_utc`,
-`git_working_tree_dirty` and `generator_sha256`, which are properties of *when*
-and *with which generator file* the registration ran. Every hash-bearing
-artefact (`spec.json` bodies, `experiment.json`, `SWITCH_MATRIX.csv`,
-`CONFIG_HASH_MANIFEST.csv`, `RUN_MANIFEST_TEMPLATE.csv`, `EXECUTION_ORDER.txt`)
-reproduced byte-identically in a full regeneration at a different root; the only
-difference in the 16 `spec.json` files was the declared, unhashed `results_dir`.
+reproducible byte-for-byte. Run against the delivered directory,
+
+```
+python scripts/gen_cand01_batch_16run_specs_v2.py --out <batch> --check
+```
+
+reports *OK: 53 artefacts reproduce; 16 differ only in volatile fields* and
+exits 0. The 16 `code_state.json` files are the volatile ones: they carry
+`timestamp_utc`, `git_working_tree_dirty`, `generator_sha256`,
+`git_head_commit` and `git_branch`, which are properties of *when*, *with which
+generator file* and *on which checkout* the registration ran — not of the
+design. Every hash-bearing artefact (`spec.json` bodies, `experiment.json`,
+`SWITCH_MATRIX.csv`, `CONFIG_HASH_MANIFEST.csv`, `RUN_MANIFEST_TEMPLATE.csv`,
+`EXECUTION_ORDER.txt`) reproduces byte-identically.
+
+`RUN_MANIFEST_TEMPLATE.csv`'s `spec_body_sha256` column is the generator's own
+definition — the canonical JSON of the spec body minus the machine-specific,
+unhashed `results_dir` — and is checked against that function, not against the
+`spec.json` file bytes. (An earlier revision of this column was rewritten with
+the file-bytes formula and a test enshrined the error; audit B-03 found both.)
 Any change to the design, the seed, the hash algorithm or the news scope
 requires a **new protocol version**; V1 and V2 both remain on disk unmodified.
