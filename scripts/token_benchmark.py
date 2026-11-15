@@ -148,6 +148,11 @@ _FINGERPRINT_EXCLUDE_PREFIXES = (
     # change the fingerprint of the code that produced them.
     "token_benchmarks/measurements/",
     "token_benchmarks/cases/",
+    # The freeze record states the fingerprint. Fingerprinting the file that
+    # contains the fingerprint is a fixed point that cannot be satisfied --
+    # writing the number changes the number -- so it is excluded, exactly like
+    # code_state.json. It is itself hashed by c3/MANIFEST-style verification.
+    "token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/c3/",
     "runs/",
     "cases/",
     # Caches / runtime state.
