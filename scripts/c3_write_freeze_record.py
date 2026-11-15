@@ -5,8 +5,11 @@ Run this **after** the freeze commit, from the clean frozen tree::
 
     TZ=UTC PYTHONSAFEPATH=1 PYTHONPATH=<root> python scripts/c3_write_freeze_record.py
 
-Then commit the record, and finally write ``c3/FROZEN_COMMIT`` (untracked) with
-``git rev-parse HEAD``.
+The script also writes ``c3/RELEASE_SEAL.sha256``, which pins the record and
+the credential audit to one issuance; the two must never be regenerated apart.
+Then commit both, and finally write ``c3/FROZEN_COMMIT`` (untracked) with
+``git rev-parse HEAD`` -- it cannot be sealed, because it names the commit the
+seal is committed in.
 
 Why the record is generated rather than authored
 ------------------------------------------------
@@ -108,7 +111,22 @@ Known limitations carried into the run (documented, not silent)
 """
     out = BATCH_DIR / "c3" / "code_freeze.txt"
     out.write_text(text, encoding="utf-8")
+    # The seal must be written *with* the record, after it: the seal hashes the
+    # record, and nothing may modify the record afterwards without breaking it.
+    # Doing these two steps by hand allowed a record to be regenerated while the
+    # seal kept the old digest, which made every gate run fail on a correct
+    # release. One step, one consistent set.
+    import hashlib
+
+    c3 = BATCH_DIR / "c3"
+    sealed = [c3 / "code_freeze.txt", c3 / "env_credential_audit.txt"]
+    seal_lines = [
+        f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.relative_to(BATCH_DIR).as_posix()}"
+        for path in sealed if path.is_file()
+    ]
+    (c3 / "RELEASE_SEAL.sha256").write_text("\n".join(seal_lines) + "\n", encoding="utf-8")
     print(f"wrote {out}")
+    print(f"wrote {c3 / 'RELEASE_SEAL.sha256'} ({len(seal_lines)} files)")
     print(f"  fingerprint: {state.get('working_tree_sha256')}")
     print(f"  commit     : {head}")
     print(f"  dirty      : {state.get('git_working_tree_dirty')}")
