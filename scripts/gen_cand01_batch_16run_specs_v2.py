@@ -352,6 +352,29 @@ def code_state(experiment_sha: str) -> dict:
         rel = str(Path(__file__).resolve().relative_to(root))
     except ValueError:  # pragma: no cover
         rel = str(Path(__file__).resolve())
+
+    head = _git("rev-parse", "HEAD")
+    branch = _git("rev-parse", "--abbrev-ref", "HEAD")
+    dirty = bool(_git("status", "--porcelain"))
+    # A delivered artefact that names a checkout must name the checkout that
+    # *produced it*, not whatever tree happens to be checked out when someone
+    # re-runs `--check` -- and it must not imply the specs were generated under
+    # the frozen commit when they were generated before the freeze. Audit C-02
+    # found these files still carrying the RC1 parent commit and a dirty flag
+    # with no explanation, which read as "generated from unfrozen code". The
+    # commit recorded is therefore explicit about the relationship.
+    frozen_file = root / "token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/c3/FROZEN_COMMIT"
+    frozen = None
+    if frozen_file.is_file():
+        text = frozen_file.read_text(encoding="utf-8").strip()
+        if text:
+            frozen = text
+    if frozen and head == frozen:
+        head_relation = "is_frozen_commit"
+    elif frozen:
+        head_relation = "precedes_frozen_commit"
+    else:
+        head_relation = "unfrozen"
     return {
         "schema_version": 1,
         "phase": "spec_generation",
@@ -359,9 +382,11 @@ def code_state(experiment_sha: str) -> dict:
         "generator": rel,
         "generator_sha256": file_sha256(Path(__file__).resolve()),
         "experiment_definition_sha256": experiment_sha,
-        "git_head_commit": _git("rev-parse", "HEAD"),
-        "git_branch": _git("rev-parse", "--abbrev-ref", "HEAD"),
-        "git_working_tree_dirty": bool(_git("status", "--porcelain")),
+        "git_head_commit": head,
+        "git_branch": branch,
+        "git_working_tree_dirty": dirty,
+        "git_head_relation_to_freeze": head_relation,
+        "frozen_commit": frozen,
         "python_version": sys.version.split()[0],
     }
 
@@ -600,7 +625,8 @@ def main(argv: list[str] | None = None) -> int:
                 current = json.loads(path.read_text(encoding="utf-8"))
                 fresh = json.loads(content)
                 volatile = {"timestamp_utc", "git_working_tree_dirty",
-                            "generator_sha256", "git_head_commit", "git_branch"}
+                            "generator_sha256", "git_head_commit", "git_branch",
+                            "git_head_relation_to_freeze", "frozen_commit"}
                 differences = {
                     key for key in set(current) | set(fresh)
                     if current.get(key) != fresh.get(key)

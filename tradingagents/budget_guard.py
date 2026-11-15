@@ -131,15 +131,20 @@ class BudgetGate:
 
     @property
     def state(self) -> str:
+        # A cap that is already provably blown is exhausted whatever the
+        # unmeasured calls would add: ``used`` alone has reached it, so the
+        # lower bound is enough to refuse. Testing UNKNOWN_SPEND first made
+        # ``used=999_999`` with a cap of 100 report UNKNOWN_SPEND and *not*
+        # block, which is the one case the gate exists for (audit C-04r).
+        if self.capped and self.used + self.reserved >= self.max_total_tokens:
+            return EXHAUSTED
         if self.unmeasured_calls:
-            # Unknown spend outranks the numeric comparison: a cap that looks
-            # satisfied may not be, and saying OK here would be a claim the data
-            # does not support.
+            # Unknown spend still outranks a *satisfied-looking* cap: it may not
+            # be satisfied, and saying OK would be a claim the data does not
+            # support.
             return UNKNOWN_SPEND
         if not self.capped:
             return UNCAPPED
-        if self.used + self.reserved >= self.max_total_tokens:
-            return EXHAUSTED
         return OK
 
     def check(self) -> str:

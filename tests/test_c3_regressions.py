@@ -841,3 +841,84 @@ def test_legacy_launcher_refuses_without_explicit_opt_in():
     assert "CAMPAIGN_ABLATION_I_MEAN_IT" in result.stderr
     # ...and it did not start anything.
     assert "started campaign" not in result.stdout
+
+
+def test_a_spec_only_attempt_dir_is_never_overwritten(tmp_path):
+    """C-08: a spec-only attempt occupies its slot even though it is not a run.
+
+    ``attempt_dirs`` ignores a directory holding only ``spec.json`` because it
+    never ran -- correct. But the *number* it occupies is taken: skipping it made
+    ``_preferred_attempt_dir`` return ``attempt_01`` again and overwrite the spec
+    that was already there.
+    """
+    import scripts.token_benchmark as tb
+
+    exp = tmp_path / "exp"
+    exp.mkdir()
+    (exp / "experiment.json").write_text("{}")
+    first = tb._run_slot_dir(exp, 1) / "attempt_01"
+    first.mkdir(parents=True)
+    (first / "spec.json").write_text('{"keep": "me"}')
+
+    assert tb.attempt_dirs(exp, 1) == [], "a spec-only dir is not a completed attempt"
+    assert tb._preferred_attempt_dir(exp, 1).name == "attempt_02"
+    # ...and with two attempts the next is still one past the highest.
+    (tb._run_slot_dir(exp, 1) / "attempt_02").mkdir()
+    assert tb._preferred_attempt_dir(exp, 1).name == "attempt_03"
+
+
+def test_a_blown_cap_blocks_even_when_usage_is_missing():
+    """C-04r: unknown spend must not hide a cap that is already provably blown."""
+    from tradingagents.budget_guard import BudgetExhausted, BudgetGate
+
+    gate = BudgetGate(max_total_tokens=100)
+    gate.record_call("a", input_tokens=999_999, output_tokens=0, reported=True)
+    gate.record_call("b", input_tokens=None, output_tokens=None, reported=False)
+    assert gate.state == "EXHAUSTED"
+    with pytest.raises(BudgetExhausted):
+        gate.check()
+
+    # An uncapped run stays UNKNOWN_SPEND, and a satisfied cap stays OK.
+    uncapped = BudgetGate(max_total_tokens=None)
+    uncapped.record_call("a", input_tokens=5, output_tokens=5, reported=True)
+    uncapped.record_call("b", input_tokens=None, output_tokens=None, reported=False)
+    assert uncapped.state == "UNKNOWN_SPEND"
+    under = BudgetGate(max_total_tokens=100)
+    under.record_call("a", input_tokens=5, output_tokens=5, reported=True)
+    assert under.state == "OK"
+
+
+def test_an_exhausted_budget_makes_the_sample_invalid():
+    """C-04r: the gate must be wired into the validity decision, not just reported."""
+    import scripts.token_benchmark as tb
+
+    payload = {
+        "run": {"run_status": "completed"},
+        "run_totals": {"reported_input_tokens_sum": 10, "reported_output_tokens_sum": 5,
+                       "llm_calls": 1},
+        "usage_coverage": {"complete": True},
+        "llm_call_events": [{"callback_run_id": "c1", "reported_input_tokens": 10,
+                             "reported_output_tokens": 5, "usage_source": "vendor"}],
+    }
+    uncapped = tb.extract_run_metrics(payload, None, 0, max_total_tokens=None)
+    assert uncapped["valid"] is True
+    capped = tb.extract_run_metrics(payload, None, 0, max_total_tokens=1)
+    assert capped["valid"] is False
+    assert capped["invalid_reason"] == "budget_exhausted"
+
+
+def test_per_agent_usage_completeness_is_reported():
+    """C-05p: an unmeasured agent must not look like one that used zero tokens."""
+    import scripts.token_benchmark as tb
+
+    measured_zero = tb._extract_agent_metrics(
+        {"reported_input_tokens_sum": 0, "reported_output_tokens_sum": 0, "llm_calls": 1})
+    unmeasured = tb._extract_agent_metrics(
+        {"llm_calls": 1, "llm_calls_missing_input_tokens": 1})
+    assert measured_zero["total_tokens"] == unmeasured["total_tokens"] == 0
+    assert measured_zero["usage_complete"] is True
+    assert unmeasured["usage_complete"] is False
+    assert unmeasured["token_totals_are_lower_bound"] is True
+    complete = tb._extract_agent_metrics(
+        {"reported_input_tokens_sum": 100, "reported_output_tokens_sum": 50, "llm_calls": 2})
+    assert complete["usage_complete"] is True and complete["total_tokens"] == 150

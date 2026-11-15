@@ -388,10 +388,32 @@ def _zero_agent_metrics():
 
 
 def _extract_agent_metrics(agent: dict) -> dict:
-    """Extract per-agent token/tool metrics from a telemetry agents entry."""
-    inp = agent.get("reported_input_tokens_sum") or 0
-    out = agent.get("reported_output_tokens_sum") or 0
+    """Extract per-agent token/tool metrics from a telemetry agents entry.
+
+    A missing total is reported as ``0`` because a report column cannot hold
+    ``null`` forever without breaking every reader -- but it is *flagged*, so a
+    reader can tell "this agent used no tokens" from "this agent's tokens were
+    not measured". Without the flag the two collapse into the same number, and
+    a per-agent comparison would silently compare an unmeasured agent against a
+    measured one as if both were facts (audit C-05p).
+    """
+    raw_inp = agent.get("reported_input_tokens_sum")
+    raw_out = agent.get("reported_output_tokens_sum")
+    inp = raw_inp or 0
+    out = raw_out or 0
+    missing_calls = int(agent.get("llm_calls_missing_usage") or 0)
+    missing_input = int(agent.get("llm_calls_missing_input_tokens") or 0)
+    missing_output = int(agent.get("llm_calls_missing_output_tokens") or 0)
+    usage_complete = not (missing_calls or missing_input or missing_output)
     return {
+        # ``True`` only when every one of this agent's calls reported both
+        # halves of its usage; ``False`` means the token totals are a lower
+        # bound and must not be compared as if exact.
+        "usage_complete": usage_complete,
+        "llm_calls_missing_usage": missing_calls,
+        "llm_calls_missing_input_tokens": missing_input,
+        "llm_calls_missing_output_tokens": missing_output,
+        "token_totals_are_lower_bound": not usage_complete,
         "llm_calls": agent.get("llm_calls") or 0,
         "input_tokens": inp,
         "output_tokens": out,
@@ -617,6 +639,14 @@ def extract_run_metrics(payload: dict, telemetry_path: Path | None,
 
     budget = _budget_summary(payload, run_totals, usage_coverage,
                             max_total_tokens=max_total_tokens)
+    # A run that blew its cap is not a comparable sample: it stopped early by
+    # construction, so publishing its token total beside uncapped runs would
+    # invite exactly the wrong comparison. ``check()`` was previously never
+    # called anywhere in production (audit C-04r), which made the gate's
+    # refusal unreachable. This round is uncapped, so the branch cannot fire --
+    # which is the point of wiring it: it is checked, and it would fire.
+    if budget.get("blocks_run"):
+        invalid_reason = invalid_reason or "budget_exhausted"
 
     event_counts = {
         "llm_call_events": len(payload.get("llm_call_events") or []),
@@ -1701,9 +1731,19 @@ def _default_runner(spec_path: Path, exp_dir: Path, run_index: int,
 
 
 def _preferred_attempt_dir(exp_dir: Path, run_index: int) -> Path:
-    """Directory a fresh measurement is written to (never an existing one)."""
-    existing = attempt_dirs(exp_dir, run_index)
-    next_attempt = (int(existing[-1].name.rsplit("_", 1)[1]) + 1) if existing else 1
+    """Directory a fresh measurement is written to (never an existing one).
+
+    ``attempt_dirs`` deliberately ignores a directory that holds only a
+    ``spec.json`` -- it never ran, so it is not an attempt and must not be
+    counted. The *slot number* it occupies is still taken, though: skipping it
+    made this function hand back ``attempt_01`` and overwrite the spec that was
+    already there (audit C-08). Occupancy is therefore read from every existing
+    attempt directory, counted or not.
+    """
+    slot = _run_slot_dir(exp_dir, run_index)
+    taken = [int(d.name.rsplit("_", 1)[1])
+             for d in slot.glob(ATTEMPT_DIR_GLOB) if d.is_dir()] if slot.is_dir() else []
+    next_attempt = (max(taken) + 1) if taken else 1
     return _attempt_dir(exp_dir, run_index, next_attempt)
 
 
