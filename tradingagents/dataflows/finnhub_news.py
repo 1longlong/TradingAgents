@@ -588,7 +588,17 @@ def fetch_news_finnhub(
         # rendering. Finnhub returns records oldest-first, so slicing the raw
         # list kept the oldest 20 of 153 and dropped every article from the two
         # days before the trade date -- the ones a dated decision depends on.
-        admitted = sorted(admitted, key=lambda a: a["published_at"])[-int(article_limit):]
+        admitted = sorted(admitted, key=lambda a: a["published_at"])
+        dropped = len(admitted) - int(article_limit)
+        if dropped > 0:
+            admitted = admitted[-int(article_limit):]
+            # Say so in the rendered report. Silently showing 20 of 474 reads as
+            # "this is all the news there is", which is a different claim.
+            truncation = (
+                f"{dropped} older article(s) inside the window were not shown "
+                f"(the newest {int(article_limit)} are kept)"
+            )
+            detail = f"{detail}; {truncation}" if detail else truncation
     return _Outcome(articles=admitted, detail=detail)
 
 

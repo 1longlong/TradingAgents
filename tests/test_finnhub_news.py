@@ -555,3 +555,43 @@ def test_article_limit_still_respects_the_pit_cutoff():
     cutoff_dt = datetime(2026, 9, 23, 20, 0, tzinfo=timezone.utc)
     for article in outcome.articles:
         assert article["published_at"] < cutoff_dt
+
+
+def test_truncation_is_disclosed_in_the_outcome_detail():
+    """A trimmed list must say so: "20 of 474" is not "there are 20"."""
+    by_date = _items([("2026-09-21", 15), ("2026-09-22", 15)])
+    with patch.object(fn, "_request") as request, \
+            patch.object(fn, "get_api_key", return_value="test-key"), \
+            patch.object(fn, "get_config", return_value={"news_article_limit": 10}), \
+            patch.object(fn.time, "sleep"):
+        from urllib.parse import parse_qs, urlparse
+
+        def _fake(url, *_a, **_k):
+            day = parse_qs(urlparse(url).query)["from"][0]
+            return 200, json.dumps(by_date.get(day, [])), ""
+
+        request.side_effect = _fake
+        outcome = fn.fetch_news_finnhub("NVDA", START, END, as_of_cutoff=CUTOFF)
+
+    assert len(outcome.articles) == 10
+    assert "20 older article(s)" in outcome.detail
+    assert "newest 10 are kept" in outcome.detail
+
+
+def test_no_truncation_note_when_nothing_is_dropped():
+    by_date = _items([("2026-09-22", 3)])
+    with patch.object(fn, "_request") as request, \
+            patch.object(fn, "get_api_key", return_value="test-key"), \
+            patch.object(fn, "get_config", return_value={"news_article_limit": 10}), \
+            patch.object(fn.time, "sleep"):
+        from urllib.parse import parse_qs, urlparse
+
+        def _fake(url, *_a, **_k):
+            day = parse_qs(urlparse(url).query)["from"][0]
+            return 200, json.dumps(by_date.get(day, [])), ""
+
+        request.side_effect = _fake
+        outcome = fn.fetch_news_finnhub("NVDA", START, END, as_of_cutoff=CUTOFF)
+
+    assert len(outcome.articles) == 3
+    assert "not shown" not in outcome.detail
