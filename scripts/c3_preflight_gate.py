@@ -125,10 +125,28 @@ def check_fingerprint_matches_record(expected: str) -> None:
               f"code_freeze.txt records {declared[:16]}…, but this tree "
               f"fingerprints to {actual[:16]}…; the record describes a "
               f"different tree")
-    if expected[:12] not in text:
+    # The record is written before the commit that commits it, so it can never
+    # name that commit. The fingerprint is therefore the authority; the commit
+    # it does name only has to be an ancestor of HEAD, which proves the record
+    # came from this line of work rather than from an unrelated tree.
+    recorded = None
+    for line in text.splitlines():
+        if line.strip().startswith("Commit at write time:"):
+            recorded = line.split(":", 1)[-1].strip()
+            break
+    if not recorded:
+        _fail("freeze record", f"{record.name} names no write-time commit")
+    ancestor = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", recorded, "HEAD"],
+        cwd=REPO_ROOT, capture_output=True, text=True,
+    )
+    if ancestor.returncode != 0:
         _fail("freeze record",
-              f"code_freeze.txt does not mention the frozen commit {expected[:12]}")
-    _ok("freeze record", f"{declared[:16]}… matches this tree and names {expected[:12]}")
+              f"code_freeze.txt was written at {recorded[:12]}, which is not an "
+              f"ancestor of HEAD; the record belongs to another line of work")
+    _ok("freeze record",
+        f"{declared[:16]}… matches this tree; written at {recorded[:12]} "
+        f"(ancestor of HEAD)")
 
 
 def check_import_root(expected_root: Path = REPO_ROOT) -> None:
