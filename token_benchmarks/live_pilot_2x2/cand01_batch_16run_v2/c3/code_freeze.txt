@@ -1,19 +1,19 @@
 PLAN C3 — CODE FREEZE RECORD
-generated: 2026-11-15T14:23:43.482210+00:00
+generated: 2026-11-15T14:25:41.101035+00:00
 
 This file cannot name the commit it is committed in (a commit cannot contain
 its own hash). It therefore records the code fingerprint, which is identical
 before and after the freeze commit, plus the commit it was written on.
 
 Branch              : exp/cand01-batch-v2
-Commit at write time: 7b6a61a19db153e2b9fc1efaf13411e25a9683e9
+Commit at write time: de55c525c2c4e12de90a7765c21864acae8fe3b4
 Working tree at write: clean
 
 Fingerprint (the authority -- the gate recomputes this and refuses on a mismatch)
   fingerprint_algorithm : working-tree-sha256-v2
-  working_tree_sha256   : 3355168c45719285592bf21b6f9c917bbf1ad97fdf80a9398fc135369c0b23da
+  working_tree_sha256   : 148f790256169bae01ede3f9da528309ba254b84f03f747774ceb92d01f08d8d
   git_working_tree_dirty: False
-  files fingerprinted   : 209 (209 tracked)
+  files fingerprinted   : 210 (210 tracked)
   tool_schema_version   : 2
 
 Runtime
