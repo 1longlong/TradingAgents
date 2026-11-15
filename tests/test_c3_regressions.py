@@ -1032,24 +1032,52 @@ def test_editing_a_registration_moves_the_fingerprint():
 
 
 def test_a_sealed_release_is_not_resealed_by_accident(tmp_path):
-    """B-15's other half: the writer refuses to re-certify without intent."""
+    """B-15's other half: the writer refuses to re-certify without intent.
+
+    This test must never execute the real writer. Audit B round 5 (B-21) found
+    the first version built a harmless copy and then invoked ``str(script)`` --
+    the *real* path. It passed only because the guard fired before any write;
+    had the guard regressed, the test would have re-certified the live tree
+    instead of failing, which is the one failure mode a guard test must not
+    have. The script is now executed from a copy, with its directory mocked.
+    """
     import os
+    import re
+    import shutil
     import subprocess
 
-    script = (Path(__file__).resolve().parent.parent / "scripts" /
-              "c3_write_freeze_record.py")
-    source = script.read_text(encoding="utf-8")
-    probe = tmp_path / "probe.py"
-    probe.write_text(source, encoding="utf-8")
-    # The guard is what is under test, and it runs before any generation.
+    source_path = (Path(__file__).resolve().parent.parent / "scripts" /
+                   "c3_write_freeze_record.py")
+    source = source_path.read_text(encoding="utf-8")
     assert "C3_I_MEAN_TO_RESEAL" in source
-    assert "REFUSED: a sealed release already exists" in source
-    assert "_refuse_to_overwrite_sealed_release()" in source
+
+    # Copy the script beside a throwaway ``c3/`` so that even a broken guard
+    # writes into the sandbox and never into the frozen release.
+    sandbox = tmp_path / "scripts"
+    sandbox.mkdir()
+    batch = tmp_path / "batch"
+    (batch / "c3").mkdir(parents=True)
+    (batch / "c3" / "RELEASE_SEAL.sha256").write_text("sentinel\n", encoding="utf-8")
+    probe = (sandbox / "c3_write_freeze_record.py")
+    probe.write_text(
+        re.sub(r"^BATCH_DIR = .*$",
+               f"BATCH_DIR = Path({str(batch)!r})", source, count=1, flags=re.M),
+        encoding="utf-8")
+    assert str(batch) in probe.read_text(encoding="utf-8"), (
+        "the probe must be redirected at the sandbox before it is executed")
+
     env = {k: v for k, v in os.environ.items() if k != "C3_I_MEAN_TO_RESEAL"}
-    result = subprocess.run([__import__("sys").executable, str(script)],
+    # The probe imports the real harness (read-only); only its output directory
+    # is redirected.
+    env["PYTHONPATH"] = str(Path(__file__).resolve().parent.parent / "scripts")
+    result = subprocess.run([__import__("sys").executable, str(probe)],
                             capture_output=True, text=True, env=env, cwd=tmp_path)
     assert result.returncode == 3, result.stdout + result.stderr
     assert "C3_I_MEAN_TO_RESEAL" in result.stderr
+    # Nothing was written into the sandbox, and the real release is untouched.
+    assert (batch / "c3" / "RELEASE_SEAL.sha256").read_text() == "sentinel\n"
+    assert sorted(p.name for p in (batch / "c3").iterdir()) == ["RELEASE_SEAL.sha256"]
+    assert source_path.read_text(encoding="utf-8") == source
 
 
 @pytest.mark.parametrize("field", ["switches", "news_scope", "config_sha256",
@@ -1152,3 +1180,85 @@ def test_delivered_provenance_states_true_ancestry():
         else:
             assert relation != "precedes_frozen_commit", (
                 f"{directory.name} claims to precede {recorded_freeze[:8]} but does not")
+
+
+# ---------------------------------------------------------------------------
+# Audit B round 5, B-20: the gate's protocol-arm check had no test
+# ---------------------------------------------------------------------------
+def test_the_gate_checks_the_arm_against_the_protocol_not_just_the_matrix():
+    """B-10/B-11 on the *gate* path, which audit B round 5 found untested.
+
+    Deleting ``if switches != table[arm]`` left the suite fully green, so the
+    gate could have stopped consulting the protocol's arm table and nothing
+    would have noticed. The registration is checked against two independent
+    authorities -- the protocol says what an arm *means*, SWITCH_MATRIX.csv says
+    which arm a Run ID *runs* -- and neither may be the only one consulted.
+    """
+    import inspect
+
+    from scripts import c3_preflight_gate as gate
+
+    source = inspect.getsource(gate._run_arm_map)
+    assert "table = _protocol_arm_table()" in source
+    assert "if switches != table[arm]:" in source
+    # The protocol table must itself be read from the document, not restated.
+    table_source = inspect.getsource(gate._protocol_arm_table)
+    assert "CAND01_BATCH_2X2_PROTOCOL_V2.md" in table_source
+
+    # And the table it parses really is the 2x2 design.
+    assert gate._protocol_arm_table() == gate.ARMS
+    # The four arms must be four *distinct* designs, differing only on the two
+    # design axes; structured/s2 are held throughout.
+    axes = {(a["batch_macro"], a["single_pass"]) for a in gate.ARMS.values()}
+    assert axes == {(False, False), (True, False), (False, True), (True, True)}
+    assert gate.ARMS["B"]["batch_macro"] is False
+    assert gate.ARMS["AB"]["batch_macro"] is True
+    assert gate.ARMS["C0"]["single_pass"] is True
+    assert gate.ARMS["CC"] == {"batch_macro": True, "single_pass": True,
+                               "structured": True, "s2_downstream": True}
+    for arm in gate.ARMS.values():
+        assert arm["structured"] is True and arm["s2_downstream"] is True
+
+
+def test_the_gate_agrees_with_the_matrix_for_all_16_runs():
+    """Both authorities, checked against each other for every delivered run."""
+    from scripts import c3_preflight_gate as gate
+
+    arm_map = gate._run_arm_map()
+    assert len(arm_map) == 16
+    for run_id, switches in arm_map.items():
+        assert switches in gate.ARMS.values(), run_id
+
+
+def test_spec_body_hash_matches_the_release_definition():
+    """B-23: a run must record a hash that can be matched against the release."""
+    import json
+
+    import scripts.token_benchmark as tb
+    from scripts import gen_cand01_batch_16run_specs_v2 as gen
+
+    spec = json.loads((_batch_dir() / "specs/R01_NVDA_C0/spec.json").read_text())
+    assert tb.spec_body_sha256(spec) == gen.spec_body_sha256(spec)
+    assert tb.spec_body_sha256(dict(spec, results_dir="/elsewhere")) == (
+        tb.spec_body_sha256(spec))
+
+
+def test_the_freeze_check_opt_out_announces_itself(capfd, monkeypatch):
+    """B-26: the escape hatch must never be quiet, and must be opt-in only."""
+    import inspect
+
+    import scripts.token_benchmark as tb
+
+    monkeypatch.setenv("TRADINGAGENTS_SKIP_FREEZE_CHECK", "1")
+    tb.verify_frozen_tree()
+    err = capfd.readouterr().err
+    assert "SKIP_FREEZE_CHECK=1" in err
+    assert "DISABLED" in err
+
+    # Only the exact string "1" opts out; anything else still checks.
+    source = inspect.getsource(tb.verify_frozen_tree)
+    assert 'os.environ.get("TRADINGAGENTS_SKIP_FREEZE_CHECK") == "1"' in source
+    for value in ("true", "yes", "0", ""):
+        monkeypatch.setenv("TRADINGAGENTS_SKIP_FREEZE_CHECK", value)
+        with pytest.raises(tb.RunRefused):
+            tb.verify_frozen_tree()

@@ -1454,6 +1454,19 @@ def compute_working_tree_fingerprint() -> dict:
     }
 
 
+def spec_body_sha256(spec: dict) -> str:
+    """SHA-256 of a run spec minus the machine-specific ``results_dir``.
+
+    The same definition the spec generator and the delivered ``MANIFEST.sha256``
+    use; a test pins the two implementations together, because a run's recorded
+    value is only useful if it can be matched against the release.
+    """
+    body = {k: v for k, v in spec.items() if k != "results_dir"}
+    canonical = json.dumps(body, sort_keys=True, ensure_ascii=False,
+                           separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def experiment_config_sha256(experiment: dict | None) -> str | None:
     """SHA-256 of the canonical experiment definition (no host-specific paths)."""
     if not experiment:
@@ -2690,6 +2703,17 @@ def _write_effective_config(run_dir: Path, *, config: dict, spec: dict,
             resolved[key] = _safe(config[key])
 
     payload = {
+        # The identifiers a third party needs to prove *which* registered
+        # experiment and *which* code produced this run (audit B round 5,
+        # B-23). Without them the only link back to the release was the raw
+        # spec file, whose hash was recomputable but never recorded here.
+        "experiment_id": spec.get("experiment_id"),
+        "config_sha256": spec.get("config_sha256"),
+        # The spec body as it actually is, hashed here rather than copied: the
+        # run spec carries no such field, and a recorded ``null`` would prove
+        # nothing. ``spec_body_sha256()`` is the same function the delivered
+        # MANIFEST uses, so this value can be matched against the release.
+        "spec_body_sha256": spec_body_sha256(spec),
         "spec_switches": spec.get("switches"),
         "switches_applied_to_config": applied_switches,
         "switches_observed_from_graph_setup": observed_switches,
@@ -2965,10 +2989,16 @@ def verify_frozen_tree() -> None:
     import os
     import subprocess
 
-    # The only way past this is an explicit, test-scoped opt-out. Production
-    # never sets it, and it is named so that an operator who sees it in an
-    # environment knows they are running unfrozen code.
+    # The only way past this is an explicit, test-scoped opt-out, and it
+    # announces itself on every use so that it can never be set quietly
+    # (audit B round 5, B-26: an undocumented escape hatch on the one check
+    # that decides whether money is spent). The suite sets it only in tests
+    # that run the child outside a frozen release, and the flag's presence is
+    # itself asserted there.
     if os.environ.get("TRADINGAGENTS_SKIP_FREEZE_CHECK") == "1":
+        print("WARNING: TRADINGAGENTS_SKIP_FREEZE_CHECK=1 -- the frozen-release "
+              "check is DISABLED; any result from this process is not evidence "
+              "from the audited release", file=sys.stderr)
         return
 
     batch = _frozen_batch_dir()
