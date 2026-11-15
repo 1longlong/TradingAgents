@@ -2,13 +2,13 @@
   "experiment_definition_sha256": "ebfefe7b4d0867465156f3f7d03556e15b1a829c0091bd91145ea3a61833ffc8",
   "frozen_commit": "8e4c2408a1787b242f0dfa81c449ac4d188a81ee",
   "generator": "scripts/gen_cand01_batch_16run_specs_v2.py",
-  "generator_sha256": "9141194b4b6ed1af5f6f92781e3674bc8a6e3d60e460732b5fb8d9b78224799d",
+  "generator_sha256": "a02690ef14a5c8b7631571f728f0c7f7a7ddd6b515fdc2192c1242c5f885d04a",
   "git_branch": "exp/cand01-batch-v2",
-  "git_head_commit": "f5e90516e0315e297f1cc1af15090872c31ea88e",
-  "git_head_relation_to_freeze": "precedes_frozen_commit",
-  "git_working_tree_dirty": false,
+  "git_head_commit": "90c7689829caca888e4385896a1904066c00aed3",
+  "git_head_relation_to_freeze": "follows_frozen_commit",
+  "git_working_tree_dirty": true,
   "phase": "spec_generation",
   "python_version": "3.14.7",
   "schema_version": 1,
-  "timestamp_utc": "2026-11-15T15:03:11.635060+00:00"
+  "timestamp_utc": "2026-11-15T15:18:40.607009+00:00"
 }
