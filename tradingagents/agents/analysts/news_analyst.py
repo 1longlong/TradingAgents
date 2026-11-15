@@ -9,6 +9,8 @@ from tradingagents.agents.schemas import (
 from tradingagents.agents.utils.structured import (
     bind_structured,
     finalize_analyst_report,
+    finalize_single_pass,
+    run_data_tools,
 )
 
 from tradingagents.agents.utils.agent_utils import (
@@ -21,8 +23,108 @@ from tradingagents.agents.utils.agent_utils import (
     get_prediction_markets,
 )
 
+NEWS_UNAVAILABLE_PREFIX = (
+    "> **News source unavailable for this window.** The stance is"
+    " **Unknown**, not Neutral: no company-specific news was"
+    " retrieved, so the market's news flow cannot be read. Any"
+    " macro observation below is context, not a news-driven"
+    " view.\n\n**Stance:** Unknown\n\n"
+)
 
-def create_news_analyst(llm, batch_macro: bool = True, structured: bool = True):
+# The availability verdict is decided by :func:`classify_news_source_availability`
+# from the real ``get_news`` ToolMessages and nowhere else. The guard never reads
+# the report's prose to decide availability, and it never deletes a line because
+# of the words in it: a model may legitimately quote the banner as evidence, put
+# it in a blockquote or a code block, or write a sentence that opens with the
+# same words (final audit H1). Only *provenance* is authoritative.
+#
+# The banner below is the application's own component: it is emitted only when
+# the classifier says the company-news feed is dead, and it is identified by this
+# exact text -- never by matching a heuristic against user/model content.
+NEWS_UNAVAILABLE_BANNER = (
+    "> **News source unavailable for this window.** The stance is"
+    " **Unknown**, not Neutral: no company-specific news was"
+    " retrieved, so the market's news flow cannot be read. Any"
+    " macro observation below is context, not a news-driven"
+    " view.\n\n**Stance:** Unknown\n\n"
+)
+
+# Kept for callers that imported the old name; same authoritative text.
+NEWS_UNAVAILABLE_PREFIX = NEWS_UNAVAILABLE_BANNER
+
+
+def _strip_application_banner(report: str) -> str:
+    """Remove *this module's* banner, by exact text, from the head of ``report``.
+
+    This is provenance, not content matching: the string removed is the literal
+    component :data:`NEWS_UNAVAILABLE_BANNER` that this module inserted, and it
+    is only ever inserted at the head of the report. Removing it makes guarding
+    idempotent (guarding twice must not stack two banners, and re-guarding a
+    cleared report must restore exactly one).
+
+    No other text is examined. A model's own prose -- including a quoted banner,
+    a banner in a code block, or a sentence that opens with the phrase -- is
+    never touched here.
+    """
+    body = report.replace("\r\n", "\n").replace("\r", "\n").lstrip("\n")
+    banner = NEWS_UNAVAILABLE_BANNER
+    if body.startswith(banner):
+        return body[len(banner):].lstrip("\n")
+    return body
+
+
+def _news_available_note(news_status: NewsSourceStatus) -> str:
+    """An authoritative status line for a prose-fallback report on a live feed.
+
+    This replaces the earlier "validation note", which tried to detect a
+    contradiction by matching the words the model wrote. Two independent audits
+    showed every such matcher fails in one direction or the other: a loose
+    trigger fired on ordinary evidence mentions, a strict one missed realistic
+    dead-feed assertions. The note therefore no longer inspects the report at
+    all (user decision: never match text).
+
+    Instead, on the prose-fallback path the system states the tool-derived
+    availability, exactly as the renderer does on the schema path, so a
+    downstream reader has the authoritative verdict no matter what the model
+    wrote. It is emitted only when the classifier says the company feed was
+    ``AVAILABLE``; on ``UNAVAILABLE`` the full banner in
+    :func:`_guard_news_unavailable` already carries the verdict. Nothing in the
+    model's text is read, rewritten, or removed.
+    """
+    if news_status is not NewsSourceStatus.AVAILABLE:
+        return ""
+    return (
+        "> **Company news source: available.** The ``get_news`` tool returned"
+        " company-specific articles for this window, so the analysis below is"
+        " news-backed. This line is set by the system from the tool result and"
+        " does not restate or override the analyst's text.\n\n"
+    )
+
+
+def _guard_news_unavailable(report: str, news_status: NewsSourceStatus) -> str:
+    """Make ``report``'s availability status agree with ``news_status``.
+
+    ``news_status`` is derived by the node from the real ``get_news`` results,
+    never from ``report``. Two outcomes:
+
+    * ``UNAVAILABLE`` -- the application banner is prepended (a system-controlled
+      status component, identified by :data:`NEWS_UNAVAILABLE_BANNER`).
+    * ``AVAILABLE`` -- the banner is *not* prepended and nothing model-authored is
+      touched: the report is returned byte-identical apart from line-ending
+      normalisation. The authoritative status is added by the caller through
+      :func:`_news_available_note`, which never reads the text.
+
+    Guarding is idempotent in both directions because the only text removed is
+    this module's own banner, by exact match.
+    """
+    body = _strip_application_banner(report)
+    if news_status is NewsSourceStatus.UNAVAILABLE:
+        return NEWS_UNAVAILABLE_BANNER + body
+    return body
+
+
+def create_news_analyst(llm, batch_macro: bool = True, structured: bool = True,
+                        single_pass: bool = False):
     """Create the news analyst node.
 
     Two ablation switches, both defaulting to the shipped behaviour:
@@ -35,6 +137,9 @@ def create_news_analyst(llm, batch_macro: bool = True, structured: bool = True):
         crippled one.
     ``structured``
         When False the analyst never binds the S2 schema and emits free text.
+    ``single_pass``
+        CAND-01 experiment switch; see ``create_market_analyst``. Ignored when
+        ``structured`` is False.
     """
     structured_llm = (
         bind_structured(llm, NewsAnalystReport, "News Analyst")
@@ -93,19 +198,75 @@ def create_news_analyst(llm, batch_macro: bool = True, structured: bool = True):
         prompt = prompt.partial(instrument_context=instrument_context)
 
         chain = prompt | llm.bind_tools(tools)
+
+        # Decided in Python from the tool results, not by the model: a dead
+        # company-news feed must not become a directional stance. It must be
+        # decided from the *finished* tool history: in single-pass mode the
+        # data tools run *inside* ``finalize_single_pass``, so classifying the
+        # messages the node received would judge a feed that had not been asked
+        # yet (PF-01: real articles forced to Unknown).
+        def make_render(messages, executed=()):
+            news_status = classify_news_source_availability(
+                [*messages, *executed])
+
+            def _render(report):
+                return render_news_analyst_report(
+                    report.model_copy(update={"news_source_status": news_status})
+                )
+
+            return news_status, _render
+
+        if single_pass:
+            # ``accept`` runs after the loop, over the schema instance plus the
+            # full tool history the loop built (the caller's messages and every
+            # ToolMessage this runner executed), which is what the forced
+            # stance must be derived from. It cannot close over the loop's
+            # return value: the loop binds that after ``accept`` runs.
+            executed: list = []
+            outcome: dict = {}
+
+            def _accept(report):
+                news_status, render = make_render(state["messages"], executed)
+                outcome["rendered"] = render(report)
+                return outcome["rendered"]
+
+            report, _, emitted = finalize_single_pass(
+                llm=llm,
+                structured_llm=structured_llm,
+                prompt=prompt,
+                messages=state["messages"],
+                tools=tools,
+                schema=NewsAnalystReport,
+                render=None,
+                agent_name="News Analyst",
+                run_tools=run_data_tools(tools, state=state),
+                state=state,
+                accept=_accept,
+                executed=executed,
+            )
+            result_rendered = outcome.get("rendered")
+            news_status, _ = make_render(state["messages"], executed)
+            if result_rendered is not None and report == result_rendered:
+                # The success branch: the renderer already applied the forced
+                # status, which is only ever UNAVAILABLE with the full header,
+                # so no additional status line is needed.
+                return {"messages": emitted, "news_report": report}
+            # A prose fallback never passes through the renderer, so the status
+            # banner (dead feed) or the authoritative status line (live feed)
+            # is applied here from the same tool-derived verdict. Neither reads
+            # the model's text.
+            guarded = _guard_news_unavailable(report, news_status)
+            return {
+                "messages": emitted,
+                "news_report": _news_available_note(news_status) + guarded,
+            }
+
         result = chain.invoke(state["messages"])
 
         report = ""
 
         if len(result.tool_calls) == 0:
-            # Decided in Python from the tool results, not by the model: a dead
-            # company-news feed must not become a directional stance.
-            news_status = classify_news_source_availability(state["messages"])
-
-            def render(report):
-                return render_news_analyst_report(
-                    report.model_copy(update={"news_source_status": news_status})
-                )
+            news_status, render = make_render(state["messages"])
 
             report, _ = finalize_analyst_report(
                 llm=llm,
@@ -115,19 +276,8 @@ def create_news_analyst(llm, batch_macro: bool = True, structured: bool = True):
                 agent_name="News Analyst",
                 free_text_block=result.content,
             )
-            if news_status is NewsSourceStatus.UNAVAILABLE and not report.startswith(
-                "> **News source unavailable"
-            ):
-                # The prose fallback never passes through the renderer, so the
-                # model's own stance header would survive unchallenged. Prepend
-                # the authoritative one (same approach as the sentiment node).
-                report = (
-                    "> **News source unavailable for this window.** The stance is"
-                    " **Unknown**, not Neutral: no company-specific news was"
-                    " retrieved, so the market's news flow cannot be read. Any"
-                    " macro observation below is context, not a news-driven"
-                    " view.\n\n**Stance:** Unknown\n\n" + report
-                )
+            report = _guard_news_unavailable(report, news_status)
+            report = _news_available_note(news_status) + report
 
         return {
             "messages": [result],

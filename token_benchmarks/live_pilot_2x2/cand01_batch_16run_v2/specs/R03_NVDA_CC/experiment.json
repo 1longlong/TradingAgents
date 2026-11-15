@@ -1,0 +1,43 @@
+{
+  "budget": {
+    "max_total_tokens": null
+  },
+  "cache_policy": "preserve_existing",
+  "cases": [
+    {
+      "analysts": [
+        "market",
+        "news",
+        "fundamentals"
+      ],
+      "case_id": "nvda_2026_09_23",
+      "research_rounds": 1,
+      "risk_rounds": 1,
+      "ticker": "NVDA",
+      "trade_date": "2026-09-23"
+    }
+  ],
+  "checkpoint_enabled": false,
+  "config_sha256": "80367bf3d532abccf974bb22c4834d7ec2ab556c1ce4d0d229d79803e225a27d",
+  "deep_model": "CS5351/DeepSeek-V4-Flash",
+  "description": "CAND-01 x batch-macro 2x2, arm CC on NVDA (execution position 3); protocol V2",
+  "experiment_id": "R03",
+  "measured_runs": 1,
+  "news_scope": {
+    "company_news": "finnhub",
+    "gdelt": "excluded",
+    "global_news": "finnhub:CONFIG_DISABLED"
+  },
+  "output_language": "English",
+  "protocol_version": "V2",
+  "provider": "openai_compatible",
+  "quick_model": "CS5351/DeepSeek-V4-Flash",
+  "schema_version": 2,
+  "switches": {
+    "batch_macro": true,
+    "s2_downstream": true,
+    "single_pass": true,
+    "structured": true
+  },
+  "switches_required": true
+}

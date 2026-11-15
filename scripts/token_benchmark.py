@@ -52,7 +52,11 @@ from tradingagents.dataflows.utils import safe_ticker_component
 
 # Kept in sync with the telemetry payload consumers expect. Bump only when the
 # experiment/summary format changes deliberately.
-TOOL_SCHEMA_VERSION = 1
+# v2 adds the fields the CAND-01 2x2 registration needs -- ``switches``,
+# ``news_scope`` and ``budget`` -- and the run-level ``experiment_root``. The
+# validator still accepts v1 so every archived experiment stays readable.
+TOOL_SCHEMA_VERSION = 2
+SUPPORTED_EXPERIMENT_SCHEMAS = (1, 2)
 
 # Valid analyst wire keys as used by ``GraphSetup`` / ``TradingAgentsGraph``.
 VALID_ANALYSTS = ("market", "social", "news", "fundamentals")
@@ -326,9 +330,10 @@ def validate_experiment(data: dict) -> list[str]:
             "cache_policy must be 'preserve_existing' (only supported value)"
         )
 
-    if data.get("schema_version") not in (None, TOOL_SCHEMA_VERSION):
+    if data.get("schema_version") not in (None,) + SUPPORTED_EXPERIMENT_SCHEMAS:
         errors.append(
-            f"schema_version must be {TOOL_SCHEMA_VERSION} got {data.get('schema_version')!r}"
+            f"schema_version must be one of {SUPPORTED_EXPERIMENT_SCHEMAS} "
+            f"got {data.get('schema_version')!r}"
         )
 
     return errors
@@ -1337,6 +1342,18 @@ def fingerprint_drift(before: dict | None, after: dict | None) -> dict:
     }
 
 
+def compute_code_state(exp_dir: Path | None, experiment: dict | None = None) -> dict:
+    """The code-state document, without writing it to ``exp_dir``.
+
+    Used by dry runs and by callers that need the fingerprint only. Keeping it
+    separate from ``write_code_state`` is what lets a rehearsal report the tree
+    it *would* record without overwriting the recorded one.
+    """
+    state = capture_code_state(experiment)
+    state["code_state_phase"] = "start_of_measurement"
+    return state
+
+
 def write_code_state(exp_dir: Path, experiment: dict | None = None,
                      previous: dict | None = None) -> dict:
     """Write ``code_state.json``.
@@ -1530,6 +1547,9 @@ def prepare_run_spec(exp_dir: Path, experiment: dict, case: dict, run_index: int
         "output_language": experiment.get("output_language"),
         "cache_policy": experiment.get("cache_policy"),
         "results_dir": str(runtime_results),
+        # Pinned into the spec so the child can prove it imported the tree this
+        # experiment was registered against, instead of trusting its cwd.
+        "experiment_root": str(_PROJECT_ROOT),
         "run_index": run_index,
     }
     spec_path = run_dir / "spec.json"
@@ -1553,12 +1573,26 @@ def _default_runner(spec_path: Path, exp_dir: Path, run_index: int,
     spec = _load_json(spec_path)
     before = _telemetry_snapshot(Path(spec["results_dir"]))
     args = _run_single_process_args(run_dir)
+    child_env = _child_env_for_spec(spec)
     try:
-        proc = subprocess.run(args, cwd=str(exp), capture_output=True, text=True, timeout=None)
+        proc = subprocess.run(args, cwd=str(exp), capture_output=True, text=True,
+                              timeout=None, env=child_env)
     except Exception as exc:  # noqa: BLE001
         return {"status": "it_failed", "error": f"subprocess launch failed: {exc!r}",
                 "telemetry_before": sorted(before)}
     report = _load_json(prev) if prev.exists() else None
+    refusal_path = run_dir / REFUSAL_FILE
+    if proc.returncode == 2 and refusal_path.exists():
+        data = _load_json(refusal_path)
+        return {
+            "status": RUN_REFUSED_STATUS,
+            "returncode": proc.returncode,
+            "error": data.get("reason") or (proc.stderr or "").strip()[-2000:],
+            "report": report,
+            "telemetry_new": [],
+            "telemetry_before": sorted(before),
+            "refused": True,
+        }
     return {
         "status": "ok" if proc.returncode == 0 else "failed",
         "returncode": proc.returncode,
@@ -1591,16 +1625,27 @@ def execute_measured_run(exp_dir: Path, experiment: dict, case: dict,
     """
     if run_dir is None and not dry_run:
         run_dir = _preferred_attempt_dir(exp_dir, run_index)
-    run_dir = Path(run_dir) if run_dir is not None else _run_slot_dir(exp_dir, run_index)
-    attempt = int(run_dir.name.rsplit("_", 1)[1]) if run_dir.name.startswith("attempt_") else 1
-    spec_path = prepare_run_spec(exp_dir, experiment, case, run_index, attempt)
-    runner = runner or _default_runner
-    runner_result = runner(spec_path, exp_dir, run_index, attempt) if not dry_run else {
-        "status": "dry_run", "returncode": 0, "error": None, "report": None,
-    }
+    if dry_run:
+        # A dry run must leave no trace of a measurement: no attempt directory,
+        # no spec, no run slot. Writing either makes the study look like it has
+        # an attempt that never happened.
+        runner_result = {"status": "dry_run", "returncode": 0,
+                         "error": None, "report": None}
+        run_dir = None
+    else:
+        run_dir = Path(run_dir) if run_dir is not None else _run_slot_dir(exp_dir, run_index)
+        attempt = (int(run_dir.name.rsplit("_", 1)[1])
+                   if run_dir.name.startswith("attempt_") else 1)
+        spec_path = prepare_run_spec(exp_dir, experiment, case, run_index, attempt)
+        runner = runner or _default_runner
+        runner_result = runner(spec_path, exp_dir, run_index, attempt)
 
     report = runner_result.get("report") or {}
     status = runner_result.get("status")
+    if status == RUN_REFUSED_STATUS:
+        # The child refused before doing any work. Surface it as an exception
+        # so the orchestrator can keep it out of the attempt sequence.
+        raise RunRefused(runner_result.get("error") or "run refused")
     if status == "dry_run":
         return {
             "run_index": run_index, "run_status": "dry_run", "valid": False,
@@ -1846,6 +1891,22 @@ def _mark_run_started(exp_dir: Path, experiment: dict, case: dict, run_index: in
     }, indent=2, ensure_ascii=False, sort_keys=True), encoding="utf-8")
 
 
+def _record_refusal(exp_dir: Path, case: dict, run_index: int, exc: Exception) -> Path:
+    """Append a refusal to the study's own log, outside the attempt sequence."""
+    log = Path(exp_dir) / "refusals.jsonl"
+    entry = {
+        "run_index": run_index,
+        "ticker": case.get("ticker"),
+        "trade_date": case.get("trade_date"),
+        "case_id": case.get("case_id"),
+        "reason": f"{type(exc).__name__}: {exc}",
+        "recorded_at": datetime.now(timezone.utc).isoformat(),
+    }
+    with log.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(entry, ensure_ascii=False, sort_keys=True) + "\n")
+    return log
+
+
 def run_experiment(exp_dir: Path, experiment: dict, *, runner=None,
                    continue_on_error: bool = False, dry_run: bool = False) -> dict:
     """Run every case `measured_runs` times and write the summary.
@@ -1863,7 +1924,13 @@ def run_experiment(exp_dir: Path, experiment: dict, *, runner=None,
     such a measurement is never reported as a valid baseline.
     """
     exp_dir = Path(exp_dir)
-    code_state = write_code_state(exp_dir, experiment)
+    if dry_run:
+        # Compute the fingerprint without persisting it: a dry run must not
+        # rewrite the study's recorded code state, or the pre-registration and
+        # the on-disk state stop agreeing after a mere rehearsal.
+        code_state = compute_code_state(exp_dir, experiment)
+    else:
+        code_state = write_code_state(exp_dir, experiment)
     fingerprint_start = code_state.get("working_tree_sha256")
 
     all_metrics = []
@@ -1898,6 +1965,13 @@ def run_experiment(exp_dir: Path, experiment: dict, *, runner=None,
                     run_dir=(_attempt_dir(exp_dir, run_index, attempt)
                              if attempt is not None else None),
                 )
+            except RunRefused as exc:
+                # A refusal means the run never started: there is no attempt to
+                # number and no sample to lose. It is recorded under its own
+                # log and the study stops, because a spec that the harness
+                # now refuses must be fixed rather than skipped.
+                _record_refusal(exp_dir, case, run_index, exc)
+                raise
             except Exception as exc:  # noqa: BLE001
                 all_metrics.append({
                     "run_index": run_index, "run_status": "_launch_error", "valid": False,
@@ -2045,6 +2119,256 @@ def summarize_experiment(exp_dir: Path, experiment: dict | None = None) -> dict:
 # ---------------------------------------------------------------------------
 # Hidden single-run (executed in the freshly spawned subprocess)
 # ---------------------------------------------------------------------------
+def _apply_spec_switches(spec: dict, config: dict, defaults: dict,
+                         explicitly_exported: frozenset[str] = frozenset()) -> dict:
+    """Apply a spec's declared switches to ``config``; return what was applied.
+
+    The spec is authoritative. A spec that omits ``switches`` entirely (every
+    pre-V2 spec, and any spec produced outside the V2 generator) is left on the
+    ``default_config`` behaviour, which is exactly what the shipped harness did
+    before this function existed — no unrelated artefact starts failing.
+
+    A spec that *does* declare switches must declare all of them, must use real
+    booleans, and must not contradict an explicitly exported ``TRADINGAGENTS_*``
+    variable: that combination means two records disagree about what the arm is,
+    and silently preferring one of them is how a label goes wrong.
+    """
+    declared = spec.get("switches")
+    if declared is None:
+        return {}
+    # Imported here rather than at module import time: this module stays
+    # import-light so ``validate``/``summarize``/``compare`` never need the
+    # business imports (same convention as ``_run_single``).
+    from tradingagents.graph.switch_verification import (
+        SWITCH_CONFIG_KEYS,
+        SwitchNotConsumed,
+        validate_spec_switches,
+    )
+
+    validate_spec_switches(declared)
+
+    for name, key in SWITCH_CONFIG_KEYS.items():
+        if key is None:
+            continue          # declared-only switch (s2_downstream)
+        wanted = declared[name]
+        # ``defaults`` already has the env overrides applied; if the caller
+        # exported an *explicit* different value, refusing is the only safe
+        # outcome. An unset variable is not a contradiction: it just means the
+        # environment has no opinion, and the spec fills the gap (that is the
+        # normal case -- the harness launches every run with a neutral env).
+        if key in explicitly_exported:
+            ambient = defaults.get(key)
+            if isinstance(ambient, bool) and ambient is not wanted:
+                raise SwitchNotConsumed(
+                    f"spec declares {name}={wanted} but the environment "
+                    f"exported {key}={ambient}; refusing to run an ambiguous arm"
+                )
+        config[key] = wanted
+    return {key: config[key] for key in SWITCH_CONFIG_KEYS.values() if key}
+
+
+def _child_env_for_spec(spec: dict) -> dict:
+    """Environment for one measured child process.
+
+    Two things the child cannot recover on its own:
+
+    * the study's switches. They are also applied from the spec inside
+      ``_run_single``, but exporting them means a crash report, a stack trace
+      and any ``get_config()`` dump taken from the child all agree with the arm.
+    * the harness's optional-credential passthrough. ``_PASSTHROUGH_ENV`` is
+      already applied to ``os.environ`` by ``apply_cityu_env`` at launch; the
+      copy here makes that explicit and keeps the child from inheriting
+      unrelated shell state silently.
+    """
+    env = dict(os.environ)
+    switches = spec.get("switches") or {}
+    for name, env_var in SPEC_SWITCH_ENV:
+        if name in switches:
+            value = switches[name]
+            env[env_var] = "true" if value is True else "false"
+    return env
+
+
+def _exported_switch_keys() -> set[str]:
+    """Config keys whose value came from a *non-empty* ``TRADINGAGENTS_*`` var.
+
+    ``DEFAULT_CONFIG`` is built once at import time, so it already carries the
+    env overrides; the only way to tell an explicit export from a default is to
+    look at the environment itself.
+    """
+    from tradingagents.default_config import _ENV_OVERRIDES
+
+    return {
+        key for env_var, key in _ENV_OVERRIDES.items()
+        if os.environ.get(env_var)
+    }
+
+
+EFFECTIVE_CONFIG_FILE = "effective_config.json"
+
+#: Marker file a child writes when it refuses to run, and the status string the
+#: orchestrator maps it to. A refusal is not a measurement: it never produces
+#: telemetry and must never be counted as an attempt of the study.
+REFUSAL_FILE = "refusal.json"
+RUN_REFUSED_STATUS = "refused"
+
+
+class RunRefused(RuntimeError):
+    """Raised when a spec is refused before any paid call is made."""
+
+
+#: Keys of the resolved config withheld from ``effective_config.json``. Secrets
+#: by name; the value is replaced with a boolean "is set" flag, never printed.
+_SECRET_CONFIG_KEYS = frozenset({
+    "api_key", "openai_api_key", "anthropic_api_key", "google_api_key",
+    "backend_url_secret",
+})
+
+
+def imported_module_path() -> str:
+    """Absolute path of the ``tradingagents`` package this interpreter imported."""
+    import tradingagents as _ta
+
+    return str(Path(_ta.__file__).resolve())
+
+
+def verify_import_root(expected_root: str | os.PathLike) -> None:
+    """Refuse to run if ``tradingagents`` was imported from outside ``expected_root``.
+
+    A shared editable install resolves the package from whichever checkout was
+    installed, not from the worktree the operator believes they are in. Running
+    a paid experiment against the wrong tree silently mixes code versions, so
+    this is a hard failure rather than a warning.
+    """
+    root = Path(expected_root).resolve()
+    actual = Path(imported_module_path())
+    try:
+        actual.relative_to(root)
+    except ValueError:
+        raise RuntimeError(
+            f"tradingagents imported from {actual}, which is outside the "
+            f"expected experiment root {root}; refusing to run"
+        ) from None
+
+
+def _write_effective_config(run_dir: Path, *, config: dict, spec: dict,
+                            graph, applied_switches: dict) -> Path:
+    """Write the config this process is really running with.
+
+    Distinct from ``spec.json`` (what was requested) and from the summary (what
+    happened): this is the resolved state between the two, recorded before the
+    paid call so a crash cannot lose it.
+    """
+    from tradingagents.graph.switch_verification import (
+        consume_switches_from_setup,
+    )
+
+    observed_switches = {}
+    try:
+        observed_switches = consume_switches_from_setup(graph.graph_setup)
+    except Exception as exc:  # noqa: BLE001 - a broken probe must be visible
+        observed_switches = {"_probe_error": f"{type(exc).__name__}: {exc}"}
+
+    def _safe(value):
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            return value
+        return repr(value)
+
+    resolved = {}
+    for key in sorted(config):
+        if key in _SECRET_CONFIG_KEYS:
+            resolved[key] = {"redacted": True, "is_set": bool(config[key])}
+        else:
+            resolved[key] = _safe(config[key])
+
+    payload = {
+        "spec_switches": spec.get("switches"),
+        "switches_applied_to_config": applied_switches,
+        "switches_observed_from_graph_setup": observed_switches,
+        "provider": spec.get("provider"),
+        "quick_model": spec.get("quick_model"),
+        "deep_model": spec.get("deep_model"),
+        "resolved_config": resolved,
+        "import_provenance": {
+            "tradingagents_module": imported_module_path(),
+            "python_executable": sys.executable,
+            "python_version": sys.version.split()[0],
+            "cwd": os.getcwd(),
+        },
+    }
+    path = Path(run_dir) / EFFECTIVE_CONFIG_FILE
+    path.write_text(
+        json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True),
+        encoding="utf-8",
+    )
+    return path
+
+
+def _preflight_gate(spec: dict) -> dict:
+    """Refuse a spec that cannot be a valid sample, before any paid call.
+
+    Every condition here is one the study registered and a run must satisfy:
+    a declared ``s2_downstream`` that is False (unimplemented, per C2's
+    contract), a news scope other than the frozen Finnhub-only one, and a
+    switch set that contradicts an explicitly exported environment. Raising
+    ``RunRefused`` keeps these distinguishable from a run that started and
+    failed, which is a different -- and countable -- kind of evidence.
+    """
+    from tradingagents.graph.switch_verification import (
+        SwitchNotConsumed,
+        validate_spec_switches,
+    )
+
+    switches = spec.get("switches")
+    if switches is not None:
+        try:
+            validate_spec_switches(switches)
+        except SwitchNotConsumed as exc:
+            raise RunRefused(f"spec switches rejected: {exc}") from None
+        # Mirror the ambient check ``_apply_spec_switches`` performs, but fail
+        # here so the refusal happens before a graph is constructed.
+        from tradingagents.default_config import DEFAULT_CONFIG
+        from tradingagents.graph.switch_verification import SWITCH_CONFIG_KEYS
+
+        for name, key in SWITCH_CONFIG_KEYS.items():
+            if key is None:
+                continue
+            if key in _exported_switch_keys():
+                ambient = DEFAULT_CONFIG.get(key)
+                if isinstance(ambient, bool) and ambient is not switches[name]:
+                    raise RunRefused(
+                        f"spec declares {name}={switches[name]} but the "
+                        f"environment exported {key}={ambient}"
+                    )
+
+    scope = spec.get("news_scope")
+    if scope is not None:
+        # The frozen contract, as the V2 generator records it: company news is
+        # Finnhub, global news is Finnhub with the feature explicitly disabled
+        # (never silently routed elsewhere), and GDELT is excluded outright.
+        if scope.get("company_news") != "finnhub":
+            raise RunRefused(
+                f"news_scope.company_news={scope.get('company_news')!r} is not "
+                f"the frozen Finnhub-only scope"
+            )
+        if not str(scope.get("global_news", "")).startswith("finnhub"):
+            raise RunRefused(
+                f"news_scope.global_news={scope.get('global_news')!r} must be "
+                f"the explicitly disabled Finnhub path"
+            )
+        if scope.get("gdelt") != "excluded":
+            raise RunRefused(
+                f"news_scope.gdelt={scope.get('gdelt')!r} must be 'excluded'"
+            )
+        forbidden = {"gdelt", "alpha_vantage", "yahoo"}
+        for field, got in scope.items():
+            if isinstance(got, str) and got.lower() in forbidden:
+                raise RunRefused(
+                    f"news scope field {field}={got!r} names a forbidden vendor"
+                )
+    return {"checked": True}
+
+
 def _run_single(spec_path: str) -> int:
     """Execute ONE measured TradingAgents run inside the current process.
 
@@ -2057,10 +2381,35 @@ def _run_single(spec_path: str) -> int:
     case = spec["case"]
     run_index = spec.get("run_index")
 
+    # Everything that can disqualify this run is checked before a client is
+    # built, so a refusal costs nothing and is never recorded as an attempt.
+    _expected_root = spec.get("experiment_root") or _PROJECT_ROOT
+    try:
+        verify_import_root(_expected_root)
+        _preflight_gate(spec)
+    except (RunRefused, RuntimeError) as exc:
+        reason = f"{type(exc).__name__}: {exc}"
+        (Path(spec_path).parent / REFUSAL_FILE).write_text(
+            json.dumps({"refused": True, "reason": reason,
+                        "spec_switches": spec.get("switches")},
+                       indent=2, ensure_ascii=False, sort_keys=True),
+            encoding="utf-8",
+        )
+        print(f"refused: {reason}", file=sys.stderr)
+        return 2
+
+
     import traceback
 
     from cli.stats_handler import StatsCallbackHandler
     from tradingagents.default_config import DEFAULT_CONFIG
+    from tradingagents.graph.switch_verification import (
+        SWITCH_CONFIG_KEYS,
+        SwitchNotConsumed,
+        consume_switches_from_setup,
+        validate_spec_switches,
+        verify_switches_consumed,
+    )
     from tradingagents.graph.trading_graph import TradingAgentsGraph
 
     config = dict(DEFAULT_CONFIG)
@@ -2074,11 +2423,54 @@ def _run_single(spec_path: str) -> int:
     # checkpoint disabled for benchmarks (each run is an independent sample).
     config["checkpoint_enabled"] = False
 
+    # CAND-01 arms. The ablation switches reach the config through two paths —
+    # the ambient ``TRADINGAGENTS_*`` vars (``default_config``) and, since this
+    # fix, the spec itself. Only the spec path is self-describing: independent
+    # audit B1 measured that without it 12/16 specs run under a neutral
+    # environment with switches that contradict their own arm label (every C0
+    # and CC run, plus every B run). The spec is the record of what was
+    # registered, so it wins; the ambient value is only used as an *agreement*
+    # check, never as the source.
+    applied_switches = _apply_spec_switches(
+        spec, config, DEFAULT_CONFIG,
+        explicitly_exported=frozenset(_exported_switch_keys()),
+    )
+
+    # Exactly one graph is constructed per measured run. An earlier revision
+    # built a second one purely to run the switch check and threw the first
+    # away, which doubled client construction and left two live handlers that
+    # could each record usage. Construct once, verify, then propagate.
     handler = StatsCallbackHandler()
     graph = TradingAgentsGraph(
         selected_analysts=tuple(case.get("analysts") or ()),
         config=config,
         callbacks=[handler],
+    )
+
+    # The spec's switches are now in ``config``, but "in config" is not the same
+    # as "consumed by the graph". Ask the constructed ``GraphSetup`` what it
+    # derived from that config and require it to equal what the arm declares.
+    # Without this a spec can be marked complete while running somebody else's
+    # arm, which is the failure independent audit B1 measured. The check runs
+    # before ``propagate``, so a mislabelled arm costs no paid calls.
+    if applied_switches:
+        verify_switches_consumed(
+            spec["switches"],
+            observed=consume_switches_from_setup(graph.graph_setup),
+        )
+
+    # Record the configuration this process is *actually* running with, after
+    # every override has been folded in. The spec records what was requested;
+    # this records what took effect, including the provider's resolved
+    # endpoint and the module that was really imported. Written before
+    # ``propagate`` so a run that crashes still leaves its configuration on
+    # disk, and so the record cannot be confused with a post-hoc summary.
+    _write_effective_config(
+        Path(spec_path).parent,
+        config=config,
+        spec=spec,
+        graph=graph,
+        applied_switches=applied_switches,
     )
 
     # Locate the telemetry artifact this run produced (run-scoped results_dir).
@@ -2160,9 +2552,22 @@ _TEMPLATE_KEYS = (
 # environment (e.g. ``fred.get_api_key``), so a value in the file alone reached
 # the app only if the caller happened to export it. Only mapped names are copied
 # — a stray variable in the file still cannot change the benchmark's config.
+#: Spec switch name -> the env var ``default_config`` reads it from.
+#: ``s2_downstream`` is deliberately absent: it has no implementation, so there
+#: is no env var for it and ``validate_spec_switches`` refuses anything but True.
+SPEC_SWITCH_ENV = (
+    ("batch_macro", "TRADINGAGENTS_BATCH_MACRO_ENABLED"),
+    ("structured", "TRADINGAGENTS_STRUCTURED_ANALYST_OUTPUT_ENABLED"),
+    ("single_pass", "TRADINGAGENTS_SINGLE_PASS_FINALIZATION_ENABLED"),
+)
+
 _PASSTHROUGH_ENV = (
     "FRED_API_KEY",          # dataflows/fred.py: the macro_data vendor
     "SEC_EDGAR_USER_AGENT",  # dataflows/sec_edgar.py: optional filings vendor
+    # The study's *only* news vendor. Without this the child process sees no
+    # key and every one of the 16 runs renders AUTH_MISSING while the config
+    # still claims a Finnhub-only news path (independent audit A-01).
+    "FINNHUB_API_KEY",
 )
 
 

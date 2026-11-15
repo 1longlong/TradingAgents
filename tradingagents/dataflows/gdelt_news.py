@@ -1,12 +1,12 @@
-"""Point-in-time-safe historical company news via the GDELT DOC 2.0 API.
+"""Point-in-time-safe company, industry and macro news via the GDELT DOC 2.0 API.
 
 Why this module exists
 ----------------------
-``yfinance_news`` serves recent items only and its ticker endpoint is retired
-(HTTP 404). Alpha Vantage can answer a date range but needs a key that is not
-provisioned here. GDELT DOC 2.0 is keyless and **does** take an explicit
-``STARTDATETIME``/``ENDDATETIME``, so it is the one source that can answer "what
-was published about NVDA on 2026-09-23" today.
+GDELT DOC 2.0 is keyless and **does** take an explicit
+``STARTDATETIME``/``ENDDATETIME``, so it complements Finnhub's symbol-specific
+``company-news`` endpoint with the discovery and macro coverage Finnhub does not
+provide. The two are complements, not interchangeable feeds: see
+:mod:`news_merge` for how their results are combined.
 
 The trap that makes a naive GDELT adapter dangerous
 ---------------------------------------------------
@@ -47,6 +47,7 @@ from urllib.parse import urlencode
 
 from .config import get_config
 from .date_window import to_utc
+from .news_relevance import company_name, is_about_company
 from .news_status import NewsStatus, render_status
 from .symbol_utils import normalize_symbol
 
@@ -54,11 +55,23 @@ logger = logging.getLogger(__name__)
 
 _API = "https://api.gdeltproject.org/api/v2/doc/doc"
 
-# One request every 5 s is GDELT's documented limit; the margin absorbs clock
-# skew between us and their limiter. Kept as a module attribute so tests can
-# drive the throttle deterministically instead of sleeping.
-_MIN_INTERVAL_SECONDS = 5.5
+#: Query parameters that carry a credential. GDELT itself needs no key, but the
+#: publisher URLs it returns are arbitrary, and a transport exception can echo
+#: the full request URL — neither may reach a log line verbatim.
+_SECRET_PARAM = re.compile(
+    r"(?i)(?<![A-Za-z0-9_])(token|apikey|api_key|access_token|key|secret|password)"
+    r"=[^&\s\"']+"
+)
 
+
+def _redact(text: str) -> str:
+    """Mask any credential-looking query parameter before logging."""
+    return _SECRET_PARAM.sub(r"\1=<redacted>", text or "")
+
+# One request every 5 s is GDELT's documented limit, but measured behaviour is
+# stricter (see ``_MIN_INTERVAL_SECONDS`` below). Kept as a module attribute so
+# tests can drive the throttle deterministically instead of sleeping.
+#
 # GDELT documents "within the last 3 months". Computed as 89 days of slack so a
 # request at the edge is not rejected; anything older is refused locally and
 # reported as HISTORICAL_UNSUPPORTED *without* a request.
@@ -74,9 +87,52 @@ VERIFY_MAX_BYTES = 4 * 1024 * 1024
 # this many, and the report says how many were skipped.
 _VERIFY_BUDGET = 8
 
-# Transient statuses worth exactly one retry. 429 is retried once after the
-# vendor's own 5 s interval; nothing permanent is retried.
+# Transient statuses worth exactly one retry. 429 is retried once after a
+# backoff well past the vendor's documented 5 s interval; nothing permanent is
+# retried. Measured 2026-11-15: GDELT returns no ``Retry-After`` header, and a
+# 5.5 s retry still 429s, so the backoff must be longer than the docs imply.
 _MAX_ATTEMPTS = 2
+
+#: Wait before the single retry of a 429. The vendor sends no server hint, so
+#: this is a measured value: see ``_MIN_INTERVAL_SECONDS``.
+_RATE_LIMIT_BACKOFF_SECONDS = 60.0
+
+#: Hard ceiling on DOC-API requests issued by one news call.
+_MAX_REQUESTS_PER_CALL = 12
+
+#: Minimum spacing between *any* two GDELT DOC-API requests from this process.
+#:
+#: The documented fair-use interval is one request every 5 s, but measured
+#: behaviour on 2026-11-15 was far stricter and is what governs this constant:
+#:
+#:   spacing  requests  accepted   note
+#:   -------  --------  ---------  --------------------------------------------
+#:   5.5 s    9         1 of 9     the shipped pacing before this round
+#:   10 s     13        1 of 13    bursts of one macro query per class
+#:   20 s     9         4 of 9     mixed with retries; not reproducible
+#:   30 s     1         0 of 1
+#:   45 s     1         0 of 1
+#:   60 s     1         1 of 1     accepted on a *partially idle* host
+#:   90 s     1         1 of 1     accepted on a *partially idle* host
+#:
+#: A later probe measured the TRUE start-to-start delta while the host was
+#: still loaded by earlier requests, which is the condition a burst actually
+#: sees:
+#:
+#:   spacing  accepted
+#:   -------  --------
+#:   80 s     0 of 1
+#:   95 s     0 of 1
+#:   110 s    1 of 1
+#:
+#: So 60 s is enough only after the host has been idle long enough, and too low
+#: for a host that is still recovering. The threshold is host-state dependent
+#: and unobservable (no ``Retry-After`` header), so 60 s is kept as a
+#: reasonable-cost value rather than a guaranteed-safe one. A burst of the five
+#: default macro queries consequently costs about four minutes of wall clock.
+#: Known limitation, tracked in ``REMAINING_ISSUES.md`` R-1; GDELT is excluded
+#: from the frozen 16-run experiment.
+_MIN_INTERVAL_SECONDS = 60.0
 
 _last_request_at: float = 0.0
 
@@ -89,6 +145,21 @@ def _throttle() -> None:
     if _last_request_at and wait > 0:
         time.sleep(wait)
     _last_request_at = time.monotonic()
+
+
+def _request_budget() -> int:
+    """Maximum DOC-API requests one news call may issue.
+
+    The global path sends one request per configured macro query. With five
+    default queries a single analyst call is five requests; the budget bounds
+    it so a misconfigured (or very long) query list cannot turn one analyst
+    turn into an unbounded burst against a throttled third party.
+    """
+    try:
+        value = int(get_config().get("news_max_requests_per_call", _MAX_REQUESTS_PER_CALL))
+    except (TypeError, ValueError):
+        value = _MAX_REQUESTS_PER_CALL
+    return max(1, value)
 
 
 def _reset_throttle_state() -> None:
@@ -108,15 +179,41 @@ def _gdelt_datetime(dt: datetime) -> str:
 # ``extract_publish_time`` on the publisher's own page.
 
 
+#: Shortest quoted phrase GDELT accepts. Measured live: ``"AAPL"`` and
+#: ``"NVDA"`` answer HTTP 200 with the plain-text body ``The specified phrase is
+#: too short.``, so a 4-character symbol must not be quoted either.
+_MIN_QUOTED_PHRASE = 4
+
+
 def _query_for(ticker: str) -> str:
     """Build the full-text query for a ticker.
 
-    GDELT has no symbol field: relevance is a text match. The plain ticker is
-    too noisy (``NVDA`` also matches unrelated strings), so the canonical
-    symbol is quoted. Callers are responsible for the extra relevance filter in
-    :func:`_is_relevant`.
+    GDELT has no symbol field: relevance is a text match. Two live constraints
+    measured 2026-11-15 decide the shape of this query:
+
+    * a **quoted phrase of 2-3 characters is rejected** — ``"AAPL"
+      sourcelang:english`` answers HTTP 200 with the plain-text body ``The
+      specified phrase is too short.``, and the short term poisons the whole
+      query even when OR'd with a valid one. So short tickers are never quoted;
+      the company name (``"Apple"``, ``"JPMorgan"``) carries the phrase instead.
+    * unquoted tickers match plenty of unrelated text, so the canonical symbol
+      is quoted **when long enough** to be a legal phrase.
+
+    Callers are responsible for the extra relevance filter in
+    :func:`_is_relevant`; this only decides what to *ask*.
     """
-    return f'"{normalize_symbol(ticker)}" sourcelang:english'
+    symbol = normalize_symbol(ticker)
+    name = company_name(ticker)
+    if len(symbol) <= _MIN_QUOTED_PHRASE:
+        # Quote the company name, never the symbol: a 2-4 char phrase is a hard
+        # GDELT error, and the name is what these articles actually say.
+        terms = [f'"{name}"'] if name and name.upper() != symbol else []
+        if not terms:
+            # No known name to lean on: fall back to the bare symbol, which
+            # GDELT accepts unquoted. Relevance filtering keeps the noise out.
+            terms = [symbol]
+        return " OR ".join(terms) + " sourcelang:english"
+    return f'"{symbol}" sourcelang:english'
 
 
 def _request(url: str) -> tuple[int | None, str | None, str]:
@@ -148,7 +245,10 @@ def _request(url: str) -> tuple[int | None, str | None, str]:
     except TimeoutError:
         return None, None, "timeout"
     except OSError as exc:  # connection resets and friends
-        logger.warning("GDELT transport error: %s", exc)
+        logger.warning("GDELT transport error: %s", _redact(str(exc)))
+        return None, None, "transport"
+    except Exception as exc:  # noqa: BLE001 - a transport bug must not abort the node
+        logger.warning("GDELT client error: %s: %s", type(exc).__name__, _redact(str(exc)))
         return None, None, "transport"
 
 
@@ -197,11 +297,20 @@ def _fetch_articles(query: str, start_dt: datetime, end_dt: datetime, limit: int
         if status is None:
             break
         detail = f"HTTP {http_status}" if http_status else error_kind
-        # Only throttling is worth a second try; the retry sleeps the vendor
-        # interval inside _throttle(), which is exactly what GDELT asks for.
         if status is not NewsStatus.RATE_LIMITED or attempt == _MAX_ATTEMPTS - 1:
             return [], status, detail
-        logger.warning("GDELT throttled; retrying once after the vendor interval.")
+        # Measured 2026-11-15: GDELT sends **no** ``Retry-After`` and no other
+        # rate-limit header, so there is no server hint to honour. The
+        # documented "one request every 5 seconds" is not sufficient in
+        # practice: a burst at 5.5 s spacing was rejected 8 times out of 9,
+        # while isolated requests 20 s apart were accepted 3 times out of 3.
+        # The retry therefore backs off well past the documented interval
+        # instead of repeating the same 5.5 s sleep that had just failed.
+        backoff = _RATE_LIMIT_BACKOFF_SECONDS * (2 ** attempt)
+        logger.warning(
+            "GDELT throttled; backing off %.0fs before one retry.", backoff
+        )
+        time.sleep(backoff)
 
     if status is not None:
         return [], status, detail
@@ -211,10 +320,11 @@ def _fetch_articles(query: str, start_dt: datetime, end_dt: datetime, limit: int
     if text.startswith("Please limit requests"):
         return [], NewsStatus.RATE_LIMITED, "rate-limit body"
     # GDELT reports query errors as plain text (with a 200 or 400 status), e.g.
-    # "Invalid query end date.". That is our request being rejected, not a
-    # malformed vendor response, so it must not be labelled PARSE_ERROR and it
-    # must not be retried against the next vendor as if it were transient.
-    if text.lower().startswith(("invalid query", "error:")):
+    # "Invalid query end date." or "The specified phrase is too short.". That is
+    # our request being rejected, not a malformed vendor response, so it must not
+    # be labelled PARSE_ERROR and it must not be retried against the next vendor
+    # as if it were transient.
+    if text.lower().startswith(("invalid query", "error:")) or _is_query_rejection(text):
         return [], NewsStatus.HTTP_ERROR, text[:160]
     if not text:
         return [], NewsStatus.EMPTY_VALID, ""
@@ -232,6 +342,26 @@ def _fetch_articles(query: str, start_dt: datetime, end_dt: datetime, limit: int
     if not isinstance(articles, list):
         return [], NewsStatus.PARSE_ERROR, "'articles' is not a list"
     return [a for a in articles if isinstance(a, dict)], None, ""
+
+
+def _is_query_rejection(text: str) -> bool:
+    """Whether a plain-text GDELT body is a complaint about *our* query.
+
+    GDELT answers a syntactically rejected query with ``HTTP 200`` and English
+    prose instead of JSON. Measured bodies: ``The specified phrase is too
+    short.`` and ``Invalid query end date.``. Classifying these as
+    ``PARSE_ERROR`` made a client-side bug look like a vendor outage (live run,
+    2026-11-15), so they are recognised explicitly.
+    """
+    lowered = (text or "").lower()
+    return (
+        "phrase is too short" in lowered
+        or "invalid query" in lowered
+        # Measured live 2026-11-15: a non-OR parenthesised group is rejected with
+        # "Parentheses may only be used around OR'd statements."
+        or "parentheses may only be used" in lowered
+        or "unsupported query" in lowered
+    )
 
 
 # --- per-article publish-time verification -------------------------------
@@ -318,7 +448,12 @@ def _fetch_page(url: str) -> tuple[int | None, str | None, str]:
     except TimeoutError:
         return None, None, "timeout"
     except OSError as exc:
-        logger.warning("GDELT verification fetch failed for %s: %s", url, exc)
+        logger.warning("GDELT verification fetch failed for %s: %s",
+                       _redact(url), _redact(str(exc)))
+        return None, None, "transport"
+    except Exception as exc:  # noqa: BLE001 - a transport bug must not abort the node
+        logger.warning("GDELT article fetch failed for %s: %s",
+                       _redact(url), _redact(f"{type(exc).__name__}: {exc}"))
         return None, None, "transport"
 
 
@@ -326,18 +461,20 @@ def _fetch_page(url: str) -> tuple[int | None, str | None, str]:
 
 
 def _is_relevant(article: dict, ticker: str) -> bool:
-    """Whether a discovered article is plausibly *about* ``ticker``.
+    """Whether a discovered article is substantively *about* ``ticker``.
 
-    GDELT matched on text, so relevance is re-checked on the fields we keep:
-    the canonical symbol must appear in the title or the URL path. This is
-    deliberately permissive on the title (``Nvidia`` is not ``NVDA``) but the
-    URL path catches the common ``/nvidia-...``/``/NVDA`` slugs.
+    GDELT matches on free text, so relevance is re-checked on the fields kept.
+    The rule lives in :mod:`news_relevance` so Finnhub and GDELT agree: symbol in
+    the title/slug, a company alias (``Nvidia``, ``Exxon Mobil``), or a
+    name-plus-subject body match. A sector-only piece that merely names the
+    industry is excluded.
     """
-    symbol = normalize_symbol(ticker)
-    haystack = f"{article.get('title', '')} {article.get('url', '')}".lower()
-    if symbol.lower() in haystack:
-        return True
-    return "nvidia" in haystack if symbol.upper() == "NVDA" else False
+    return is_about_company(
+        article.get("title") or "",
+        article.get("summary") or "",
+        article.get("url") or "",
+        ticker,
+    )
 
 
 def _dedupe(articles: list[dict]) -> list[dict]:
@@ -494,20 +631,25 @@ def fetch_news_gdelt(
     # dismissed on seendate alone -- verification is the whole point.
     candidates = relevant[: max(0, budget)]
     verified: list[dict] = []
+    fetch_failed = undated = out_of_window = 0
     for article in candidates:
         url = (article.get("url") or "").strip()
         if not url.startswith(("http://", "https://")):
+            fetch_failed += 1
             continue
         status, page, _kind = _fetch_page(url)
         if status != 200 or not page:
-            logger.warning("GDELT candidate unverifiable (%s): %s", status, url)
+            logger.warning("GDELT candidate unverifiable (%s): %s", status, _redact(url))
+            fetch_failed += 1
             continue
         published, method = extract_publish_time(page)
         if published is None:
-            logger.warning("GDELT candidate has no publisher timestamp: %s", url)
+            logger.warning("GDELT candidate has no publisher timestamp: %s", _redact(url))
+            undated += 1
             continue
-        # Half-open [start, cutoff), matching historical_news.py.
+        # Half-open [start, cutoff), matching the company-news adapters.
         if published < start_dt or published >= cutoff:
+            out_of_window += 1
             continue
         verified.append(
             {
@@ -520,12 +662,31 @@ def fetch_news_gdelt(
         )
 
     if not verified:
+        total = len(candidates)
+        counts = (f"{total} candidate(s): {fetch_failed} unreadable, "
+                  f"{undated} undated, {out_of_window} outside the window")
+        if total and out_of_window == 0 and undated == 0 and fetch_failed == total:
+            # Every publisher page was unreadable. That is an outage on the
+            # verification path, not a fact about GDELT's coverage -- reporting
+            # it as OUT_OF_WINDOW would tell the analyst "this vendor only
+            # serves recent items", which is false (audit H-2).
+            _raise_for(
+                NewsStatus.PROVIDER_UNAVAILABLE,
+                f"GDELT could not be queried: every candidate page was "
+                f"unreadable ({counts})",
+            )
+        if out_of_window:
+            # We proved publication times and they fell outside the window.
+            return _Outcome(
+                status=NewsStatus.OUT_OF_WINDOW,
+                detail=f"none of the discovered articles was published inside the "
+                       f"window ({counts})",
+            )
+        # Nothing was verified and nothing was proved out of window: the pages
+        # were readable but carried no usable date.
         return _Outcome(
-            status=NewsStatus.OUT_OF_WINDOW,
-            detail=(
-                f"{len(candidates)} candidate(s) discovered; none had a verifiable "
-                "publisher publication time inside the window"
-            ),
+            status=NewsStatus.PARSE_ERROR,
+            detail=f"no publisher publication time could be read ({counts})",
         )
     return _Outcome(articles=verified)
 
@@ -566,3 +727,263 @@ def _parse_cutoff(as_of_cutoff: str | None, end_dt: datetime) -> datetime:
         except (TypeError, ValueError):
             pass
     return end_dt + timedelta(days=1)
+
+
+# --- global / macro news -------------------------------------------------
+#
+# GDELT is the project's global-news provider: it is keyless, takes an explicit
+# date range, and every article's publisher timestamp is re-verified. The
+# queries come from ``global_news_queries`` in the active config, so coverage can
+# be broadened without a code change.
+
+
+def _global_query(query: str, ticker: str | None) -> str:
+    """Build one GDELT query from a macro phrase, optionally scoped to a ticker.
+
+    A bare ticker inside a macro query would drag in unrelated symbol matches and
+    also make GDELT treat the phrase terms as optional, so the ticker is supplied
+    as a quoted company-name term that must co-occur, not as a loose alternative.
+    The macro phrase itself stays the primary subject, and the per-article
+    relevance check is *not* applied to global news: these articles are about the
+    topic, and requiring the company name would discard every valid macro item.
+
+    GDELT's boolean grammar allows parentheses **only around OR'd statements**;
+    wrapping a plain AND list in ``(...)`` is rejected with "Parentheses may only
+    be used around OR'd statements." (measured live, 2026-11-15). A configured
+    phrase is therefore emitted as bare space-separated terms, which GDELT reads
+    as an AND, and any explicit ``OR`` the operator wrote is parenthesised.
+    """
+    text = (query or "").strip()
+    if not text:
+        return ""
+    expression = _gdelt_phrase(text)
+    if not expression:
+        return ""
+    if ticker:
+        name = company_name(ticker)
+        return f'{expression} "{name}" sourcelang:english'
+    return f"{expression} sourcelang:english"
+
+
+def _gdelt_phrase(query: str) -> str:
+    """Render a configured phrase in GDELT boolean syntax.
+
+    ``"a OR b c"`` becomes ``(a OR b) c``. Without an ``OR`` the phrase is
+    returned as bare terms; adding parentheses there is a syntax error.
+
+    GDELT rejects keywords containing characters it treats as operators. The
+    measured case is a bare ``&``: the default macro query ``S&P 500`` was
+    answered with "One or more of your keywords contained an illegal character"
+    (2026-11-15 audit), so a token carrying ``&`` (or any of ``| ! ( ) , ; :``)
+    is quoted, which is GDELT's documented remedy for punctuation.
+    """
+    words = [w for w in query.split() if w]
+    if not words:
+        return ""
+    words = [_quote_illegal(w) for w in words]
+    if any(w.upper() == "OR" for w in words):
+        # Parenthesise the whole OR group so the remaining terms are ANDed to it.
+        return "(" + " ".join(words) + ")"
+    # Quote multi-word proper-noun-ish runs as phrases so GDELT requires them
+    # adjacent; individual words stay loose terms.
+    return " ".join(words)
+
+
+#: Characters GDELT's query parser reads as operators rather than text.
+_ILLEGAL_QUERY_CHARS = re.compile(r"[&|!(),;:]")
+
+
+def _quote_illegal(word: str) -> str:
+    """Quote ``word`` when it carries a character GDELT treats as an operator."""
+    if word.startswith('"') or not _ILLEGAL_QUERY_CHARS.search(word):
+        return word
+    return '"' + word.replace('"', "") + '"'
+
+
+def get_global_news_gdelt(
+    curr_date: str,
+    look_back_days: int | None = None,
+    limit: int | None = None,
+    *,
+    as_of_cutoff: str | None = None,
+    ticker: str | None = None,
+) -> str:
+    """Global / macro news for the ``look_back_days`` window ending ``curr_date``.
+
+    Args:
+        curr_date: ``yyyy-mm-dd`` analysis date (the window end).
+        look_back_days: Days to look back; ``None`` uses the configured default.
+        limit: Maximum articles; ``None`` uses the configured default.
+        as_of_cutoff: Exclusive publication cutoff, defaulting to the end of
+            ``curr_date``. Post-cutoff articles are dropped, never rendered.
+        ticker: Optional symbol to corroborate each macro query.
+
+    Returns:
+        Markdown in the same shape as the company-news vendors, or an explicit
+        ``NEWS_STATUS=...`` line. Request-level failures raise so the router can
+        fail over (see :func:`get_news_gdelt`).
+    """
+    from .errors import VendorUnavailableError
+
+    config = get_config()
+    if look_back_days is None:
+        look_back_days = config.get("global_news_lookback_days", 7)
+    if limit is None:
+        limit = config.get("global_news_article_limit", 10)
+    queries = list(config.get("global_news_queries", []))
+    # Bound the requests: one per configured query, never more than the budget.
+    request_budget = _request_budget()
+    if len(queries) > request_budget:
+        logger.warning(
+            "GDELT global news: %d configured queries exceed the per-call request "
+            "budget of %d; only the first %d are queried.",
+            len(queries), request_budget, request_budget,
+        )
+        queries = queries[:request_budget]
+
+    end_dt = datetime.strptime(curr_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    start_dt = end_dt - timedelta(days=int(look_back_days))
+    start_date = f"{start_dt:%Y-%m-%d}"
+    cutoff = _parse_cutoff(as_of_cutoff, end_dt)
+
+    oldest_supported = datetime.now(timezone.utc) - timedelta(days=_WINDOW_DAYS)
+    if start_dt < oldest_supported:
+        return render_status(
+            NewsStatus.HISTORICAL_UNSUPPORTED, vendor="GDELT", subject="global news",
+            start_date=start_date, end_date=curr_date,
+            detail=f"GDELT archives ~3 months; oldest supported start is "
+                   f"{oldest_supported:%Y-%m-%d}",
+        )
+
+    seen: set[str] = set()
+    verified: list[dict] = []
+    failures: list[NewsStatus] = []
+    # Verification re-fetches each publisher page, which is the expensive part of
+    # this call. The company path bounds that work with ``verify_budget``; this
+    # path previously did not, so N macro queries x ``limit`` hits meant up to
+    # N*limit page fetches per call with no ceiling (audit finding, 2026-11-15).
+    # The same budget now applies, shared across all queries.
+    budget = int(config.get("news_verify_budget", _VERIFY_BUDGET))
+    fetch_failed = undated = out_of_window = 0
+    attempts = 0
+    for query in queries:
+        built = _global_query(query, ticker)
+        if not built:
+            continue
+        records, failure, detail = _fetch_articles(built, start_dt, end_dt, limit)
+        if failure is not None:
+            if failure in _IMMEDIATE_CLASSES:
+                # An empty answer for one query is not fatal; keep the others.
+                failures.append(failure)
+                continue
+            # A request-level failure means GDELT cannot answer at all right
+            # now: surface it rather than silently reporting fewer articles.
+            _raise_for(failure, detail)
+        for article in records:
+            title = html.unescape(article.get("title") or "").strip()
+            url = (article.get("url") or "").strip()
+            key = (title.lower() or url)
+            if not key or key in seen:
+                continue
+            if not url.startswith(("http://", "https://")):
+                continue
+            # Record the hit *before* consulting the budget: a discovered but
+            # unverified candidate is evidence of coverage we did not confirm,
+            # not evidence that nothing matched. Moving this after the budget
+            # check made an exhausted budget report EMPTY_VALID ("no macro news
+            # was published"), which is a false claim about the world.
+            seen.add(key)
+            if attempts >= budget:
+                continue
+            attempts += 1
+            status, page, _kind = _fetch_page(url)
+            if status != 200 or not page:
+                fetch_failed += 1
+                continue
+            published, method = extract_publish_time(page)
+            if published is None:
+                undated += 1
+                continue
+            # Half-open [start, cutoff): the same rule as company news.
+            if published < start_dt or published >= cutoff:
+                out_of_window += 1
+                continue
+            verified.append({
+                "title": title,
+                "domain": (article.get("domain") or "").strip() or "unknown",
+                "url": url,
+                "published": published,
+                "method": method,
+            })
+            if len(verified) >= int(limit):
+                break
+        if len(verified) >= int(limit):
+            break
+
+    if not verified:
+        # Distinguish "every query answered that nothing matched" from a mix of
+        # causes. Reporting EMPTY_VALID requires that *no* query implied a
+        # coverage gap (final audit F3: one EMPTY_VALID + one OUT_OF_WINDOW was
+        # being reported as a real absence).
+        coverage_note = (
+            f"{attempts} candidate page(s) checked against a budget of {budget}"
+            if attempts else ""
+        )
+        stats = (
+            f"{len(seen)} hit(s) discovered; {len(verified)} verified inside the "
+            f"window ({fetch_failed} page(s) unreachable, {undated} undated, "
+            f"{out_of_window} outside the window"
+            + (f"; {coverage_note}" if coverage_note else "")
+            + ")"
+        )
+        if failures and all(f is NewsStatus.EMPTY_VALID for f in failures) and not seen:
+            # Every query answered "nothing in this window": a real absence.
+            # ``seen`` having entries means another query did return hits that
+            # could not be verified, which is a coverage gap, not an absence.
+            return render_status(
+                NewsStatus.EMPTY_VALID, vendor="GDELT", subject="global news",
+                start_date=start_date, end_date=curr_date,
+            )
+        if failures:
+            for failure in failures:
+                if failure is not NewsStatus.EMPTY_VALID:
+                    return render_status(
+                        failure, vendor="GDELT", subject="global news",
+                        start_date=start_date, end_date=curr_date,
+                    )
+        if not seen:
+            # No query returned a single hit at all: GDELT answered, and the
+            # answer was "nothing matched". That is an absence, not an outage —
+            # claiming "could not verify" here would disguise a real empty
+            # result as a vendor failure.
+            return render_status(
+                NewsStatus.EMPTY_VALID, vendor="GDELT", subject="global news",
+                start_date=start_date, end_date=curr_date,
+            )
+        # Hits existed but none carried a publisher timestamp inside the window:
+        # the queries answered, the articles were merely older, undated, or the
+        # verification budget ran out before one could be confirmed. Say which,
+        # rather than attributing every case to the articles' age.
+        return render_status(
+            NewsStatus.OUT_OF_WINDOW, vendor="GDELT", subject="global news",
+            start_date=start_date, end_date=curr_date,
+            detail=(
+                f"{len(seen)} hit(s) discovered; {len(verified)} verified inside the "
+                f"window ({stats})"
+            ),
+        )
+
+    lines = [
+        f"## Global Market News, from {start_date} to {curr_date} "
+        f"(GDELT discovery, publish time verified per article):",
+        "",
+        f"{len(verified)} article(s) with a publisher-verified publication time "
+        f"before {cutoff.strftime('%Y-%m-%dT%H:%M')}Z:",
+        "",
+    ]
+    for article in sorted(verified, key=lambda a: a["published"]):
+        lines.append(f"### {article['title']} (source: {article['domain']})")
+        lines.append(f"**Published:** {article['published'].isoformat()}")
+        lines.append(f"Link: {article['url']}")
+        lines.append("")
+    return "\n".join(lines)

@@ -57,15 +57,14 @@ def _isolate_config():
 
 
 #: Network endpoints tests must never reach for real. The default ``get_news``
-#: chain now tries Alpha Vantage and GDELT before yfinance; without this guard
-#: those are live HTTP calls, which makes results depend on the network and on
-#: whatever key happens to be in the environment (and risks scraping history
-#: with a real credential during a test run).
+#: chain is now Finnhub + GDELT; without this guard those are live HTTP calls,
+#: which makes results depend on the network and on whatever key happens to be
+#: in the environment (and risks spending a real credential's quota during a
+#: test run).
 _LIVE_NETWORK_HOSTS = (
-    "alpha_vantage",
-    "alphavantage",
+    "finnhub.io",
     "api.gdeltproject.org",
-    "gdelttopics",
+    "gdeltproject",
 )
 
 
@@ -73,29 +72,28 @@ _LIVE_NETWORK_HOSTS = (
 def _block_live_news_vendors(monkeypatch):
     """Make the news vendors fail fast instead of dialling out.
 
-    The default ``get_news`` chain is now
-    ``alpha_vantage_historical,gdelt,yfinance``. Without this, a test that only
-    patches the yfinance transport would still make a **real** Alpha Vantage or
-    GDELT request first (locally with a real key), so results would depend on
-    the network and on the environment. Both are patched here to raise typed
-    vendor errors, which the router already handles by skipping to the next
-    vendor -- exactly what would happen in production on such a failure.
+    The default ``get_news`` chain is ``finnhub,gdelt``. Without this, a test
+    that only patches one adapter's transport would still make a **real**
+    request to the other (locally with a real key), so results would depend on
+    the network and on the environment. Both transports are replaced with the
+    providers' own deterministic failure shape, which classifies to
+    ``PROVIDER_UNAVAILABLE`` and is handled by the router exactly as a real
+    outage would be.
 
     Tests that exercise these adapters patch their internals themselves, which
     overrides this fixture.
     """
 
-    import tradingagents.dataflows.historical_news as hist
+    import tradingagents.dataflows.finnhub_news as finnhub
 
-    def _refuse_alpha(*_args, **_kwargs):
-        raise OSError("live Alpha Vantage disabled in tests")
-
-    monkeypatch.setattr(hist, "_alpha_vantage_news", _refuse_alpha)
+    monkeypatch.setattr(finnhub, "_request", lambda *a, **k: (None, None, "transport"))
 
     import tradingagents.dataflows.gdelt_news as gdelt
 
     monkeypatch.setattr(gdelt, "_request", lambda *a, **k: (None, None, "transport"))
     monkeypatch.setattr(gdelt, "_fetch_page", lambda *a, **k: (None, None, "transport"))
+    # GDELT asks callers to space requests; tests must not sleep for it.
+    monkeypatch.setattr(gdelt, "_throttle", lambda: None)
 
 
 @pytest.fixture()

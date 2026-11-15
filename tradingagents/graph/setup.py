@@ -85,20 +85,30 @@ class GraphSetup:
         """
         plan = build_analyst_execution_plan(selected_analysts)
 
+        # CAND-01: only meaningful together with the structured switch, so an
+        # ablation arm cannot enable it on a free-text analyst.
+        single_pass = (
+            self.config.get("single_pass_finalization_enabled", False)
+            and self.config.get("structured_analyst_output_enabled", True)
+        )
+
         analyst_factories = {
             "market": lambda: create_market_analyst(
                 self.quick_thinking_llm,
                 structured=self.config.get("structured_analyst_output_enabled", True),
+                single_pass=single_pass,
             ),
             "social": lambda: create_sentiment_analyst(self.quick_thinking_llm),
             "news": lambda: create_news_analyst(
                 self.quick_thinking_llm,
                 batch_macro=self.config.get("batch_macro_enabled", True),
                 structured=self.config.get("structured_analyst_output_enabled", True),
+                single_pass=single_pass,
             ),
             "fundamentals": lambda: create_fundamentals_analyst(
                 self.quick_thinking_llm,
                 structured=self.config.get("structured_analyst_output_enabled", True),
+                single_pass=single_pass,
             ),
         }
 

@@ -74,6 +74,15 @@ CLASSES: tuple[NewsStatus, ...] = tuple(NewsStatus)
 #: be rendered as, or read as, a news signal.
 PROVES_REAL_NEWS: frozenset[NewsStatus] = frozenset({NewsStatus.SUCCESS_REAL_CONTENT})
 
+#: Classes that are *facts about the window* rather than failures: the vendor
+#: was reached and answered, and the answer is "nothing usable here". A combined
+#: status may report one of these without hiding an outage beside it.
+ABSENCE_CLASSES: frozenset[NewsStatus] = frozenset({
+    NewsStatus.EMPTY_VALID,
+    NewsStatus.OUT_OF_WINDOW,
+    NewsStatus.HISTORICAL_UNSUPPORTED,
+})
+
 #: Classes worth retrying within a single run. A permanent condition (auth,
 #: retired endpoint, unsupported window) is *not* retried: retrying it burns
 #: the probe budget and delays the run for a guaranteed failure.
@@ -89,7 +98,7 @@ _STATUS_TEXT = {
     NewsStatus.OUT_OF_WINDOW: "the vendor only serves recent items, none in this window",
     NewsStatus.AUTH_MISSING: "no credential is configured for this vendor",
     NewsStatus.AUTH_INVALID: "the vendor rejected the credential",
-    NewsStatus.RATE_LIMITED: "the vendor throttled the request",
+    NewsStatus.RATE_LIMITED: "the vendor rate-limited the request",
     NewsStatus.TIMEOUT: "the request timed out",
     NewsStatus.PROVIDER_UNAVAILABLE: "the vendor endpoint is not serving (retired or down)",
     NewsStatus.HTTP_ERROR: "the vendor returned an HTTP error",
@@ -133,6 +142,19 @@ def render_status(
             f"between {start_date} and {end_date} — {reason}{extra}. "
             "This is a real absence: do not infer that the instrument is quiet "
             "in any particular direction."
+        )
+    # CONFIG_DISABLED is a decision, not an outage. The shared "could not
+    # answer" sentence is correct for every failure class (the vendor tried and
+    # failed) but wrong here: nothing was attempted, so presenting it as an
+    # outage would invite a reader to wait for recovery that will not come
+    # (independent audit A-03, 2026-11-15).
+    if status is NewsStatus.CONFIG_DISABLED:
+        return (
+            f"NEWS_STATUS={status.value}: {subject} news was deliberately not "
+            f"requested for {start_date}..{end_date} — {reason}{extra}. Nothing "
+            "was attempted and no error occurred; this protocol simply excludes "
+            "this source for every arm. This says nothing about the instrument: "
+            "report the news as excluded, not as unavailable or neutral."
         )
     return (
         f"NEWS_STATUS={status.value}: {vendor} could not answer for {subject} "

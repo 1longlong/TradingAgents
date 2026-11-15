@@ -1,0 +1,43 @@
+{
+  "budget": {
+    "max_total_tokens": null
+  },
+  "cache_policy": "preserve_existing",
+  "cases": [
+    {
+      "analysts": [
+        "market",
+        "news",
+        "fundamentals"
+      ],
+      "case_id": "jpm_2026_09_23",
+      "research_rounds": 1,
+      "risk_rounds": 1,
+      "ticker": "JPM",
+      "trade_date": "2026-09-23"
+    }
+  ],
+  "checkpoint_enabled": false,
+  "config_sha256": "ecaf062211a22bc993263bc7658bb67bd43c66c2fe58b79a1a6c96f67d91211c",
+  "deep_model": "CS5351/DeepSeek-V4-Flash",
+  "description": "CAND-01 x batch-macro 2x2, arm B on JPM (execution position 11); protocol V2",
+  "experiment_id": "R11",
+  "measured_runs": 1,
+  "news_scope": {
+    "company_news": "finnhub",
+    "gdelt": "excluded",
+    "global_news": "finnhub:CONFIG_DISABLED"
+  },
+  "output_language": "English",
+  "protocol_version": "V2",
+  "provider": "openai_compatible",
+  "quick_model": "CS5351/DeepSeek-V4-Flash",
+  "schema_version": 2,
+  "switches": {
+    "batch_macro": false,
+    "s2_downstream": true,
+    "single_pass": false,
+    "structured": true
+  },
+  "switches_required": true
+}

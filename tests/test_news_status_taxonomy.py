@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import json
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
@@ -43,7 +43,12 @@ from tradingagents.dataflows.news_status import (
     render_status,
 )
 
-START, END = "2026-09-23", "2026-09-23"
+#: The window is derived from the real clock so the suite does not rot: GDELT
+#: refuses windows older than ~89 days, and a literal "2026-09-23" would become
+#: HISTORICAL_UNSUPPORTED in December 2026 (audit finding F3, 2026-11-15).
+_END_DT = datetime.now(timezone.utc) - timedelta(days=2)
+START = _END_DT.strftime("%Y-%m-%d")
+END = START
 
 
 # --------------------------------------------------------------------------
@@ -158,8 +163,10 @@ class GdeltWindowTest(unittest.TestCase):
 
     def test_article_published_the_day_before_is_excluded(self):
         payload = _gdelt_payload(_hit("Nvidia price prediction", "https://x/nvda-1"))
-        # seendate says 09-23; the publisher says 09-22. The publisher wins.
-        page = '<script>{"datePublished": "2026-09-22T14:30:44Z"}</script>'
+        # seendate says the target day; the publisher says the day before. The
+        # publisher wins. Both dates follow the window so the suite cannot rot.
+        before = (_END_DT - timedelta(days=1)).strftime("%Y-%m-%dT14:30:44Z")
+        page = '<script>{"datePublished": "' + before + '"}</script>'
         with patch.object(gn, "_request", return_value=(200, payload, "")), \
              patch.object(gn, "_fetch_page", return_value=(200, page, "")), \
              patch.object(gn, "_throttle"):
@@ -169,24 +176,30 @@ class GdeltWindowTest(unittest.TestCase):
 
     def test_article_published_inside_the_day_is_kept(self):
         payload = _gdelt_payload(_hit("Nvidia ships", "https://x/nvda-2"))
-        page = '<script>{"datePublished": "2026-09-23T04:00:00Z"}</script>'
+        inside = _END_DT.strftime("%Y-%m-%dT%H:%M:%SZ")
+        page = '<script>{"datePublished": "' + inside + '"}</script>'
         with patch.object(gn, "_request", return_value=(200, payload, "")), \
              patch.object(gn, "_fetch_page", return_value=(200, page, "")), \
              patch.object(gn, "_throttle"):
             out = gn.get_news_gdelt("NVDA", START, END)
         self.assertIn("Nvidia ships", out)
-        self.assertIn("2026-09-23T04:00:00+00:00", out)
+        self.assertIn(_END_DT.strftime("%Y-%m-%dT%H:%M:%S+00:00"), out)
         self.assertIn("https://x/nvda-2", out)
         self.assertNotIn("NEWS_STATUS=", out)
 
     def test_unverifiable_page_is_dropped_not_assumed(self):
+        # A candidate whose publisher page cannot be read is never assumed to be
+        # in-window news. Every candidate failing to load is an outage on the
+        # verification path, so it must be raised (the router can try another
+        # vendor), never reported as "no news" or "only serves recent items".
         payload = _gdelt_payload(_hit("Nvidia rumor", "https://x/nvda-3"))
         with patch.object(gn, "_request", return_value=(200, payload, "")), \
              patch.object(gn, "_fetch_page", return_value=(404, None, "")), \
              patch.object(gn, "_throttle"):
-            out = gn.get_news_gdelt("NVDA", START, END)
-        self.assertNotIn("Nvidia rumor", out)
-        self.assertIn("OUT_OF_WINDOW", out)
+            with self.assertRaises(VendorUnavailableError) as ctx:
+                gn.get_news_gdelt("NVDA", START, END)
+        self.assertNotIn("Nvidia rumor", str(ctx.exception))
+        self.assertNotIn("OUT_OF_WINDOW", str(ctx.exception))
 
     def test_irrelevant_hit_is_not_ticker_news(self):
         payload = _gdelt_payload(_hit("Unrelated story", "https://x/other"))
@@ -263,9 +276,9 @@ class GdeltFailureTest(unittest.TestCase):
 
         with patch.object(gn, "_request", side_effect=_capture), \
              patch.object(gn, "_throttle"):
-            gn.get_news_gdelt("NVDA", "2026-09-23", "2026-09-23")
-        self.assertIn("startdatetime=20260923000000", seen["url"])
-        self.assertIn("enddatetime=20260923235959", seen["url"])
+            gn.get_news_gdelt("NVDA", START, END)
+        self.assertIn(f"startdatetime={_END_DT.strftime('%Y%m%d')}000000", seen["url"])
+        self.assertIn(f"enddatetime={_END_DT.strftime('%Y%m%d')}235959", seen["url"])
 
     def test_invalid_query_body_is_not_a_parse_error(self):
         with patch.object(gn, "_request", return_value=(200, "Invalid query end date.", "")), \
@@ -278,29 +291,33 @@ class GdeltFailureTest(unittest.TestCase):
         self.assertNotIn("parse_error", str(ctx.exception))
         self.assertNotIsInstance(ctx.exception, VendorTimeoutError)
         with patch.object(gn, "_request", return_value=(429, "", "")) as request, \
-             patch.object(gn, "_throttle"):
+             patch.object(gn, "_throttle"), patch.object(gn.time, "sleep") as sleep:
             with self.assertRaises(VendorRateLimitError):
                 gn.get_news_gdelt("NVDA", START, END)
         self.assertLessEqual(request.call_count, 2)
+        # The one retry waits the measured backoff rather than a second 5 s sleep.
+        sleep.assert_called_once_with(gn._RATE_LIMIT_BACKOFF_SECONDS)
 
     def test_a_gdelt_failure_does_not_mask_later_vendors(self):
         # The live defect: GDELT returned failure *text*, the router accepted it
-        # as the answer, and yfinance was never asked.
-        from tradingagents.dataflows import yfinance_news as yn
+        # as the answer, and the next vendor was never asked.
         from tradingagents.dataflows import interface as iface
 
-        class _Ticker:
-            def __init__(self, symbol):
-                pass
+        asked = []
 
-            def get_news(self, count=0):
-                raise AssertionError("reached yfinance")
+        def _second_vendor(*_a, **_k):
+            asked.append("second")
+            raise VendorUnavailableError("downstream vendor unavailable")
 
-        with patch.object(gn, "_request", return_value=(429, "", "")), \
-             patch.object(gn, "_throttle"), \
-             patch.object(yn.yf, "Ticker") as ticker:
-            ticker.side_effect = yn.YFDataException("*** YAHOO! FINANCE IS CURRENTLY DOWN! ***")
+        with patch.dict(iface.VENDOR_METHODS["get_news"],
+                        {"gdelt": gn.get_news_gdelt, "second": _second_vendor},
+                        clear=True), \
+             patch.object(iface, "get_config",
+                          return_value={"tool_vendors": {"get_news": "gdelt,second"}}), \
+             patch.object(gn, "_request", return_value=(429, "", "")), \
+             patch.object(gn, "_throttle"), patch.object(gn.time, "sleep"):
             out = iface.route_to_vendor("get_news", "NVDA", START, END)
+        self.assertEqual(asked, ["second"], "GDELT's failure text masked the next vendor")
         # Both vendors failed, so the router answers for the whole chain rather
         # than the first vendor's own string.
         self.assertIn("DATA_UNAVAILABLE", out)
@@ -309,17 +326,8 @@ class GdeltFailureTest(unittest.TestCase):
         # Audit W7: a timeout must be its own type; the router must still ask the
         # next vendor and, when none serves, still end in DATA_UNAVAILABLE.
         from tradingagents.dataflows import interface as iface
-        from tradingagents.dataflows import yfinance_news as yn
 
         asked = []
-
-        class _Ticker:
-            def __init__(self, symbol):
-                pass
-
-            def get_news(self, count=0):
-                asked.append("yfinance")
-                raise yn.YFDataException("*** YAHOO! FINANCE IS CURRENTLY DOWN! ***")
 
         # 1) The adapter itself raises the timeout class.
         with patch.object(gn, "_request", return_value=(None, None, "timeout")), \
@@ -329,20 +337,26 @@ class GdeltFailureTest(unittest.TestCase):
                 gn.get_news_gdelt("NVDA", START, END)
         self.assertNotIsInstance(ctx.value, VendorRateLimitError)
 
-        # 2) Through the router: GDELT is not accepted as an answer, the next
-        #    vendor is asked, and the chain ends in the sentinel.
-        with patch.dict(iface.VENDOR_METHODS["get_news"], clear=False), \
+        # 2) Through the router: GDELT's timeout is not accepted as an answer,
+        #    the next vendor is asked, and the chain ends in the sentinel.
+        def _second_vendor(*_a, **_k):
+            asked.append("second")
+            raise VendorRateLimitError("downstream vendor unavailable")
+
+        with patch.dict(iface.VENDOR_METHODS["get_news"],
+                        {"gdelt": gn.get_news_gdelt, "second": _second_vendor},
+                        clear=True), \
+             patch.object(iface, "get_config",
+                          return_value={"tool_vendors": {"get_news": "gdelt,second"}}), \
              patch.object(gn, "_request", return_value=(None, None, "timeout")), \
              patch.object(gn, "_throttle"), \
-             patch.object(gn, "_MAX_ATTEMPTS", 1), \
-             patch.object(yn.yf, "Ticker") as ticker:
-            ticker.side_effect = _Ticker
-            iface.VENDOR_METHODS["get_news"]["gdelt"] = gn.get_news_gdelt
+             patch.object(gn, "_MAX_ATTEMPTS", 1):
             try:
                 out = iface.route_to_vendor("get_news", "NVDA", START, END)
             except Exception as routed_exc:  # noqa: BLE001
                 out = f"RAISED {type(routed_exc).__name__}: {routed_exc}"
-        self.assertTrue(asked, "the router did not try the next vendor after a timeout")
+        self.assertEqual(asked, ["second"],
+                         "the router did not try the next vendor after a timeout")
         self.assertIn("DATA_UNAVAILABLE", out)
         self.assertNotIn("RATE_LIMIT", out)
         self.assertNotIn("VendorRateLimitError", out)
@@ -404,7 +418,7 @@ class NewsAvailabilityTest(unittest.TestCase):
                 )
 
     def test_header_only_render_is_unavailable(self):
-        header = "## NVDA News, from 2026-09-23 to 2026-09-23:\n\n0 article(s):\n\n"
+        header = f"## NVDA News, from {START} to {END}:\n\n0 article(s):\n\n"
         self.assertEqual(
             classify_news_source_availability([_ToolMsg("get_news", header)]),
             NewsSourceStatus.UNAVAILABLE,
@@ -420,7 +434,9 @@ class NewsAvailabilityTest(unittest.TestCase):
     def test_yfinance_no_news_found_is_unavailable(self):
         # yfinance's own absence wording carries no NEWS_STATUS token; before
         # audit D-1 it classified as AVAILABLE.
-        text = "No news found for NVDA between 2026-09-16 and 2026-09-23 (vendor returned no articles in the window)."
+        text = ("No news found for NVDA between "
+                f"{(_END_DT - timedelta(days=7)).strftime('%Y-%m-%d')} and {END} "
+                "(vendor returned no articles in the window).")
         self.assertEqual(
             classify_news_source_availability([_ToolMsg("get_news", text)]),
             NewsSourceStatus.UNAVAILABLE,

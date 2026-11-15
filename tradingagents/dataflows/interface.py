@@ -4,11 +4,9 @@ from .alpha_vantage import (
     get_balance_sheet as get_alpha_vantage_balance_sheet,
     get_cashflow as get_alpha_vantage_cashflow,
     get_fundamentals as get_alpha_vantage_fundamentals,
-    get_global_news as get_alpha_vantage_global_news,
     get_income_statement as get_alpha_vantage_income_statement,
     get_indicator as get_alpha_vantage_indicator,
     get_insider_transactions as get_alpha_vantage_insider_transactions,
-    get_news as get_alpha_vantage_news,
     get_stock as get_alpha_vantage_stock,
 )
 from .config import get_config
@@ -34,9 +32,8 @@ from .y_finance import (
     get_stock_stats_indicators_window,
     get_YFin_data_online,
 )
-from .historical_news import get_news_historical as get_historical_news
-from .gdelt_news import get_news_gdelt
-from .yfinance_news import get_global_news_yfinance, get_news_yfinance
+from .finnhub_news import get_global_news_finnhub, get_news_finnhub_only
+from .gdelt_news import get_global_news_gdelt, get_news_gdelt
 
 logger = logging.getLogger(__name__)
 
@@ -134,18 +131,22 @@ VENDOR_METHODS = {
     },
     # news_data
     "get_news": {
-        # Historical first: these are the vendors whose endpoints accept a
-        # date range, so they are the only ones that can answer a backtest
-        # window. ``yfinance`` last: its ticker-news endpoint is retired (404)
-        # and it only ever served recent items (campaign 20261107_140536).
-        "alpha_vantage_historical": get_historical_news,
+        # Finnhub-only scope: the *only* routes here are Finnhub's symbol-scoped
+        # company feed and, for historical evidence runs only, the GDELT
+        # ticker feed. ``get_news_finnhub_only`` does not contact GDELT, so the
+        # configured Finnhub path can never acquire silent secondary coverage.
+        # The Alpha Vantage NEWS_SENTIMENT and Yahoo news paths were removed:
+        # Yahoo's ticker endpoint is retired (HTTP 404), and Alpha Vantage needs
+        # a key this project does not provision for news.
+        "finnhub": get_news_finnhub_only,
         "gdelt": get_news_gdelt,
-        "alpha_vantage": get_alpha_vantage_news,
-        "yfinance": get_news_yfinance,
     },
     "get_global_news": {
-        "yfinance": get_global_news_yfinance,
-        "alpha_vantage": get_alpha_vantage_global_news,
+        # Finnhub has no global/macro endpoint. Under the Finnhub-only scope the
+        # ``finnhub`` route answers CONFIG_DISABLED explicitly instead of
+        # borrowing company news, and GDELT is not reachable from it.
+        "finnhub": get_global_news_finnhub,
+        "gdelt": get_global_news_gdelt,
     },
     "get_insider_transactions": {
         "alpha_vantage": get_alpha_vantage_insider_transactions,

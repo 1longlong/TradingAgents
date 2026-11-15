@@ -137,7 +137,8 @@ def create_sentiment_analyst(llm):
         news_block = _prefetch_or_degrade(
             "news",
             lambda: record_prefetch_call(
-                "news", get_news.func, ticker, start_date, end_date
+                "news", get_news.func, ticker, start_date, end_date,
+                trade_date=end_date,
             ),
         )
         # Pass the analysis window so a historical run trims social posts to it

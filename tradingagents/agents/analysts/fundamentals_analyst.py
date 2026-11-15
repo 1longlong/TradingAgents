@@ -7,6 +7,8 @@ from tradingagents.agents.schemas import (
 from tradingagents.agents.utils.structured import (
     bind_structured,
     finalize_analyst_report,
+    finalize_single_pass,
+    run_data_tools,
 )
 
 from tradingagents.agents.utils.agent_utils import (
@@ -19,12 +21,15 @@ from tradingagents.agents.utils.agent_utils import (
 )
 
 
-def create_fundamentals_analyst(llm, structured: bool = True):
+def create_fundamentals_analyst(llm, structured: bool = True, single_pass: bool = False):
     """Create the fundamentals analyst node.
 
     ``structured`` is the ablation switch for native structured output. When
     False the analyst never binds a schema and emits free text, so an ablation
     arm can run the pre-S2 path with every other variable held constant.
+
+    ``single_pass`` is the CAND-01 experiment switch; see
+    ``create_market_analyst``. Ignored when ``structured`` is False.
     """
     structured_llm = (
         bind_structured(llm, FundamentalsAnalystReport, "Fundamentals Analyst")
@@ -73,6 +78,26 @@ def create_fundamentals_analyst(llm, structured: bool = True):
         prompt = prompt.partial(instrument_context=instrument_context)
 
         chain = prompt | llm.bind_tools(tools)
+
+        if single_pass:
+            report, report_obj, emitted = finalize_single_pass(
+                llm=llm,
+                structured_llm=structured_llm,
+                prompt=prompt,
+                messages=state["messages"],
+                tools=tools,
+                schema=FundamentalsAnalystReport,
+                render=render_fundamentals_analyst_report,
+                agent_name="Fundamentals Analyst",
+                run_tools=run_data_tools(tools, state=state),
+                state=state,
+            )
+            return {
+                "messages": emitted,
+                "fundamentals_report": report,
+                # Typed side-channel; see market_analyst_node for the contract.
+                "fundamentals_report_obj": report_obj,
+            }
 
         result = chain.invoke(state["messages"])
 

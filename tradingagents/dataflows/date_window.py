@@ -138,6 +138,30 @@ def as_of_window(start_date: str, end_date: str, trade_date: str) -> tuple[str, 
     return f"{_parse(end) - span:%Y-%m-%d}", end
 
 
+def publication_cutoff(trade_date: str | None) -> str | None:
+    """The exclusive publication cutoff a news vendor should be given, or None.
+
+    A trading decision dated ``D`` may use anything published up to the end of
+    ``D`` (UTC), but *not* anything published during ``D`` after the decision
+    was taken. The date-only window cannot express that: a vendor asked for
+    ``end_date=D`` legitimately returns a story filed at 21:15 that day, which
+    is future information for a decision made before it.
+
+    The cutoff is therefore the first instant *after* ``trade_date`` — midnight
+    UTC of the following day — so every timestamp inside the trading day is
+    admitted and nothing on a later day can be. This is deliberately the
+    earliest defensible boundary: it never drops same-day news, and it never
+    admits news from the next day.
+
+    Returns None when there is no run date (a direct call outside a graph run),
+    which leaves the vendor's own end-of-window default in force.
+    """
+    parsed = _parse(trade_date)
+    if parsed is None:
+        return None
+    return f"{parsed + timedelta(days=1):%Y-%m-%d}T00:00:00Z"
+
+
 def withhold_live_profile(curr_date: str | None, label: str) -> str | None:
     """Notice to serve instead of a live-only company profile, or None to serve it.
 

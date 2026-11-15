@@ -1,0 +1,12 @@
+{
+  "experiment_definition_sha256": "ebfefe7b4d0867465156f3f7d03556e15b1a829c0091bd91145ea3a61833ffc8",
+  "generator": "scripts/gen_cand01_batch_16run_specs_v2.py",
+  "generator_sha256": "7f28bf6a94902c95a010c26dc208ada550de807a864ca4fd708d749dc49d3828",
+  "git_branch": "HEAD",
+  "git_head_commit": "9948bf8545cceeb0d7a60cda913a04826a06c007",
+  "git_working_tree_dirty": true,
+  "phase": "spec_generation",
+  "python_version": "3.14.7",
+  "schema_version": 1,
+  "timestamp_utc": "2026-11-15T11:19:30.852085+00:00"
+}

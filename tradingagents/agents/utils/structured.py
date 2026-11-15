@@ -24,6 +24,7 @@ from collections.abc import Callable
 from typing import Any, TypeVar
 
 from langchain_core.messages import HumanMessage
+from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import BaseModel
 
 from tradingagents.observability import record_structured_attempt
@@ -79,6 +80,22 @@ STRUCTURED_FINALISATION_INSTRUCTION = (
     "needed could not be retrieved."
 )
 
+# CAND-01: the single-pass terminal call. The same instruction as above, but
+# this one is delivered *on the call that would otherwise have written prose*,
+# so it has to say how to use the tools it is still bound to. The model may keep
+# fetching data; it only has to stop asking for tools when it is ready to answer.
+SINGLE_PASS_FINALISATION_INSTRUCTION = (
+    STRUCTURED_FINALISATION_INSTRUCTION
+    + " If a tool result is still missing and you need it, call that data tool"
+    " first; otherwise answer with the schema's tool call now."
+)
+
+# Upper bound on schema-bound rounds for one analyst node (data-tool round,
+# then the next). It is a safety stop, not a policy: the model normally answers
+# with the schema on its first or second round. When it is hit, the run falls
+# back to the RC1 two-call finalisation rather than dropping evidence.
+SINGLE_PASS_MAX_ROUNDS = 4
+
 
 def _free_text_tail(prompt: Any, section_marker: str = "## Output") -> Any:
     """The free-text output section of ``prompt`` (guidance + closing lines).
@@ -133,6 +150,37 @@ def bind_structured(llm: Any, schema: type[T], agent_name: str) -> Any | None:
         return None
     record_structured_attempt(agent_name, kind="success")
     return llm_with_schema
+
+
+def bind_tools_with_schema(llm: Any, tools: list[Any], schema: type[T], agent_name: str) -> Any | None:
+    """Bind data ``tools`` *and* the output ``schema`` to one runnable.
+
+    ``with_structured_output`` (used by :func:`bind_structured`) binds the schema
+    as the *only* tool and sets ``tool_choice`` to it, so it cannot hold a tool
+    loop. This helper binds the schema as one more tool alongside the data tools,
+    which lets a single call both fetch data and emit the typed report.
+
+    No ``tool_choice`` is sent. That is deliberate: it keeps the call valid on
+    providers that reject the parameter (DeepSeek thinking models, MiniMax — see
+    ``llm_clients/capabilities.py``), and it is what allows the model to keep
+    calling data tools on this turn. ``parallel_tool_calls`` is left at the
+    provider default; a second schema call on the same turn is handled by
+    :func:`strip_schema_tool_calls`.
+
+    Returns ``None`` on the same providers where :func:`bind_structured` does, so
+    callers fall back to the two-call path.
+    """
+    try:
+        bound = llm.bind_tools([*tools, schema])
+    except (NotImplementedError, AttributeError) as exc:
+        logger.warning(
+            "%s: provider cannot bind data tools and the schema together (%s); "
+            "using the two-call structured finalisation",
+            agent_name, exc,
+        )
+        record_structured_attempt(agent_name, kind="unsupported", error=exc)
+        return None
+    return bound
 
 
 def invoke_structured_or_freetext(
@@ -286,6 +334,59 @@ def _prepare_structured_messages(messages: list[Any]) -> list[Any]:
     return body + [HumanMessage(content=STRUCTURED_FINALISATION_INSTRUCTION)]
 
 
+def _find_tool_messages(messages: list[Any]) -> list[Any]:
+    """The tool-result turns in ``messages``, in order."""
+    return [m for m in messages if getattr(m, "type", None) == "tool"]
+
+
+def _strip_partial_schema_call(result: Any, schema_name: str) -> tuple[list[Any], bool]:
+    """Replace the schema tool-call inside ``result`` with a plain continuation.
+
+    A single-pass terminal call is bound to *both* the data tools and the schema
+    (see :func:`bind_tools_with_schema`), so the model may answer with the schema
+    tool call and no content. That message cannot be stored as-is: the graph's
+    clear/tool nodes and the next analyst's history would see a dangling schema
+    tool call, and replaying it into a data-tool loop makes the model believe the
+    report is already filed.
+
+    Returns ``(messages, emitted_schema)``. When the schema call is present it is
+    removed and replaced by a short instruction to emit the object now; the
+    structured finalisation call that follows then produces it.
+    """
+    tool_calls = list(getattr(result, "tool_calls", None) or [])
+    schema_calls = [
+        call for call in tool_calls
+        if (call.get("name") if isinstance(call, dict) else None) == schema_name
+    ]
+    if not schema_calls:
+        return [result], False
+    remaining = [c for c in tool_calls if c not in schema_calls]
+    content = getattr(result, "content", "") or ""
+    if remaining:
+        replacement = result.model_copy(update={"tool_calls": remaining})
+    else:
+        replacement = HumanMessage(
+            content=(content + "\n\n" if content.strip() else "")
+            + "Emit the final report as the structured object now; the tool "
+              "results above are complete."
+        )
+    return [replacement], True
+
+
+def _single_pass_messages(messages: list[Any]) -> list[Any]:
+    """Message list for the schema-bound terminal call that replaces prose.
+
+    This is :func:`_prepare_structured_messages` applied to a conversation that
+    has **no trailing assistant turn to drop**: the call is made before the model
+    has written any prose. The prose-layout instructions are still withheld for
+    the same measured reason (they competed with the schema), and the same
+    closing instruction is appended.
+    """
+    return _without_free_text_guidance(messages) + [
+        HumanMessage(content=SINGLE_PASS_FINALISATION_INSTRUCTION)
+    ]
+
+
 def finalize_analyst_report(
     llm: Any,
     structured_llm: Any | None,
@@ -361,3 +462,454 @@ def finalize_analyst_report(
             started_at=started_at, ended_at=time.monotonic(),
         )
         return free_text_block, None
+
+
+
+def _schema_tool_name(schema: type[T]) -> str:
+    """The tool name a Pydantic schema is bound under."""
+    return convert_to_openai_tool(schema)["function"]["name"]
+
+
+def run_data_tools(
+    tools: list[Any], state: dict[str, Any] | None = None
+) -> Callable[[list[dict[str, Any]]], list[Any]]:
+    """Build a runner that executes tool calls into ``ToolMessage`` results.
+
+    Mirrors ``ToolNode``'s contract for the cases a single analyst node can hit:
+    one ``ToolMessage`` per call, carrying the call id and tool name, and a
+    failed tool becomes a ``status="error"`` message the model can react to
+    instead of aborting the run (``ToolNode`` does the same). Tools are looked up
+    by name from the same list the analyst bound, so a name the model invented is
+    reported back as an error rather than executed.
+
+    ``state`` is the graph state the call was made in. Every data tool declares a
+    hidden ``trade_date: Annotated[str, InjectedState("trade_date")]`` parameter,
+    which ``ToolNode`` injects and which does **not** appear in the tool's JSON
+    schema — so ``tool.invoke(args)`` alone would leave it at its ``""`` default.
+    For tools that clamp their window to ``trade_date`` that silently returns a
+    different (later) window than the graph would, which can read data after the
+    trade date. Passing ``state`` restores the injection; keys the tool does not
+    accept are dropped, so an absent ``trade_date`` behaves exactly as before.
+
+    Injected values are **trusted state, never the model's**. ``ToolNode`` strips
+    any caller-supplied value for an injected argument and then overlays the
+    state-derived one (``langgraph.prebuilt.tool_node.ToolNode._inject_tool_args``):
+    "This prevents an LLM from forging hidden InjectedToolArg fields via
+    ToolCall.args." A model that emits its own ``trade_date`` must therefore not
+    be able to widen the window past the run date, so this runner does the same:
+    every injected key is removed from the model's args and replaced by the value
+    from ``state``.
+    """
+    from langgraph.prebuilt.tool_node import InjectedState
+
+    from langchain_core.messages import ToolMessage
+
+    by_name: dict[str, Any] = {}
+    # name -> {tool_arg: state_key | None}; every entry is stripped from the
+    # model's args, matching ToolNode's ``all_injected_keys``.
+    injected: dict[str, dict[str, str | None]] = {}
+    # name -> required injected args (ToolNode raises when these are missing).
+    injected_required: dict[str, set[str]] = {}
+    try:
+        from langgraph.prebuilt.tool_node import _get_all_injected_args
+    except Exception:  # noqa: BLE001 - private helper moved; use the schema scan
+        _get_all_injected_args = None
+
+    for tool in tools:
+        name = getattr(tool, "name", None) or getattr(tool, "__name__", None)
+        if not name:
+            continue
+        by_name[name] = tool
+        fields: dict[str, str | None] = {}
+        required: set[str] = set()
+        if _get_all_injected_args is not None:
+            try:
+                info = _get_all_injected_args(tool)
+                if info.state:
+                    fields.update(info.state)
+                    required = set(info.state) - set(info._optional_state_args)
+            except Exception:  # noqa: BLE001 - fake tools in tests have no schema
+                fields = {}
+        if not fields:
+            schema = getattr(tool, "args_schema", None)
+            for param, fld in (getattr(schema, "model_fields", None) or {}).items():
+                for meta in getattr(fld, "metadata", None) or []:
+                    if isinstance(meta, InjectedState):
+                        fields[param] = meta.field
+                        if fld.is_required():
+                            required.add(param)
+        if fields:
+            injected[name] = fields
+            injected_required[name] = required
+    state = state or {}
+
+    def _injected_args(name: str, args: dict[str, Any]) -> dict[str, Any]:
+        fields = injected.get(name)
+        if not fields:
+            return args
+        trusted: dict[str, Any] = {}
+        for tool_arg, state_key in fields.items():
+            if not state_key:
+                # ToolNode injects the whole state dict for a field-less
+                # InjectedState.
+                trusted[tool_arg] = state
+            elif state_key in state:
+                trusted[tool_arg] = state[state_key]
+            elif tool_arg in injected_required.get(name, set()):
+                # ToolNode raises KeyError when a required injected field is
+                # absent from state. Raising here turns that into a status="error"
+                # ToolMessage instead of letting the tool run with a forged or
+                # default value.
+                raise KeyError(state_key)
+            # Optional field with no state value: leave the tool's own default.
+        # Strip caller-supplied values for injected args, then add back only the
+        # trusted ones (ToolNode's ordering, so state always wins).
+        stripped = {k: v for k, v in args.items() if k not in fields}
+        return {**stripped, **trusted}
+
+    def _run(calls: list[dict[str, Any]]) -> list[Any]:
+        results = []
+        for call in calls:
+            name = call.get("name")
+            tool = by_name.get(name)
+            if tool is None:
+                results.append(ToolMessage(
+                    content=f"Error: {name} is not a valid tool, try one of "
+                            f"{sorted(by_name)}.",
+                    name=name, tool_call_id=call.get("id"), status="error",
+                ))
+                continue
+            try:
+                content = tool.invoke(
+                    _injected_args(name, call.get("args") or {})
+                )
+                results.append(ToolMessage(
+                    content=content if isinstance(content, str) else str(content),
+                    name=name, tool_call_id=call.get("id"),
+                ))
+            except Exception as exc:  # noqa: BLE001 - a tool error is a message
+                results.append(ToolMessage(
+                    content=f"Error: {type(exc).__name__}: {exc}",
+                    name=name, tool_call_id=call.get("id"), status="error",
+                ))
+        return results
+
+    return _run
+
+
+def _terminal_messages(
+    emitted: list[Any],
+    history: list[Any],
+    rendered: str,
+    *,
+    drop_last: bool = True,
+) -> list[Any]:
+    """The assistant/tool messages to return when the loop ends deliberately.
+
+    LangGraph's routing reads ``state["messages"][-1].tool_calls``
+    (``ConditionalLogic.should_continue_*``) and ``MessagesState`` appends what a
+    node returns. So whatever this node hands back must (a) be a legal
+    assistant/tool sequence and (b) leave an assistant turn **without** pending
+    tool calls last, or the graph routes back into the tool node.
+
+    ``emitted`` alone is not enough. It holds only assistant turns; the
+    ``ToolMessage`` results this runner executed live in ``history``. Returning
+    the assistant turns without their results leaves a dangling tool call at the
+    end of the state, the tool node runs that call again, and the analyst is
+    re-entered -- an unbounded loop that also re-executes the data tool.
+
+    So return the executed turns **with** their results, and finish with a
+    no-tool-call ``AIMessage`` carrying the rendered report. The schema-carrying
+    turn itself is dropped (it is not a data tool result and must never be
+    replayed). On the common k>=1 path this is the k data-tool rounds plus their
+    results plus one terminal turn.
+    """
+    from langchain_core.messages import AIMessage
+
+    # Build the sequence straight from ``emitted`` (the assistant turns, in
+    # order) plus the results this runner executed, so every data tool call is
+    # immediately followed by its own ``ToolMessage``. Slicing ``history`` is
+    # not equivalent: ``history`` interleaves results, so its tail length does
+    # not line up with ``len(emitted)`` once the schema turn is present.
+    results: dict[str, Any] = {}
+    for m in history:
+        if getattr(m, "type", None) == "tool" and getattr(m, "tool_call_id", None):
+            results[m.tool_call_id] = m
+
+    turns: list[Any] = []
+    for i, turn in enumerate(emitted):
+        if drop_last and i == len(emitted) - 1:
+            # The schema-carrying turn is not a data tool result: never replay
+            # it from shared state.
+            break
+        declared = list(getattr(turn, "tool_calls", None) or [])
+        data_calls = [c for c in declared if c.get("id") in results]
+        if not data_calls:
+            # Nothing this turn asked for was executed (e.g. a schema call that
+            # rode along with a data call on an earlier mixed turn). Putting the
+            # turn back would leave a tool call the graph would re-run.
+            continue
+        if len(data_calls) != len(declared):
+            # A mixed turn: keep only the calls this runner executed, otherwise
+            # the schema call would stay dangling in shared state.
+            turn = turn.model_copy(update={"tool_calls": data_calls})
+        turns.append(turn)
+        for call in data_calls:
+            result = results.get(call.get("id"))
+            if result is not None:
+                turns.append(result)
+    if not turns:
+        # The loop answered on its very first turn: nothing was executed, so end
+        # on an explicit no-tool-call turn. Appending an empty list would leave
+        # the prior HumanMessage last and routing would raise on ``.tool_calls``.
+        turns.append(AIMessage(content=rendered))
+    elif not isinstance(turns[-1], AIMessage) or getattr(turns[-1], "tool_calls", None):
+        # Last element is a tool result or a turn whose call the graph must not
+        # run again: close the loop with the report as a plain assistant turn.
+        turns.append(AIMessage(content=rendered))
+    return turns
+
+
+def _schema_tool_call(result: Any, schema_tool: str) -> dict[str, Any] | None:
+    """The schema tool call carried by ``result``, if any."""
+    for call in getattr(result, "tool_calls", None) or []:
+        if isinstance(call, dict) and call.get("name") == schema_tool:
+            return call
+    return None
+
+
+def _single_pass_free_text(llm: Any, history: list[Any], agent_name: str) -> str:
+    """Ask once for a prose report over the history gathered so far.
+
+    The last-resort ending for the single-pass loop: the model never produced a
+    schema call and never produced prose either (budget exhausted, or every tool
+    in the round failed). One plain ``llm.invoke`` over the full history is
+    exactly the turn RC1 would have written, so the node asks for a real report
+    instead of returning a code-built empty string.
+
+    This cannot guarantee non-empty text: if the model itself answers with ``""``
+    the result is ``""``, exactly as RC1's ``finalize_analyst_report`` returns the
+    empty ``free_text_block`` it was handed. An empty ending is logged as a
+    warning and never dressed up as a valid structured report (``report_obj``
+    stays ``None``); it is a run-quality anomaly to flag, not a normal ending.
+    """
+    response = llm.invoke(_single_pass_messages(history))
+    content = getattr(response, "content", "") or ""
+    if not content.strip():
+        logger.warning("%s: single-pass ending produced no text", agent_name)
+    return content
+
+
+def finalize_single_pass(
+    llm: Any,
+    structured_llm: Any | None,
+    prompt: Any,
+    messages: list[Any],
+    tools: list[Any],
+    schema: type[T],
+    render: Callable[[T], str] | None,
+    agent_name: str,
+    run_tools: Callable[[list[Any]], list[Any]] | None = None,
+    state: dict[str, Any] | None = None,
+    accept: Callable[[T], str] | None = None,
+    executed: list[Any] | None = None,
+) -> tuple[str, T | None, list[Any]]:
+    """CAND-01: write the structured report on the call that would have written prose.
+
+    The RC1 two-call path (:func:`finalize_analyst_report`) ends the tool loop
+    with a full prose report and then pays a second call to regenerate the same
+    analysis as typed fields, discarding the prose. On the RC1 2x2 pilot the
+    discarded turn averaged 4,151 output tokens across 12 analyst finalisations
+    while the replacement call's input was within 156 tokens of it, so the prose
+    is the repeatable cost.
+
+    Here the schema is bound as one more tool beside the data tools. The loop is
+    untouched — the model may keep calling data tools — but when it is ready to
+    answer it emits the schema tool call instead of prose, and that call *is* the
+    report. Nothing is written twice.
+
+    ``run_tools`` executes a list of data-tool calls and returns their
+    ``ToolMessage`` results; it is the caller's own tool node, so tool side
+    effects, error handling and observability are identical to the graph's.
+    ``state`` is the analyst's graph state, used to inject the hidden
+    ``trade_date`` into the data tools exactly as ``ToolNode`` would.
+
+    Every fallback lands on the untouched RC1 behaviour, so this can only change
+    the report's shape. It removes the code-built blank ending, but it neither
+    guarantees non-empty text (a model that emits ``""`` still yields ``""``,
+    as in RC1) nor is every failure converted into a success -- read the
+    remaining risks below:
+
+    * ``structured_llm is None`` (S2 off / provider unsupported) -> plain loop,
+      prose returned exactly as before S2.
+    * this call produced no schema call and no tool calls (model answered in
+      prose) -> :func:`finalize_analyst_report` finalises that prose.
+    * the schema call fails validation -> ``llm.invoke`` once on the same
+      single-pass prompt, as the two-call path does.
+    * the round budget is exhausted with data-tool calls still pending, or every
+      tool in a round failed -> ``llm.invoke`` once as free text, so a run that
+      gathered tools but never answered still gets one free-text attempt.
+
+    ``accept`` lets the caller post-process the parsed schema instance and
+    return the text to use; it runs on the success branch only, after the loop
+    has finished, so it sees every ``ToolMessage`` this runner executed (PF-01:
+    the news node classifies its source from that history, which does not exist
+    until the loop has run). Raising from it is a normal failure: the loop
+    falls back to the free-text retry like any other schema error. Callers that
+    need the history must supply ``accept`` instead of ``render``; supplying
+    neither is a programming error, not a runtime condition.
+
+    ``executed`` is an optional list that is filled (in place, and by
+    reference while the loop runs) with every message this runner produced —
+    assistant turns and the ``ToolMessage`` results it executed — so a caller
+    can classify evidence after the fact without holding the loop's return
+    value.
+
+    Returns ``(rendered_or_prose, report_object, messages_to_return)``.
+    """
+    schema_tool = _schema_tool_name(schema)
+    if render is None and accept is None:
+        raise TypeError(
+            f"{agent_name}: finalize_single_pass needs render= or accept=")
+    # ``accept`` is the post-loop hook; the plain renderer is the same hook with
+    # no history to read, so both take one argument and one code path runs.
+    if accept is None:
+        accept = render
+    if run_tools is None:
+        run_tools = run_data_tools(tools, state=state)
+
+    if structured_llm is None:
+        result = (prompt | llm.bind_tools(tools)).invoke(messages)
+        if getattr(result, "tool_calls", None):
+            return "", None, [result]  # graph's tool node runs it; normal loop
+        record_structured_attempt(agent_name, kind="unsupported", used_fallback=True)
+        return (getattr(result, "content", "") or ""), None, [result]
+
+    bound = llm.bind_tools([*tools, schema])
+    history = list(messages)
+    emitted: list[Any] = []
+    if executed is not None:
+        executed.clear()
+        executed.extend(history)
+
+    for _ in range(SINGLE_PASS_MAX_ROUNDS):
+        result = (prompt | bound).invoke(history)
+        history.append(result)
+        emitted.append(result)
+
+        schema_call = _schema_tool_call(result, schema_tool)
+        # A model may emit the schema together with a data-tool call in the same
+        # turn ("fetch these and finalise"). Treating that as terminal would
+        # silently drop the requested evidence, so execute the data calls first
+        # and only accept the schema on a turn that asks for no data.
+        all_calls = list(getattr(result, "tool_calls", None) or [])
+        # Only a *data* call beside the schema makes a turn mixed. Counting raw
+        # calls would misclassify two schema calls (a model slip) as mixed and
+        # drop a valid structured report to prose.
+        mixed = schema_call is not None and any(
+            c.get("name") != schema_tool for c in all_calls)
+        if mixed:
+            logger.info(
+                "%s: schema and data tools requested in one turn; running the "
+                "data tool(s) first", agent_name)
+        if schema_call is not None and not mixed:
+            started_at = time.monotonic()
+            try:
+                if not schema_call.get("id"):
+                    # ToolMessage/parser bookkeeping expects an id on every tool
+                    # call the model emits; without one the message cannot be
+                    # serialised back into the history.
+                    raise ValueError("schema tool call carried no call id")
+                report = schema.model_validate(schema_call.get("args") or {})
+                rendered = accept(report)
+                if not rendered or not rendered.strip():
+                    raise ValueError("structured render produced an empty report")
+                record_structured_attempt(
+                    agent_name, kind="success",
+                    started_at=started_at, ended_at=time.monotonic(),
+                )
+                # The schema call is not a data tool result, so the graph has
+                # nothing to execute: this turn ends the analyst. The assistant
+                # message that carried it is dropped from the shared history, as
+                # the two-call path drops its prose turn, so the next analyst
+                # never replays a stray tool call.
+                return rendered, report, _terminal_messages(emitted, history, rendered)
+            except Exception as exc:  # noqa: BLE001 - never abort a run
+                logger.warning(
+                    "%s: single-pass structured call failed (%s); "
+                    "retrying once as free text", agent_name, exc,
+                )
+                record_structured_attempt(
+                    agent_name, kind="failure", used_fallback=True, error=exc,
+                    started_at=started_at, ended_at=time.monotonic(),
+                )
+                # The loop may already hold data-tool results, and those are
+                # what the free-text answer has to stand on, so finalise over
+                # them rather than over the pre-loop history.
+                response = llm.invoke(_single_pass_messages(history))
+                text = getattr(response, "content", "") or ""
+                # Fold the free-text answer into history so the shared state
+                # carries the data-tool rounds *with* their results, then close
+                # on the prose turn.
+                history.append(response)
+                emitted.append(response)
+                return text, None, _terminal_messages(
+                    emitted, history, text, drop_last=False)
+
+        # Data-tool calls (skipping the schema call when a turn mixed both).
+        data_calls = [c for c in getattr(result, "tool_calls", None) or []
+                      if c.get("name") != schema_tool]
+        if not data_calls:
+            # The model answered in prose on this turn instead of filling the
+            # schema. RC1 treats that prose as the finished report and returns
+            # it unchanged, so do the same: paying a second call to restructure
+            # it would reintroduce the very duplication this path removes, and
+            # finalising over a history that has the prose stripped out would be
+            # strictly worse than RC1. ``report_obj`` stays None exactly as it
+            # does in RC1 whenever structure is unavailable.
+            prose = getattr(result, "content", "") or ""
+            if not prose.strip():
+                prose = _single_pass_free_text(llm, history, agent_name)
+            record_structured_attempt(agent_name, kind="failure", used_fallback=True)
+            # The prose turn is itself the terminating assistant turn, so keep
+            # it (drop_last=False). Earlier data-tool rounds ride along with the
+            # results this runner already executed, so no tool call is left
+            # dangling in shared state.
+            return prose, None, _terminal_messages(
+                emitted, history, prose, drop_last=False)
+
+        rounds_before = len(history)
+        history.extend(run_tools(data_calls))
+        if executed is not None:
+            executed.extend(history[rounds_before:])
+        # A round in which every call failed to execute (unknown name, tool
+        # error) leaves the model nothing new to read; looping on it would just
+        # burn rounds.
+        if all(getattr(m, "status", None) == "error" for m in history[-len(data_calls):]):
+            break
+
+    # The loop ended without a report: either the round budget ran out with the
+    # model still asking for data tools, or every tool in the last round failed.
+    # Do not return a code-built blank report -- ask once for free text over
+    # everything gathered, which is what RC1's ending turn did. The model may
+    # still answer with "" (RC1 would too); that is logged and left as None
+    # rather than reported as a valid structured result.
+    #
+    # Record exactly one structured event, as RC1's ``finalize_analyst_report``
+    # does on every return. No schema call happened here, so this must NOT be
+    # reported as a success: it is a failure of structured output (the model
+    # never emitted one) that fell back to prose. ``exhausted`` says which of the
+    # two endings fired, so the run can tell a truncated loop from dead tools.
+    exhausted = "round budget" if emitted else "no round"
+    record_structured_attempt(
+        agent_name, kind="failure", used_fallback=True,
+        error=ValueError("no schema call within %d rounds (budget exhausted "
+                         "or every tool failed)" % SINGLE_PASS_MAX_ROUNDS),
+    )
+    logger.info("%s: single-pass loop ended without a schema call (%s)",
+                agent_name, exhausted)
+    prose = _single_pass_free_text(llm, history, agent_name)
+    # The data-tool rounds ride along with the results this runner executed, and
+    # the free-text answer closes the sequence, so shared state has no dangling
+    # tool call for the graph to replay.
+    return prose, None, _terminal_messages(emitted, history, prose, drop_last=False)

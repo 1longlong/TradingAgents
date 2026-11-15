@@ -7,6 +7,8 @@ from tradingagents.agents.schemas import (
 from tradingagents.agents.utils.structured import (
     bind_structured,
     finalize_analyst_report,
+    finalize_single_pass,
+    run_data_tools,
 )
 
 from tradingagents.agents.utils.agent_utils import (
@@ -18,12 +20,18 @@ from tradingagents.agents.utils.agent_utils import (
 )
 
 
-def create_market_analyst(llm, structured: bool = True):
+def create_market_analyst(llm, structured: bool = True, single_pass: bool = False):
     """Create the market analyst node.
 
     ``structured`` is the ablation switch for native structured output. When
     False the analyst never binds a schema and emits free text, so an ablation
     arm can run the pre-S2 path with every other variable held constant.
+
+    ``single_pass`` is the CAND-01 experiment switch. When True the structured
+    report is emitted by the same call that would have written the prose
+    report, instead of by a second finalisation call over the finished loop.
+    It has no effect when ``structured`` is False, and defaults to False so the
+    shipped behaviour is unchanged.
     """
     structured_llm = (
         bind_structured(llm, MarketAnalystReport, "Market Analyst")
@@ -102,6 +110,25 @@ Where the evidence supports it, lay out Bull, Base and Bear branches for the tra
         prompt = prompt.partial(instrument_context=instrument_context)
 
         chain = prompt | llm.bind_tools(tools)
+
+        if single_pass:
+            report, report_obj, emitted = finalize_single_pass(
+                llm=llm,
+                structured_llm=structured_llm,
+                prompt=prompt,
+                messages=state["messages"],
+                tools=tools,
+                schema=MarketAnalystReport,
+                render=render_market_analyst_report,
+                agent_name="Market Analyst",
+                run_tools=run_data_tools(tools, state=state),
+                state=state,
+            )
+            return {
+                "messages": emitted,
+                "market_report": report,
+                "market_report_obj": report_obj,
+            }
 
         result = chain.invoke(state["messages"])
 

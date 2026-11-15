@@ -1038,7 +1038,7 @@ class ObservabilityCallbackHandler(BaseCallbackHandler):
         parent_run_id: Any = None,
         **kwargs: Any,
     ) -> None:
-        self._handle_llm_start(run_id, parent_run_id, serialized, prompts=None)
+        self._handle_llm_start(run_id, parent_run_id, serialized, prompts=prompts)
 
     def on_chat_model_start(
         self,
@@ -1411,6 +1411,12 @@ def _extract_usage_metadata(raw: Any) -> dict[str, Any] | None:
 
     # Cached-input is informational, from input_token_details.cache_read +
     # cache_creation; it is a detail of input_tokens, never added to totals.
+    # Providers disagree on where they put this: LangChain normalises to
+    # ``cache_read``/``cache_creation``, OpenAI-compatible servers report
+    # ``cached_tokens`` under ``prompt_tokens_details``, and DeepSeek-style
+    # gateways report top-level ``prompt_cache_hit_tokens``. Reading only the
+    # LangChain spelling would record a provider's genuine cache hits as 0,
+    # i.e. report a measured quantity as an unmeasured one.
     cached = None
     in_details = raw.get("input_token_details") or raw.get("input_tokens_details")
     if isinstance(in_details, dict):
@@ -1418,6 +1424,15 @@ def _extract_usage_metadata(raw: Any) -> dict[str, Any] | None:
             in_details.get("cache_read"),
             in_details.get("cache_creation"),
         ])
+    prompt_details = raw.get("prompt_tokens_details")
+    if isinstance(prompt_details, dict):
+        # Use max(), not sum: a server that reports both ``cached_tokens`` and
+        # ``cache_read`` is describing one quantity twice, and adding them
+        # would double-count cache hits.
+        variants = _sum_ints([prompt_details.get("cached_tokens")])
+        cached = _max_opt(cached, variants)
+    cached = _max_opt(cached, _sum_ints([raw.get("prompt_cache_hit_tokens")]))
+    cached = _max_opt(cached, _sum_ints([raw.get("cache_read_input_tokens")]))
 
     # Reasoning is informational, a subset of output_tokens.
     reasoning = None
@@ -1457,6 +1472,21 @@ def _sum_ints(values: list[Any]) -> int | None:
             total += value
             found = True
     return total if found else None
+
+
+def _max_opt(*values: Any) -> int | None:
+    """Largest non-negative int among ``values``, or ``None`` if there is none.
+
+    Used to reconcile the several spellings a provider may use for one
+    quantity (e.g. cached input), where the spellings describe the same number
+    and summing them would double-count it.
+    """
+    seen = [
+        value for value in values
+        if isinstance(value, int) and not isinstance(value, bool) and value >= 0
+    ]
+    return max(seen) if seen else None
+
 
 
 # ---------------------------------------------------------------------------

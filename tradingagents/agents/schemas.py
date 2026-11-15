@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 from enum import Enum
 from typing import Literal
 
@@ -517,15 +518,20 @@ _NEWS_UNAVAILABLE_MARKERS = (
     "NO_DATA_AVAILABLE",
     "unavailable for",
     "only serves newer items",
-    # yfinance's own absence wording (yfinance_news.py). It carries no
-    # NEWS_STATUS token, so without this marker a vendor that answered "no
-    # articles" would read as *news present* (audit D-1).
+    # The retired yfinance adapter's absence wording. It carries no
+    # NEWS_STATUS token, and a stale checkpoint could still contain it, so
+    # without this marker such text would read as *news present* (audit D-1).
     "no news found",
     # Every failure class is rendered as ``NEWS_STATUS=<CLASS>: ...`` (see
     # dataflows/news_status.py). Only SUCCESS_REAL_CONTENT asserts content, so
     # any *other* NEWS_STATUS line must count as unavailable. The helper below
     # implements that precisely rather than matching the bare prefix.
 )
+
+
+#: Provider section header emitted by ``news_merge`` (``#### Finnhub — ...``).
+#: Used to judge a merged multi-provider block one section at a time.
+_PROVIDER_SECTION = re.compile(r"^####\s+(?=[A-Za-z])", re.MULTILINE)
 
 
 def _news_status_is_failure(text: str) -> bool:
@@ -548,8 +554,9 @@ def _has_news_body(text: str) -> bool:
     Each vendor that can serve ``get_news`` renders content in its own shape, so
     this recognises every one that returns *real* records:
 
-    * the markdown vendors (``yfinance_news``, ``gdelt_news``,
-      ``historical_news``) put each article on a ``### Title (source: ...)`` line;
+    * the markdown vendors (``finnhub_news``, ``gdelt_news``) put each article
+      on a ``### Title (source: ...)`` line, and ``news_merge`` gives each
+      provider's section a ``####`` header so a header is never counted;
     * the raw Alpha Vantage adapter returns a JSON object with a ``feed`` (or
       ``articles``) array.
 
@@ -574,6 +581,40 @@ def _has_news_body(text: str) -> bool:
     return any(line.lstrip().startswith("### ") for line in text.splitlines())
 
 
+def _article_lines_are_news(text: str) -> bool:
+    """Whether ``text`` contains real article records outside a failure section.
+
+    A merged two-provider block (``news_merge``) puts several providers' verdicts
+    in **one** tool message: Finnhub may have three real articles while GDELT
+    states ``NEWS_STATUS=RATE_LIMITED``. Scanning the whole message for markers
+    would then discard the real articles and report "no news" — the exact
+    CAND-01 failure mode where a degraded source erases a working one.
+
+    So the message is split at the merge module's provider headers (``####``)
+    and any section whose own text carries an unavailable marker or a non-success
+    ``NEWS_STATUS`` token is dropped; the surviving sections are what count.
+    A message with no such headers is treated as a single section, preserving the
+    original behaviour for every single-vendor render.
+
+    A rendered article is checked **before** the prose markers. Headlines are
+    real publisher text, so one may legitimately contain a marker phrase
+    (\"Nvidia says cloud service is unavailable for Europe customers\"); testing
+    markers first made a successful answer read as an outage (final audit F2).
+    The ``NEWS_STATUS=`` token is matched at line start only for the same reason.
+    """
+    sections = _PROVIDER_SECTION.split(text)
+    if len(sections) <= 1:
+        return True  # not a merged block; caller applies its own rules
+    for section in sections[1:]:
+        if _has_news_body(section):
+            return True
+        if any(marker in section for marker in _NEWS_UNAVAILABLE_MARKERS):
+            continue
+        if _news_status_is_failure(section) and "NEWS_STATUS=SUCCESS_REAL_CONTENT" not in section:
+            continue
+    return False
+
+
 def classify_news_source_availability(messages: object) -> NewsSourceStatus:
     """Did any real company-news record reach the analyst?
 
@@ -581,6 +622,10 @@ def classify_news_source_availability(messages: object) -> NewsSourceStatus:
     call. A result counts as available only if it contains none of the
     unavailable markers. If ``get_news`` was never called, or every call
     returned a marker, the company-news source is ``UNAVAILABLE``.
+
+    For a merged multi-provider block the markers are applied **per provider
+    section**, so one provider's outage cannot erase another provider's real
+    articles (see ``_article_lines_are_news``).
 
     This is a presence test, not a quality judgement: it cannot tell a genuine
     empty window (vendor answered, no articles) from an outage. Both are
@@ -598,6 +643,17 @@ def classify_news_source_availability(messages: object) -> NewsSourceStatus:
         # (audit D-1). Same rule the sentiment classifier applies.
         if not text.strip():
             continue
+        # A merged block is judged section by section: a degraded provider must
+        # not mask a provider that returned real, PIT-verified articles.
+        if _PROVIDER_SECTION.search(text):
+            if _article_lines_are_news(text):
+                return NewsSourceStatus.AVAILABLE
+            continue
+        # A real rendered article outranks every prose marker: a headline may
+        # legitimately contain "unavailable for" (final audit F2). The marker
+        # and status checks below only decide between *non-article* answers.
+        if _has_news_body(text):
+            return NewsSourceStatus.AVAILABLE
         if any(marker in text for marker in _NEWS_UNAVAILABLE_MARKERS):
             continue
         if _news_status_is_failure(text):
@@ -605,9 +661,7 @@ def classify_news_source_availability(messages: object) -> NewsSourceStatus:
         # A bare markdown header (e.g. "## NVDA News, from ...:") with no
         # article blocks is also an absence: the vendor formatted an empty
         # window. Require at least one article line before calling it news.
-        if not _has_news_body(text):
-            continue
-        return NewsSourceStatus.AVAILABLE
+        continue
     # Never called, or every call returned a marker: both mean "no company news".
     return NewsSourceStatus.UNAVAILABLE
 
