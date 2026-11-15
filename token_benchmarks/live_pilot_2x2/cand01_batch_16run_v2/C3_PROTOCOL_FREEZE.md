@@ -69,7 +69,7 @@ perturb the pre-registered sequence: R01 is already first.
 | Gate, live, R01 | PASS (Finnhub `NVDA: 8582 chars`; FRED `fed_funds_rate` real observations) |
 | News scope | Finnhub-only in every spec; `gdelt: excluded`; `get_global_news` disabled |
 | Imports | `tradingagents` resolves under the worktree, not the shared checkout |
-| Full test suite | 2083 passed, 2 skipped, 319 subtests |
+| Full test suite | 2087 passed, 2 skipped, 319 subtests |
 
 ## 3. Stopping conditions (from protocol §11, restated)
 

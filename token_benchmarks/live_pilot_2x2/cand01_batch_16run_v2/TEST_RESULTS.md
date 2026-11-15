@@ -194,7 +194,7 @@ Live state at the C3 freeze (`git rev-parse HEAD` = `cat c3/FROZEN_COMMIT`):
 
 | Measure | Value |
 | --- | --- |
-| Full suite, isolated venv `/tmp/opencode/expvenv` | **2083 passed, 2 skipped**, 319 subtests, **0 failed** |
+| Full suite, isolated venv `/tmp/opencode/expvenv` | **2087 passed, 2 skipped**, 319 subtests, **0 failed** |
 | The 2 failures recorded in §1 | **gone** — they came from a stale worktree `.env` (audit A-01), now deleted |
 
 The §1 figure `2 failed, 1990 passed` therefore describes neither the current
