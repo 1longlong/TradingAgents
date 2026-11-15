@@ -1,18 +1,24 @@
-PLAN C3 — CODE FREEZE (post-remediation)
-generated: 2026-11-15T13:47Z
+PLAN C3 — CODE FREEZE RECORD
+generated: 2026-11-15T14:16:45.511377+00:00
 
-Branch          : exp/cand01-batch-v2
-Frozen commit   : 12ca8212eea8dc75d0bb4581c65ae9419bc992c9
-Parent chain    : 9948bf85 (RC1) -> b00dd008 -> 24d488d6 -> 12ca8212
-Working tree    : clean (git_working_tree_dirty = False)
-Fingerprint     : working-tree-sha256-v2
-working_tree_sha256 = 574e09a13afb310893ca542a1d12a7c45ebf97da85eff180b8522f14f1f6bcef
-files fingerprinted : 206 (206 tracked, 0 untracked)
-tool_schema_version : 2
+This file cannot name the commit it is committed in (a commit cannot contain
+its own hash). It therefore records the code fingerprint, which is identical
+before and after the freeze commit, plus the commit it was written on.
+
+Branch              : exp/cand01-batch-v2
+Commit at write time: 07ac08ee5b2f0b0d63493d1cb1df9b0978fc12b1
+Working tree at write: clean
+
+Fingerprint (the authority -- the gate recomputes this and refuses on a mismatch)
+  fingerprint_algorithm : working-tree-sha256-v2
+  working_tree_sha256   : 1af50a8d45f8056f78701f2c426bb5e110f15170641e15cc0a2c67ca56b1814d
+  git_working_tree_dirty: False
+  files fingerprinted   : 207 (207 tracked)
+  tool_schema_version   : 2
 
 Runtime
-  Python        : 3.14.7 (Anaconda, GCC 14.3.0)
-  Isolated venv : /tmp/opencode/expvenv  (never the shared /home venv)
+  Python        : 3.14.7 | packaged by Anaconda, Inc. | (main, Aug 14 2026, 10:21:40) [GCC 14.3.0]
+  Isolated venv : /tmp/opencode/expvenv  (never the shared developer venv)
   Provider      : openai_compatible
   Endpoint      : https://llm.cs.cityu.edu.hk/v1
   Models        : CS5351/DeepSeek-V4-Flash (quick and deep)
@@ -27,19 +33,30 @@ Invocation (every run)
     /tmp/opencode/expvenv/bin/python scripts/token_benchmark.py ...
 
 Remediation history (each audit blocker, fixed before any paid call)
-  A-02  finnhub_news kept the OLDEST 20 articles instead of the newest.
-        Live: NVDA 2026-09-23 showed newest 2026-09-16, dropping all 63
-        in-window articles from the final two days.  FIXED.
-  B-01  prepare_run_spec dropped 'switches', so every arm ran AB.  FIXED.
+  A-02  finnhub_news kept the OLDEST articles instead of the newest; live NVDA
+        showed news newest 2026-09-16 while all in-window articles from the
+        final two days were dropped.  FIXED, plus truncation is now disclosed
+        (A-02b).
+  A-01  a stale worktree .env (40-char FRED key) was loadable via
+        find_dotenv(usecwd=True).  FIXED (removed).
+  A-09  ~/.env_secrets carried no FINNHUB_API_KEY, so the wrapper path would
+        render AUTH_MISSING news.  FIXED and verified live.
+  B-01  prepare_run_spec dropped 'switches', so every arm would have run AB.
+        FIXED.
   B-02  config_sha256 was never recomputed; tampered definitions ran.  FIXED.
-  B-03  MANIFEST.sha256 and spec_body_sha256 went stale; 94/94 now verify.
-  C-01  gate hash check recomputed but never compared spec fields.  FIXED.
+  B-03  MANIFEST.sha256 and spec_body_sha256 went stale.  FIXED (verify 94/94).
+  B-r2  --dry-run skipped the pre-flight and accepted s2_downstream=false;
+        duplicate run IDs collapsed silently; a refused run rewrote
+        code_state.json.  FIXED.
+  C-01  the gate recomputed the hash but never compared spec fields.  FIXED.
   apply_cityu_env: the named secrets file now wins over the ambient
-        environment (an unreachable-endpoint probe was dialling the real
-        paid endpoint for 120s).  FIXED.
+        environment (an unreachable-endpoint probe was dialling the real paid
+        endpoint).  FIXED.
 
-Verification at this commit
-  Full suite         : 2030 passed, 2 skipped, 319 subtests passed
-  Known failures     : 2 in tests/test_cli_prefs.py, identical at RC1
-  Preflight gate     : 16/16 runnable offline; R01 passes live (Finnhub+FRED)
-  V2 MANIFEST.sha256 : 94/94 OK
+Known limitations carried into the run (documented, not silent)
+  L-2  Finnhub news is fetched serially per day chunk.
+  L-3  a cwd-relative test remains.
+  L-5  raw vendor usage payloads are not preserved, only the parsed totals.
+  L-6  PIT is day granular on the news window start.
+  get_insider_transactions has no Finnhub implementation and would raise
+        ValueError, but it is not bound to any of the three run analysts.
