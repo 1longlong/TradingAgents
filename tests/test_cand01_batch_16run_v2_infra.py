@@ -402,3 +402,44 @@ def test_a_missing_hashed_field_is_an_error_not_a_default():
     broken.pop("switches")
     with pytest.raises(KeyError, match="switches"):
         gv2.config_sha256(broken)
+
+
+# ---------------------------------------------------------------------------
+# The C3 protocol freeze declaration must agree with the registrations
+# ---------------------------------------------------------------------------
+def test_protocol_freeze_verification_passes():
+    """``C3_PROTOCOL_FREEZE.md`` restates the design; it must not drift.
+
+    Run before the first paid call. The restatement is what an operator reads
+    before spending money, so a drifted one is worse than none.
+    """
+    import subprocess
+    import sys
+
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    result = subprocess.run(
+        [sys.executable, str(root / "scripts/c3_verify_protocol_freeze.py")],
+        cwd=root, capture_output=True, text=True,
+        env={**__import__("os").environ, "PYTHONPATH": str(root)},
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert "PROTOCOL FREEZE VERIFIED" in result.stdout
+
+
+def test_freeze_declaration_states_the_correct_axes():
+    """The design varies batch_macro x single_pass; structured is held constant.
+
+    Writing the axes down wrong is how a reader comes to believe an arm tests
+    something it does not (the same class of error as a spec that runs as the
+    wrong arm).
+    """
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    doc = (root / "token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2"
+           / "C3_PROTOCOL_FREEZE.md").read_text()
+    assert "`batch_macro` × `single_pass`" in doc
+    assert "no paid call was made before this document was committed" in doc.lower()
+    assert "0" in doc.split("Paid calls at freeze time")[1].split("\n")[0]
