@@ -184,6 +184,19 @@ class TestUsageVerdict:
         assert tb.usage_verdict(payload)["state"] == tb.USAGE_MISMATCH
         assert tb.extract_run_metrics(payload, None, 0)["valid"] is False
 
+    def test_a_non_container_event_field_never_raises(self):
+        """A tampered artifact must be classified, not crash the summariser."""
+        for bad in (42, 1.5, True, {"not": "a list"}):
+            payload = _payload(calls=2, with_usage=2, total_in=100, total_out=20)
+            payload["usage_checks"] = {"raw_usage_preserved": 2,
+                                       "raw_usage_expected": 2,
+                                       "negative_token_counts": 0}
+            payload["llm_call_events"] = bad
+            metrics = tb.extract_run_metrics(payload, None, 0)
+            assert metrics["valid"] is False, bad
+            assert metrics["invalid_reason"] == tb.INVALID_USAGE_MISMATCH, bad
+            assert metrics["event_counts"]["llm_call_events"] == 0, bad
+
     def test_a_payload_without_per_call_records_is_inconclusive_not_a_mismatch(self):
         payload = _payload(events=False)
         verdict = tb.usage_verdict(payload)

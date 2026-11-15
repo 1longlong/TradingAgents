@@ -1112,8 +1112,13 @@ def extract_run_metrics(payload: dict, telemetry_path: Path | None,
     if budget.get("blocks_run"):
         invalid_reason = invalid_reason or "budget_exhausted"
 
+    # The same container guard as the replay: a tampered artifact may carry any
+    # JSON type here, and counting it must not abort an offline re-summarise.
+    raw_event_records = payload.get("llm_call_events")
+    if not isinstance(raw_event_records, (list, tuple)):
+        raw_event_records = []
     event_counts = {
-        "llm_call_events": len(payload.get("llm_call_events") or []),
+        "llm_call_events": len(raw_event_records),
         "tool_call_events": len(payload.get("tool_call_events") or []),
         "tool_round_events": len(payload.get("tool_round_events") or []),
         "prefetch_events": len(payload.get("prefetch_events") or []),
