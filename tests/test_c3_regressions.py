@@ -1121,22 +1121,34 @@ def test_delivered_provenance_states_true_ancestry():
     import subprocess
 
     batch = _batch_dir()
-    frozen = (batch / "c3" / "FROZEN_COMMIT").read_text().strip()
+    current = (batch / "c3" / "FROZEN_COMMIT").read_text().strip()
     for directory in sorted((batch / "specs").iterdir()):
         if not directory.is_dir():
             continue
         state = json.loads((directory / "code_state.json").read_text())
         relation = state["git_head_relation_to_freeze"]
-        assert state["frozen_commit"] == frozen, directory.name
+        # The file names the freeze that existed when it was captured. That is
+        # necessarily *not* the commit carrying the file (a file cannot name the
+        # commit that contains it), so it may name an earlier freeze -- but its
+        # recorded commit must be on this line of work, and its own `relation`
+        # label must still be true of the commit it names.
         head = state["git_head_commit"]
+        recorded_freeze = state["frozen_commit"]
+        on_branch = subprocess.run(
+            ["git", "-C", str(Path(__file__).resolve().parent.parent),
+             "merge-base", "--is-ancestor", recorded_freeze, current],
+            capture_output=True).returncode == 0
+        assert on_branch, (
+            f"{directory.name} names a freeze {recorded_freeze[:8]} that is not "
+            f"an ancestor of {current[:8]}; the provenance is from another line")
         is_ancestor = subprocess.run(
             ["git", "-C", str(Path(__file__).resolve().parent.parent),
-             "merge-base", "--is-ancestor", head, frozen],
+             "merge-base", "--is-ancestor", head, recorded_freeze],
             capture_output=True).returncode == 0
-        if head == frozen:
+        if head == recorded_freeze:
             assert relation == "is_frozen_commit", directory.name
         elif is_ancestor:
             assert relation == "precedes_frozen_commit", directory.name
         else:
             assert relation != "precedes_frozen_commit", (
-                f"{directory.name} claims to precede {frozen[:8]} but does not")
+                f"{directory.name} claims to precede {recorded_freeze[:8]} but does not")
