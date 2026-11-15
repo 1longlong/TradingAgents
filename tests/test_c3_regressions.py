@@ -507,3 +507,93 @@ def test_gate_rejects_a_spec_field_that_disagrees_with_its_registration(tmp_path
                          ("switches", dict(spec["switches"], batch_macro=True))]:
         with pytest.raises(SystemExit):
             gate.check_spec_hash(dict(spec, **{field: value}))
+
+
+# ---------------------------------------------------------------------------
+# Round-2 audit findings: rehearsals that cannot fail, duplicate run IDs,
+# and refusals that rewrite the recorded code state
+# ---------------------------------------------------------------------------
+def _batch_dir() -> "__import__('pathlib').Path":
+    from pathlib import Path
+
+    return (Path(__file__).resolve().parent.parent / "token_benchmarks" /
+            "live_pilot_2x2" / "cand01_batch_16run_v2")
+
+
+def test_dry_run_refuses_an_invalid_switch_combination(tmp_path):
+    """A rehearsal that cannot fail is not a rehearsal.
+
+    ``run_experiment(dry_run=True)`` used to skip the registration pre-flight,
+    so ``--dry-run`` accepted ``s2_downstream: false`` -- a switch with no OFF
+    implementation -- and printed "would run".
+    """
+    import json
+
+    import scripts.token_benchmark as tb
+
+    experiment = _registration()
+    experiment["cases"] = [experiment["cases"][0]]
+    experiment["switches"] = dict(experiment["switches"], s2_downstream=False)
+    experiment["config_sha256"] = tb.registration_sha256(experiment)
+    (tmp_path / "experiment.json").write_text(json.dumps(experiment))
+
+    with pytest.raises(tb.RunRefused):
+        tb.run_experiment(tmp_path, experiment, dry_run=True)
+    # And the rehearsal left no state behind.
+    assert not (tmp_path / tb.CODE_STATE_FILE).exists()
+
+
+def test_refused_run_does_not_rewrite_code_state(tmp_path):
+    """A run that never started has no code state to record."""
+    import json
+
+    import scripts.token_benchmark as tb
+
+    experiment = _registration()
+    experiment["cases"] = [experiment["cases"][0]]
+    (tmp_path / "experiment.json").write_text(json.dumps(experiment))
+    (tmp_path / tb.CODE_STATE_FILE).write_text('{"sentinel": true}\n')
+    before = (tmp_path / tb.CODE_STATE_FILE).read_bytes()
+
+    broken = dict(experiment, switches=None)
+    with pytest.raises(tb.RunRefused):
+        tb.run_experiment(tmp_path, broken)
+
+    assert (tmp_path / tb.CODE_STATE_FILE).read_bytes() == before, \
+        "a refused run must not rewrite the recorded code state"
+
+
+def test_gate_rejects_a_duplicated_run_id(tmp_path, monkeypatch):
+    """Two directories for one run ID must not collapse to one silent winner."""
+    import shutil
+
+    from scripts import c3_preflight_gate as gate
+
+    specs = tmp_path / "specs"
+    specs.mkdir()
+    real = _batch_dir() / "specs"
+    # All 16 real runs, plus one extra directory that claims an existing ID.
+    # The count then still reaches 16 only because of the duplicate, so a check
+    # that merely counts would pass; the duplicate must be named explicitly.
+    names = [p.parent.name for p in sorted(real.glob("*/experiment.json"))]
+    names.append("R01_NVDA_AB")
+    for name in names:
+        src = next(real.glob(f"{name.split('_')[0]}_*/experiment.json"))
+        dst = specs / name
+        dst.mkdir()
+        dst.joinpath("experiment.json").write_text(src.read_text())
+
+    monkeypatch.setattr(gate, "BATCH_DIR", tmp_path)
+    with pytest.raises(SystemExit):
+        gate._run_arm_map()
+    # Prove the *reason* is the duplicate, not the count: with the extra
+    # directory removed the same 16 must be accepted.
+    shutil.rmtree(specs / "R01_NVDA_AB")
+    assert len(gate._run_arm_map()) == 16
+
+
+def test_gate_accepts_the_real_registration_set(monkeypatch):
+    """And the duplicate detector must not fire on the 16 delivered runs."""
+    from scripts import c3_preflight_gate as gate
+
+    assert len(gate._run_arm_map()) == 16

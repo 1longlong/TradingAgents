@@ -2001,6 +2001,13 @@ def run_experiment(exp_dir: Path, experiment: dict, *, runner=None,
     such a measurement is never reported as a valid baseline.
     """
     exp_dir = Path(exp_dir)
+    # Every case is pre-flighted before any state is persisted. A spec the
+    # harness refuses must not rewrite ``code_state.json``: the file records
+    # *the code the study ran under*, and a run that never started did not run
+    # under anything. Writing it first left a refusal looking like the start
+    # of a measurement.
+    for case in experiment["cases"]:
+        _preflight_registration(exp_dir, experiment, case)
     if dry_run:
         # Compute the fingerprint without persisting it: a dry run must not
         # rewrite the study's recorded code state, or the pre-registration and
@@ -2032,11 +2039,18 @@ def run_experiment(exp_dir: Path, experiment: dict, *, runner=None,
                         all_metrics.append(stored)
                         continue
             attempt = None
+            # Refusals are decided *before* an attempt is numbered. Doing it
+            # (as the child also does) in the parent means a refused run
+            # leaves no attempt directory and cannot consume attempt_01.
+            #
+            # This runs for dry runs too. A rehearsal used to skip it, so
+            # ``--dry-run`` happily accepted a spec with ``s2_downstream:
+            # false`` -- a switch with no OFF implementation -- and reported
+            # "would run". A rehearsal that cannot fail is not a rehearsal.
+            # Only the *numbering* and the recorded start are withheld, since
+            # a dry run must leave no trace.
+            _preflight_registration(exp_dir, experiment, case)
             if not dry_run:
-                # Refusals are decided *before* an attempt is numbered. Doing it
-                # (as the child also does) in the parent means a refused run
-                # leaves no attempt directory and cannot consume attempt_01.
-                _preflight_registration(exp_dir, experiment, case)
                 attempt = len(attempt_dirs(exp_dir, run_index)) + 1
                 _mark_run_started(exp_dir, experiment, case, run_index, attempt)
             print(f"[bench] run {run_index} of {n_runs_total} for {case_label(case)}")

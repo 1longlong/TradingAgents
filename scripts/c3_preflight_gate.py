@@ -228,12 +228,23 @@ def _run_arm_map() -> dict[str, dict]:
     rebuilt from the per-run registrations, which are the authority.
     """
     out: dict[str, dict] = {}
+    seen_dirs: dict[str, list[str]] = {}
     for spec_dir in sorted((BATCH_DIR / "specs").iterdir()):
         reg = spec_dir / "experiment.json"
         if not reg.is_file():
             continue
         data = json.loads(reg.read_text(encoding="utf-8"))
         run_id = spec_dir.name.split("_", 1)[0]
+        # Two directories for one run ID would silently collapse here (the
+        # second assignment wins) while the count still came to 16 as long as
+        # some other ID was missing. A duplicated run ID means two different
+        # definitions claim one sample; refuse rather than pick one.
+        seen_dirs.setdefault(run_id, []).append(spec_dir.name)
+        if len(seen_dirs[run_id]) > 1:
+            _fail("manifest",
+                  f"run ID {run_id} is registered {len(seen_dirs[run_id])} "
+                  f"times ({', '.join(seen_dirs[run_id])}); one run ID must "
+                  f"name exactly one run")
         switches = data.get("switches")
         if not switches:
             _fail("manifest", f"{spec_dir.name}: registration declares no switches")
