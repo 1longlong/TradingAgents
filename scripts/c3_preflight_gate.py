@@ -41,15 +41,29 @@ FROZEN_COMMIT_FILE = REPO_ROOT / "token_benchmarks/live_pilot_2x2/cand01_batch_1
 
 
 def _frozen_commit() -> str:
-    override = os.environ.get("C3_FROZEN_COMMIT")
-    if override:
-        return override.strip()
-    if FROZEN_COMMIT_FILE.is_file():
-        return FROZEN_COMMIT_FILE.read_text(encoding="utf-8").strip()
-    raise SystemExit(
-        f"FAIL  frozen commit: {FROZEN_COMMIT_FILE} is missing; refusing to "
-        f"run without a frozen reference"
-    )
+    """The commit this gate will certify HEAD against.
+
+    ``--expected-commit`` / ``C3_FROZEN_COMMIT`` used to *replace* the frozen
+    reference, which let a caller point the gate at whatever commit was checked
+    out (audit A round 5, R-5-D). The append-only designation
+    (``c3/FREEZE_HISTORY.jsonl``) removed the need for that: the reference is a
+    recorded fact, not an argument. An override is now an *assertion* -- it must
+    agree with both the file and the designation, or the gate refuses.
+    """
+    if not FROZEN_COMMIT_FILE.is_file():
+        raise SystemExit(
+            f"FAIL  frozen commit: {FROZEN_COMMIT_FILE} is missing; refusing to "
+            f"run without a frozen reference"
+        )
+    recorded = FROZEN_COMMIT_FILE.read_text(encoding="utf-8").strip()
+    claimed = (os.environ.get("C3_FROZEN_COMMIT") or "").strip()
+    if claimed and claimed != recorded:
+        raise SystemExit(
+            f"FAIL  frozen commit: C3_FROZEN_COMMIT claims {claimed[:12]}, but "
+            f"{FROZEN_COMMIT_FILE.name} records {recorded[:12]}; the override may "
+            f"only restate the frozen reference, not replace it"
+        )
+    return recorded
 
 #: The 2x2, as frozen in the protocol. Each arm maps to its four switches.
 ARMS = {

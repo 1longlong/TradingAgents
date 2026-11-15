@@ -1132,9 +1132,11 @@ def test_the_frozen_tree_check_is_on_the_child_path():
     import scripts.token_benchmark as tb
 
     source = inspect.getsource(tb._run_single)
-    assert "verify_frozen_tree()" in source
+    # Called *with the spec path*, so the check can tell a run of the frozen
+    # batch (which may never disable it) from a test seam.
+    assert "verify_frozen_tree(spec_path)" in source
     # Before the imports that build a client, not after.
-    assert source.index("verify_frozen_tree()") < source.index("StatsCallbackHandler")
+    assert source.index("verify_frozen_tree(") < source.index("StatsCallbackHandler")
 
 
 def test_delivered_provenance_states_true_ancestry():
@@ -1278,3 +1280,132 @@ def test_the_freeze_check_opt_out_is_explicit_and_loud(capfd, monkeypatch, tmp_p
 
     source = inspect.getsource(tb.verify_frozen_tree)
     assert 'os.environ.get("TRADINGAGENTS_SKIP_FREEZE_CHECK") == "1"' in source
+
+
+# ---------------------------------------------------------------------------
+# Audit A round 5: H-C, R-5-B, R-5-C, R-5-D
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize("field,value", [
+    ("trade_date", "2020-01-01"),
+    ("ticker", "AAPL"),
+    ("case_id", "not-a-registered-case"),
+    ("analysts", ["market"]),
+    ("research_rounds", 9),
+    ("risk_rounds", 9),
+])
+def test_tampering_the_spec_case_is_refused(field, value):
+    """H-C: the spec carries ``case``, the registration ``cases``.
+
+    Because the two keys never intersected, the spec-vs-registration agreement
+    loop skipped the case entirely and any trade date, ticker or analyst set was
+    accepted -- and reached ``propagate`` (audit A round 5).
+    """
+    import scripts.token_benchmark as tb
+
+    spec = _conforming_spec()
+    spec["case"] = dict(spec["case"])
+    spec["case"][field] = value
+    with pytest.raises(tb.RunRefused, match="case"):
+        tb._preflight_gate(spec)
+
+
+def test_an_unmodified_case_is_still_accepted():
+    """The guard above must not refuse the registered experiment itself."""
+    import scripts.token_benchmark as tb
+
+    tb._preflight_gate(_conforming_spec())
+
+
+def test_the_freeze_designation_is_append_only(tmp_path, monkeypatch):
+    """R-5-B: a re-seal must not be able to move what "frozen" means.
+
+    ``FROZEN_COMMIT`` is untracked, so anything that rewrites the record can
+    rewrite the pointer -- which is how a tampered tree certified itself. The
+    designation is the *first* entry of a tracked, append-only history.
+    """
+    import json
+
+    from scripts import c3_attest
+
+    history = tmp_path / "FREEZE_HISTORY.jsonl"
+    monkeypatch.setattr(c3_attest, "HISTORY_FILE", history)
+    monkeypatch.setattr(c3_attest, "_git", lambda *a: (a[-1] if a else ""))
+    monkeypatch.setattr(c3_attest, "is_ancestor", lambda older, newer: newer.startswith("a"))
+
+    # No history at all: refuse, because nothing designates a freeze.
+    with pytest.raises(c3_attest._Refused):
+        c3_attest.check_head_is_designated("a" * 40)
+
+    history.write_text(
+        json.dumps({"event": "designated_freeze", "commit": "a" * 40}) + "\n"
+        + json.dumps({"event": "note", "commit": "a" * 40 + "b"}) + "\n",
+        encoding="utf-8")
+    c3_attest.check_head_is_designated("a" * 40)          # the designation
+
+    # A descendant is *not* the designation, even if appended to the history.
+    with pytest.raises(c3_attest._Refused, match="descendant"):
+        c3_attest.check_head_is_designated("a" * 40 + "b")
+
+    # An entry that does not descend from the designation is a rewritten
+    # history, not an appended one.
+    history.write_text(
+        history.read_text(encoding="utf-8")
+        + json.dumps({"event": "note", "commit": "c" * 40}) + "\n",
+        encoding="utf-8")
+    monkeypatch.setattr(c3_attest, "is_ancestor", lambda older, newer: newer.startswith("a"))
+    with pytest.raises(c3_attest._Refused, match="rewritten"):
+        c3_attest.check_head_is_designated("a" * 40)
+
+
+def test_the_run_spec_case_guard_reads_the_registration_not_the_spec():
+    """H-C, structurally: the comparison must consult ``definition['cases']``."""
+    import inspect
+
+    import scripts.token_benchmark as tb
+
+    source = inspect.getsource(tb._preflight_gate)
+    assert 'definition.get("cases")' in source
+    assert "case_diff" in source
+
+
+def test_the_freeze_seam_cannot_be_used_for_a_frozen_batch_run(monkeypatch, tmp_path):
+    """R-5-C: the skip flag is a test seam, not a hole on the paid path."""
+    import scripts.token_benchmark as tb
+
+    monkeypatch.setenv("TRADINGAGENTS_SKIP_FREEZE_CHECK", "1")
+    run_dir = _batch_dir() / "specs" / "R01_NVDA_C0"
+    with pytest.raises(tb.RunRefused, match="cannot be disabled"):
+        tb.verify_frozen_tree(run_dir / "spec.json")
+
+
+def test_the_parent_strips_the_freeze_seam_from_a_child_environment(monkeypatch):
+    """R-5-C: the flag must not travel to a child unless asked for explicitly.
+
+    The flag must be *present* in the parent's environment for this test to
+    mean anything -- otherwise it passes because nothing was there to strip.
+    """
+    import scripts.token_benchmark as tb
+
+    spec = {"switches": {"batch_macro": False, "structured": True,
+                         "single_pass": True, "s2_downstream": True}}
+
+    monkeypatch.setenv("TRADINGAGENTS_SKIP_FREEZE_CHECK", "1")
+    monkeypatch.delenv("TRADINGAGENTS_ALLOW_SKIP_FREEZE_CHECK_IN_CHILD",
+                       raising=False)
+    assert "TRADINGAGENTS_SKIP_FREEZE_CHECK" not in tb._child_env_for_spec(spec)
+
+    # ...unless a test asks for it on the second, separately-named variable.
+    monkeypatch.setenv("TRADINGAGENTS_ALLOW_SKIP_FREEZE_CHECK_IN_CHILD", "1")
+    assert tb._child_env_for_spec(spec)["TRADINGAGENTS_SKIP_FREEZE_CHECK"] == "1"
+
+
+def test_the_frozen_commit_override_can_only_restate_the_reference(monkeypatch):
+    """R-5-D: ``C3_FROZEN_COMMIT`` may not redirect the gate elsewhere."""
+    from scripts import c3_preflight_gate as gate
+
+    recorded = gate._frozen_commit()
+    monkeypatch.setenv("C3_FROZEN_COMMIT", recorded)
+    assert gate._frozen_commit() == recorded          # a restatement is fine
+    monkeypatch.setenv("C3_FROZEN_COMMIT", "0" * 40)
+    with pytest.raises(SystemExit, match="may only restate"):
+        gate._frozen_commit()

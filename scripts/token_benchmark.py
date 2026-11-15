@@ -2548,6 +2548,15 @@ def _child_env_for_spec(spec: dict) -> dict:
       unrelated shell state silently.
     """
     env = dict(os.environ)
+    # The frozen-release check's test seam must not travel to a paid child
+    # (audit A round 5, R-5-C). Inheriting it from an operator's shell would
+    # silently disable the one control that decides whether money is spent,
+    # which is a hole rather than a seam. A test that needs it must ask for it
+    # explicitly on this second, separately-named variable -- and that request
+    # is refused outright once the spec is a registration of the frozen batch
+    # (see ``verify_frozen_tree``), so it cannot reach a real paid run.
+    if env.pop("TRADINGAGENTS_ALLOW_SKIP_FREEZE_CHECK_IN_CHILD", None) != "1":
+        env.pop("TRADINGAGENTS_SKIP_FREEZE_CHECK", None)
     switches = spec.get("switches") or {}
     for name, env_var in SPEC_SWITCH_ENV:
         if name in switches:
@@ -2998,7 +3007,7 @@ def _preflight_gate(spec: dict) -> dict:
     return {"checked": True}
 
 
-def verify_frozen_tree() -> None:
+def verify_frozen_tree(spec_path: str | Path | None = None) -> None:
     """Refuse to spend money on a tree that is not the frozen release.
 
     The freeze checks lived only in ``scripts/c3_preflight_gate.py``, which the
@@ -3022,6 +3031,18 @@ def verify_frozen_tree() -> None:
     # that run the child outside a frozen release, and the flag's presence is
     # itself asserted there.
     if os.environ.get("TRADINGAGENTS_SKIP_FREEZE_CHECK") == "1":
+        # The seam exists for tests that exercise the child outside a frozen
+        # release. It must never be usable for a run of *this* batch: a paid
+        # result produced with the check disabled is not evidence from the
+        # audited release, so it is refused rather than warned about (audit A
+        # round 5, R-5-C: a warning is not a guard).
+        if spec_path is not None and _is_frozen_batch_registration(
+                Path(spec_path).parent):
+            raise RunRefused(
+                "TRADINGAGENTS_SKIP_FREEZE_CHECK=1 is set, but this is a run of "
+                "the frozen batch: the frozen-release check cannot be disabled "
+                "for a paid run, whatever the environment says"
+            )
         print("WARNING: TRADINGAGENTS_SKIP_FREEZE_CHECK=1 -- the frozen-release "
               "check is DISABLED; any result from this process is not evidence "
               "from the audited release", file=sys.stderr)
@@ -3112,7 +3133,7 @@ def _run_single(spec_path: str) -> int:
         # The expensive refusal: only a run of the *frozen release* may spend
         # money. Checked here, on the spending path, not only in the gate
         # script (audit A round 4, H-A).
-        verify_frozen_tree()
+        verify_frozen_tree(spec_path)
         _preflight_gate(spec)
     except (RunRefused, RuntimeError) as exc:
         reason = f"{type(exc).__name__}: {exc}"

@@ -101,6 +101,10 @@ def _run(root: Path, *args: str, cwd: Path | None = None, secrets: Path | None =
     # refusal has its own tests; skipping it here keeps that control from being
     # quietly untested by making every wrapper test depend on it.
     env["TRADINGAGENTS_SKIP_FREEZE_CHECK"] = "1"
+    # ...and it must reach the measured child: the parent strips the seam from
+    # a child's environment unless this second, separately-named variable asks
+    # for it explicitly (audit A round 5, R-5-C).
+    env["TRADINGAGENTS_ALLOW_SKIP_FREEZE_CHECK_IN_CHILD"] = "1"
     return subprocess.run(
         [str(root / "scripts" / WRAPPER.name), *args],
         cwd=str(cwd or root.parent), capture_output=True, text=True, env=env,
