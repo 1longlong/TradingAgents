@@ -88,6 +88,43 @@ def check_frozen_commit(expected: str) -> None:
     _ok("tracked tree clean")
 
 
+def check_fingerprint_matches_record(expected: str) -> None:
+    """The committed freeze record must describe *this* tree, not an older one.
+
+    ``c3/code_freeze.txt`` cannot name the commit it is committed in (a commit
+    cannot contain its own hash), so it records the code fingerprint instead.
+    That number is stable across the freeze commit, which makes it the one
+    field that can prove the record and the tree agree. Without this check a
+    freeze record naming an earlier commit and an earlier tree ran unnoticed
+    (audit A-07).
+    """
+    import json
+    import sys
+
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    import token_benchmark as tb
+
+    record = BATCH_DIR / "c3" / "code_freeze.txt"
+    text = record.read_text(encoding="utf-8")
+    declared = None
+    for line in text.splitlines():
+        if line.strip().startswith("working_tree_sha256"):
+            declared = line.split("=", 1)[-1].strip()
+    if not declared:
+        _fail("freeze record", f"{record.name} records no working_tree_sha256")
+    experiment = json.loads((BATCH_DIR / "experiment.json").read_text(encoding="utf-8"))
+    actual = tb.compute_code_state(BATCH_DIR, experiment).get("working_tree_sha256")
+    if actual != declared:
+        _fail("freeze record",
+              f"code_freeze.txt records {declared[:16]}…, but this tree "
+              f"fingerprints to {actual[:16]}…; the record describes a "
+              f"different tree")
+    if expected[:12] not in text:
+        _fail("freeze record",
+              f"code_freeze.txt does not mention the frozen commit {expected[:12]}")
+    _ok("freeze record", f"{declared[:16]}… matches this tree and names {expected[:12]}")
+
+
 def check_import_root(expected_root: Path = REPO_ROOT) -> None:
     import tradingagents
 
@@ -281,7 +318,9 @@ def main(argv: list[str] | None = None) -> int:
         _fail("spec path", f"{args.spec} belongs to {spec_dir!r}, "
                            f"not to run {args.run_id}")
 
-    check_frozen_commit(args.expected_commit or _frozen_commit())
+    frozen = args.expected_commit or _frozen_commit()
+    check_frozen_commit(frozen)
+    check_fingerprint_matches_record(frozen)
     check_import_root()
     check_spec_hash(spec)
     check_arm_matches_manifest(spec, expected_switches)
