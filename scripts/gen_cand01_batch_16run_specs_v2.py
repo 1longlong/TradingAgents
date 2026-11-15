@@ -355,7 +355,15 @@ def code_state(experiment_sha: str) -> dict:
 
     head = _git("rev-parse", "HEAD")
     branch = _git("rev-parse", "--abbrev-ref", "HEAD")
-    dirty = bool(_git("status", "--porcelain"))
+    # "Dirty" means the *code* differs from HEAD, which is exactly what the
+    # gate means by it (`git diff --binary`). Counting untracked files made the
+    # flag permanently true in this worktree, where ~19MB of historical
+    # experiment evidence is deliberately untracked, so the delivered record
+    # said "dirty" for a tree the gate accepts as clean -- a contradiction a
+    # reader would read as "generated from uncommitted code".
+    diff = subprocess.run(["git", "-C", str(root), "diff", "--binary"],
+                          capture_output=True, text=True, check=False)
+    dirty = bool(diff.stdout.strip())
     # A delivered artefact that names a checkout must name the checkout that
     # *produced it*, not whatever tree happens to be checked out when someone
     # re-runs `--check` -- and it must not imply the specs were generated under
