@@ -3046,6 +3046,26 @@ def verify_frozen_tree() -> None:
             f"{expected[:12]}; the code that would run is not the code that "
             f"was audited"
         )
+    # ``FROZEN_COMMIT`` is untracked and therefore rewritable by the same act
+    # that rewrites the record, which made the whole check circular: Audit A
+    # round 5 (R-5-B) committed a tampered tree, re-ran the freeze writer, wrote
+    # the new hash into ``FROZEN_COMMIT`` and both this function and the gate
+    # passed. The designation is now an append-only history whose *first* entry
+    # names the commit, and which later entries cannot retract.
+    try:
+        from c3_attest import check_head_is_designated
+    except ImportError:  # imported as scripts.token_benchmark, not from scripts/
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "c3_attest", Path(__file__).resolve().parent / "c3_attest.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        check_head_is_designated = module.check_head_is_designated
+    try:
+        check_head_is_designated(head)
+    except Exception as exc:  # noqa: BLE001 - any failure here means "refuse"
+        raise RunRefused(str(exc)) from None
     dirty = subprocess.run(["git", "-C", str(_PROJECT_ROOT), "status",
                             "--porcelain", "--untracked-files=no"],
                            capture_output=True, text=True, check=False).stdout.strip()

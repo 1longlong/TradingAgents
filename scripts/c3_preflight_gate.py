@@ -29,6 +29,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from c3_attest import check_head_is_designated  # noqa: E402
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BATCH_DIR = REPO_ROOT / "token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2"
 #: The container commit is read from a file that the *release* step writes,
@@ -97,6 +100,17 @@ def check_frozen_commit(expected: str) -> None:
     if dirty:
         _fail("tracked tree", f"uncommitted changes:\n{dirty}")
     _ok("tracked tree clean")
+
+    # HEAD == FROZEN_COMMIT is circular on its own: FROZEN_COMMIT is untracked,
+    # so anything that can rewrite the record can also rewrite the pointer
+    # (Audit A round 5, R-5-B; and the 2026-11-15 self-tamper incident). The
+    # append-only designation in FREEZE_HISTORY.jsonl names the *first* commit
+    # ever designated, and later entries cannot retract it.
+    try:
+        check_head_is_designated(head)
+    except Exception as exc:  # noqa: BLE001 - any failure means "refuse"
+        _fail("designated freeze", str(exc))
+    _ok("designated freeze", head[:12])
 
 
 def check_release_seal() -> None:
