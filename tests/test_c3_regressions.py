@@ -1243,22 +1243,38 @@ def test_spec_body_hash_matches_the_release_definition():
         tb.spec_body_sha256(spec))
 
 
-def test_the_freeze_check_opt_out_announces_itself(capfd, monkeypatch):
-    """B-26: the escape hatch must never be quiet, and must be opt-in only."""
+def test_the_freeze_check_opt_out_is_explicit_and_loud(capfd, monkeypatch, tmp_path):
+    """B-26: the escape hatch must never be quiet, and must be opt-in only.
+
+    Exercised against a sandbox batch directory so the test says nothing about
+    the developer's checkout; the real tree is covered by
+    ``test_the_spending_child_refuses_an_unfrozen_tree``.
+    """
     import inspect
 
     import scripts.token_benchmark as tb
 
+    fake = tmp_path / "batch"
+    (fake / "c3").mkdir(parents=True)
+    (fake / "c3" / "FROZEN_COMMIT").write_text("0" * 40 + "\n")
+    (fake / "c3" / "code_freeze.txt").write_text(
+        "  working_tree_sha256   : " + "0" * 64 + "\n", encoding="utf-8")
+    (fake / "experiment.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(tb, "_frozen_batch_dir", lambda: fake)
+
+    # Opted out: returns without checking, but says so every time.
     monkeypatch.setenv("TRADINGAGENTS_SKIP_FREEZE_CHECK", "1")
     tb.verify_frozen_tree()
     err = capfd.readouterr().err
-    assert "SKIP_FREEZE_CHECK=1" in err
-    assert "DISABLED" in err
+    assert "SKIP_FREEZE_CHECK=1" in err and "DISABLED" in err
 
-    # Only the exact string "1" opts out; anything else still checks.
-    source = inspect.getsource(tb.verify_frozen_tree)
-    assert 'os.environ.get("TRADINGAGENTS_SKIP_FREEZE_CHECK") == "1"' in source
-    for value in ("true", "yes", "0", ""):
+    # Any other value still checks and still refuses this broken pointer.
+    for value in ("true", "yes", "0", "", "2"):
         monkeypatch.setenv("TRADINGAGENTS_SKIP_FREEZE_CHECK", value)
+        capfd.readouterr()
         with pytest.raises(tb.RunRefused):
             tb.verify_frozen_tree()
+        assert capfd.readouterr().err == "", f"{value!r} must not disable the check"
+
+    source = inspect.getsource(tb.verify_frozen_tree)
+    assert 'os.environ.get("TRADINGAGENTS_SKIP_FREEZE_CHECK") == "1"' in source
