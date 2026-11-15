@@ -38,29 +38,39 @@ def _run_single_source() -> str:
 # C3-01: exactly one graph per measured run
 # ---------------------------------------------------------------------------
 def test_run_single_constructs_exactly_one_graph():
+    import scripts.token_benchmark as tb
+
     src = _run_single_source()
-    assert src.count("TradingAgentsGraph(") == 1, (
-        "one measured run must construct exactly one graph; a second "
-        "construction creates a second live stats handler"
-    )
+    # The construction itself lives in one helper (shared with the dry run), and
+    # a measured run must call that helper exactly once: a second construction
+    # creates a second live stats handler.
+    assert src.count("_construct_graph(") == 1, (
+        "one measured run must construct exactly one graph")
+    builder = inspect.getsource(tb._construct_graph)
+    assert builder.count("TradingAgentsGraph(") == 1
+    assert builder.count("StatsCallbackHandler()") == 1
 
 
 def test_run_single_constructs_exactly_one_stats_handler():
-    src = _run_single_source()
-    assert src.count("StatsCallbackHandler()") == 1
+    import scripts.token_benchmark as tb
+
+    builder = inspect.getsource(tb._construct_graph)
+    assert builder.count("StatsCallbackHandler()") == 1
 
 
 def test_switch_verification_happens_before_propagate():
     """A mislabelled arm must be refused before it can spend money."""
     src = _run_single_source()
-    verify_at = src.index("verify_switches_consumed(")
+    verify_at = src.index("_verify_graph_consumed_switches(")
     propagate_at = src.index("graph.propagate(")
     assert verify_at < propagate_at
 
 
 def test_switch_verification_reads_the_live_graph():
     """The check must inspect the graph that will run, not a stand-in."""
-    src = _run_single_source()
+    import scripts.token_benchmark as tb
+
+    src = inspect.getsource(tb._verify_graph_consumed_switches)
     assert "consume_switches_from_setup(graph.graph_setup)" in src
 
 
@@ -154,8 +164,13 @@ def test_verify_import_root_rejects_a_foreign_tree(tmp_path):
 
 
 def test_run_single_checks_import_root_before_building_clients():
+    import scripts.token_benchmark as tb
+
     src = _run_single_source()
-    assert src.index("verify_import_root(") < src.index("TradingAgentsGraph(")
+    # The check lives in the shared spending-path guard; what matters is that
+    # the guard runs before anything constructs a client.
+    assert src.index("_guard_spending_path(") < src.index("_construct_graph(")
+    assert "verify_import_root(" in inspect.getsource(tb._guard_spending_path)
 
 
 def test_run_single_writes_effective_config_before_propagating():
@@ -194,13 +209,20 @@ def test_effective_config_redacts_secrets_and_records_provenance(tmp_path, monke
     # Patch the collaborator the writer imports, not the writer's own module
     # globals: restoring is then guaranteed by monkeypatch even if the body
     # raises, and no reload of the harness is needed.
-    monkeypatch.setattr(sv, "consume_switches_from_setup",
-                        lambda setup: {"batch_macro": True})
+    # A complete arm: the writer now *verifies* the record it is about to
+    # write, and a partial switch set is not a valid arm (U-1 round; the strict
+    # field set predates it, audit A H-B).
+    switches = {"batch_macro": True, "structured": True, "single_pass": False,
+                "s2_downstream": True}
+    monkeypatch.setattr(
+        sv, "consume_switches_from_setup",
+        lambda setup: sv.expected_analyst_kwargs(switches))
 
     path = tb._write_effective_config(
         tmp_path,
         config={"api_key": "sk-should-never-appear", "quick_think_llm": "m"},
-        spec={"switches": {"batch_macro": True}},
+        spec={"stream": None, "switches": switches,
+              "provider": None, "quick_model": None, "deep_model": None},
         graph=_FakeGraph(),
         applied_switches={"batch_macro_enabled": True},
     )
@@ -953,7 +975,14 @@ def test_an_exhausted_budget_makes_the_sample_invalid():
         "run": {"run_status": "completed"},
         "run_totals": {"reported_input_tokens_sum": 10, "reported_output_tokens_sum": 5,
                        "llm_calls": 1},
-        "usage_coverage": {"complete": True},
+        # Complete coverage means the counts say so, not only the boolean (U-1).
+        "usage_coverage": {"complete": True, "llm_calls": 1,
+                           "calls_with_provider_usage": 1,
+                           "calls_without_provider_usage": 0,
+                           "calls_missing_input_tokens": 0,
+                           "calls_missing_output_tokens": 0},
+        "audit_quality": {"usage_complete": True, "attribution_complete": True,
+                          "telemetry_complete": True},
         "llm_call_events": [{"callback_run_id": "c1", "reported_input_tokens": 10,
                              "reported_output_tokens": 5, "usage_source": "vendor"}],
     }
@@ -1132,11 +1161,15 @@ def test_the_frozen_tree_check_is_on_the_child_path():
     import scripts.token_benchmark as tb
 
     source = inspect.getsource(tb._run_single)
-    # Called *with the spec path*, so the check can tell a run of the frozen
-    # batch (which may never disable it) from a test seam.
-    assert "verify_frozen_tree(spec_path)" in source
-    # Before the imports that build a client, not after.
-    assert source.index("verify_frozen_tree(") < source.index("StatsCallbackHandler")
+    # The check lives in the shared spending-path guard, which is called with
+    # the spec path so it can tell a run of the frozen batch (which may never
+    # disable the check) from a test seam.
+    assert "_guard_spending_path(spec, Path(spec_path))" in source
+    guard = inspect.getsource(tb._guard_spending_path)
+    assert "verify_frozen_tree(spec_path)" in guard
+    # The guard runs before any client or graph is constructed.
+    assert source.index("_guard_spending_path(") < source.index("_construct_graph(")
+    assert source.index("_guard_spending_path(") < source.index("_config_for_spec(")
 
 
 def test_delivered_provenance_states_true_ancestry():
@@ -1151,11 +1184,19 @@ def test_delivered_provenance_states_true_ancestry():
     import subprocess
 
     batch = _batch_dir()
-    current = (batch / "c3" / "FROZEN_COMMIT").read_text().strip()
+    frozen_file = batch / "c3" / "FROZEN_COMMIT"
+    current = frozen_file.read_text().strip() if frozen_file.is_file() else None
     for directory in sorted((batch / "specs").iterdir()):
         if not directory.is_dir():
             continue
         state = json.loads((directory / "code_state.json").read_text())
+        if current is None:
+            # The specs are generated before the commit that freezes them, so
+            # before certification no file may *claim* a freeze. After
+            # certification this branch cannot run: FROZEN_COMMIT exists.
+            assert state["frozen_commit"] is None, directory.name
+            assert state["git_head_relation_to_freeze"] == "unfrozen", directory.name
+            continue
         relation = state["git_head_relation_to_freeze"]
         # The file names the freeze that existed when it was captured. That is
         # necessarily *not* the commit carrying the file (a file cannot name the
@@ -1164,6 +1205,14 @@ def test_delivered_provenance_states_true_ancestry():
         # label must still be true of the commit it names.
         head = state["git_head_commit"]
         recorded_freeze = state["frozen_commit"]
+        if recorded_freeze is None:
+            # The specs are regenerated before the commit that freezes them, so
+            # a file cannot name that commit. An absent reference must say so
+            # rather than claim an ancestry -- and the freeze verifier ties the
+            # file to the commit by hash instead.
+            assert relation == "unfrozen", (
+                f"{directory.name} names no freeze but claims {relation!r}")
+            continue
         on_branch = subprocess.run(
             ["git", "-C", str(Path(__file__).resolve().parent.parent),
              "merge-base", "--is-ancestor", recorded_freeze, current],
@@ -1399,9 +1448,15 @@ def test_the_parent_strips_the_freeze_seam_from_a_child_environment(monkeypatch)
     assert tb._child_env_for_spec(spec)["TRADINGAGENTS_SKIP_FREEZE_CHECK"] == "1"
 
 
-def test_the_frozen_commit_override_can_only_restate_the_reference(monkeypatch):
+def test_the_frozen_commit_override_can_only_restate_the_reference(monkeypatch, tmp_path):
     """R-5-D: ``C3_FROZEN_COMMIT`` may not redirect the gate elsewhere."""
     from scripts import c3_preflight_gate as gate
+
+    # A temporary reference, so the test is about the override rule and not
+    # about whether this checkout happens to be released yet.
+    reference = tmp_path / "FROZEN_COMMIT"
+    reference.write_text("a" * 40 + "\n", encoding="utf-8")
+    monkeypatch.setattr(gate, "FROZEN_COMMIT_FILE", reference)
 
     recorded = gate._frozen_commit()
     monkeypatch.setenv("C3_FROZEN_COMMIT", recorded)

@@ -1,4 +1,8 @@
 {
+  "budget": {
+    "budget_mode": "uncapped_authorized",
+    "max_total_tokens": null
+  },
   "cache_policy": "preserve_existing",
   "case": {
     "analysts": [
@@ -12,10 +16,10 @@
     "ticker": "AAPL",
     "trade_date": "2026-09-23"
   },
-  "config_sha256": "8658b8a1018938cb24cfc0f5a3225b0d65b9819453061c9dbb58fb3f05e4079b",
+  "config_sha256": "65c4086691ea9eb522ff64655fd1bed5434795c6a937cbd977cdc83e7cf22b1f",
   "deep_model": "CS5351/DeepSeek-V4-Flash",
   "experiment_id": "R07",
-  "experiment_root": "/tmp/opencode/planC2_wt",
+  "experiment_root": "/home/sky/cs5351/TradingAgents/.worktrees/cand01_final_wt",
   "news_scope": {
     "company_news": "finnhub",
     "gdelt": "excluded",
@@ -24,7 +28,7 @@
   "output_language": "English",
   "provider": "openai_compatible",
   "quick_model": "CS5351/DeepSeek-V4-Flash",
-  "results_dir": "/tmp/opencode/planC2_wt/token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/specs/R07_AAPL_CC/runs/run_01/attempt_01/runtime/AAPL/2026-09-23",
+  "results_dir": "/home/sky/cs5351/TradingAgents/.worktrees/cand01_final_wt/token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/specs/R07_AAPL_CC/runs/run_01/attempt_01/runtime/AAPL/2026-09-23",
   "run_index": 1,
   "switches": {
     "batch_macro": true,

@@ -187,22 +187,22 @@ later be reused for a different (stock, arm) cell. `Rnn` == execution position.
 
 | Run | Pos | Block | Arm | `batch_macro` | `single_pass` | `structured` | `s2_downstream` | `config_sha256` |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `R01` | 1  | NVDA | C0 | false | true  | true | true | `3d5500170779a90284f3869d745bcdafdcee8b57800a22e6d7f42062dbb71a03` |
-| `R02` | 2  | NVDA | AB | true  | false | true | true | `9cd7241382233fd40c28fc0588463cd5ed51e9432666139e64030f11bd994efe` |
-| `R03` | 3  | NVDA | CC | true  | true  | true | true | `80367bf3d532abccf974bb22c4834d7ec2ab556c1ce4d0d229d79803e225a27d` |
-| `R04` | 4  | NVDA | B  | false | false | true | true | `dbab594d30fb906cd269402a59046d4ce1932423953841e5d720240b1f5771ec` |
-| `R05` | 5  | AAPL | C0 | false | true  | true | true | `d1ea84c6c61bc7eb1890eaef38a8989edf6e3f980e5ffa797d91ed8837cc17d7` |
-| `R06` | 6  | AAPL | B  | false | false | true | true | `7179532fc5826b0fc8ef3803c72d63cc3f925db5513c38ae4ea41fd49d163ce7` |
-| `R07` | 7  | AAPL | CC | true  | true  | true | true | `8658b8a1018938cb24cfc0f5a3225b0d65b9819453061c9dbb58fb3f05e4079b` |
-| `R08` | 8  | AAPL | AB | true  | false | true | true | `b07f7deb710dcca2b92f5af2f16714a8f7a91f5cfb0a07f18093d5f93ab18937` |
-| `R09` | 9  | JPM  | C0 | false | true  | true | true | `e74be5b613f4ef1a4b134ddcf4edd0b89339599a7e772c00ceba43be004bc7d3` |
-| `R10` | 10 | JPM  | AB | true  | false | true | true | `fbc6991e902ac4b63dc034ed43dd7fe35d6b27af9698c3a9cb9b5bc1e5f4de15` |
-| `R11` | 11 | JPM  | B  | false | false | true | true | `ecaf062211a22bc993263bc7658bb67bd43c66c2fe58b79a1a6c96f67d91211c` |
-| `R12` | 12 | JPM  | CC | true  | true  | true | true | `beb4bcb49776427dbbcc07965d5033f18ba382a22cf1c4b92385c25c123c31f7` |
-| `R13` | 13 | XOM  | C0 | false | true  | true | true | `0f6ae6639ab4a2e1b334d35e33dc0a7f71f51c0195ef8eef1b44cde19490e8bc` |
-| `R14` | 14 | XOM  | CC | true  | true  | true | true | `a2fae64deebd314796d4b0f18c1467496890a5e7f291b23c9b7aa90edfb09c80` |
-| `R15` | 15 | XOM  | B  | false | false | true | true | `df852fb531915549ec1cb67cc26e7853dbfd83655ebacb99d7f5b290b58a7108` |
-| `R16` | 16 | XOM  | AB | true  | false | true | true | `eb478d2b5337a8a6729ecc6cf5c399bed9319f541bf27d3ef46aa197839f6ffe` |
+| `R01` | 1  | NVDA | C0 | false | true  | true  | true  | `bdbd531ec8c0de14cce0db574f5a47cdef9ba6f8c0e62549b3982f0aad6df407` |
+| `R02` | 2  | NVDA | AB | true  | false | true  | true  | `0c998239ac70316af6e0f59a860614c2a881548a8c0ee27d3257947715686e5e` |
+| `R03` | 3  | NVDA | CC | true  | true  | true  | true  | `a9d2aff62baa5a6007b29c62d38f62ee028b4ad4383c3f74307708ef18a8bd19` |
+| `R04` | 4  | NVDA | B  | false | false | true  | true  | `b2e780920ca89a85a5c7f2716d23b8e22c9e03120c794f764a239672ae04f900` |
+| `R05` | 5  | AAPL | C0 | false | true  | true  | true  | `72cf570ce8f74b30aa0969435ce9cbca2a8554a4bf05fd5ad80a845f4902b173` |
+| `R06` | 6  | AAPL | B  | false | false | true  | true  | `c88b6e3a174432e5e8cb37299891f2e6973510528703a0b856d7fddf159470db` |
+| `R07` | 7  | AAPL | CC | true  | true  | true  | true  | `65c4086691ea9eb522ff64655fd1bed5434795c6a937cbd977cdc83e7cf22b1f` |
+| `R08` | 8  | AAPL | AB | true  | false | true  | true  | `617d2b3c850a9a56f288ed590f1d8ea5f45964557cae1e295bb087d2ae6981c9` |
+| `R09` | 9  | JPM | C0 | false | true  | true  | true  | `68a60ea4bc9ebb911db21a60e147cdc541f88880f51eab5a1135a1b0028df16b` |
+| `R10` | 10 | JPM | AB | true  | false | true  | true  | `c57f7a18b87bb056d9a3dcce6648b770fc751e9d9e6f7eda4525ff064e4b476a` |
+| `R11` | 11 | JPM | B  | false | false | true  | true  | `52985cb2896f675b2ca35a4eea245cafe5ded9ee2af4873c56efdc1df63ade6a` |
+| `R12` | 12 | JPM | CC | true  | true  | true  | true  | `eeabfa7b25d20d293111a627c9a2b4d480df462ff9ccbf31845039cecafd7110` |
+| `R13` | 13 | XOM | C0 | false | true  | true  | true  | `71a2cb376a0a8d845c19049f815364ca1062902b9c007f26cbb9fc1806d94cf1` |
+| `R14` | 14 | XOM | CC | true  | true  | true  | true  | `ed53794d3fc340d38da413875011a672b3c6bdb98ead99a6f254604a9b82fbb3` |
+| `R15` | 15 | XOM | B  | false | false | true  | true  | `98d3b0b99e1a48ba8494f1b285f995badf079a0d5621ce9e214b3b2e95df94e4` |
+| `R16` | 16 | XOM | AB | true  | false | true  | true  | `4f8c6e8c84a7681780f19c1ed698298cef7d94c4030c0ed3ba917fa73c253ab2` |
 
 Machine-readable copies: `CONFIG_HASH_MANIFEST.csv`, `RUN_MANIFEST_TEMPLATE.csv`,
 `SWITCH_MATRIX.csv` (all generated, never hand-edited).
@@ -322,14 +322,39 @@ The authoritative implementation is `tradingagents/observability.py`.
   `run_id` is dropped once the event has been emitted (`_llm_starts` +
   `emitted`).
 * **Separate fields.** prompt / completion / total / cached / reasoning tokens
-  are recorded separately; raw vendor usage is preserved via `usage_source`.
+  are recorded separately; the **raw vendor usage blob** is preserved per call
+  (`reported_usage_raw`, bounded, no message content) so a parsed total can be
+  re-examined against the provider's own numbers (limitation L-5, closed).
+* **Negative counts are not counts.** A negative token count is rejected at
+  extraction and recorded in `usage_checks.negative_token_counts`; it can never
+  enter a sum or certify a run (limitation L-5, closed).
 * **Partial runs keep their usage.** Interrupted runs retain every event already
-  recorded; a run is only `usage_complete` when the newest event asserts
-  completeness, and completeness is never downgraded by a later partial.
-* **Budget.** `max_total_tokens = null` this round: the cap is **unset by
-  design**. The gate distinguishes used / reserved / remaining / `UNKNOWN_SPEND`
-  / `UNCAPPED` / `OK` / `EXHAUSTED`; under `UNKNOWN_SPEND` spend is **not**
-  reported as zero. See `BUDGET_GUARD_DESIGN.md`.
+  recorded. Completeness is *derived from the counts* on every read, not
+  remembered from the newest event, so a later partial call cannot leave a flag
+  reading "complete" (limitation L-5, closed).
+* **The usage verdict gates validity (U-1).** Every telemetry payload is
+  classified as one of:
+
+  | Verdict | Meaning |
+  | --- | --- |
+  | `VALID` | every call reported usage, every field present, attribution complete, replay agrees with the totals |
+  | `MISSING` | no provider usage at all (or no LLM call): nothing was measured |
+  | `INCOMPLETE` | usage exists but not for every call / field, an event is unattributed, or the run did not finalize |
+  | `MISMATCH` | the payload contradicts itself or the replay: counts that do not add up, negative totals, per-call events that do not sum to the run totals, or a replay total different from the telemetry total |
+
+  Only `VALID` can produce a measured sample. `agrees_with_telemetry` is now
+  **consumed**: it was computed and ignored, so a disagreeing run still reported
+  `valid=True` (audit C round 5, U-1). A run with `MISSING` usage publishes
+  `total_tokens: null`, never `0`.
+* **Budget.** The registration states the contract explicitly:
+  `budget_mode = "uncapped_authorized"` with `max_total_tokens = null` (U-2). A
+  `null` cap is *only* "unlimited" when that mode is present; a missing file, a
+  malformed block, a missing mode or a non-integer cap are each a distinct
+  refusal (`BUDGET_PROTOCOL_MISSING`, `BUDGET_CONFIG_MALFORMED`,
+  `BUDGET_MODE_MISSING`, `BUDGET_CAP_INVALID`, …), never an implicit uncapped
+  run. The gate still distinguishes used / reserved / remaining /
+  `UNKNOWN_SPEND` / `UNCAPPED` / `OK` / `EXHAUSTED`, and under `UNKNOWN_SPEND`
+  spend is **not** reported as zero. See `BUDGET_GUARD_DESIGN.md`.
 
 ---
 
@@ -360,6 +385,9 @@ The round stops (rather than continuing to spend) on:
 | `S6` | Working-tree fingerprint drifts between runs |
 | `S7` | Any evidence that GDELT was contacted |
 | `S8` | Operator stop request |
+| `S9` | A run's usage verdict is `MISMATCH` or `MISSING` (U-1). The run is void, not a sample; a `MISMATCH` also means the harness and the provider disagree about what was spent, which is a round-level stop rather than a single bad sample |
+| `S10` | The budget contract cannot be interpreted (U-2: missing file, malformed block, missing `budget_mode`, non-integer cap). Nothing may be spent against an unknown budget |
+| `S11` | The final-freeze verification fails (`scripts/c3_verify_final_freeze.py`): `HEAD`, the record, the tag and the append-only designation must all name the same commit, and the tree must hash to the recorded fingerprint |
 
 ---
 
@@ -439,3 +467,37 @@ unhashed `results_dir` — and is checked against that function, not against the
 the file-bytes formula and a test enshrined the error; audit B-03 found both.)
 Any change to the design, the seed, the hash algorithm or the news scope
 requires a **new protocol version**; V1 and V2 both remain on disk unmodified.
+
+### 14.1 Amendment — budget contract and usage verdict (V2.1)
+
+Two fields change how a run is validated, neither of which touches the design
+(stocks, arms, trade date, models, seed, order):
+
+1. `budget` now carries `budget_mode = "uncapped_authorized"` alongside
+   `max_total_tokens = null`. `budget` was already a hashed field, so **every
+   `config_sha256` moved**; the table in §5 was rewritten by
+   `gen_cand01_batch_16run_specs_v2.py --write-protocol-table`, never edited by
+   hand, and `CONFIG_HASH_MANIFEST.csv` / `RUN_MANIFEST_TEMPLATE.csv` were
+   regenerated with it.
+2. The usage verdict in §9 is consumed by the validity check (U-1).
+
+`protocol_version` in every registration is `"V2.1"`. The V2 design is
+unchanged; this amendment records *why the hashes are new* and keeps the
+pre-registration honest instead of presenting hashes that no longer match their
+registration.
+
+### 14.2 What is certified, and by what
+
+The final freeze is one commit, named by `c3/FROZEN_COMMIT` and by an annotated
+tag `c3-final-freeze`, and recorded in `c3/FREEZE_RECORD.json` (commit, tree,
+fingerprint, per-spec hashes, generator and protocol hashes). It is verified by
+
+```
+python scripts/c3_verify_final_freeze.py
+```
+
+which requires `HEAD`, the record, the tag and the append-only
+`c3/FREEZE_HISTORY.jsonl` designation to name the **same** commit — a later
+commit moves `HEAD` and fails the check. The previous record designated an
+ancestor of `HEAD`, so `HEAD == FROZEN_COMMIT` could never hold again; that is
+the defect this replaces.

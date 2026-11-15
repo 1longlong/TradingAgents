@@ -1,7 +1,7 @@
 seed = 20261114
 generator = random.Random(20261114) once; shuffle(['B','AB','C0','CC']) once per block in order ['NVDA', 'AAPL', 'JPM', 'XOM']
 algorithm = CPython stdlib random.shuffle (Mersenne Twister)
-protocol = V2
+protocol = V2.1
 
 NVDA: ['C0', 'AB', 'CC', 'B']
 AAPL: ['C0', 'B', 'CC', 'AB']

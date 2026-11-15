@@ -860,7 +860,9 @@ class TestIncompleteUsageIsNotMeasured:
         assert calls == [], "skipping must not spend another LLM run"
         s = result["summaries"]["nvda_2026_09_23"]
         assert s["measured_valid"] == 0
-        assert s["runs"][0]["error"] == tb.INVALID_USAGE_MISSING
+        # One of two calls reported no usage: that is an *incomplete* sample,
+        # not a run with no usage at all (U-1 distinguishes the two).
+        assert s["runs"][0]["error"] == tb.INVALID_USAGE_INCOMPLETE
 
     def test_failed_llm_call_without_usage_invalidates_the_run(self, tmp_path):
         exp_dir = tmp_path / "exp"
@@ -886,8 +888,8 @@ class TestIncompleteUsageIsNotMeasured:
         assert metrics["run_status"] == "completed"
         assert metrics["usage_coverage_complete"] is False
         assert metrics["valid"] is False
-        assert metrics["invalid_reason"] == tb.INVALID_USAGE_MISSING
-        assert metrics["error"] == tb.INVALID_USAGE_MISSING
+        assert metrics["invalid_reason"] == tb.INVALID_USAGE_INCOMPLETE
+        assert metrics["error"] == tb.INVALID_USAGE_INCOMPLETE
 
 
 class TestLegacyFlatRunMigration:
@@ -1313,9 +1315,20 @@ class TestRunValidity:
         # A run that never completed never reaches the mean, regardless of why.
         assert tb.run_invalidity_reason(payload) == tb.INVALID_BUSINESS_FAILED
 
-    def test_missing_usage_is_its_own_reason(self):
+    def test_incomplete_coverage_is_its_own_reason(self):
         payload = self._payload()
         payload["usage_coverage"]["complete"] = False
+        # The producer says the coverage is not complete while every call did
+        # report usage: incomplete, not missing (U-1).
+        assert tb.run_invalidity_reason(payload) == tb.INVALID_USAGE_INCOMPLETE
+
+    def test_missing_usage_is_its_own_reason(self):
+        payload = self._payload()
+        payload["usage_coverage"].update({
+            "complete": False,
+            "calls_with_provider_usage": 0,
+            "calls_without_provider_usage": payload["usage_coverage"]["llm_calls"],
+        })
         assert tb.run_invalidity_reason(payload) == tb.INVALID_USAGE_MISSING
 
     def test_unfinalized_telemetry_is_its_own_reason(self):

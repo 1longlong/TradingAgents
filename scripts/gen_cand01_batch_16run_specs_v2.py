@@ -58,7 +58,10 @@ from pathlib import Path
 
 SCHEMA_VERSION = 2
 EXPERIMENT_ID = "cand01_batch_2x2_16run_v2"
-PROTOCOL_VERSION = "V2"
+#: V2.1 amends the *validation contract* (budget_mode, usage verdict), not
+#: the design; the design fields are identical to V2. The amendment is
+#: recorded in the protocol §14.1 because the hashes moved with ``budget``.
+PROTOCOL_VERSION = "V2.1"
 
 SEED = 20261114
 BLOCKS = ("NVDA", "AAPL", "JPM", "XOM")
@@ -92,6 +95,14 @@ OUTPUT_LANGUAGE = "English"
 CACHE_POLICY = "preserve_existing"
 CHECKPOINT_ENABLED = False
 MAX_TOTAL_TOKENS = None
+#: How ``max_total_tokens = null`` must be read (audit C round 5, U-2). A null
+#: cap is "unlimited" only when the registration says so in as many words;
+#: without this field a null was indistinguishable from a missing or unreadable
+#: budget block. ``token_benchmark.require_budget_state`` refuses a block that
+#: does not carry a recognised mode, and refuses a ``capped`` mode without a
+#: non-negative integer cap.
+BUDGET_MODE = "uncapped_authorized"
+BUDGET = {"budget_mode": BUDGET_MODE, "max_total_tokens": MAX_TOTAL_TOKENS}
 PROVIDER = "openai_compatible"
 QUICK_MODEL = "CS5351/DeepSeek-V4-Flash"
 DEEP_MODEL = "CS5351/DeepSeek-V4-Flash"
@@ -256,7 +267,7 @@ def per_run_experiment(run: dict) -> dict:
         "output_language": OUTPUT_LANGUAGE,
         "cache_policy": CACHE_POLICY,
         "checkpoint_enabled": CHECKPOINT_ENABLED,
-        "budget": {"max_total_tokens": MAX_TOTAL_TOKENS},
+        "budget": dict(BUDGET),
         "cases": [case_for(run["ticker"])],
         "switches": switches,
         "news_scope": dict(NEWS_SCOPE),
@@ -329,6 +340,10 @@ def run_spec(run: dict, experiment: dict, out_root: Path) -> dict:
         # already part of the hashed definition, so adding it here does not
         # move ``config_sha256``.
         "news_scope": experiment["news_scope"],
+        # The budget contract travels with the spec (U-2): the child validates
+        # *this* block rather than re-reading a file whose absence would be
+        # indistinguishable from an intentional null cap.
+        "budget": experiment["budget"],
         "config_sha256": experiment["config_sha256"],
     }
 
@@ -480,7 +495,7 @@ def build(out_root: Path) -> dict[str, str]:
         "output_language": OUTPUT_LANGUAGE,
         "cache_policy": CACHE_POLICY,
         "checkpoint_enabled": CHECKPOINT_ENABLED,
-        "budget": {"max_total_tokens": MAX_TOTAL_TOKENS},
+        "budget": dict(BUDGET),
         "news_scope": dict(NEWS_SCOPE),
         "per_run_definitions": "specs/<run_id>/experiment.json",
     }
@@ -609,12 +624,37 @@ def main(argv: list[str] | None = None) -> int:
                         help="output directory; must not already contain specs/")
     parser.add_argument("--check", action="store_true",
                         help="build in memory and compare against --out")
+    parser.add_argument("--refresh", action="store_true",
+                        help=("regenerate into a directory that already holds a "
+                              "*previous output of this generator* (same "
+                              "experiment_id). Refused for any other directory, "
+                              "so a signature change is still a new registration"))
+    parser.add_argument("--write-protocol-table", action="store_true",
+                        help=("rewrite the protocol's §5 hash table from the "
+                              "generated registrations, between its markers, so "
+                              "the pre-registered values are never typed by hand"))
     args = parser.parse_args(argv)
 
     out_root = args.out.resolve()
     if not args.check:
         try:
-            ensure_writable_out_dir(out_root)
+            if args.refresh:
+                # Re-registration of the *same* study (e.g. a protocol amendment
+                # that changes the hashed definition). The guard's purpose is to
+                # stop a generator run from clobbering artefacts it did not
+                # produce; a directory whose experiment.json names this
+                # experiment is by definition its own output.
+                existing = out_root / "experiment.json"
+                if not existing.is_file():
+                    raise RefusedError(
+                        f"--refresh requires an existing registration at {existing}")
+                data = json.loads(existing.read_text(encoding="utf-8"))
+                if data.get("experiment_id") != EXPERIMENT_ID:
+                    raise RefusedError(
+                        f"--refresh refused: {existing} registers "
+                        f"{data.get('experiment_id')!r}, not {EXPERIMENT_ID!r}")
+            else:
+                ensure_writable_out_dir(out_root)
         except RefusedError as exc:
             print(f"REFUSED: {exc}", file=sys.stderr)
             return 2
@@ -677,7 +717,48 @@ def main(argv: list[str] | None = None) -> int:
 
     written = write_artifacts(out_root, artifacts)
     print(f"wrote {len(written)} files under {out_root}")
+
+    if args.write_protocol_table:
+        table = _render_protocol_table(artifacts)
+        protocol = out_root / "CAND01_BATCH_2X2_PROTOCOL_V2.md"
+        text = protocol.read_text(encoding="utf-8")
+        header = "| Run | Pos | Block | Arm | `batch_macro` | `single_pass` | `structured` | `s2_downstream` | `config_sha256` |"
+        if header not in text:
+            print("REFUSED: the protocol's §5 table header was not found",
+                  file=sys.stderr)
+            return 2
+        start = text.index(header)
+        end = text.index("\n\nMachine-readable copies:", start)
+        updated = text[:start] + table + text[end:]
+        protocol.write_text(updated, encoding="utf-8")
+        print(f"rewrote the §5 hash table in {protocol}")
     return 0
+
+
+def _render_protocol_table(artifacts: dict[str, str]) -> str:
+    """Render §5's table from the generated registrations (never by hand)."""
+    lines = [
+        "| Run | Pos | Block | Arm | `batch_macro` | `single_pass` | "
+        "`structured` | `s2_downstream` | `config_sha256` |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    order = execution_order()
+    rows = run_ids(order)
+    for run in rows:
+        registration = json.loads(
+            artifacts[f"specs/{run['run_id']}_{run['ticker']}_{run['arm']}/experiment.json"])
+        switches = registration["switches"]
+
+        def show(value: bool) -> str:
+            return "true " if value else "false"
+
+        lines.append(
+            f"| `{run['run_id']}` | {run['position']:<2} | {run['ticker']} | "
+            f"{run['arm']:<2} | {show(switches['batch_macro'])} | "
+            f"{show(switches['single_pass'])} | {show(switches['structured'])} | "
+            f"{show(switches['s2_downstream'])} | "
+            f"`{registration['config_sha256']}` |")
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":

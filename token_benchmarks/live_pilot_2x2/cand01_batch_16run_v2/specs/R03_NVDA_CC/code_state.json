@@ -1,14 +1,14 @@
 {
-  "experiment_definition_sha256": "ebfefe7b4d0867465156f3f7d03556e15b1a829c0091bd91145ea3a61833ffc8",
-  "frozen_commit": "27dd2edbf13e69f5d443381fc08d00d5519f6c89",
+  "experiment_definition_sha256": "6005da06294aaa0dfec735221bca61a9cf6e2b461252379ed87368822c924544",
+  "frozen_commit": null,
   "generator": "scripts/gen_cand01_batch_16run_specs_v2.py",
-  "generator_sha256": "a02690ef14a5c8b7631571f728f0c7f7a7ddd6b515fdc2192c1242c5f885d04a",
-  "git_branch": "exp/cand01-batch-v2",
-  "git_head_commit": "27dd2edbf13e69f5d443381fc08d00d5519f6c89",
-  "git_head_relation_to_freeze": "is_frozen_commit",
-  "git_working_tree_dirty": false,
+  "generator_sha256": "e9eb570e73f991527fbda5945801957764b0564c1b0a6cd1795500afffdc9f1f",
+  "git_branch": "fix/cand01-final-freeze",
+  "git_head_commit": "4c00aea5e7d37787d6bfe8ff265af278d5d4a00e",
+  "git_head_relation_to_freeze": "unfrozen",
+  "git_working_tree_dirty": true,
   "phase": "spec_generation",
   "python_version": "3.14.7",
   "schema_version": 1,
-  "timestamp_utc": "2026-11-15T15:20:48.022441+00:00"
+  "timestamp_utc": "2026-11-15T16:45:53.958019+00:00"
 }

@@ -32,6 +32,7 @@
     "XOM"
   ],
   "budget": {
+    "budget_mode": "uncapped_authorized",
     "max_total_tokens": null
   },
   "cache_policy": "preserve_existing",
@@ -97,7 +98,7 @@
   },
   "output_language": "English",
   "per_run_definitions": "specs/<run_id>/experiment.json",
-  "protocol_version": "V2",
+  "protocol_version": "V2.1",
   "provider": "openai_compatible",
   "quick_model": "CS5351/DeepSeek-V4-Flash",
   "randomisation": "one random.Random(seed); shuffle(['B','AB','C0','CC']) once per block in BLOCKS order (CPython stdlib random, Mersenne Twister)",

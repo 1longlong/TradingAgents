@@ -24,8 +24,18 @@ All LLMs here are scripted fakes: no network, no provider usage.
 
 from __future__ import annotations
 
+import pathlib
+
 import inspect
 import unittest
+
+
+def _source(*parts: str) -> str:
+    """Read a source file relative to the *imported* package, not the cwd."""
+    import tradingagents as _ta
+
+    return (pathlib.Path(_ta.__file__).resolve().parent.joinpath(*parts[1:])
+            ).read_text(encoding="utf-8")
 from typing import Annotated
 
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -680,7 +690,10 @@ class RegressionTest(unittest.TestCase):
         self.assertIn("bind_structured", src)
 
     def test_setup_requires_structured_before_enabling_single_pass(self):
-        src = open("tradingagents/graph/setup.py").read()
+        # Paths are anchored on the imported package, not on the process cwd: a
+        # cwd-relative read raised FileNotFoundError when the suite ran from
+        # anywhere but the repository root (limitation L-3).
+        src = _source("tradingagents", "graph", "setup.py")
         self.assertIn("single_pass_finalization_enabled", src)
         self.assertIn("and self.config.get(\"structured_analyst_output_enabled\"", src)
 
@@ -689,8 +702,9 @@ class RegressionTest(unittest.TestCase):
 
         self.assertTrue(callable(mod.finalize_analyst_report))
         self.assertTrue(callable(mod._prepare_structured_messages))
-        self.assertIn("finalize_analyst_report", open(
-            "tradingagents/agents/analysts/market_analyst.py").read())
+        self.assertIn("finalize_analyst_report",
+                      _source("tradingagents", "agents", "analysts",
+                              "market_analyst.py"))
 
 
 # --------------------------------------------------------------------------

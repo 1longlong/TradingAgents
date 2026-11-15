@@ -29,6 +29,16 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Audit A-00: running ``python scripts/c3_preflight_gate.py`` puts only
+# ``scripts/`` on ``sys.path``, so ``import tradingagents`` resolved through the
+# shared editable install to the *main* checkout -- from any cwd. The gate then
+# checked a tree it was not looking at (and ``check_import_root`` refused, so
+# the documented launch could never pass). Pin this file's own repository root
+# ahead of everything else: the gate now always inspects the tree it lives in.
+_THIS_ROOT = Path(__file__).resolve().parents[1]
+if str(_THIS_ROOT) not in sys.path:
+    sys.path.insert(0, str(_THIS_ROOT))
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from c3_attest import check_head_is_designated  # noqa: E402
 
@@ -225,8 +235,37 @@ def check_fingerprint_matches_record() -> None:
               f"code_freeze.txt was written at {recorded[:12]}, which is not an "
               f"ancestor of HEAD; the record belongs to another line of work")
     _ok("freeze record",
-        f"{declared[:16]}… matches this tree; written at {recorded[:12]} "
-        f"(ancestor of HEAD)")
+        f"{declared[:16]}… matches this tree; record parent "
+        f"{recorded[:12]} (an ancestor, as it must be: a file cannot name the "
+        f"commit that contains it)")
+
+
+def check_final_freeze() -> None:
+    """The whole certification, shared with the spending child.
+
+    The individual checks above produce precise messages for the common
+    failures; this one is the single definition of "the tree is the certified
+    freeze" (commit == record == tag == history, tree SHA, manifest, all 16 spec
+    hashes, budget contract, in-tree paths). Without it the gate and the child
+    would each be checking a subset, and a subset is what let a stale
+    designation certify the wrong commit.
+    """
+    try:
+        from c3_verify_final_freeze import verify as _verify_final_freeze
+    except ImportError:  # pragma: no cover - the script lives beside this one
+        import importlib.util
+
+        module_spec = importlib.util.spec_from_file_location(
+            "c3_verify_final_freeze",
+            Path(__file__).resolve().parent / "c3_verify_final_freeze.py")
+        module = importlib.util.module_from_spec(module_spec)
+        module_spec.loader.exec_module(module)
+        _verify_final_freeze = module.verify
+    result = _verify_final_freeze(REPO_ROOT)
+    if not result["ok"]:
+        _fail("final freeze", "; ".join(result["failures"][:4]))
+    _ok("final freeze", f"{len(result['checks'])} certification checks passed")
+
 
 
 def check_import_root(expected_root: Path = REPO_ROOT) -> None:
@@ -520,6 +559,7 @@ def main(argv: list[str] | None = None) -> int:
     check_fingerprint_matches_record()
     check_release_seal()
     check_import_root()
+    check_final_freeze()
     check_spec_hash(spec)
     check_arm_matches_manifest(spec, expected_switches)
     check_news_scope(spec)

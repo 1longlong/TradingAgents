@@ -29,6 +29,11 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 BATCH_DIR = REPO_ROOT / "token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2"
+# Audit A-00: pin this checkout ahead of the shared editable install, exactly as
+# ``token_benchmark.py`` does, so the fingerprint describes the tree that is
+# being released rather than the main checkout.
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 import token_benchmark as tb  # noqa: E402
@@ -77,15 +82,48 @@ def main() -> int:
     branch = _git("rev-parse", "--abbrev-ref", "HEAD")
     dirty = bool(_git("status", "--porcelain", "--untracked-files=no"))
 
+    # Every digest below is read from the tree here; none is typed by hand.
+    import hashlib
+
+    def _digest(relative: str) -> str:
+        return hashlib.sha256((BATCH_DIR / relative).read_bytes()).hexdigest()
+
+    protocol_sha = _digest("CAND01_BATCH_2X2_PROTOCOL_V2.md")
+    generator_sha = hashlib.sha256(
+        (REPO_ROOT / "scripts/gen_cand01_batch_16run_specs_v2.py").read_bytes()
+    ).hexdigest()
+    spec_lines = []
+    budget_modes = set()
+    caps = set()
+    for directory in sorted((BATCH_DIR / "specs").iterdir()):
+        if not directory.is_dir():
+            continue
+        registration = json.loads(
+            (directory / "experiment.json").read_text(encoding="utf-8"))
+        budget = registration.get("budget") or {}
+        budget_modes.add(budget.get("budget_mode"))
+        caps.add(budget.get("max_total_tokens"))
+        spec_lines.append(
+            f"  {directory.name:<16} config_sha256={registration.get('config_sha256')} "
+            f"spec_sha256={hashlib.sha256((directory / 'spec.json').read_bytes()).hexdigest()}")
+    if budget_modes != {"uncapped_authorized"} or caps != {None}:
+        print(f"REFUSED: budget contract drifted: modes={budget_modes} caps={caps}",
+              file=sys.stderr)
+        raise SystemExit(4)
+
     text = f"""PLAN C3 — CODE FREEZE RECORD
 generated: {state.get('timestamp_utc')}
+schema    : 2
 
 This file cannot name the commit it is committed in (a commit cannot contain
-its own hash). It therefore records the code fingerprint, which is identical
-before and after the freeze commit, plus the commit it was written on.
+its own hash). The authority is therefore the **code fingerprint**, which is
+identical before and after the freeze commit, plus the digest of every artefact
+the study depends on. The commit, the tree SHA and the release tag are recorded
+after the commit by ``scripts/c3_finalize_freeze.py`` (``c3/FREEZE_RECORD.json``)
+and checked by ``scripts/c3_verify_final_freeze.py``.
 
 Branch              : {branch}
-Commit at write time: {head}
+Commit at write time: {head}   (the parent of the freeze commit, by construction)
 Working tree at write: {'DIRTY' if dirty else 'clean'}
 
 Fingerprint (the authority -- the gate recomputes this and refuses on a mismatch)
@@ -95,21 +133,35 @@ Fingerprint (the authority -- the gate recomputes this and refuses on a mismatch
   files fingerprinted   : {state.get('file_count')} ({state.get('tracked_file_count')} tracked)
   tool_schema_version   : {state.get('tool_schema_version')}
 
+Artefact digests (SHA-256, recomputed by the verifier)
+  protocol_sha256 : {protocol_sha}
+  generator_sha256: {generator_sha}
+  MANIFEST.sha256 : see the manifest; every entry is verified
+
+Spec hashes (16 registered runs)
+{chr(10).join(spec_lines)}
+
+Budget contract (U-2)
+  budget_mode     : uncapped_authorized   (explicit; a null cap is never inferred)
+  max_total_tokens: null
+
 Runtime
   Python        : {state.get('python_version')}
-  Isolated venv : /tmp/opencode/expvenv  (never the shared developer venv)
+  Interpreter   : {sys.executable}
   Provider      : openai_compatible
   Endpoint      : https://llm.cs.cityu.edu.hk/v1
   Models        : CS5351/DeepSeek-V4-Flash (quick and deep)
   langgraph     : {(state.get('package_versions') or {}).get('langgraph')}
   langchain-core: {(state.get('package_versions') or {}).get('langchain-core')}
-  max_total_tokens: null  (uncapped; usage recorded in full, never estimated)
 
 Invocation (every run)
-  TZ=UTC PYTHONSAFEPATH=1 PYTHONPATH={REPO_ROOT} \\
-    /tmp/opencode/expvenv/bin/python scripts/c3_preflight_gate.py ...
-  TZ=UTC PYTHONSAFEPATH=1 PYTHONPATH={REPO_ROOT} \\
-    /tmp/opencode/expvenv/bin/python scripts/token_benchmark.py ...
+  TZ=UTC PYTHONSAFEPATH=1 python scripts/c3_preflight_gate.py ...
+  TZ=UTC PYTHONSAFEPATH=1 python scripts/token_benchmark.py ...
+
+The scripts pin their own repository root on ``sys.path`` (audit A-00), so the
+documented invocation runs this tree even though the shared ``.venv`` installs
+``tradingagents`` as an editable package pointing at another checkout. The
+spending child verifies the import root again and refuses a mismatch.
 
 Remediation history (each audit blocker, fixed before any paid call)
   A-02  finnhub_news kept the OLDEST articles instead of the newest; live NVDA
@@ -123,22 +175,35 @@ Remediation history (each audit blocker, fixed before any paid call)
   B-01  prepare_run_spec dropped 'switches', so every arm would have run AB.
         FIXED.
   B-02  config_sha256 was never recomputed; tampered definitions ran.  FIXED.
-  B-03  MANIFEST.sha256 and spec_body_sha256 went stale.  FIXED (verify 94/94).
+  B-03  MANIFEST.sha256 and spec_body_sha256 went stale.  FIXED.
   B-r2  --dry-run skipped the pre-flight and accepted s2_downstream=false;
         duplicate run IDs collapsed silently; a refused run rewrote
         code_state.json.  FIXED.
   C-01  the gate recomputed the hash but never compared spec fields.  FIXED.
+  U-1   agrees_with_telemetry was computed and never consumed; a conflicting
+        run still reported valid=True.  FIXED: MISSING / INCOMPLETE / MISMATCH
+        are now invalid, and an unknown total is null, never 0.
+  U-2   max_total_tokens=null was indistinguishable from a missing or broken
+        budget file.  FIXED: budget_mode=uncapped_authorized is required.
+  A-00  the gate imported the main checkout from any cwd.  FIXED: scripts pin
+        their own repo root; the child re-verifies the import root.
+  Freeze the designation named an ancestor of HEAD, so no run could pass.
+        FIXED: the designation is written after the commit and must equal HEAD.
   apply_cityu_env: the named secrets file now wins over the ambient
-        environment (an unreachable-endpoint probe was dialling the real paid
-        endpoint).  FIXED.
+        environment.  FIXED.
 
 Known limitations carried into the run (documented, not silent)
-  L-2  Finnhub news is fetched serially per day chunk.
-  L-3  a cwd-relative test remains.
-  L-5  raw vendor usage payloads are not preserved, only the parsed totals.
-  L-6  PIT is day granular on the news window start.
-  get_insider_transactions has no Finnhub implementation and would raise
-        ValueError, but it is not bound to any of the three run analysts.
+  L-2  Finnhub news is fetched serially per day chunk (performance).
+  L-3  no longer applies: the cwd-relative test was made path-independent.
+  L-4  some module docstrings still describe the superseded news architecture.
+  L-6  PIT is day granular on the news window start (declared convention).
+  L-7  n = 4, exploratory; no significance claim is supported.
+  L-8  V1 config_sha256 values are permanently void; V1 is not a numeric baseline.
+  L-9  the V1 manifest's stale R01 spec hash is historical and untouched.
+  L-10 s2_downstream has no OFF implementation; it is refused when false.
+  L-11 global/macro news is disabled in every arm; no global-news effect is in
+        scope. ``get_insider_transactions`` has no Finnhub implementation and is
+        not bound to any of the three run analysts.
 """
     out = BATCH_DIR / "c3" / "code_freeze.txt"
     out.write_text(text, encoding="utf-8")
@@ -147,8 +212,6 @@ Known limitations carried into the run (documented, not silent)
     # Doing these two steps by hand allowed a record to be regenerated while the
     # seal kept the old digest, which made every gate run fail on a correct
     # release. One step, one consistent set.
-    import hashlib
-
     c3 = BATCH_DIR / "c3"
     sealed = [c3 / "code_freeze.txt", c3 / "env_credential_audit.txt"]
     seal_lines = [

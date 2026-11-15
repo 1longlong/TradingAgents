@@ -98,3 +98,22 @@ behaviour**, and I am not going to circumvent it.
 `real investment returns` will remain **NOT_MEASURED** in any final report: these 16 runs
 measure `total_tokens` (the pre-registered primary outcome), not P&L. No profitability or
 alpha claim can be supported, and none should be made.
+
+---
+
+## Addendum (2026-11-16) — superseded by the final freeze
+
+This halt report is preserved unmodified above as the record of why Plan C3
+stopped. Its open items have since been closed in a single round; the detail and
+the evidence are in `REMEDIATION.md` (Round 6) and `EXECUTION_READINESS.md`:
+
+| Open item in §4 | State now |
+| --- | --- |
+| U-1 `agrees_with_telemetry` never consumed | **Fixed** — verdict gates validity; `MISSING`/`INCOMPLETE`/`MISMATCH` void the run |
+| U-2 null cap indistinguishable from a missing file | **Fixed** — `budget_mode = uncapped_authorized` required; seven distinct refusal states |
+| "my own attestation designates `eaba4f7`, an ancestor" | **Fixed** — designation is written after the final commit and must equal `HEAD`, the tag and the record |
+| B-08 / B-24 / B-27, A-03 / A-04 / A-12 | B-08, B-23 closed with the seal/`effective_config` verification; A-03 was already fixed; A-04 is the documented serial-fetch limitation (L-2); A-12 has no reproducible symptom in the delivered tree and is covered by the new fail-closed import/usage checks |
+| L-5 raw usage / negative counts / empty-run attribution | **Fixed** |
+| "the gate refusing all 16 specs right now is the correct behaviour" | Still correct *until* certification, and that is exactly what the new verifier enforces. After certification the gate passes for the certified commit only |
+
+**0 paid LLM calls and 0 Pipeline runs were made in this round either.**

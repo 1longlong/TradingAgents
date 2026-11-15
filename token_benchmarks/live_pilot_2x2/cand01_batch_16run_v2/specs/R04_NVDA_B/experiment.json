@@ -1,5 +1,6 @@
 {
   "budget": {
+    "budget_mode": "uncapped_authorized",
     "max_total_tokens": null
   },
   "cache_policy": "preserve_existing",
@@ -18,9 +19,9 @@
     }
   ],
   "checkpoint_enabled": false,
-  "config_sha256": "dbab594d30fb906cd269402a59046d4ce1932423953841e5d720240b1f5771ec",
+  "config_sha256": "b2e780920ca89a85a5c7f2716d23b8e22c9e03120c794f764a239672ae04f900",
   "deep_model": "CS5351/DeepSeek-V4-Flash",
-  "description": "CAND-01 x batch-macro 2x2, arm B on NVDA (execution position 4); protocol V2",
+  "description": "CAND-01 x batch-macro 2x2, arm B on NVDA (execution position 4); protocol V2.1",
   "experiment_id": "R04",
   "measured_runs": 1,
   "news_scope": {
@@ -29,7 +30,7 @@
     "global_news": "finnhub:CONFIG_DISABLED"
   },
   "output_language": "English",
-  "protocol_version": "V2",
+  "protocol_version": "V2.1",
   "provider": "openai_compatible",
   "quick_model": "CS5351/DeepSeek-V4-Flash",
   "schema_version": 2,

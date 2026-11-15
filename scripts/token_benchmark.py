@@ -359,6 +359,15 @@ def validate_experiment(data: dict) -> list[str]:
             f"got {data.get('schema_version')!r}"
         )
 
+    # Budget configuration (U-2). A block that is present must be interpretable;
+    # an absent block stays legal here because generic experiments may not use
+    # the spend gate at all. The frozen batch *requires* the block, and that is
+    # enforced on the run path (``_preflight_registration``).
+    if "budget" in data:
+        state = budget_state_from_experiment(data)
+        if not state["ok"]:
+            errors.append(f"budget: {state['state']}: {state['detail']}")
+
     return errors
 
 
@@ -419,15 +428,24 @@ def _extract_agent_metrics(agent: dict) -> dict:
     raw_out = agent.get("reported_output_tokens_sum")
     inp = raw_inp or 0
     out = raw_out or 0
-    missing_calls = int(agent.get("llm_calls_missing_usage") or 0)
+    # ``calls_without_provider_usage`` is the field the telemetry actually
+    # publishes; reading only ``llm_calls_missing_usage`` (which it never
+    # publishes) made this flag always-true (limitation L-5, audit C-6).
+    missing_calls = int(
+        agent.get("calls_without_provider_usage")
+        or agent.get("llm_calls_missing_usage")
+        or 0
+    )
     missing_input = int(agent.get("llm_calls_missing_input_tokens") or 0)
     missing_output = int(agent.get("llm_calls_missing_output_tokens") or 0)
-    usage_complete = not (missing_calls or missing_input or missing_output)
+    measured = int(agent.get("llm_calls") or 0) > 0
+    usage_complete = bool(measured and not (missing_calls or missing_input or missing_output))
     return {
         # ``True`` only when every one of this agent's calls reported both
         # halves of its usage; ``False`` means the token totals are a lower
         # bound and must not be compared as if exact.
         "usage_complete": usage_complete,
+        "measured": measured,
         "llm_calls_missing_usage": missing_calls,
         "llm_calls_missing_input_tokens": missing_input,
         "llm_calls_missing_output_tokens": missing_output,
@@ -488,7 +506,24 @@ def _resolve_report_path(stored: str | None, base: Path | None) -> str | None:
 INVALID_BUSINESS_FAILED = "business_run_failed"
 INVALID_LLM_ERRORS = "llm_call_errors"
 INVALID_USAGE_MISSING = "token_usage_missing"
+INVALID_USAGE_INCOMPLETE = "token_usage_incomplete"
+INVALID_USAGE_MISMATCH = "token_usage_mismatch"
 INVALID_TELEMETRY_INCOMPLETE = "telemetry_incomplete"
+INVALID_BUDGET_CONFIG = "budget_config_invalid"
+
+#: The four usage verdicts (audit C round 5, U-1). They are a *decision*, not a
+#: description: only ``VALID`` may produce a measured sample.
+USAGE_VALID = "VALID"
+USAGE_MISSING = "MISSING"
+USAGE_INCOMPLETE = "INCOMPLETE"
+USAGE_MISMATCH = "MISMATCH"
+USAGE_STATES = (USAGE_VALID, USAGE_MISSING, USAGE_INCOMPLETE, USAGE_MISMATCH)
+
+_USAGE_INVALID_REASON = {
+    USAGE_MISSING: INVALID_USAGE_MISSING,
+    USAGE_INCOMPLETE: INVALID_USAGE_INCOMPLETE,
+    USAGE_MISMATCH: INVALID_USAGE_MISMATCH,
+}
 
 
 def llm_error_count(payload: dict) -> int:
@@ -517,17 +552,194 @@ def llm_error_count(payload: dict) -> int:
     return max(total, per_agent)
 
 
-def _usage_coverage_problem(payload: dict) -> str | None:
-    """Return why provider token usage is incomplete, or ``None`` if complete."""
+def _as_count(value) -> int | None:
+    """A non-negative integer count, or ``None`` when the value is not one."""
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
+
+
+def usage_verdict(payload: dict, *, replay_used: int | None = None) -> dict:
+    """Decide whether provider usage and telemetry agree, and how completely.
+
+    Independent audit C round 5 (U-1) found that ``agrees_with_telemetry`` was
+    *computed and never consumed*: a run whose replay disagreed with its own
+    totals still reported ``valid=True``. A check that cannot fail is not a
+    check, so the verdict is now the gate on validity.
+
+    Four states, mutually exclusive, checked in this order:
+
+    ``MISMATCH``
+        The payload contradicts itself or the replay: usage counts that do not
+        add up to the call count, negative totals, per-call events that do not
+        sum to the run totals, a negative count in the preserved vendor blob, or
+        a replay total that differs from the telemetry total.
+    ``MISSING``
+        No provider usage was reported for a run that made calls (or no calls
+        at all): there is nothing to measure.
+    ``INCOMPLETE``
+        Some usage exists but not for every call, some field was omitted, an
+        event could not be attributed to an agent, the run did not finalize, or
+        the preserved raw blob is absent for a call that reported usage.
+    ``VALID``
+        Everything above holds.
+
+    A payload that predates per-call records (no ``llm_call_events`` key) is
+    not treated as a mismatch: its replay is *inconclusive*, not contradictory.
+    The verdict then rests on the telemetry's own coverage fields, and the
+    inconclusiveness is reported rather than hidden.
+    """
     coverage = payload.get("usage_coverage") or {}
-    if not coverage.get("complete"):
-        return INVALID_USAGE_MISSING
+    run_totals = payload.get("run_totals") or {}
     audit = payload.get("audit_quality") or {}
-    if "usage_complete" in audit and not audit.get("usage_complete"):
-        return INVALID_USAGE_MISSING
-    if "telemetry_complete" in audit and not audit.get("telemetry_complete"):
-        return INVALID_TELEMETRY_INCOMPLETE
-    return None
+    checks = payload.get("usage_checks") or {}
+    raw_events = payload.get("llm_call_events")
+    events = [e for e in (raw_events or []) if isinstance(e, dict)]
+    # Per-call cross-checks need per-call records. A payload with no records at
+    # all is the legacy/aggregate shape: its replay is *inconclusive*, not
+    # contradictory, and saying so is more honest than inventing a mismatch.
+    # ``usage_checks`` is written by the observability layer for every run, so
+    # a payload that carries it and still has no events for a non-zero call
+    # count is a genuine contradiction and is treated as one.
+    events_recorded = bool(
+        isinstance(raw_events, list)
+        and (events or "usage_checks" in payload)
+    )
+
+    problems: list[str] = []
+    mismatch: list[str] = []
+    incomplete: list[str] = []
+
+    calls = _as_count(coverage.get("llm_calls"))
+    if calls is None:
+        calls = _as_count(run_totals.get("llm_calls"))
+    with_usage = _as_count(coverage.get("calls_with_provider_usage"))
+    without_usage = _as_count(coverage.get("calls_without_provider_usage"))
+    missing_input = _as_count(coverage.get("calls_missing_input_tokens"))
+    missing_output = _as_count(coverage.get("calls_missing_output_tokens"))
+    totals_in = _as_count(run_totals.get("reported_input_tokens_sum"))
+    totals_out = _as_count(run_totals.get("reported_output_tokens_sum"))
+
+    # --- contradictions ---------------------------------------------------
+    if totals_in is None or totals_out is None:
+        mismatch.append("run totals are not non-negative integers")
+    if calls is not None and with_usage is not None and without_usage is not None:
+        if with_usage + without_usage != calls:
+            mismatch.append(
+                f"usage counts do not add up: {with_usage} with + "
+                f"{without_usage} without != {calls} calls")
+    elif calls is not None:
+        mismatch.append("usage coverage counts are missing")
+    negative_preserved = _as_count(checks.get("negative_token_counts"))
+    if negative_preserved:
+        mismatch.append(
+            f"the provider blob carries {negative_preserved} negative token count(s)")
+    if events_recorded and calls:
+        if len(events) > calls:
+            mismatch.append(
+                f"{len(events)} call events for a run that reports {calls} calls")
+        event_in = 0
+        event_out = 0
+        event_with_usage = 0
+        for ev in events:
+            if ev.get("usage_source") is None:
+                continue
+            event_with_usage += 1
+            if isinstance(ev.get("reported_input_tokens"), int):
+                event_in += ev["reported_input_tokens"]
+            if isinstance(ev.get("reported_output_tokens"), int):
+                event_out += ev["reported_output_tokens"]
+        if with_usage is not None and event_with_usage != with_usage:
+            mismatch.append(
+                f"{event_with_usage} events carry usage but coverage says "
+                f"{with_usage}")
+        if totals_in is not None and event_in != totals_in:
+            mismatch.append(
+                f"per-call input tokens sum to {event_in}, totals say {totals_in}")
+        if totals_out is not None and event_out != totals_out:
+            mismatch.append(
+                f"per-call output tokens sum to {event_out}, totals say {totals_out}")
+    if replay_used is not None and totals_in is not None and totals_out is not None \
+            and events_recorded:
+        if replay_used != totals_in + totals_out:
+            mismatch.append(
+                f"usage replay counted {replay_used} tokens, telemetry totals "
+                f"say {totals_in + totals_out}")
+
+    # --- absence ----------------------------------------------------------
+    if calls is None or calls == 0:
+        problems.append("the run recorded no LLM call")
+    elif with_usage == 0:
+        problems.append("no provider usage was reported for any call")
+
+    # --- incompleteness ---------------------------------------------------
+    if without_usage:
+        incomplete.append(f"{without_usage} of {calls or '?'} calls reported no usage")
+    if missing_input:
+        incomplete.append(f"{missing_input} call(s) omitted input tokens")
+    if missing_output:
+        incomplete.append(f"{missing_output} call(s) omitted output tokens")
+    if coverage.get("complete") is False:
+        incomplete.append("the telemetry's own usage_coverage is not complete")
+    if audit.get("usage_complete") is False:
+        incomplete.append("audit_quality.usage_complete is false")
+    if audit.get("attribution_complete") is False:
+        incomplete.append("usage could not be attributed to an agent")
+    if audit.get("telemetry_complete") is False:
+        incomplete.append("the run did not finalize its telemetry")
+    if payload.get("unattributed_llm_events"):
+        incomplete.append(
+            f"{payload.get('unattributed_llm_events')} unattributed LLM event(s)")
+    if payload.get("unattributed_tool_events"):
+        incomplete.append(
+            f"{payload.get('unattributed_tool_events')} unattributed tool event(s)")
+    if checks:
+        preserved = _as_count(checks.get("raw_usage_preserved"))
+        expected = _as_count(checks.get("raw_usage_expected"))
+        if expected and (preserved is None or preserved < expected):
+            incomplete.append(
+                f"the raw usage blob was kept for {preserved or 0} of {expected} calls")
+
+    if mismatch:
+        state = USAGE_MISMATCH
+        reasons = mismatch + incomplete
+    elif problems:
+        state = USAGE_MISSING
+        reasons = problems + incomplete
+    elif incomplete:
+        state = USAGE_INCOMPLETE
+        reasons = incomplete
+    else:
+        state = USAGE_VALID
+        reasons = []
+
+    invalid = _USAGE_INVALID_REASON.get(state)
+    # A run that never finalized is not merely "usage incomplete": its artifact
+    # does not describe a completed run at all. Keeping the two distinct keeps
+    # the reason actionable (audit C's original distinction).
+    if state == USAGE_INCOMPLETE and audit.get("telemetry_complete") is False:
+        invalid = INVALID_TELEMETRY_INCOMPLETE
+
+    return {
+        "state": state,
+        "reasons": reasons,
+        "calls": calls,
+        "calls_with_provider_usage": with_usage,
+        "calls_without_provider_usage": without_usage,
+        "reported_input_tokens_sum": totals_in,
+        "reported_output_tokens_sum": totals_out,
+        "replay_used_tokens": replay_used,
+        "replay_conclusive": events_recorded,
+        "event_records_present": events_recorded,
+        "negative_token_counts": negative_preserved or 0,
+        "invalid_reason": invalid,
+    }
+
+
+def _usage_problem(payload: dict) -> str | None:
+    """The invalid reason implied by the usage verdict, or ``None``."""
+    return usage_verdict(payload)["invalid_reason"]
+
 
 
 def run_invalidity_reason(payload: dict) -> str | None:
@@ -553,34 +765,172 @@ def run_invalidity_reason(payload: dict) -> str | None:
         return INVALID_BUSINESS_FAILED
     if llm_error_count(payload) > 0:
         return INVALID_LLM_ERRORS
-    return _usage_coverage_problem(payload)
+    return _usage_problem(payload)
+
+
+# ---------------------------------------------------------------------------
+# Budget configuration semantics (audit C round 5, U-2)
+# ---------------------------------------------------------------------------
+#: A cap of ``None`` means "no ceiling" *only* when the registration says so.
+#: It used to be indistinguishable from "the protocol file is missing", "the
+#: JSON is broken" or "the field was never written", and every one of those
+#: collapsed to the same silent ``None``.
+BUDGET_MODE_UNCAPPED = "uncapped_authorized"
+BUDGET_MODE_CAPPED = "capped"
+BUDGET_MODES = (BUDGET_MODE_UNCAPPED, BUDGET_MODE_CAPPED)
+
+BUDGET_OK = "OK"
+BUDGET_FILE_MISSING = "BUDGET_PROTOCOL_MISSING"
+BUDGET_FILE_UNREADABLE = "BUDGET_PROTOCOL_UNREADABLE"
+BUDGET_MALFORMED = "BUDGET_CONFIG_MALFORMED"
+BUDGET_BLOCK_MISSING = "BUDGET_BLOCK_MISSING"
+BUDGET_BLOCK_NOT_OBJECT = "BUDGET_BLOCK_NOT_OBJECT"
+BUDGET_MODE_MISSING = "BUDGET_MODE_MISSING"
+BUDGET_MODE_INVALID = "BUDGET_MODE_INVALID"
+BUDGET_CAP_INVALID = "BUDGET_CAP_INVALID"
+
+
+def budget_state_from_experiment(experiment: dict | None,
+                                 *, source: str = "<registration>") -> dict:
+    """Interpret one registration's ``budget`` block.
+
+    Returns ``{"ok", "state", "mode", "max_total_tokens", "detail", "source"}``
+    where ``state`` is one of the explicit codes above. The states are distinct
+    on purpose: an operator who sees ``BUDGET_PROTOCOL_MISSING`` goes looking
+    for the file, while ``BUDGET_MODE_MISSING`` means the file is there and the
+    contract is not. Both refuse.
+    """
+    def bad(state: str, detail: str) -> dict:
+        return {"ok": False, "state": state, "mode": None,
+                "max_total_tokens": None, "detail": detail, "source": source}
+
+    if experiment is None or not isinstance(experiment, dict):
+        return bad(BUDGET_MALFORMED, "the experiment registration is not an object")
+    if "budget" not in experiment:
+        return bad(BUDGET_BLOCK_MISSING,
+                   "the registration declares no 'budget' block")
+    budget = experiment["budget"]
+    if not isinstance(budget, dict):
+        return bad(BUDGET_BLOCK_NOT_OBJECT,
+                   f"'budget' must be an object, got {type(budget).__name__}")
+
+    if "budget_mode" not in budget:
+        return bad(
+            BUDGET_MODE_MISSING,
+            "no 'budget_mode'; a null cap cannot be distinguished from an "
+            "unconfigured one, so this registration cannot be interpreted")
+    mode = budget["budget_mode"]
+    if not isinstance(mode, str) or mode not in BUDGET_MODES:
+        return bad(BUDGET_MODE_INVALID,
+                   f"budget_mode {mode!r} is not one of {list(BUDGET_MODES)}")
+
+    if "max_total_tokens" not in budget:
+        return bad(BUDGET_CAP_INVALID,
+                   "'max_total_tokens' is absent; write it explicitly, even as null")
+    cap = budget["max_total_tokens"]
+
+    if mode == BUDGET_MODE_UNCAPPED:
+        if cap is not None:
+            return bad(BUDGET_CAP_INVALID,
+                       f"budget_mode={BUDGET_MODE_UNCAPPED} requires "
+                       f"max_total_tokens=null, got {cap!r}")
+        return {"ok": True, "state": BUDGET_OK, "mode": mode,
+                "max_total_tokens": None,
+                "detail": "uncapped by explicit authorisation", "source": source}
+
+    # capped
+    if isinstance(cap, bool) or not isinstance(cap, int) or cap < 0:
+        return bad(BUDGET_CAP_INVALID,
+                   f"budget_mode={BUDGET_MODE_CAPPED} requires a non-negative "
+                   f"integer max_total_tokens, got {cap!r}")
+    return {"ok": True, "state": BUDGET_OK, "mode": mode, "max_total_tokens": cap,
+            "detail": f"capped at {cap} tokens", "source": source}
+
+
+def load_budget_state(path: Path) -> dict:
+    """Read and interpret a registration file's budget block.
+
+    The three ways this can fail before the block is even reached are reported
+    separately -- missing file, unreadable file, unparseable JSON -- because the
+    operator's next action differs for each.
+    """
+    path = Path(path)
+    if not path.is_file():
+        return {"ok": False, "state": BUDGET_FILE_MISSING, "mode": None,
+                "max_total_tokens": None, "source": str(path),
+                "detail": f"{path} does not exist"}
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return {"ok": False, "state": BUDGET_FILE_UNREADABLE, "mode": None,
+                "max_total_tokens": None, "source": str(path),
+                "detail": f"{path} cannot be read: {exc}"}
+    try:
+        data = json.loads(text)
+    except ValueError as exc:
+        return {"ok": False, "state": BUDGET_MALFORMED, "mode": None,
+                "max_total_tokens": None, "source": str(path),
+                "detail": f"{path} is not valid JSON: {exc}"}
+    return budget_state_from_experiment(data, source=str(path))
+
+
+def require_budget_state(experiment: dict | None, *,
+                         source: str = "<registration>") -> dict:
+    """Return the interpreted budget block, or refuse with ``RunRefused``.
+
+    Every failure mode is a refusal: a budget contract that cannot be read is
+    not the same experiment as one that explicitly authorises no ceiling, and
+    the difference decides whether a run may be counted.
+    """
+    state = budget_state_from_experiment(experiment, source=source)
+    if not state["ok"]:
+        raise RunRefused(
+            f"budget configuration is not usable ({state['state']}): "
+            f"{state['detail']} [{source}]")
+    return state
+
+
+def require_budget_file(path: Path) -> dict:
+    """As :func:`require_budget_state`, but reading the registration from disk."""
+    state = load_budget_state(path)
+    if not state["ok"]:
+        raise RunRefused(
+            f"budget configuration is not usable ({state['state']}): "
+            f"{state['detail']} [{state['source']}]")
+    return state
+
+
+def _experiment_budget(exp_dir: Path | None = None) -> dict:
+    """The frozen batch's budget state (or the given registration's).
+
+    Never returns a bare ``None``: callers get a state they can report, so
+    "uncapped" and "unreadable" cannot be confused downstream.
+    """
+    if exp_dir is not None:
+        path = Path(exp_dir) / EXPERIMENT_FILE
+        return load_budget_state(path)
+    here = Path(__file__).resolve().parent.parent
+    path = here / "token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2" / EXPERIMENT_FILE
+    return load_budget_state(path)
 
 
 def _experiment_token_cap() -> int | None:
-    """This round's token cap, read from the frozen protocol file.
+    """This round's token cap, from a *validated* budget contract.
 
-    ``None`` means uncapped, which is this round's deliberate configuration. The
-    value is read (never defaulted, never guessed) so the spend gate the report
-    shows is the one the protocol defines: a ``null`` here stays ``null`` and
-    must not be replaced by a fallback that would silently describe a different
-    experiment.
+    ``None`` now means the registration explicitly authorised an uncapped
+    round; it is never the fallback for a missing or broken file (U-2). Callers
+    that need to distinguish the two use :func:`_experiment_budget`.
     """
-    here = Path(__file__).resolve().parent.parent
-    path = here / "token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2" / EXPERIMENT_FILE
-    if not path.is_file():
+    state = _experiment_budget()
+    if not state["ok"]:
         return None
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    budget = data.get("budget")
-    if isinstance(budget, dict):
-        return budget.get("max_total_tokens")
-    return None
+    return state["max_total_tokens"]
+
 
 
 def _budget_summary(payload: dict, run_totals: dict, usage_coverage: dict,
-                    *, max_total_tokens: int | None = None) -> dict:
+                    *, max_total_tokens: int | None = None,
+                    budget_state: dict | None = None) -> dict:
     """Report the spend gate's state for one run (``BUDGET_GUARD_DESIGN.md``).
 
     The gate is built from the run's own telemetry: every recorded call is
@@ -598,30 +948,49 @@ def _budget_summary(payload: dict, run_totals: dict, usage_coverage: dict,
     gate = BudgetGate(max_total_tokens=max_total_tokens)
     events = payload.get("llm_call_events") or []
     seen: dict[str, dict] = {}
-    for ev in events:
+    for position, ev in enumerate(events):
         if not isinstance(ev, dict):
             # Older payloads carry bare values in this section; they describe no
             # call this gate can attribute, so they are not replayed.
             continue
-        rid = ev.get("callback_run_id") or ev.get("telemetry_run_id")
-        if rid is None:
-            continue
-        seen[rid] = {
-            "run_id": rid,
+        # Deduplicate on the *callback* run id, which is unique per call. The
+        # telemetry run id identifies the whole run, so using it as the fallback
+        # collapsed every call of a run into one and made the replay disagree
+        # with the run's own totals (U-1: the mismatch this produced was real,
+        # but it was the replay's bug, not the payload's).
+        rid = ev.get("callback_run_id")
+        key = str(rid) if rid is not None else f"__event_{position}"
+        seen[key] = {
+            "run_id": key,
             "input": ev.get("reported_input_tokens"),
             "output": ev.get("reported_output_tokens"),
             "reported": ev.get("usage_source") is not None,
         }
     gate.record_calls(seen.values())
     info = gate.describe()
+    # Report the *contract* that produced the cap, not just the number: a bare
+    # ``null`` used to be ambiguous between "authorised uncapped" and "no budget
+    # configuration could be read" (U-2).
+    if budget_state is not None:
+        info["mode"] = budget_state.get("mode")
+        info["config_state"] = budget_state.get("state")
+        info["config_source"] = budget_state.get("source")
+        info["cap_authorised"] = bool(budget_state.get("ok"))
     # Cross-check against the telemetry totals the report also publishes; a
     # disagreement means the replay and the aggregate disagree, which the reader
     # must know about rather than see silently resolved.
-    info["telemetry_total_tokens"] = (
-        (run_totals.get("reported_input_tokens_sum") or 0)
-        + (run_totals.get("reported_output_tokens_sum") or 0)
+    totals_in = _as_count(run_totals.get("reported_input_tokens_sum"))
+    totals_out = _as_count(run_totals.get("reported_output_tokens_sum"))
+    telemetry_total = (None if totals_in is None or totals_out is None
+                       else totals_in + totals_out)
+    info["telemetry_total_tokens"] = telemetry_total
+    info["telemetry_total_known"] = telemetry_total is not None
+    # "Agrees" is a claim about two known numbers. When either side is unknown
+    # the honest answer is False, not True: an unmeasured total cannot agree
+    # with anything (U-1).
+    info["agrees_with_telemetry"] = (
+        telemetry_total is not None and info["used_tokens"] == telemetry_total
     )
-    info["agrees_with_telemetry"] = info["used_tokens"] == info["telemetry_total_tokens"]
     info["calls_without_provider_usage"] = (
         usage_coverage.get("calls_without_provider_usage") or 0
     )
@@ -630,7 +999,8 @@ def _budget_summary(payload: dict, run_totals: dict, usage_coverage: dict,
 
 def extract_run_metrics(payload: dict, telemetry_path: Path | None,
                         run_index: int, *, base_dir: Path | None = None,
-                        max_total_tokens: int | None = None) -> dict:
+                        max_total_tokens: int | None = None,
+                        budget_state: dict | None = None) -> dict:
     """Normalize one telemetry payload into the benchmark's per-run metric dict.
 
     ``total_tokens`` is exactly reported input + reported output. Reasoning and
@@ -644,8 +1014,11 @@ def extract_run_metrics(payload: dict, telemetry_path: Path | None,
     usage_coverage = payload.get("usage_coverage", {}) or {}
     audit = payload.get("audit_quality", {}) or {}
 
-    inp = run_totals.get("reported_input_tokens_sum") or 0
-    out = run_totals.get("reported_output_tokens_sum") or 0
+    # A token total is only a measurement when it is known. ``... or 0`` turned
+    # an unmeasured run into a measured zero (audit C round 5, U-1 / L-5), so
+    # the value stays ``None`` and every renderer shows N/A instead.
+    inp = _as_count(run_totals.get("reported_input_tokens_sum"))
+    out = _as_count(run_totals.get("reported_output_tokens_sum"))
 
     run_status = run.get("run_status")
     usage_complete = bool(usage_coverage.get("complete"))
@@ -656,7 +1029,24 @@ def extract_run_metrics(payload: dict, telemetry_path: Path | None,
         agents_metrics[agent_id] = _extract_agent_metrics(agg)
 
     budget = _budget_summary(payload, run_totals, usage_coverage,
-                            max_total_tokens=max_total_tokens)
+                            max_total_tokens=max_total_tokens,
+                            budget_state=budget_state)
+
+    # U-1: the verdict is now taken *with* the replay, so a payload whose
+    # per-run replay disagrees with its own totals is MISMATCH and the run is
+    # void. Previously ``agrees_with_telemetry`` was computed here and never
+    # consulted, so a disagreeing run still reported ``valid=True``.
+    verdict = usage_verdict(payload, replay_used=budget.get("used_tokens"))
+    if verdict["state"] != USAGE_VALID:
+        invalid_reason = invalid_reason or verdict["invalid_reason"]
+
+    # A run whose entire usage is missing has no token total at all: leave it
+    # unknown rather than publishing the collector's 0. A partial run keeps its
+    # observed numbers and is flagged as a lower bound.
+    totals_are_lower_bound = verdict["state"] in (USAGE_INCOMPLETE, USAGE_MISMATCH)
+    if verdict["state"] == USAGE_MISSING:
+        inp = out = None
+
     # A run that blew its cap is not a comparable sample: it stopped early by
     # construction, so publishing its token total beside uncapped runs would
     # invite exactly the wrong comparison. ``check()`` was previously never
@@ -686,7 +1076,9 @@ def extract_run_metrics(payload: dict, telemetry_path: Path | None,
         "llm_calls": run_totals.get("llm_calls") or 0,
         "reported_input_tokens_sum": inp,
         "reported_output_tokens_sum": out,
-        "total_tokens": inp + out,
+        "total_tokens": None if inp is None or out is None else inp + out,
+        "totals_are_lower_bound": totals_are_lower_bound,
+        "usage_verdict": verdict,
         "reported_reasoning_tokens_sum": run_totals.get("reported_reasoning_tokens_sum") or 0,
         "reported_cached_input_tokens_sum": run_totals.get("reported_cached_input_tokens_sum") or 0,
         "tool_calls": run_totals.get("tool_calls") or 0,
@@ -1731,11 +2123,13 @@ def _is_frozen_batch_registration(exp_dir: Path) -> bool:
     return resolved.parent.resolve() == specs.resolve()
 
 
-def prepare_run_spec(exp_dir: Path, experiment: dict, case: dict, run_index: int,
-                     attempt: int = 1) -> Path:
-    """Write the run spec JSON the child reads to run one measurement."""
-    run_dir = _attempt_dir(exp_dir, run_index, attempt)
-    run_dir.mkdir(parents=True, exist_ok=True)
+def build_run_spec(exp_dir: Path, experiment: dict, case: dict, run_index: int,
+                   attempt: int = 1) -> dict:
+    """Build the run spec the child reads, without writing it.
+
+    Split out of :func:`prepare_run_spec` so a dry run can rehearse the *exact*
+    spec a paid run would receive while leaving no trace on disk.
+    """
     runtime_results = _run_runtime_dir(exp_dir, case, run_index, attempt)
     spec = {
         "experiment_id": experiment.get("experiment_id"),
@@ -1771,7 +2165,7 @@ def prepare_run_spec(exp_dir: Path, experiment: dict, case: dict, run_index: int
     # registration outside it (a test fixture, a non-arm ablation) is not an
     # arm of this study, so it is not this function's job to invent one.
     if _is_frozen_batch_registration(exp_dir):
-        absent = [key for key in ("switches", "config_sha256", "news_scope")
+        absent = [key for key in ("switches", "config_sha256", "news_scope", "budget")
                   if key not in spec]
         if absent:
             raise RunRefused(
@@ -1780,6 +2174,15 @@ def prepare_run_spec(exp_dir: Path, experiment: dict, case: dict, run_index: int
             )
     if "switches" in spec:
         spec["switches_source"] = "registered"
+    return spec
+
+
+def prepare_run_spec(exp_dir: Path, experiment: dict, case: dict, run_index: int,
+                     attempt: int = 1) -> Path:
+    """Write the run spec JSON the child reads to run one measurement."""
+    run_dir = _attempt_dir(exp_dir, run_index, attempt)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    spec = build_run_spec(exp_dir, experiment, case, run_index, attempt)
     spec_path = run_dir / "spec.json"
     spec_path.write_text(json.dumps(spec, indent=2, ensure_ascii=False), encoding="utf-8")
     return spec_path
@@ -1865,12 +2268,17 @@ def execute_measured_run(exp_dir: Path, experiment: dict, case: dict,
         run_dir = _preferred_attempt_dir(exp_dir, run_index)
     if dry_run:
         # A dry run must leave no trace of a measurement: no attempt directory,
-        # no spec, no run slot. Writing either makes the study look like it has
-        # an attempt that never happened.
+        # no spec, no run slot. But it *must* rehearse the real thing: the spec a
+        # paid run would receive, the real graph, the real switch consumption
+        # and the effective-config record. A rehearsal that only counts loop
+        # iterations proves nothing (limitation 1 in the preflight report).
+        spec = build_run_spec(exp_dir, experiment, case, run_index, 1)
+        rehearsal = rehearse_run_spec(spec)
         runner_result = {"status": "dry_run", "returncode": 0,
                          "error": None, "report": None}
         run_dir = None
     else:
+        rehearsal = None
         run_dir = Path(run_dir) if run_dir is not None else _run_slot_dir(exp_dir, run_index)
         attempt = (int(run_dir.name.rsplit("_", 1)[1])
                    if run_dir.name.startswith("attempt_") else 1)
@@ -1896,6 +2304,10 @@ def execute_measured_run(exp_dir: Path, experiment: dict, case: dict,
             "reported_reasoning_tokens_sum": 0, "reported_cached_input_tokens_sum": 0,
             "duplicate_tool_call_count": 0, "prefetched_data_calls": 0,
             "event_counts": {}, "agents": {}, "telemetry_path": None,
+            # The rehearsal's evidence: which switches the *real* graph consumed
+            # and the verified effective-config digest. A dry run that cannot
+            # produce these did not rehearse a paid run.
+            "rehearsal": rehearsal,
         }
 
     telemetry_path = None
@@ -1955,21 +2367,53 @@ def execute_measured_run(exp_dir: Path, experiment: dict, case: dict,
     # Read telemetry to extract metrics. A selected artifact is the primary
     # evidence: it is parsed even when the child exited non-zero (e.g. the graph
     # raised after the run), and its own run_status then decides validity below.
+    # The budget contract is interpreted once, from the run's own registration,
+    # so an unreadable/malformed block is reported as such instead of silently
+    # becoming an uncapped run (U-2). A registration of the frozen batch must
+    # state the contract; a generic experiment that never uses the spend gate
+    # (no ``budget`` block) keeps the pre-existing behaviour and is not
+    # invalidated for lacking a field it never had.
+    if _is_frozen_batch_registration(exp_dir):
+        budget_state = _experiment_budget(exp_dir)
+        budget_cap = budget_state["max_total_tokens"]
+    else:
+        candidate = budget_state_from_experiment(
+            experiment, source=f"{exp_dir}/experiment.json")
+        if "budget" in experiment:
+            budget_state = candidate
+            budget_cap = candidate["max_total_tokens"]
+        else:
+            budget_state = None
+            budget_cap = None
     if copied_path is not None:
         payload = _load_json(copied_path)
         metrics = extract_run_metrics(payload, telemetry_path, run_index,
                                       base_dir=exp_dir,
-                                      max_total_tokens=_experiment_token_cap())
+                                      max_total_tokens=budget_cap,
+                                      budget_state=budget_state)
         metrics["telemetry_path"] = _portable_path(copied_path, exp_dir)
         if runner_error:
             # Keep the diagnostic, but do not let it erase recorded metrics.
             metrics["runner_error"] = runner_error
     else:
         metrics = extract_run_metrics({}, None, run_index,
-                                      max_total_tokens=_experiment_token_cap())
+                                      max_total_tokens=budget_cap,
+                                      budget_state=budget_state)
         metrics["run_status"] = "failed"
         metrics["valid"] = False
         metrics["error"] = runner_error
+
+    # A budget contract that cannot be interpreted makes the run unclassifiable:
+    # the cap is unknown, so neither "within budget" nor "uncapped" can be
+    # claimed. Fail closed rather than treating it as an uncapped run (U-2).
+    if budget_state is not None and not budget_state["ok"]:
+        metrics["invalid_reason"] = metrics.get("invalid_reason") or INVALID_BUDGET_CONFIG
+        metrics["valid"] = False
+        metrics["budget_error"] = {
+            "state": budget_state["state"],
+            "detail": budget_state["detail"],
+            "source": budget_state["source"],
+        }
 
     # Telemetry is authoritative for whether the run is valid: a run the
     # application recorded as non-completed is never promoted to a valid sample,
@@ -2196,6 +2640,13 @@ def _preflight_registration(exp_dir: Path, experiment: dict, case: dict) -> None
                 f"{declared[:12]}…, hashes to {actual[:12]}…"
             )
 
+    # U-2: a registration of *this* study must state a budget contract that can
+    # be interpreted before any attempt directory exists. An absent block is a
+    # refusal here, not an implicit "uncapped".
+    if _is_frozen_batch_registration(exp_dir):
+        require_budget_state(
+            experiment, source=str(Path(exp_dir) / EXPERIMENT_FILE))
+
 
 def _mark_run_started(exp_dir: Path, experiment: dict, case: dict, run_index: int,
                       attempt: int) -> None:
@@ -2268,6 +2719,10 @@ def run_experiment(exp_dir: Path, experiment: dict, *, runner=None,
     such a measurement is never reported as a valid baseline.
     """
     exp_dir = Path(exp_dir)
+    # Audit A-00: the *parent* imports ``tradingagents`` too (budget gate, switch
+    # verification). If the shared editable install wins, the parent would apply
+    # one tree's rules and the child another. Refuse before touching anything.
+    verify_import_root(_PROJECT_ROOT)
     # Every case is pre-flighted before any state is persisted. A spec the
     # harness refuses must not rewrite ``code_state.json``: the file records
     # *the code the study ran under*, and a run that never started did not run
@@ -2337,7 +2792,11 @@ def run_experiment(exp_dir: Path, experiment: dict, *, runner=None,
                     # at the spec. Un-number it, so the next real run reuses
                     # attempt_01 and the study shows no phantom attempt.
                     _discard_refused_attempt(exp_dir, run_index, attempt)
-                _record_refusal(exp_dir, case, run_index, exc)
+                # A rehearsal leaves no trace, including no refusal log: nothing
+                # was attempted, and a refusal artefact would make the study
+                # look like it had a run that never happened.
+                if not dry_run:
+                    _record_refusal(exp_dir, case, run_index, exc)
                 raise
             except Exception as exc:  # noqa: BLE001
                 all_metrics.append({
@@ -2562,6 +3021,25 @@ def _child_env_for_spec(spec: dict) -> dict:
         if name in switches:
             value = switches[name]
             env[env_var] = "true" if value is True else "false"
+
+    # Audit A-00: the shared ``.venv`` installs ``tradingagents`` as an editable
+    # package pointing at the *main* checkout. A child launched elsewhere (or by
+    # a shell wrapper that changes directory) therefore imported a different
+    # tree than the one the spec was registered against -- silently, because the
+    # import succeeds. Pinning the experiment root on ``PYTHONPATH`` makes the
+    # import follow the spec, and ``PYTHONSAFEPATH`` stops the interpreter from
+    # re-ordering the script directory ahead of it. The child still verifies
+    # with ``verify_import_root``; this is the mechanism that makes the
+    # verification pass for the intended tree instead of failing for a tree the
+    # operator never chose.
+    experiment_root = spec.get("experiment_root")
+    if experiment_root:
+        existing = env.get("PYTHONPATH")
+        parts = [str(experiment_root)]
+        if existing:
+            parts.extend(p for p in existing.split(os.pathsep) if p)
+        env["PYTHONPATH"] = os.pathsep.join(parts)
+        env["PYTHONSAFEPATH"] = "1"
     return env
 
 
@@ -2681,13 +3159,14 @@ def verify_import_root(expected_root: str | os.PathLike) -> None:
         ) from None
 
 
-def _write_effective_config(run_dir: Path, *, config: dict, spec: dict,
-                            graph, applied_switches: dict) -> Path:
-    """Write the config this process is really running with.
+def build_effective_config(*, config: dict, spec: dict, graph,
+                           applied_switches: dict) -> dict:
+    """The resolved configuration this process is really running with.
 
     Distinct from ``spec.json`` (what was requested) and from the summary (what
-    happened): this is the resolved state between the two, recorded before the
-    paid call so a crash cannot lose it.
+    happened): this is the state between the two, built before the paid call so
+    a crash cannot lose it, and *verified* against the spec before the call so a
+    misapplied switch cannot spend money first (audit B-23 + round 5).
     """
     from tradingagents.graph.switch_verification import (
         consume_switches_from_setup,
@@ -2711,7 +3190,7 @@ def _write_effective_config(run_dir: Path, *, config: dict, spec: dict,
         else:
             resolved[key] = _safe(config[key])
 
-    payload = {
+    return {
         # The identifiers a third party needs to prove *which* registered
         # experiment and *which* code produced this run (audit B round 5,
         # B-23). Without them the only link back to the release was the raw
@@ -2737,6 +3216,75 @@ def _write_effective_config(run_dir: Path, *, config: dict, spec: dict,
             "cwd": os.getcwd(),
         },
     }
+
+
+def verify_effective_config(payload: dict, spec: dict, *,
+                            expected_root: str | os.PathLike | None = None) -> dict:
+    """Check an ``effective_config`` record against the spec that produced it.
+
+    This is the *consumer* of the artefact: writing a file nobody validates is
+    how a record drifts from reality. It refuses when the recorded definition,
+    the applied switches or the imported module disagree with the spec, and it
+    treats a probe error as a failure rather than a note (the whole point is
+    what the graph actually consumed).
+    """
+    problems: list[str] = []
+    if payload.get("experiment_id") != spec.get("experiment_id"):
+        problems.append(
+            f"experiment_id {payload.get('experiment_id')!r} != "
+            f"{spec.get('experiment_id')!r}")
+    if payload.get("config_sha256") != spec.get("config_sha256"):
+        problems.append("config_sha256 does not match the spec")
+    if payload.get("spec_body_sha256") != spec_body_sha256(spec):
+        problems.append("spec_body_sha256 does not match the spec body")
+    if payload.get("spec_switches") != spec.get("switches"):
+        problems.append("spec_switches do not match the spec")
+    if payload.get("provider") != spec.get("provider"):
+        problems.append("provider does not match the spec")
+    if payload.get("quick_model") != spec.get("quick_model"):
+        problems.append("quick_model does not match the spec")
+    if payload.get("deep_model") != spec.get("deep_model"):
+        problems.append("deep_model does not match the spec")
+
+    observed = payload.get("switches_observed_from_graph_setup") or {}
+    if "_probe_error" in observed:
+        problems.append(f"the switch probe failed: {observed['_probe_error']}")
+    elif spec.get("switches"):
+        # ``consume_switches_from_setup`` reports what each analyst factory was
+        # given, not a flat switch dict; ``verify_switches_consumed`` is the
+        # function that knows how to compare the two. Re-implementing the
+        # comparison here would drift from it.
+        from tradingagents.graph.switch_verification import verify_switches_consumed
+
+        try:
+            verify_switches_consumed(spec["switches"], observed=observed)
+        except Exception as exc:  # noqa: BLE001 - any disagreement is a failure
+            problems.append(
+                f"the graph consumed {observed}, which does not match the "
+                f"spec's {spec['switches']}: {exc}")
+
+    module = (payload.get("import_provenance") or {}).get("tradingagents_module")
+    if expected_root is not None and module:
+        try:
+            Path(module).resolve().relative_to(Path(expected_root).resolve())
+        except ValueError:
+            problems.append(
+                f"tradingagents was imported from {module}, outside "
+                f"{expected_root}")
+
+    if problems:
+        raise RuntimeError(
+            "effective_config verification failed: " + "; ".join(problems))
+    return {"verified": True, "checks": 8}
+
+
+def _write_effective_config(run_dir: Path, *, config: dict, spec: dict,
+                            graph, applied_switches: dict) -> Path:
+    """Build, verify and write ``effective_config.json`` for one run."""
+    payload = build_effective_config(
+        config=config, spec=spec, graph=graph, applied_switches=applied_switches)
+    verify_effective_config(payload, spec,
+                            expected_root=spec.get("experiment_root"))
     path = Path(run_dir) / EFFECTIVE_CONFIG_FILE
     path.write_text(
         json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True),
@@ -2791,6 +3339,28 @@ def _frozen_switch_matrix_rows() -> dict[str, dict]:
     with path.open(newline="", encoding="utf-8") as fh:
         return {(row.get("run_id") or "").strip(): row
                 for row in csv.DictReader(fh) if (row.get("run_id") or "").strip()}
+
+
+def _spec_belongs_to_frozen_batch(spec: dict) -> bool:
+    """Does this spec claim to be one of the 16 registered runs?
+
+    Two independent signals, and either is enough: the ``registration_dir`` the
+    spec names, and the location of the spec file itself. Using only the first
+    would let a spec *delete* the field to escape the strict field set that
+    audit H-B required.
+    """
+    registration = _registration_dir_for(spec)
+    if registration is not None and _is_frozen_batch_registration(
+            Path(registration).parent):
+        return True
+    raw = spec.get("_spec_path")
+    if raw:
+        try:
+            Path(raw).resolve().relative_to((_frozen_batch_dir() / "specs").resolve())
+            return True
+        except (ValueError, OSError):
+            pass
+    return False
 
 
 def _run_id_for_spec(spec: dict) -> str | None:
@@ -2860,12 +3430,19 @@ def _preflight_gate(spec: dict) -> dict:
     # C0 (audit A round 4, H-B). The fields the protocol freezes are now
     # mandatory, and each one must still agree with the registration -- the
     # hash vouches for the registration, not for the spec that points at it.
-    missing_required = [key for key in _SPEC_REQUIRED_FIELDS if key not in spec]
-    if missing_required:
-        raise RunRefused(
-            f"spec is missing required field(s) {missing_required}; omitting a "
-            f"frozen field is not the same as leaving it at its default"
-        )
+    # The mandatory-field set is the *registered batch's* contract. A generic
+    # measurement (``token_benchmark.py measure`` on any experiment) never opted
+    # into switches or a config hash, so requiring them there would refuse a
+    # legitimate measurement rather than a malformed one. ``_spec_belongs_to_
+    # frozen_batch`` also checks the spec's path, so deleting the field that
+    # says "I am R01" cannot downgrade a registered run to a generic one.
+    if _spec_belongs_to_frozen_batch(spec):
+        missing_required = [key for key in _SPEC_REQUIRED_FIELDS if key not in spec]
+        if missing_required:
+            raise RunRefused(
+                f"spec is missing required field(s) {missing_required}; omitting a "
+                f"frozen field is not the same as leaving it at its default"
+            )
 
     declared_hash = spec.get("config_sha256")
     if declared_hash is not None:
@@ -3004,6 +3581,17 @@ def _preflight_gate(spec: dict) -> dict:
                 raise RunRefused(
                     f"news scope field {field}={got!r} names a forbidden vendor"
                 )
+    # U-2: the spec's budget block must be interpretable. Reading it as a bare
+    # ``.get("max_total_tokens")`` made null, absent and malformed identical,
+    # so a broken registration would have run as if it were uncapped.
+    if "budget" in spec:
+        require_budget_state(
+            spec, source=str(spec.get("registration_dir") or "<spec>"))
+    elif _spec_belongs_to_frozen_batch(spec):
+        raise RunRefused(
+            "spec carries no budget block; a run of the frozen batch must state "
+            "whether it is capped, and null is only 'uncapped' by declaration"
+        )
     return {"checked": True}
 
 
@@ -3112,54 +3700,35 @@ def verify_frozen_tree(spec_path: str | Path | None = None) -> None:
             f"declares {declared[:16]}…; the code is not the frozen release"
         )
 
-
-def _run_single(spec_path: str) -> int:
-    """Execute ONE measured TradingAgents run inside the current process.
-
-    This is invoked by ``run`` in a fresh Python subprocess to isolate global
-    state / ContextVars / callbacks between measured runs. Imports the real
-    TradingAgents execution path here (lazily) so the orchestrator can stay
-    lightweight and run validation/summarize/compare without business imports.
-    """
-    spec = _load_json(Path(spec_path))
-    case = spec["case"]
-    run_index = spec.get("run_index")
-
-    # Everything that can disqualify this run is checked before a client is
-    # built, so a refusal costs nothing and is never recorded as an attempt.
-    _expected_root = spec.get("experiment_root") or _PROJECT_ROOT
+    # The local checks above give the operator a precise message for the common
+    # failures. The full certification -- tag, manifest, every spec hash, the
+    # budget contract, the spec paths -- is one shared check so the gate and the
+    # spending child cannot drift apart on what "frozen" means.
     try:
-        verify_import_root(_expected_root)
-        # The expensive refusal: only a run of the *frozen release* may spend
-        # money. Checked here, on the spending path, not only in the gate
-        # script (audit A round 4, H-A).
-        verify_frozen_tree(spec_path)
-        _preflight_gate(spec)
-    except (RunRefused, RuntimeError) as exc:
-        reason = f"{type(exc).__name__}: {exc}"
-        (Path(spec_path).parent / REFUSAL_FILE).write_text(
-            json.dumps({"refused": True, "reason": reason,
-                        "spec_switches": spec.get("switches")},
-                       indent=2, ensure_ascii=False, sort_keys=True),
-            encoding="utf-8",
+        from c3_verify_final_freeze import verify as _verify_final_freeze
+    except ImportError:  # imported as scripts.token_benchmark, not from scripts/
+        import importlib.util
+
+        module_spec = importlib.util.spec_from_file_location(
+            "c3_verify_final_freeze",
+            Path(__file__).resolve().parent / "c3_verify_final_freeze.py")
+        module = importlib.util.module_from_spec(module_spec)
+        module_spec.loader.exec_module(module)
+        _verify_final_freeze = module.verify
+    result = _verify_final_freeze(_PROJECT_ROOT)
+    if not result["ok"]:
+        raise RunRefused(
+            "this tree is not the certified final freeze: "
+            + "; ".join(result["failures"][:3])
+            + (f" (+{len(result['failures']) - 3} more)" if len(result["failures"]) > 3 else "")
         )
-        print(f"refused: {reason}", file=sys.stderr)
-        return 2
 
 
-    import traceback
-
-    from cli.stats_handler import StatsCallbackHandler
+def _config_for_spec(spec: dict) -> tuple[dict, dict]:
+    """Resolve the process config for one run, applying the spec's switches."""
     from tradingagents.default_config import DEFAULT_CONFIG
-    from tradingagents.graph.switch_verification import (
-        SWITCH_CONFIG_KEYS,
-        SwitchNotConsumed,
-        consume_switches_from_setup,
-        validate_spec_switches,
-        verify_switches_consumed,
-    )
-    from tradingagents.graph.trading_graph import TradingAgentsGraph
 
+    case = spec["case"]
     config = dict(DEFAULT_CONFIG)
     config["results_dir"] = spec.get("results_dir")
     config["llm_provider"] = spec.get("provider")
@@ -3172,47 +3741,166 @@ def _run_single(spec_path: str) -> int:
     config["checkpoint_enabled"] = False
 
     # CAND-01 arms. The ablation switches reach the config through two paths —
-    # the ambient ``TRADINGAGENTS_*`` vars (``default_config``) and, since this
-    # fix, the spec itself. Only the spec path is self-describing: independent
-    # audit B1 measured that without it 12/16 specs run under a neutral
-    # environment with switches that contradict their own arm label (every C0
-    # and CC run, plus every B run). The spec is the record of what was
-    # registered, so it wins; the ambient value is only used as an *agreement*
-    # check, never as the source.
-    applied_switches = _apply_spec_switches(
+    # the ambient ``TRADINGAGENTS_*`` vars (``default_config``) and the spec
+    # itself. Only the spec path is self-describing: independent audit B1
+    # measured that without it 12/16 specs run under a neutral environment with
+    # switches that contradict their own arm label (every C0 and CC run, plus
+    # every B run). The spec is the record of what was registered, so it wins;
+    # the ambient value is only used as an *agreement* check, never a source.
+    applied = _apply_spec_switches(
         spec, config, DEFAULT_CONFIG,
         explicitly_exported=frozenset(_exported_switch_keys()),
     )
+    return config, applied
 
-    # Exactly one graph is constructed per measured run. An earlier revision
-    # built a second one purely to run the switch check and threw the first
-    # away, which doubled client construction and left two live handlers that
-    # could each record usage. Construct once, verify, then propagate.
+
+def _construct_graph(spec: dict, config: dict):
+    """Construct exactly one graph for one run.
+
+    Exactly one, because an earlier revision built a second graph purely to run
+    the switch check and threw the first away, which doubled client construction
+    and left two live handlers that could each record usage. The seam exists so
+    an offline rehearsal can substitute a stub graph without changing the
+    verification logic.
+    """
+    from cli.stats_handler import StatsCallbackHandler
+    from tradingagents.graph.trading_graph import TradingAgentsGraph
+
     handler = StatsCallbackHandler()
-    graph = TradingAgentsGraph(
-        selected_analysts=tuple(case.get("analysts") or ()),
+    return TradingAgentsGraph(
+        selected_analysts=tuple(spec["case"].get("analysts") or ()),
         config=config,
         callbacks=[handler],
     )
 
+
+def _verify_graph_consumed_switches(spec: dict, graph, applied: dict) -> dict:
+    """Ask the constructed ``GraphSetup`` what it derived, and require the arm."""
+    from tradingagents.graph.switch_verification import (
+        consume_switches_from_setup,
+        verify_switches_consumed,
+    )
+
+    observed = consume_switches_from_setup(graph.graph_setup)
+    if applied:
+        verify_switches_consumed(spec["switches"], observed=observed)
+    return observed
+
+
+def _guard_spending_path(spec: dict, spec_path: Path | None = None) -> None:
+    """Everything that can disqualify a run, before a single paid call.
+
+    Import provenance (A-00), the frozen-release check (H-A) and the spec-level
+    refusals (s2, news scope, budget, arm) all live here so the rehearsal and
+    the paid path cannot diverge.
+    """
+    verify_import_root(spec.get("experiment_root") or _PROJECT_ROOT)
+    # The frozen-release check is a property of the registered batch: those are
+    # the runs whose evidence must come from the audited release. A generic
+    # measurement of another experiment does not claim to be that release (and
+    # refusing it for lacking a release tag would make `measure` unusable
+    # outside the study), but it still gets every other guard.
+    if _spec_belongs_to_frozen_batch(spec):
+        verify_frozen_tree(spec_path)
+    _preflight_gate(spec)
+
+
+def rehearse_run_spec(spec: dict, *, spec_path: Path | None = None) -> dict:
+    """Offline rehearsal of one paid run: everything except the LLM call.
+
+    A rehearsal that cannot fail is not a rehearsal. This builds the *real*
+    spec, resolves the *real* config, constructs the *real* graph and asserts
+    that the graph consumed exactly the registered arm, then verifies the
+    ``effective_config`` record that a paid run would write. No client is
+    asked for a completion, no tool runs, nothing is written to disk.
+    """
+    _guard_spending_path(spec, spec_path)
+    config, applied = _config_for_spec(spec)
+    if not (spec.get("provider") and spec.get("quick_model")
+            and spec.get("deep_model")):
+        # There is no provider/model to build a client from, so there is no
+        # graph to interrogate. Everything that does not need one has already
+        # run; say so instead of silently skipping the strongest check. A
+        # *registered* spec cannot reach this branch: its required fields
+        # include the provider and both models.
+        return {
+            "rehearsed": True,
+            "graph_rehearsed": False,
+            "reason": "spec declares no provider/models; no graph constructed",
+            "switches_applied": applied,
+            "switches_observed": None,
+            "effective_config_verified": {"verified": False},
+            "effective_config_sha256": None,
+        }
+    try:
+        graph = _construct_graph(spec, config)
+        observed = _verify_graph_consumed_switches(spec, graph, applied)
+        record = build_effective_config(
+            config=config, spec=spec, graph=graph, applied_switches=applied)
+        verification = verify_effective_config(
+            record, spec, expected_root=spec.get("experiment_root"))
+    except Exception as exc:  # noqa: BLE001 - a rehearsal failure is a refusal
+        raise RunRefused(
+            f"offline rehearsal failed: {type(exc).__name__}: {exc}") from None
+    return {
+        "rehearsed": True,
+        "graph_rehearsed": True,
+        "switches_applied": applied,
+        "switches_observed": observed,
+        "effective_config_verified": verification,
+        "effective_config_sha256": hashlib.sha256(
+            canonical_json(record).encode("utf-8")).hexdigest(),
+    }
+
+
+def _run_single(spec_path: str) -> int:
+    """Execute ONE measured TradingAgents run inside the current process.
+
+    This is invoked by ``run`` in a fresh Python subprocess to isolate global
+    state / ContextVars / callbacks between measured runs. Imports the real
+    TradingAgents execution path here (lazily) so the orchestrator can stay
+    lightweight and run validation/summarize/compare without business imports.
+    """
+    spec = _load_json(Path(spec_path))
+    # Record where this spec came from: it is the second, independent signal of
+    # whether the spec is a registered batch run (see
+    # ``_spec_belongs_to_frozen_batch``).
+    spec["_spec_path"] = str(Path(spec_path).resolve())
+    case = spec["case"]
+    run_index = spec.get("run_index")
+
+    # Everything that can disqualify this run is checked before a client is
+    # built, so a refusal costs nothing and is never recorded as an attempt.
+    try:
+        _guard_spending_path(spec, Path(spec_path))
+    except (RunRefused, RuntimeError) as exc:
+        reason = f"{type(exc).__name__}: {exc}"
+        (Path(spec_path).parent / REFUSAL_FILE).write_text(
+            json.dumps({"refused": True, "reason": reason,
+                        "spec_switches": spec.get("switches")},
+                       indent=2, ensure_ascii=False, sort_keys=True),
+            encoding="utf-8",
+        )
+        print(f"refused: {reason}", file=sys.stderr)
+        return 2
+
+    import traceback
+
+    config, applied_switches = _config_for_spec(spec)
+
+    # Exactly one graph is constructed per measured run.
+    graph = _construct_graph(spec, config)
+
     # The spec's switches are now in ``config``, but "in config" is not the same
     # as "consumed by the graph". Ask the constructed ``GraphSetup`` what it
     # derived from that config and require it to equal what the arm declares.
-    # Without this a spec can be marked complete while running somebody else's
-    # arm, which is the failure independent audit B1 measured. The check runs
-    # before ``propagate``, so a mislabelled arm costs no paid calls.
-    if applied_switches:
-        verify_switches_consumed(
-            spec["switches"],
-            observed=consume_switches_from_setup(graph.graph_setup),
-        )
+    # The check runs before ``propagate``, so a mislabelled arm costs nothing.
+    _verify_graph_consumed_switches(spec, graph, applied_switches)
 
     # Record the configuration this process is *actually* running with, after
-    # every override has been folded in. The spec records what was requested;
-    # this records what took effect, including the provider's resolved
-    # endpoint and the module that was really imported. Written before
-    # ``propagate`` so a run that crashes still leaves its configuration on
-    # disk, and so the record cannot be confused with a post-hoc summary.
+    # every override has been folded in, and verify it against the spec before
+    # the paid call. Written before ``propagate`` so a run that crashes still
+    # leaves its configuration on disk.
     _write_effective_config(
         Path(spec_path).parent,
         config=config,
@@ -3408,7 +4096,10 @@ def build_measurement_experiment(template: dict, *, experiment_id: str,
     # because `news_scope` is a required spec field (audit A round 4, H-B).
     if "news_scope" in template:
         exp["news_scope"] = template["news_scope"]
-    if "budget" in template:
+    if isinstance(template.get("budget"), dict):
+        # Carried verbatim, including the budget_mode that makes a null cap
+        # mean "uncapped" rather than "unconfigured" (U-2). A template whose
+        # budget is null has no contract to carry.
         exp["budget"] = template["budget"]
     if "checkpoint_enabled" in template:
         exp["checkpoint_enabled"] = template["checkpoint_enabled"]

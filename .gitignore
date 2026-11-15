@@ -241,3 +241,11 @@ token_benchmarks/measurements/
 # Plan C3: the frozen-commit pointer is written after the commit it names
 # (a commit cannot contain its own hash), so it is release metadata, not source.
 token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/c3/FROZEN_COMMIT
+# The rest of the post-commit release record. All of it names the final commit
+# or is derived after it, so none of it can live inside that commit; keeping it
+# ignored is what lets the certified working tree be clean. The tracked
+# authority is c3/code_freeze.txt (the fingerprint), c3/RELEASE_SEAL.sha256 and
+# MANIFEST.sha256, and scripts/c3_verify_final_freeze.py checks all of it.
+token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/c3/FREEZE_RECORD.json
+token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/c3/FREEZE_HISTORY.jsonl
+token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/c3/FINAL_FREEZE_REPORT.md

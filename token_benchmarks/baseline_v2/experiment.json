@@ -1,4 +1,8 @@
 {
+  "budget": {
+    "budget_mode": "uncapped_authorized",
+    "max_total_tokens": null
+  },
   "cache_policy": "preserve_existing",
   "cases": [
     {

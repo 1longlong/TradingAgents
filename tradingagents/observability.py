@@ -505,6 +505,12 @@ class LLMCallEvent:
     reported_cached_input_tokens: int | None = None
     usage_source: str | None = None
     usage_complete: bool = False
+    #: The provider's usage payload as received (scalar fields only, no prompt
+    #: or completion text). Audit C-5 (limitation L-5) found that only the
+    #: parsed totals survived, so a later dispute about spend could not be
+    #: settled against the vendor's own numbers. Preserving the blob makes the
+    #: parsed total auditable; it is still never a message body.
+    reported_usage_raw: dict | None = None
     success: bool = True
     error_class: str | None = None
 
@@ -869,6 +875,17 @@ class RunMetricsCollector:
     def snapshot(self) -> dict[str, Any]:
         """Return a deep summary of recorded metrics (deterministic)."""
         with self._lock:
+            total = len(self.llm_calls)
+            # Derived from the counts rather than remembered from the last
+            # event: the remembered flag was sticky-true and was not a measure
+            # of coverage at all (limitation L-5, audit C-6).
+            usage_complete = bool(
+                total > 0
+                and self.llm_calls_with_provider_usage == total
+                and self.llm_calls_without_provider_usage == 0
+                and self.llm_calls_missing_input_tokens == 0
+                and self.llm_calls_missing_output_tokens == 0
+            )
             return {
                 "telemetry_run_id": self.telemetry_run_id,
                 "closed": self._closed,
@@ -885,7 +902,7 @@ class RunMetricsCollector:
                 "reported_output_tokens_sum": self.reported_output_tokens_sum,
                 "reported_reasoning_tokens_sum": self.reported_reasoning_tokens_sum,
                 "reported_cached_input_tokens_sum": self.reported_cached_input_tokens_sum,
-                "usage_complete": self.usage_complete,
+                "usage_complete": usage_complete,
             }
 
     def serialize_metrics(self) -> str:
@@ -1170,6 +1187,7 @@ class ObservabilityCallbackHandler(BaseCallbackHandler):
             reported_cached_input_tokens=usage["cached_input"] if usage else None,
             usage_source=usage["source"] if usage else None,
             usage_complete=usage["complete"] if usage else False,
+            reported_usage_raw=usage.get("raw") if usage else None,
             success=success,
             error_class=_sanitized_error_class(error),
         )
@@ -1376,6 +1394,56 @@ def _first_generation(response: Any) -> Any | None:
     return first_batch[0]
 
 
+def _sanitize_usage_raw(raw: dict) -> dict:
+    """A bounded, JSON-safe copy of the provider's own usage payload.
+
+    Audit C-5 (limitation L-5): only the *parsed* totals were kept, so a
+    disagreement with the vendor's invoice could not be re-examined. The whole
+    blob is small by nature (token counts and their details), so it is cheap to
+    preserve -- but it is still bounded: nested depth, list length and string
+    length are capped, and any long string is dropped rather than stored. A
+    usage payload that carries prose is not a usage payload, and this module's
+    contract forbids storing message content.
+    """
+    def clean(value: Any, depth: int = 0) -> Any:
+        if depth > 3:
+            return None
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return value
+        if isinstance(value, str):
+            return value if len(value) <= 64 else None
+        if isinstance(value, dict):
+            out = {}
+            for key, item in value.items():
+                if not isinstance(key, str):
+                    continue
+                cleaned = clean(item, depth + 1)
+                if cleaned is not None:
+                    out[key] = cleaned
+            return out or None
+        if isinstance(value, (list, tuple)):
+            items = [clean(item, depth + 1) for item in list(value)[:16]]
+            return [item for item in items if item is not None] or None
+        return None
+
+    return clean(raw) or {}
+
+
+def _count_negative_ints(value: Any) -> int:
+    """How many negative integers a (sanitized) raw usage blob contains."""
+    if isinstance(value, bool):
+        return 0
+    if isinstance(value, int):
+        return 1 if value < 0 else 0
+    if isinstance(value, dict):
+        return sum(_count_negative_ints(item) for item in value.values())
+    if isinstance(value, (list, tuple)):
+        return sum(_count_negative_ints(item) for item in value)
+    return 0
+
+
 def _extract_usage_metadata(raw: Any) -> dict[str, Any] | None:
     """Normalize a usage blob to our canonical fields, or ``None`` if absent.
 
@@ -1423,6 +1491,7 @@ def _extract_usage_metadata(raw: Any) -> dict[str, Any] | None:
             "cached_input": None,
             "source": "provider",
             "complete": False,
+            "raw": _sanitize_usage_raw(raw),
         }
 
     # Cached-input is informational, from input_token_details.cache_read +
@@ -1466,6 +1535,7 @@ def _extract_usage_metadata(raw: Any) -> dict[str, Any] | None:
         "cached_input": cached,
         "source": "provider",
         "complete": complete,
+        "raw": _sanitize_usage_raw(raw),
     }
 
 
@@ -1473,7 +1543,11 @@ def _first_int(*values: Any) -> Any:
     for value in values:
         if isinstance(value, bool):
             continue
-        if isinstance(value, int):
+        # A negative token count is not a count: no provider can report one.
+        # Accepting it would put a physically impossible number into a sum and
+        # let a corrupt payload pass as complete (limitation L-5, audit C-5).
+        # It is treated as "not reported", which makes the call incomplete.
+        if isinstance(value, int) and value >= 0:
             return value
     return _MISSING
 
@@ -1484,7 +1558,8 @@ def _sum_ints(values: list[Any]) -> int | None:
     for value in values:
         if isinstance(value, bool):
             continue
-        if isinstance(value, int):
+        # Negative counts are dropped for the same reason as in ``_first_int``.
+        if isinstance(value, int) and value >= 0:
             total += value
             found = True
     return total if found else None
@@ -1622,6 +1697,19 @@ def _build_telemetry_dict(collector: RunMetricsCollector) -> dict[str, Any]:
         a["node_invocations"] += 1
         a["node_wall_time_ms"] += (ev.wall_time_ms or 0.0)
 
+    # ``usage_complete`` is derived from the counts, not remembered from the
+    # last event. It used to be sticky-true: once a single call carried full
+    # usage, a later call that carried none left the per-agent flag reading
+    # "complete" (limitation L-5, audit C-6). A flag that can only ever turn on
+    # is not a measurement of coverage.
+    for a in agents.values():
+        a["usage_complete"] = bool(
+            a["llm_calls"] > 0
+            and a["calls_with_provider_usage"] == a["llm_calls"]
+            and a["calls_missing_input_tokens"] == 0
+            and a["calls_missing_output_tokens"] == 0
+        )
+
     # Run totals = sum over all agents (unattributed is an explicit pseudo-agent).
     run_totals = {
         "llm_calls": sum(a["llm_calls"] for a in agents.values()),
@@ -1675,14 +1763,39 @@ def _build_telemetry_dict(collector: RunMetricsCollector) -> dict[str, Any]:
         "complete": usage_complete,
     }
 
+    # Self-audit of the raw payloads we preserved (limitation L-5, audit C-5):
+    # a negative token count is physically impossible and must not be read as a
+    # measurement, and "we kept the vendor's numbers" is only true if the blob
+    # was actually carried. Both are recorded so a consumer can check the claim
+    # instead of trusting it.
+    raw_present = 0
+    negative_counts = 0
+    for ev in collector.llm_calls:
+        if ev.reported_usage_raw:
+            raw_present += 1
+            negative_counts += _count_negative_ints(ev.reported_usage_raw)
+    usage_checks = {
+        "raw_usage_preserved": raw_present,
+        "raw_usage_expected": total_llm,
+        "negative_token_counts": negative_counts,
+    }
+
     unattributed_llm = agents.get(AGENT_UNATTRIBUTED, {}).get("llm_calls", 0)
     unattributed_tool = agents.get(AGENT_UNATTRIBUTED, {}).get("tool_calls", 0)
     # Read the private flags directly: the caller (build_telemetry) holds the
     # lock, so we must not re-acquire it here.
     run_finished = collector._run_finished
+    # A run with no events at all has nothing to attribute, but calling that
+    # "complete attribution" is a claim about data that does not exist: an
+    # empty finished run used to report ``attribution_complete: true``
+    # (limitation L-5, audit C-6). Completeness requires something to be
+    # complete about.
+    has_events = (total_llm + run_totals["tool_calls"]) > 0
     audit_quality = {
         "usage_complete": usage_complete,
-        "attribution_complete": bool(unattributed_llm == 0 and unattributed_tool == 0),
+        "attribution_complete": bool(
+            has_events and unattributed_llm == 0 and unattributed_tool == 0
+        ),
         # ``telemetry_complete`` means: this record corresponds to a run that
         # reached a TERMINAL state (completed/interrupted/failed) and was
         # finalized for persistence. It does NOT mean full provider token
@@ -1721,6 +1834,7 @@ def _build_telemetry_dict(collector: RunMetricsCollector) -> dict[str, Any]:
                 "reported_cached_input_tokens": ev.reported_cached_input_tokens,
                 "usage_source": ev.usage_source,
                 "usage_complete": ev.usage_complete,
+                "reported_usage_raw": ev.reported_usage_raw,
             }
             for ev in collector.llm_calls
         ],
@@ -1822,6 +1936,7 @@ def _build_telemetry_dict(collector: RunMetricsCollector) -> dict[str, Any]:
             "max_risk_rounds": collector.max_risk_rounds,
         },
         "usage_coverage": usage_coverage,
+        "usage_checks": usage_checks,
         "audit_quality": audit_quality,
         "run_totals": run_totals,
         "unattributed_llm_events": unattributed_llm,

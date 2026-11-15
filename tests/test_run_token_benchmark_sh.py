@@ -45,7 +45,9 @@ def _sandbox(tmp_path: Path) -> Path:
     experiment["news_scope"] = {"company_news": "finnhub",
                                 "global_news": "finnhub:CONFIG_DISABLED",
                                 "gdelt": "excluded"}
-    experiment["budget"] = {"max_total_tokens": 1000}
+    # U-2: a cap must say what kind of contract it is; a bare number is no
+    # longer interpretable, by design.
+    experiment["budget"] = {"budget_mode": "capped", "max_total_tokens": 1000}
     experiment["checkpoint_enabled"] = False
     # The hash is computed here exactly as the harness computes it: a handed
     # value would make this sandbox test the fixture rather than the code.
