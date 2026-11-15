@@ -43,7 +43,7 @@ deleted; they remain in history.
 | Finding | Severity | Fix | Mutation proof |
 |---|---|---|---|
 | **H-C** `case` sub-fields accepted | Critical | spec `case` now matched to registration `cases` by `case_id`, field by field | M14 → 7 tests red |
-| **R-5-B** circular freeze check | High | append-only `c3/FREEZE_HISTORY.jsonl`; first entry designates the commit, later entries cannot retract it; tracked, so inside the fingerprint | new tests |
+| **R-5-B** circular freeze check | High | append-only `c3/FREEZE_HISTORY.jsonl`; first entry designates the commit, later entries cannot retract it. **Correction (final freeze):** the file is *not* tracked — it names a commit it was written after, so it cannot be in that commit. The load-bearing anchor is the annotated tag `c3-final-freeze`, whose object hash the verifier checks; the history must still agree with it | new tests |
 | **R-5-C** skip flag reached paid child | High | parent strips it from child env; refused outright for frozen-batch registrations | M15/M16 → red |
 | **R-5-D** `C3_FROZEN_COMMIT` redirect | Medium | override may only *restate* the file, never replace it | M17 → red |
 | **B-20** no test for protocol-arm authority | Med/High | two tests pin it against the protocol document | M10 → red |

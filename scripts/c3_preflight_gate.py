@@ -16,7 +16,10 @@ Checks, in order (all must pass):
   6. Finnhub answers and returns articles for the ticker in the window.
   7. FRED answers for a real series at the frozen trade date.
 
-Exit code 0 means "safe to spend money on this run"; anything else means stop.
+Exit code 0 means the offline checks passed. With live probes it prints
+"GATE PASSED — safe to spend money"; with ``--skip-network`` (which requires
+``C3_I_MEAN_TO_SKIP_NETWORK=yes``) it prints "OFFLINE ONLY", which is **not**
+authorisation to spend. Anything else means stop.
 """
 from __future__ import annotations
 

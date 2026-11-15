@@ -91,6 +91,17 @@ def verify(root: Path = REPO_ROOT) -> dict:
     root = Path(root).resolve()
     batch = root / BATCH_REL
     c3 = batch / "c3"
+    # Everything below is derived from ``root``. Using the module-level
+    # constants here would make ``verify(other_root)`` inspect *this* checkout's
+    # files while claiming to check another tree (audit round 3, L-3).
+    manifest_file = batch / "MANIFEST.sha256"
+    protocol_file = batch / "CAND01_BATCH_2X2_PROTOCOL_V2.md"
+    generator_file = root / "scripts" / "gen_cand01_batch_16run_specs_v2.py"
+    code_freeze_file = c3 / "code_freeze.txt"
+    seal_file = c3 / "RELEASE_SEAL.sha256"
+    hash_manifest_file = batch / "CONFIG_HASH_MANIFEST.csv"
+    frozen_file = c3 / "FROZEN_COMMIT"
+    history_file = c3 / "FREEZE_HISTORY.jsonl"
     checks: list[str] = []
     failures: list[str] = []
 
@@ -116,7 +127,6 @@ def verify(root: Path = REPO_ROOT) -> dict:
     head_tree = _git(root, "rev-parse", "HEAD^{tree}")
 
     # -- 1. identity -------------------------------------------------------
-    frozen_file = c3 / "FROZEN_COMMIT"
     if not frozen_file.is_file():
         bad(f"{frozen_file} is missing")
     else:
@@ -165,8 +175,8 @@ def verify(root: Path = REPO_ROOT) -> dict:
     else:
         ok(f"fingerprint recomputed and equal ({str(actual_fingerprint)[:16]}…)")
     declared = None
-    if CODE_FREEZE_FILE.is_file():
-        for line in CODE_FREEZE_FILE.read_text(encoding="utf-8").splitlines():
+    if code_freeze_file.is_file():
+        for line in code_freeze_file.read_text(encoding="utf-8").splitlines():
             stripped = line.strip()
             if stripped.startswith("working_tree_sha256") and "=" not in stripped:
                 declared = stripped.split(":", 1)[-1].strip()
@@ -178,14 +188,14 @@ def verify(root: Path = REPO_ROOT) -> dict:
         ok("c3/code_freeze.txt agrees with the record")
 
     # -- 5. manifest -------------------------------------------------------
-    if _sha256(MANIFEST_FILE) != record.get("manifest_sha256"):
+    if _sha256(manifest_file) != record.get("manifest_sha256"):
         bad("MANIFEST.sha256 has changed since certification")
     else:
         ok(f"MANIFEST.sha256 digest matches the record "
            f"({record.get('manifest_entries')} entries)")
-    if MANIFEST_FILE.is_file():
+    if manifest_file.is_file():
         entries = 0
-        for line in MANIFEST_FILE.read_text(encoding="utf-8").splitlines():
+        for line in manifest_file.read_text(encoding="utf-8").splitlines():
             line = line.strip()
             if not line:
                 continue
@@ -215,10 +225,10 @@ def verify(root: Path = REPO_ROOT) -> dict:
 
     recorded_specs = record.get("specs") or {}
     hash_manifest: dict[str, str] = {}
-    if HASH_MANIFEST_FILE.is_file():
+    if hash_manifest_file.is_file():
         import csv
 
-        with HASH_MANIFEST_FILE.open(newline="", encoding="utf-8") as handle:
+        with hash_manifest_file.open(newline="", encoding="utf-8") as handle:
             for row in csv.DictReader(handle):
                 if row.get("run_id"):
                     hash_manifest[row["run_id"]] = row.get("config_sha256", "")
@@ -282,20 +292,20 @@ def verify(root: Path = REPO_ROOT) -> dict:
            f"budget uncapped_authorized, paths inside the tree")
 
     # -- 7. protocol / generator / sealed release files --------------------
-    if _sha256(PROTOCOL_FILE) != record.get("protocol_sha256"):
+    if _sha256(protocol_file) != record.get("protocol_sha256"):
         bad("CAND01_BATCH_2X2_PROTOCOL_V2.md has changed since certification")
     else:
         ok("protocol digest matches the record")
-    if _sha256(GENERATOR_FILE) != record.get("generator_sha256"):
+    if _sha256(generator_file) != record.get("generator_sha256"):
         bad("gen_cand01_batch_16run_specs_v2.py has changed since certification")
     else:
         ok("generator digest matches the record")
     # Audit round 2 (F5): these fields were recorded and never recomputed.
-    if _sha256(c3 / "code_freeze.txt") != record.get("code_freeze_sha256"):
+    if _sha256(code_freeze_file) != record.get("code_freeze_sha256"):
         bad("c3/code_freeze.txt has changed since certification")
     else:
         ok("code_freeze.txt digest matches the record")
-    if _sha256(c3 / "RELEASE_SEAL.sha256") != record.get("release_seal_sha256"):
+    if _sha256(seal_file) != record.get("release_seal_sha256"):
         bad("c3/RELEASE_SEAL.sha256 has changed since certification")
     else:
         ok("RELEASE_SEAL.sha256 digest matches the record")
@@ -328,7 +338,7 @@ def verify(root: Path = REPO_ROOT) -> dict:
     else:
         ok("tag message digest matches the record")
 
-    history = c3 / "FREEZE_HISTORY.jsonl"
+    history = history_file
     if not history.is_file():
         bad(f"{history} is missing; the designation is not recorded")
     else:

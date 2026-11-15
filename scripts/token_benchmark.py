@@ -993,7 +993,12 @@ def _budget_summary(payload: dict, run_totals: dict, usage_coverage: dict,
     from tradingagents.budget_guard import BudgetGate
 
     gate = BudgetGate(max_total_tokens=max_total_tokens)
-    events = payload.get("llm_call_events") or []
+    events = payload.get("llm_call_events")
+    if not isinstance(events, (list, tuple)):
+        # A tampered artifact can carry any JSON type here. The usage verdict
+        # already calls that a mismatch; the replay must not raise on it and
+        # abort an offline re-summarise of the whole study (audit round 3).
+        events = []
     seen: dict[str, dict] = {}
     for position, ev in enumerate(events):
         if not isinstance(ev, dict):
@@ -1402,6 +1407,12 @@ def _budget_label(budget: dict) -> str:
     """
     state = budget.get("state") or "UNKNOWN"
     used = budget.get("used_tokens")
+    if budget.get("cap_authorised") is False:
+        # The run is invalid because its budget contract could not be read; the
+        # gate's own state is still UNCAPPED (no cap was applied), so rendering
+        # only that word would describe the run as authorised (audit round 3).
+        return (f"contract unusable "
+                f"({budget.get('config_state') or 'unknown'}) — invalid")
     if state == "UNCAPPED":
         return "uncapped"
     if state == "UNKNOWN_SPEND":
