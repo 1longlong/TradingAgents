@@ -108,10 +108,16 @@ def check_fingerprint_matches_record(expected: str) -> None:
     text = record.read_text(encoding="utf-8")
     declared = None
     for line in text.splitlines():
-        if line.strip().startswith("working_tree_sha256"):
-            declared = line.split("=", 1)[-1].strip()
-    if not declared:
-        _fail("freeze record", f"{record.name} records no working_tree_sha256")
+        # Only the machine-readable line counts: "  working_tree_sha256   : <hex>".
+        # An earlier looser parse also matched the human label line and read a
+        # truncated value, which made every record look stale.
+        stripped = line.strip()
+        if stripped.startswith("working_tree_sha256") and "=" not in stripped:
+            declared = stripped.split(":", 1)[-1].strip()
+            break
+    if not declared or len(declared) != 64:
+        _fail("freeze record",
+              f"{record.name} records no usable working_tree_sha256 ({declared!r})")
     experiment = json.loads((BATCH_DIR / "experiment.json").read_text(encoding="utf-8"))
     actual = tb.compute_code_state(BATCH_DIR, experiment).get("working_tree_sha256")
     if actual != declared:
