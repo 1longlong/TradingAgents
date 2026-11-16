@@ -33,4 +33,6 @@ the freeze.
 | LOW-3 committed docs had stale counts | low | updated to the real numbers |
 | LOW-4 budget fallback merges unreadable/malformed on a non-frozen path | low | pre-existing; recorded |
 
-**Delta re-check on `f19d6ed`: PASS.** Tampered-flag payload → INCOMPLETE; missing memory_state.json → `memory_state_missing`; 233 focused tests pass.
+**Delta re-check on `f19d6ed`: PASS.** The final commit `c30700c`
+adds only the harness stripped-spec guard, its test and documentation
+(`tradingagents/` is byte-identical), so this scope is unaffected. Tampered-flag payload → INCOMPLETE; missing memory_state.json → `memory_state_missing`; 233 focused tests pass.
