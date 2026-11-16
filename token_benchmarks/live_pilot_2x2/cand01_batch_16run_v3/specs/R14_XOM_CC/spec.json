@@ -1,0 +1,45 @@
+{
+  "budget": {
+    "budget_mode": "uncapped_authorized",
+    "max_total_tokens": null
+  },
+  "cache_policy": "preserve_existing",
+  "case": {
+    "analysts": [
+      "market",
+      "news",
+      "fundamentals"
+    ],
+    "case_id": "xom_2026_09_23",
+    "research_rounds": 1,
+    "risk_rounds": 1,
+    "ticker": "XOM",
+    "trade_date": "2026-09-23"
+  },
+  "config_sha256": "60e7160a375aa53b4b116e2c77bd175ef9e5a6c17e35e159639fdf28ce572dab",
+  "deep_model": "CS5351/DeepSeek-V4-Flash",
+  "experiment_id": "R14",
+  "experiment_root": "/home/sky/cs5351/TradingAgents/.worktrees/cand01_v3",
+  "memory": {
+    "baseline_relpath": "memory/baseline_v3.md",
+    "baseline_sha256": "01102211cc012807956e3a31bafc587b90d518daa3335d07d33c571cfecf8c96",
+    "mode": "per_run_snapshot_copy"
+  },
+  "news_scope": {
+    "company_news": "finnhub",
+    "gdelt": "excluded",
+    "global_news": "finnhub:CONFIG_DISABLED"
+  },
+  "output_language": "English",
+  "provider": "openai_compatible",
+  "quick_model": "CS5351/DeepSeek-V4-Flash",
+  "results_dir": "/home/sky/cs5351/TradingAgents/.worktrees/cand01_v3/token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/specs/R14_XOM_CC/runs/run_01/attempt_01/runtime/XOM/2026-09-23",
+  "run_index": 1,
+  "switches": {
+    "batch_macro": true,
+    "s2_downstream": true,
+    "single_pass": true,
+    "structured": true
+  },
+  "switches_source": "declared"
+}

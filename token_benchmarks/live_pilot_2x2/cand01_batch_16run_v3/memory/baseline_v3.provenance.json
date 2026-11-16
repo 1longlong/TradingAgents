@@ -1,0 +1,25 @@
+{
+  "baseline": "token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/memory/baseline_v3.md",
+  "baseline_entries": 1,
+  "baseline_pending": 0,
+  "baseline_sha256": "01102211cc012807956e3a31bafc587b90d518daa3335d07d33c571cfecf8c96",
+  "excluded": [
+    {
+      "date": "2026-09-23",
+      "sha256": "5698209d84cc7323615db9c0ff21bb53ef9b866b830f96c635f3164832974f63",
+      "ticker": "AAPL"
+    }
+  ],
+  "generated_at_utc": "2026-11-16T04:23:27.218914+00:00",
+  "generator": "scripts/c3_build_memory_baseline.py",
+  "kept_entries": [
+    {
+      "date": "2026-09-23",
+      "ticker": "NVDA"
+    }
+  ],
+  "schema": 1,
+  "source": "/home/sky/.tradingagents/memory/trading_memory.md",
+  "source_entries": 2,
+  "source_sha256": "6eb92fe1417a870a97f5c78e900278b53bbc4cb21360c09e2ab6cad4fea43dc3"
+}

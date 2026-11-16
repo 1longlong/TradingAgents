@@ -195,6 +195,11 @@ def test_hash_input_fields_are_recorded_explicitly():
         "quick_model", "deep_model", "output_language", "cache_policy",
         "checkpoint_enabled", "budget", "cases", "switches", "news_scope",
     )
+    # The harness keeps one superset for every protocol version; V3 adds
+    # ``memory``. The V2 tuple must remain exactly as registered.
+    import scripts.token_benchmark as tb
+
+    assert set(gv2.HASHED_FIELDS) <= set(tb.REGISTERED_HASH_FIELDS)
 
 
 # --- 4. switch delivery -----------------------------------------------------

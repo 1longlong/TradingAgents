@@ -28,7 +28,9 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-BATCH_DIR = REPO_ROOT / "token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2"
+_DEFAULT_BATCH_REL = "token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2"
+BATCH_REL = __import__("os").environ.get("C3_BATCH_REL", _DEFAULT_BATCH_REL).strip("/")
+BATCH_DIR = REPO_ROOT / BATCH_REL
 # Audit A-00: pin this checkout ahead of the shared editable install, exactly as
 # ``token_benchmark.py`` does, so the fingerprint describes the tree that is
 # being released rather than the main checkout.
@@ -88,9 +90,11 @@ def main() -> int:
     def _digest(relative: str) -> str:
         return hashlib.sha256((BATCH_DIR / relative).read_bytes()).hexdigest()
 
-    protocol_sha = _digest("CAND01_BATCH_2X2_PROTOCOL_V2.md")
+    protocol_sha = _digest(__import__("os").environ.get(
+    "C3_PROTOCOL_NAME", "CAND01_BATCH_2X2_PROTOCOL_V2.md"))
     generator_sha = hashlib.sha256(
-        (REPO_ROOT / "scripts/gen_cand01_batch_16run_specs_v2.py").read_bytes()
+        (REPO_ROOT / __import__("os").environ.get(
+            "C3_GENERATOR", "scripts/gen_cand01_batch_16run_specs_v2.py")).read_bytes()
     ).hexdigest()
     spec_lines = []
     budget_modes = set()

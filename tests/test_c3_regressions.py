@@ -494,8 +494,11 @@ def test_registration_hash_fields_agree_across_modules():
     from scripts import c3_preflight_gate as gate
     from scripts import gen_cand01_batch_16run_specs_v2 as gen
 
-    assert tuple(tb.REGISTERED_HASH_FIELDS) == tuple(gen.HASHED_FIELDS)
+    # V3 extends the shared field set with ``memory``; the V2 tuple must stay
+    # exactly as registered, and the harness must be its superset.
     assert tuple(gate.HASHED_FIELDS) == tuple(gen.HASHED_FIELDS)
+    assert set(tb.REGISTERED_HASH_FIELDS) - set(gen.HASHED_FIELDS) == {"memory"}
+    assert set(gen.HASHED_FIELDS) <= set(tb.REGISTERED_HASH_FIELDS)
 
 
 def test_all_registered_specs_verify_against_their_registration():
@@ -827,7 +830,10 @@ def test_parent_refuses_a_consistently_rehashed_arm_swap():
     # into the frozen tree.
     spec_dir = batch / "specs/R01_NVDA_C0"
     experiment = json.loads((spec_dir / "experiment.json").read_text())
-    spec = {key: experiment[key] for key in tb.REGISTERED_HASH_FIELDS}
+    # A V2 registration does not declare ``memory``; the harness hashes it only
+    # when present, so the V2 definition keeps its original hash.
+    spec = {key: experiment[key] for key in tb.REGISTERED_HASH_FIELDS
+            if key in experiment}
     spec.update({"experiment_id": experiment["experiment_id"],
                  "config_sha256": experiment["config_sha256"],
                  "registration_dir": str(spec_dir),

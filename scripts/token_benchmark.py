@@ -510,6 +510,7 @@ INVALID_USAGE_INCOMPLETE = "token_usage_incomplete"
 INVALID_USAGE_MISMATCH = "token_usage_mismatch"
 INVALID_TELEMETRY_INCOMPLETE = "telemetry_incomplete"
 INVALID_BUDGET_CONFIG = "budget_config_invalid"
+INVALID_MEMORY_BASELINE_MODIFIED = "memory_snapshot_modified"
 
 #: The four usage verdicts (audit C round 5, U-1). They are a *decision*, not a
 #: description: only ``VALID`` may produce a measured sample.
@@ -1821,6 +1822,165 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+# ---------------------------------------------------------------------------
+# Per-run memory isolation (V3)
+# ---------------------------------------------------------------------------
+# Every run starts from one immutable snapshot and writes only its own copy.
+# Without this, a decision written by one run becomes a pending entry that the
+# *next* run reflects on before the graph starts -- the run order then changes
+# the token cost and the execution path, which is not acceptable for a
+# controlled comparison.
+MEMORY_DIRNAME = "memory"
+MEMORY_FILE = "trading_memory.md"
+MEMORY_STATE_FILE = "memory_state.json"
+MEMORY_BLOCK_MODE = "per_run_snapshot_copy"
+
+
+def memory_summary(path: Path) -> dict:
+    """Entry/pending counts of a memory log, read with the product's own parser."""
+    from tradingagents.agents.utils.memory import TradingMemoryLog
+
+    log = TradingMemoryLog({"memory_log_path": str(path)})
+    entries = log.load_entries()
+    return {
+        "entry_count": len(entries),
+        "pending_count": sum(1 for entry in entries if entry.get("pending")),
+        "sha256": _sha256_file(Path(path)) if Path(path).is_file() else None,
+    }
+
+
+def _requires_memory_isolation(definition: dict | None) -> bool:
+    """V3 registrations (or any registration that declares ``memory``) must isolate."""
+    if not isinstance(definition, dict):
+        return False
+    if "memory" in definition:
+        return True
+    return str(definition.get("protocol_version") or "").startswith("V3")
+
+
+def _memory_batch_dir(exp_dir: Path) -> Path:
+    """The batch directory a registration lives in (``<batch>/specs/<run>``)."""
+    return Path(exp_dir).resolve().parents[1]
+
+
+def memory_block_for_registration(exp_dir: Path, experiment: dict) -> dict | None:
+    """Resolve and validate a registration's memory snapshot declaration."""
+    block = experiment.get("memory")
+    if block is None:
+        return None
+    if not isinstance(block, dict):
+        raise RunRefused("registration 'memory' must be an object")
+    if block.get("mode") != MEMORY_BLOCK_MODE:
+        raise RunRefused(
+            f"registration memory mode {block.get('mode')!r} is not "
+            f"{MEMORY_BLOCK_MODE!r}; a run without a snapshot copy cannot be a sample")
+    relpath = block.get("baseline_relpath")
+    if not relpath or not isinstance(relpath, str):
+        raise RunRefused("registration memory block has no baseline_relpath")
+    baseline = (_memory_batch_dir(exp_dir) / relpath).resolve()
+    if not baseline.is_file():
+        raise RunRefused(f"memory snapshot is missing: {baseline}")
+    actual = _sha256_file(baseline)
+    declared = block.get("baseline_sha256")
+    if not declared or actual != declared:
+        raise RunRefused(
+            f"memory snapshot {baseline} hashes to {actual[:16]}…, but the "
+            f"registration declares {str(declared)[:16]}…; the snapshot changed")
+    return {"mode": MEMORY_BLOCK_MODE, "baseline_path": str(baseline),
+            "baseline_sha256": actual, "baseline_relpath": relpath}
+
+
+def prepare_run_memory(exp_dir: Path, experiment: dict, run_dir: Path) -> dict:
+    """Copy the snapshot into ``run_dir`` and describe the isolated state."""
+    block = memory_block_for_registration(exp_dir, experiment)
+    if block is None:
+        return {}
+    baseline = Path(block["baseline_path"])
+    memory_dir = Path(run_dir) / MEMORY_DIRNAME
+    memory_dir.mkdir(parents=True, exist_ok=True)
+    run_path = memory_dir / MEMORY_FILE
+    shutil.copyfile(baseline, run_path)
+    copied = _sha256_file(run_path)
+    if copied != block["baseline_sha256"]:
+        raise RunRefused("the per-run memory copy does not match its snapshot")
+    summary = memory_summary(run_path)
+    return {
+        **block,
+        "run_memory_path": str(run_path),
+        "run_initial_sha256": copied,
+        "pending_before": summary["pending_count"],
+        "entry_count_before": summary["entry_count"],
+        "memory_isolation_mode": MEMORY_BLOCK_MODE,
+    }
+
+
+def validate_memory_spec(spec: dict, *, attempt_dir: Path | None = None) -> dict:
+    """Refuse a spec whose memory isolation cannot be proven.
+
+    Runs before any paid call: the snapshot must still hash to its declared
+    value, the run copy must exist, be byte-identical to the snapshot, and live
+    inside this attempt's directory. A run whose memory cannot be isolated is
+    not a controlled sample.
+    """
+    block = spec.get("memory")
+    if not isinstance(block, dict) or not block:
+        raise RunRefused("spec carries no memory isolation block")
+    if block.get("mode") != MEMORY_BLOCK_MODE:
+        raise RunRefused(f"unsupported memory isolation mode {block.get('mode')!r}")
+    baseline_path = Path(str(block.get("baseline_path") or "")).resolve()
+    run_path = Path(str(block.get("run_memory_path") or "")).resolve()
+    declared = block.get("baseline_sha256")
+    initial = block.get("run_initial_sha256")
+    if not baseline_path.is_file():
+        raise RunRefused(f"memory snapshot is missing: {baseline_path}")
+    actual = _sha256_file(baseline_path)
+    if not declared or actual != declared:
+        raise RunRefused(
+            f"memory snapshot changed: {actual[:16]}… != {str(declared)[:16]}…")
+    if not run_path.is_file():
+        raise RunRefused(f"run memory copy is missing: {run_path}")
+    if run_path == baseline_path:
+        raise RunRefused("the run memory path is the shared snapshot")
+    if initial != declared:
+        raise RunRefused("the run memory copy was not initialised from the snapshot")
+    if _sha256_file(run_path) != initial:
+        raise RunRefused(
+            "the run memory copy was modified before the graph started; a run "
+            "must begin from the immutable snapshot")
+    if attempt_dir is not None:
+        try:
+            run_path.relative_to(Path(attempt_dir).resolve())
+        except ValueError:
+            raise RunRefused(
+                f"run memory copy {run_path} is outside its attempt directory "
+                f"{attempt_dir}") from None
+    return block
+
+
+def memory_state_after_run(spec: dict) -> dict:
+    """State of the snapshot and the run copy after the graph finished."""
+    block = spec.get("memory") or {}
+    baseline = Path(str(block.get("baseline_path") or ""))
+    run_path = Path(str(block.get("run_memory_path") or ""))
+    if not block or not run_path.is_file():
+        return {}
+    summary = memory_summary(run_path)
+    baseline_after = _sha256_file(baseline) if baseline.is_file() else None
+    return {
+        "memory_isolation_mode": block.get("mode"),
+        "baseline_sha256": block.get("baseline_sha256"),
+        "baseline_sha256_after": baseline_after,
+        "baseline_unchanged": baseline_after == block.get("baseline_sha256"),
+        "run_initial_sha256": block.get("run_initial_sha256"),
+        "run_final_sha256": summary["sha256"],
+        "run_changed": summary["sha256"] != block.get("run_initial_sha256"),
+        "pending_before": block.get("pending_before"),
+        "pending_after": summary["pending_count"],
+        "entry_count_before": block.get("entry_count_before"),
+        "entry_count_after": summary["entry_count"],
+    }
+
+
 def _working_tree_manifest() -> list[dict]:
     """Sorted ``[{path, sha256, untracked}]`` for every eligible working-tree file.
 
@@ -2257,6 +2417,11 @@ def build_run_spec(exp_dir: Path, experiment: dict, case: dict, run_index: int,
             )
     if "switches" in spec:
         spec["switches_source"] = "registered"
+    # Memory isolation is part of the registered definition for this study: the
+    # spec names the snapshot and the per-run copy the child must use.
+    block = memory_block_for_registration(exp_dir, experiment)
+    if block is not None:
+        spec["memory"] = block
     return spec
 
 
@@ -2266,6 +2431,10 @@ def prepare_run_spec(exp_dir: Path, experiment: dict, case: dict, run_index: int
     run_dir = _attempt_dir(exp_dir, run_index, attempt)
     run_dir.mkdir(parents=True, exist_ok=True)
     spec = build_run_spec(exp_dir, experiment, case, run_index, attempt)
+    memory = prepare_run_memory(exp_dir, experiment, run_dir)
+    if memory:
+        spec["memory"] = memory
+        validate_memory_spec(spec, attempt_dir=run_dir)
     spec_path = run_dir / "spec.json"
     spec_path.write_text(json.dumps(spec, indent=2, ensure_ascii=False), encoding="utf-8")
     return spec_path
@@ -2478,6 +2647,15 @@ def execute_measured_run(exp_dir: Path, experiment: dict, case: dict,
     # A budget contract that cannot be interpreted makes the run unclassifiable:
     # the cap is unknown, so neither "within budget" nor "uncapped" can be
     # claimed. Fail closed rather than treating it as an uncapped run (U-2).
+    # V3 memory isolation evidence, written by the child next to its spec.
+    memory_state = {}
+    if run_dir is not None and (run_dir / MEMORY_STATE_FILE).is_file():
+        memory_state = _load_json(run_dir / MEMORY_STATE_FILE)
+        metrics["memory"] = memory_state
+        if not memory_state.get("baseline_unchanged", True):
+            metrics["invalid_reason"] = (metrics.get("invalid_reason")
+                                         or INVALID_MEMORY_BASELINE_MODIFIED)
+            metrics["valid"] = False
     if budget_state is not None and not budget_state["ok"]:
         metrics["invalid_reason"] = metrics.get("invalid_reason") or INVALID_BUDGET_CONFIG
         metrics["valid"] = False
@@ -2514,6 +2692,7 @@ def execute_measured_run(exp_dir: Path, experiment: dict, case: dict,
         "usage_complete": metrics.get("usage_complete"),
         "attribution_complete": metrics.get("attribution_complete"),
         "telemetry_complete": metrics.get("telemetry_complete"),
+        "memory": memory_state,
         "captured_at": datetime.now(timezone.utc).isoformat(),
     }
     (run_dir / METADATA_FILE).write_text(
@@ -2622,6 +2801,14 @@ def _read_attempt(run_dir: Path, run_index: int) -> dict | None:
     metrics["attempt"] = run_dir.name
     metrics["telemetry_path"] = _portable_path(
         tele_path, run_dir.parent.parent.parent)
+    memory_path = run_dir / MEMORY_STATE_FILE
+    if memory_path.is_file():
+        memory_state = _load_json(memory_path)
+        metrics["memory"] = memory_state
+        if not memory_state.get("baseline_unchanged", True):
+            metrics["invalid_reason"] = (metrics.get("invalid_reason")
+                                         or INVALID_MEMORY_BASELINE_MODIFIED)
+            metrics["valid"] = False
     if not metrics.get("valid"):
         # The stored telemetry explains why this attempt is not a measured
         # sample (failed business run, failed LLM call, or missing usage), so a
@@ -2731,6 +2918,11 @@ def _preflight_registration(exp_dir: Path, experiment: dict, case: dict) -> None
     if _is_frozen_batch_registration(exp_dir):
         require_budget_state(
             experiment, source=str(Path(exp_dir) / EXPERIMENT_FILE))
+        # V3: a registration of this protocol that declares no memory snapshot
+        # is refused before any attempt directory exists. V2 registrations stay
+        # runnable (they predate the isolation contract).
+        if _requires_memory_isolation(experiment):
+            memory_block_for_registration(exp_dir, experiment)
 
 
 def _mark_run_started(exp_dir: Path, experiment: dict, case: dict, run_index: int,
@@ -3175,6 +3367,10 @@ REGISTERED_HASH_FIELDS = (
     "cache_policy",
     "checkpoint_enabled",
     "budget",
+    # V3 adds the memory-isolation contract to the hashed definition. It is
+    # conditionally hashed (see ``registration_sha256``) so a V2 registration,
+    # which predates the field, still recomputes to its original value.
+    "memory",
     "cases",
     "switches",
     "news_scope",
@@ -3191,11 +3387,17 @@ def registration_sha256(definition: dict) -> str:
 
     Raises ``KeyError`` if a hashed field is missing, so a truncated definition
     fails loudly instead of hashing a smaller object and matching by accident.
+
+    ``memory`` is hashed only when the definition declares it: V2 registrations
+    predate the memory contract, and their recorded hashes must keep
+    recomputing to the same value.
     """
-    unknown = set(REGISTERED_HASH_FIELDS) - set(definition)
+    required = [field for field in REGISTERED_HASH_FIELDS
+                if field != "memory" or "memory" in definition]
+    unknown = set(required) - set(definition)
     if unknown:
         raise KeyError(f"missing hashed field(s): {sorted(unknown)}")
-    subset = {key: definition[key] for key in REGISTERED_HASH_FIELDS}
+    subset = {key: definition[key] for key in required}
     return hashlib.sha256(canonical_json(subset).encode("utf-8")).hexdigest()
 
 
@@ -3400,10 +3602,33 @@ def _registration_dir_for(spec: dict) -> Path | None:
     return path
 
 
+#: Active batch under test. V2 stays the default so historical commands are
+#: unchanged; a re-registered version selects its own directory explicitly.
+DEFAULT_BATCH_REL = "token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2"
+
+
+def _frozen_batch_rel() -> str:
+    value = str(os.environ.get("TRADINGAGENTS_C3_BATCH") or DEFAULT_BATCH_REL)
+    # An absolute override (used by tests and by an out-of-tree registration)
+    # must stay absolute; a repo-relative one is normalised.
+    return value if os.path.isabs(value) else value.strip("/")
+
+
+def _freeze_tag() -> str:
+    return os.environ.get("C3_FREEZE_TAG") or "c3-final-freeze"
+
+
+def _freeze_protocol_name() -> str:
+    return os.environ.get("C3_PROTOCOL_NAME") or "CAND01_BATCH_2X2_PROTOCOL_V2.md"
+
+
+def _freeze_generator_rel() -> str:
+    return os.environ.get("C3_GENERATOR") or "scripts/gen_cand01_batch_16run_specs_v2.py"
+
+
 def _frozen_batch_dir() -> Path:
     """The registered batch directory that owns the Run IDs."""
-    return (Path(__file__).resolve().parent.parent
-            / "token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2")
+    return Path(__file__).resolve().parent.parent / _frozen_batch_rel()
 
 
 def _frozen_run_ticker(run_id: str) -> str:
@@ -3488,7 +3713,7 @@ def _frozen_switch_matrix() -> dict[str, dict]:
     return out
 
 
-def _preflight_gate(spec: dict) -> dict:
+def _preflight_gate(spec: dict, *, memory_attempt_dir: Path | None = None) -> dict:
     """Refuse a spec that cannot be a valid sample, before any paid call.
 
     Every condition here is one the study registered and a run must satisfy:
@@ -3531,8 +3756,12 @@ def _preflight_gate(spec: dict) -> dict:
 
     declared_hash = spec.get("config_sha256")
     if declared_hash is not None:
-        definition = {key: spec[key] for key in REGISTERED_HASH_FIELDS if key in spec}
-        missing = [key for key in REGISTERED_HASH_FIELDS if key not in spec]
+        # ``memory`` is hashed only when the definition declares it (V3); a V2
+        # spec legitimately has no such field and must still self-hash.
+        hash_fields = [field for field in REGISTERED_HASH_FIELDS
+                       if field != "memory" or "memory" in spec]
+        definition = {key: spec[key] for key in hash_fields if key in spec}
+        missing = [key for key in hash_fields if key not in spec]
         if missing:
             # Fall back to the registration on disk: the run spec is a subset
             # of the definition, so it cannot hash itself.
@@ -3640,6 +3869,25 @@ def _preflight_gate(spec: dict) -> dict:
                         f"spec declares {name}={switches[name]} but the "
                         f"environment exported {key}={ambient}"
                     )
+
+    # V3: a run must prove it starts from the immutable snapshot in its own
+    # copy. This is the last guard before the graph is constructed.
+    registration_path = _registration_dir_for(spec)
+    registration = None
+    if registration_path is not None:
+        try:
+            registration = _load_json(registration_path)
+        except Exception:  # noqa: BLE001 - unreadable registration is refused below
+            registration = None
+    if "memory" in spec:
+        attempt_dir = memory_attempt_dir
+        if attempt_dir is None and spec.get("_spec_path"):
+            attempt_dir = Path(spec["_spec_path"]).parent
+        validate_memory_spec(spec, attempt_dir=attempt_dir)
+    elif _requires_memory_isolation(registration):
+        raise RunRefused(
+            "spec carries no memory isolation block; a V3 run must start from "
+            "its own copy of the immutable snapshot")
 
     scope = spec.get("news_scope")
     if scope is not None:
@@ -3800,7 +4048,8 @@ def verify_frozen_tree(spec_path: str | Path | None = None) -> None:
         module = importlib.util.module_from_spec(module_spec)
         module_spec.loader.exec_module(module)
         _verify_final_freeze = module.verify
-    result = _verify_final_freeze(_PROJECT_ROOT)
+    result = _verify_final_freeze(
+        _PROJECT_ROOT, batch_rel=_frozen_batch_rel(), tag=_freeze_tag())
     if not result["ok"]:
         raise RunRefused(
             "this tree is not the certified final freeze: "
@@ -3816,6 +4065,12 @@ def _config_for_spec(spec: dict) -> tuple[dict, dict]:
     case = spec["case"]
     config = dict(DEFAULT_CONFIG)
     config["results_dir"] = spec.get("results_dir")
+    # V3 memory isolation: the graph reads and writes this run's copy, never the
+    # shared developer log. Set before construction so nothing can capture the
+    # default path.
+    memory = spec.get("memory") or {}
+    if memory.get("run_memory_path"):
+        config["memory_log_path"] = memory["run_memory_path"]
     config["llm_provider"] = spec.get("provider")
     config["quick_think_llm"] = spec.get("quick_model")
     config["deep_think_llm"] = spec.get("deep_model")
@@ -3872,7 +4127,8 @@ def _verify_graph_consumed_switches(spec: dict, graph, applied: dict) -> dict:
     return observed
 
 
-def _guard_spending_path(spec: dict, spec_path: Path | None = None) -> None:
+def _guard_spending_path(spec: dict, spec_path: Path | None = None, *,
+                         memory_attempt_dir: Path | None = None) -> None:
     """Everything that can disqualify a run, before a single paid call.
 
     Import provenance (A-00), the frozen-release check (H-A) and the spec-level
@@ -3887,7 +4143,7 @@ def _guard_spending_path(spec: dict, spec_path: Path | None = None) -> None:
     # outside the study), but it still gets every other guard.
     if _spec_belongs_to_frozen_batch(spec):
         verify_frozen_tree(spec_path)
-    _preflight_gate(spec)
+    _preflight_gate(spec, memory_attempt_dir=memory_attempt_dir)
 
 
 def _rehearsal_spec_path(spec: dict, spec_path: Path | None) -> Path | None:
@@ -3925,8 +4181,34 @@ def rehearse_run_spec(spec: dict, *, spec_path: Path | None = None) -> dict:
     removed afterwards (constructing the real graph creates
     ``results_dir``, ``data_cache_dir`` and the memory log's parent, and a
     rehearsal must not leave those behind).
+
+    A V3 spec additionally rehearses the memory contract: its snapshot is
+    re-hashed, a temporary per-run copy is made inside the sandbox, and the
+    copy is proven byte-identical to the baseline before the graph is built.
+    The sandbox copy is what the containment check sees, so a dry run leaves
+    the certified tree untouched.
     """
-    _guard_spending_path(spec, _rehearsal_spec_path(spec, spec_path))
+    import shutil
+    import tempfile
+
+    sandbox = Path(tempfile.mkdtemp(prefix="c3-rehearsal-"))
+    spec = dict(spec)
+    memory = spec.get("memory")
+    if isinstance(memory, dict) and memory.get("baseline_path"):
+        memory_dir = sandbox / "memory"
+        memory_dir.mkdir(parents=True, exist_ok=True)
+        run_copy = memory_dir / MEMORY_FILE
+        shutil.copyfile(memory["baseline_path"], run_copy)
+        summary = memory_summary(run_copy)
+        spec["memory"] = {
+            **memory,
+            "run_memory_path": str(run_copy),
+            "run_initial_sha256": summary["sha256"],
+            "pending_before": summary["pending_count"],
+            "entry_count_before": summary["entry_count"],
+        }
+    _guard_spending_path(spec, _rehearsal_spec_path(spec, spec_path),
+                         memory_attempt_dir=sandbox)
     config, applied = _config_for_spec(spec)
     if not (spec.get("provider") and spec.get("quick_model")
             and spec.get("deep_model")):
@@ -3944,10 +4226,6 @@ def rehearse_run_spec(spec: dict, *, spec_path: Path | None = None) -> dict:
             "effective_config_verified": {"verified": False},
             "effective_config_sha256": None,
         }
-    import shutil
-    import tempfile
-
-    sandbox = Path(tempfile.mkdtemp(prefix="c3-rehearsal-"))
     # The *rehearsal* runs against a scratch tree. A paid run keeps the spec's
     # own results_dir, which is what makes its telemetry land in the attempt.
     config["results_dir"] = str(sandbox / "results")
@@ -4051,6 +4329,18 @@ def _run_single(spec_path: str) -> int:
         error = f"{error_type}: {exc}"
         traceback.print_exc()
 
+    # V3 memory isolation evidence: the snapshot must be byte-identical after
+    # the run, and the run's own copy is the only thing that may have changed.
+    memory_state = memory_state_after_run(spec)
+    if memory_state:
+        (Path(spec_path).parent / MEMORY_STATE_FILE).write_text(
+            json.dumps(memory_state, indent=2, ensure_ascii=False, sort_keys=True),
+            encoding="utf-8",
+        )
+        if not memory_state.get("baseline_unchanged"):
+            status = "failed"
+            error = error or "memory snapshot was modified during the run"
+
     try:
         telemetry_path = _select_run_telemetry(results_root, telemetry_before, None)
     except RuntimeError as exc:
@@ -4062,6 +4352,7 @@ def _run_single(spec_path: str) -> int:
     report = {
         "run_index": run_index,
         "experiment_id": spec.get("experiment_id"),
+        "memory": memory_state,
         "ticker": case.get("ticker"),
         "trade_date": case.get("trade_date"),
         "status": status,

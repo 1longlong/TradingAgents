@@ -46,11 +46,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from c3_attest import check_head_is_designated  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-BATCH_DIR = REPO_ROOT / "token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2"
+_DEFAULT_BATCH_REL = "token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2"
+BATCH_REL = __import__("os").environ.get("C3_BATCH_REL", _DEFAULT_BATCH_REL).strip("/")
+BATCH_DIR = REPO_ROOT / BATCH_REL
 #: The container commit is read from a file that the *release* step writes,
 #: not embedded here: a commit cannot contain its own hash. ``--expected-commit``
 #: or ``C3_FROZEN_COMMIT`` override it.
-FROZEN_COMMIT_FILE = REPO_ROOT / "token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/c3/FROZEN_COMMIT"
+FROZEN_COMMIT_FILE = BATCH_DIR / "c3" / "FROZEN_COMMIT"
 
 
 def _frozen_commit() -> str:
@@ -268,7 +270,9 @@ def check_final_freeze() -> None:
         module = importlib.util.module_from_spec(module_spec)
         module_spec.loader.exec_module(module)
         _verify_final_freeze = module.verify
-    result = _verify_final_freeze(REPO_ROOT)
+    result = _verify_final_freeze(
+        REPO_ROOT, batch_rel=BATCH_REL,
+        tag=__import__("os").environ.get("C3_FREEZE_TAG", "c3-final-freeze"))
     if not result["ok"]:
         _fail("final freeze", "; ".join(result["failures"][:4]))
     _ok("final freeze", f"{len(result['checks'])} certification checks passed")
@@ -418,7 +422,8 @@ def _protocol_arm_table() -> dict[str, dict]:
     against itself. The protocol is not editable by a spec edit, so a swap now
     has to disagree with a document that says otherwise.
     """
-    text = (BATCH_DIR / "CAND01_BATCH_2X2_PROTOCOL_V2.md").read_text(encoding="utf-8")
+    text = (BATCH_DIR / __import__("os").environ.get(
+    "C3_PROTOCOL_NAME", "CAND01_BATCH_2X2_PROTOCOL_V2.md")).read_text(encoding="utf-8")
     table: dict[str, dict] = {}
     for m in _ARM_ROW.finditer(text):
         table[m["arm"]] = {

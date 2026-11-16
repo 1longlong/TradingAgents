@@ -26,7 +26,10 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-BATCH_REL = "token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2"
+_DEFAULT_BATCH_REL = "token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2"
+#: The batch under test. V2 is the default so historical commands keep working;
+#: a new version selects its own directory with ``C3_BATCH_REL``.
+BATCH_REL = __import__("os").environ.get("C3_BATCH_REL", _DEFAULT_BATCH_REL).strip("/")
 BATCH_DIR = REPO_ROOT / BATCH_REL
 
 MANIFEST = "MANIFEST.sha256"

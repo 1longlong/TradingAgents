@@ -506,6 +506,10 @@ class TestDryRunRehearsal:
         """The seam is a test-only hole; a batch rehearsal may not use it."""
         spec = json.loads((BATCH / "specs/R01_NVDA_C0/spec.json").read_text())
         spec["_spec_path"] = str(BATCH / "specs/R01_NVDA_C0/spec.json")
+        # The delivered V2 spec pins the tree it was generated against; a
+        # rehearsal in another worktree must point at the tree it actually uses,
+        # or the (correct) import-root refusal fires before the seam check.
+        spec["experiment_root"] = str(REPO_ROOT)
         monkeypatch.setenv("TRADINGAGENTS_SKIP_FREEZE_CHECK", "1")
         with pytest.raises(tb.RunRefused, match="cannot be disabled"):
             tb.rehearse_run_spec(spec)
@@ -573,6 +577,10 @@ class TestSpecBodyDigest:
             delivered = json.loads((directory / "spec.json").read_text(encoding="utf-8"))
             child = tb.build_run_spec(directory, registration,
                                       registration["cases"][0], 1, 1)
+            # ``experiment_root`` is a host path, like ``results_dir``: a spec
+            # generated in the release worktree legitimately names that root.
+            # Normalise it before comparing bodies.
+            child = dict(child, experiment_root=delivered.get("experiment_root"))
             assert tb.spec_body_sha256(child) == tb.spec_body_sha256(delivered), (
                 directory.name)
 

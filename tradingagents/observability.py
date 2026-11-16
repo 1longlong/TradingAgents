@@ -77,7 +77,16 @@ __all__ = [
     "AGENT_UNATTRIBUTED",
     "ALL_AGENT_IDS",
     # Scope
+    "AttributionContext",
+    "ATTRIBUTION_AGENT",
+    "ATTRIBUTION_SYSTEM",
+    "ATTRIBUTION_NONE",
+    "SYSTEM_COMPONENT_PRE_GRAPH_REFLECTOR",
+    "SYSTEM_COMPONENT_IDS",
     "get_current_agent_id",
+    "get_current_attribution",
+    "get_current_component_id",
+    "system_component_scoped",
     "agent_scoped",
     # Determinism helpers
     "utf8_byte_size",
@@ -137,6 +146,20 @@ AGENT_CONSERVATIVE_ANALYST = "conservative_analyst"
 AGENT_NEUTRAL_ANALYST = "neutral_analyst"
 AGENT_PORTFOLIO_MANAGER = "portfolio_manager"
 AGENT_UNATTRIBUTED = "unattributed"
+
+# Attribution types. Every provider-usage event must carry exactly one of these;
+# ``ATTRIBUTION_NONE`` means the call happened outside any scope and makes the
+# run's attribution incomplete (the harness fails such a run closed).
+ATTRIBUTION_AGENT = "agent"
+ATTRIBUTION_SYSTEM = "system"
+ATTRIBUTION_NONE = "none"
+
+#: System components that make provider calls outside an Agent node. They are
+#: not agents and must never be relabelled as one; they get their own bucket so
+#: their tokens are still attributable (and auditable) without polluting the
+#: per-agent comparison.
+SYSTEM_COMPONENT_PRE_GRAPH_REFLECTOR = "pre_graph_reflector"
+SYSTEM_COMPONENT_IDS = frozenset({SYSTEM_COMPONENT_PRE_GRAPH_REFLECTOR})
 
 ALL_AGENT_IDS = frozenset({
     AGENT_MARKET_ANALYST,
@@ -274,24 +297,66 @@ def _sum_field_bytes(mapping: dict[str, Any], keys: tuple[str, ...]) -> int | No
 
 
 # ---------------------------------------------------------------------------
-# Agent execution scope (ContextVar based).
+# Attribution scope (ContextVar based, agents and system components).
 # ---------------------------------------------------------------------------
-# The current agent id, or None when no agent scope is active. ContextVar is
-# copied per async task / context, so concurrent execution cannot leak and the
-# previous scope is restored automatically on context exit.
-_current_agent_var: ContextVar[str | None] = ContextVar(
-    "tradingagents_current_agent", default=None
+# One unified attribution context replaces the earlier agent-only ContextVar.
+# A provider call made with no scope is ``ATTRIBUTION_NONE`` and is reported as
+# incomplete; a call made inside ``system_component_scoped`` is attributed to a
+# named system component instead of being silently relabelled as an agent.
+#
+# ContextVar is copied per async task / context, so concurrent execution cannot
+# leak, and the previous scope is restored automatically on context exit.
+@dataclass(frozen=True)
+class AttributionContext:
+    """The attribution a provider event inherits from its execution scope."""
+
+    attribution_type: str = ATTRIBUTION_NONE
+    agent_id: str | None = None
+    component_id: str | None = None
+
+    @property
+    def is_attributed(self) -> bool:
+        if self.attribution_type == ATTRIBUTION_AGENT:
+            return bool(self.agent_id)
+        if self.attribution_type == ATTRIBUTION_SYSTEM:
+            return bool(self.component_id)
+        return False
+
+
+_NO_ATTRIBUTION = AttributionContext()
+_current_attribution_var: ContextVar[AttributionContext] = ContextVar(
+    "tradingagents_current_attribution", default=_NO_ATTRIBUTION
 )
 
 
+def get_current_attribution() -> AttributionContext:
+    """Return the active attribution context (``type='none'`` when unset)."""
+    return _current_attribution_var.get()
+
+
 def get_current_agent_id() -> str | None:
-    """Return the current agent id, or ``None`` when no scope is active."""
-    return _current_agent_var.get()
+    """Return the current *agent* id, or ``None`` outside an agent scope.
+
+    A system-component scope deliberately returns ``None`` here: it is not an
+    agent, and reporting it as one would corrupt per-agent attribution.
+    """
+    attribution = _current_attribution_var.get()
+    if attribution.attribution_type == ATTRIBUTION_AGENT:
+        return attribution.agent_id
+    return None
+
+
+def get_current_component_id() -> str | None:
+    """Return the current system component id, or ``None`` outside such a scope."""
+    attribution = _current_attribution_var.get()
+    if attribution.attribution_type == ATTRIBUTION_SYSTEM:
+        return attribution.component_id
+    return None
 
 
 @contextmanager
 def agent_scoped(agent_id: str | None):
-    """Run a block with ``agent_id`` as the current agent scope.
+    """Run a block with ``agent_id`` as the current *agent* scope.
 
     Restores the previous scope on exit even if the block raises. Supports
     nesting: the outer scope is preserved and restored afterwards. When
@@ -301,11 +366,31 @@ def agent_scoped(agent_id: str | None):
     if agent_id is None:
         yield
         return
-    token = _current_agent_var.set(agent_id)
+    token = _current_attribution_var.set(
+        AttributionContext(ATTRIBUTION_AGENT, agent_id=agent_id))
     try:
         yield
     finally:
-        _current_agent_var.reset(token)
+        _current_attribution_var.reset(token)
+
+
+@contextmanager
+def system_component_scoped(component_id: str):
+    """Run a block as a named *system component* (never as an agent).
+
+    Used by product components that legitimately call a provider outside any
+    Agent node (e.g. the pre-graph reflector). The scope is restored on success,
+    exception and cancellation; nested agent scopes still take precedence inside
+    their own block and restore this scope afterwards.
+    """
+    if not isinstance(component_id, str) or not component_id.strip():
+        raise ValueError("component_id must be a non-empty string")
+    token = _current_attribution_var.set(
+        AttributionContext(ATTRIBUTION_SYSTEM, component_id=component_id.strip()))
+    try:
+        yield
+    finally:
+        _current_attribution_var.reset(token)
 
 
 # ---------------------------------------------------------------------------
@@ -505,6 +590,10 @@ class LLMCallEvent:
     reported_cached_input_tokens: int | None = None
     usage_source: str | None = None
     usage_complete: bool = False
+    #: Attribution the call inherited from its scope: one of ``agent``,
+    #: ``system`` or ``none``. ``component_id`` names the system component.
+    attribution_type: str = ATTRIBUTION_AGENT
+    component_id: str | None = None
     #: The provider's usage payload as received (scalar fields only, no prompt
     #: or completion text). Audit C-5 (limitation L-5) found that only the
     #: parsed totals survived, so a later dispute about spend could not be
@@ -530,6 +619,8 @@ class ToolExecutionEvent:
     duration_s: float | None = None
     success: bool = True
     error_type: str | None = None
+    attribution_type: str = ATTRIBUTION_AGENT
+    component_id: str | None = None
     arguments_fingerprint: str | None = None
     result_utf8_bytes: int | None = None
     result_sha256: str | None = None
@@ -606,7 +697,9 @@ class NodeContextEvent:
 _MISSING = object()
 
 # The immutable schema version written into every telemetry artifact.
-TELEMETRY_SCHEMA_VERSION = 1
+#: 2 adds system-component attribution (``attribution`` section, per-event
+#: ``attribution_type``/``component_id``) without removing any field.
+TELEMETRY_SCHEMA_VERSION = 2
 
 
 class RunMetricsCollector:
@@ -1095,7 +1188,12 @@ class ObservabilityCallbackHandler(BaseCallbackHandler):
             if rid in self._llm_starts:
                 return
 
-            agent_id = get_current_agent_id() or AGENT_UNATTRIBUTED
+            attribution = get_current_attribution()
+            if attribution.is_attributed:
+                agent_id = attribution.agent_id or AGENT_UNATTRIBUTED
+            else:
+                # No scope: the call is explicitly unattributable, never guessed.
+                agent_id = AGENT_UNATTRIBUTED
             self._llm_attribution[rid] = agent_id
             prompt_count = 0
             prompt_bytes = 0
@@ -1111,6 +1209,8 @@ class ObservabilityCallbackHandler(BaseCallbackHandler):
                 tool_bytes = extract_tool_message_bytes(messages)
             self._llm_starts[rid] = {
                 "agent_id": agent_id,
+                "attribution_type": attribution.attribution_type,
+                "component_id": attribution.component_id,
                 "parent_run_id": self._run_id_str(parent_run_id) if parent_run_id else None,
                 "started_at": time.monotonic(),
                 "model": _model_from_serialized(serialized),
@@ -1187,6 +1287,8 @@ class ObservabilityCallbackHandler(BaseCallbackHandler):
             reported_cached_input_tokens=usage["cached_input"] if usage else None,
             usage_source=usage["source"] if usage else None,
             usage_complete=usage["complete"] if usage else False,
+            attribution_type=start_data.get("attribution_type", ATTRIBUTION_AGENT),
+            component_id=start_data.get("component_id"),
             reported_usage_raw=usage.get("raw") if usage else None,
             success=success,
             error_class=_sanitized_error_class(error),
@@ -1212,12 +1314,17 @@ class ObservabilityCallbackHandler(BaseCallbackHandler):
         with self._lock:
             if rid in self._tool_starts:
                 return
-            agent_id = get_current_agent_id() or AGENT_UNATTRIBUTED
+            attribution = get_current_attribution()
+            agent_id = (attribution.agent_id or AGENT_UNATTRIBUTED
+                        if attribution.attribution_type == ATTRIBUTION_AGENT
+                        else AGENT_UNATTRIBUTED)
             self._tool_attribution[rid] = agent_id
             tool_name = _tool_name_from_serialized(serialized)
             arguments = inputs if inputs is not None else _parse_input_str(input_str)
             self._tool_starts[rid] = {
                 "agent_id": agent_id,
+                "attribution_type": attribution.attribution_type,
+                "component_id": attribution.component_id,
                 "parent_run_id": self._run_id_str(parent_run_id) if parent_run_id else None,
                 "started_at": time.monotonic(),
                 "tool_name": tool_name,
@@ -1284,6 +1391,8 @@ class ObservabilityCallbackHandler(BaseCallbackHandler):
             duration_s=duration,
             success=success,
             error_type=_sanitized_error_class(error),
+            attribution_type=start_data.get("attribution_type", ATTRIBUTION_AGENT),
+            component_id=start_data.get("component_id"),
             arguments_fingerprint=fingerprint,
             result_utf8_bytes=utf8_byte_size(output) if success and output is not None else None,
             result_sha256=sha256_fingerprint(output) if success and output is not None else None,
@@ -1620,13 +1729,23 @@ def _new_agent_aggregate() -> dict[str, Any]:
 def _build_telemetry_dict(collector: RunMetricsCollector) -> dict[str, Any]:
     """Assemble the deterministic per-run telemetry dict under the lock."""
     agents: dict[str, dict[str, Any]] = {}
+    system_components: dict[str, dict[str, Any]] = {}
 
     def agg(agent_id: str) -> dict[str, Any]:
         return agents.setdefault(agent_id, _new_agent_aggregate())
 
-    # LLM events.
+    def sysagg(component_id: str) -> dict[str, Any]:
+        return system_components.setdefault(component_id, _new_agent_aggregate())
+
+    # LLM events. A system component is bucketed separately: it is a legitimate
+    # provider call, but it is not an agent and must not enter the per-agent
+    # comparison. An unscoped call stays under AGENT_UNATTRIBUTED so the
+    # attribution audit can see it and fail the run closed.
     for ev in collector.llm_calls:
-        a = agg(ev.agent_id)
+        if ev.attribution_type == ATTRIBUTION_SYSTEM and ev.component_id:
+            a = sysagg(ev.component_id)
+        else:
+            a = agg(ev.agent_id)
         a["llm_calls"] += 1
         if ev.success:
             a["llm_success_count"] += 1
@@ -1654,9 +1773,12 @@ def _build_telemetry_dict(collector: RunMetricsCollector) -> dict[str, Any]:
         a["prompt_utf8_bytes_sum"] += ev.prompt_utf8_bytes
         a["tool_message_utf8_bytes_sum"] += ev.tool_message_utf8_bytes
 
-    # Tool executions.
+    # Tool executions (same bucketing rule as LLM calls).
     for ev in collector.tool_calls:
-        a = agg(ev.agent_id)
+        if ev.attribution_type == ATTRIBUTION_SYSTEM and ev.component_id:
+            a = sysagg(ev.component_id)
+        else:
+            a = agg(ev.agent_id)
         a["tool_calls"] += 1
         if ev.success:
             a["tool_success_count"] += 1
@@ -1702,7 +1824,8 @@ def _build_telemetry_dict(collector: RunMetricsCollector) -> dict[str, Any]:
     # usage, a later call that carried none left the per-agent flag reading
     # "complete" (limitation L-5, audit C-6). A flag that can only ever turn on
     # is not a measurement of coverage.
-    for a in agents.values():
+    all_buckets = list(agents.values()) + list(system_components.values())
+    for a in all_buckets:
         a["usage_complete"] = bool(
             a["llm_calls"] > 0
             and a["calls_with_provider_usage"] == a["llm_calls"]
@@ -1710,34 +1833,36 @@ def _build_telemetry_dict(collector: RunMetricsCollector) -> dict[str, Any]:
             and a["calls_missing_output_tokens"] == 0
         )
 
-    # Run totals = sum over all agents (unattributed is an explicit pseudo-agent).
+    # Run totals cover every bucket: agents, system components and the
+    # unattributed pseudo-agent. A provider call is never dropped from the
+    # total because of *who* made it.
     run_totals = {
-        "llm_calls": sum(a["llm_calls"] for a in agents.values()),
-        "llm_success_count": sum(a["llm_success_count"] for a in agents.values()),
-        "llm_error_count": sum(a["llm_error_count"] for a in agents.values()),
-        "calls_with_provider_usage": sum(a["calls_with_provider_usage"] for a in agents.values()),
-        "calls_without_provider_usage": sum(a["calls_without_provider_usage"] for a in agents.values()),
-        "llm_calls_missing_input_tokens": sum(a["calls_missing_input_tokens"] for a in agents.values()),
-        "llm_calls_missing_output_tokens": sum(a["calls_missing_output_tokens"] for a in agents.values()),
-        "reported_input_tokens_sum": sum(a["reported_input_tokens_sum"] for a in agents.values()),
-        "reported_output_tokens_sum": sum(a["reported_output_tokens_sum"] for a in agents.values()),
-        "reported_reasoning_tokens_sum": sum(a["reported_reasoning_tokens_sum"] for a in agents.values()),
-        "reported_cached_input_tokens_sum": sum(a["reported_cached_input_tokens_sum"] for a in agents.values()),
-        "tool_calls": sum(a["tool_calls"] for a in agents.values()),
-        "tool_success_count": sum(a["tool_success_count"] for a in agents.values()),
-        "tool_error_count": sum(a["tool_error_count"] for a in agents.values()),
-        "tool_rounds": sum(a["tool_rounds"] for a in agents.values()),
-        "tool_result_utf8_bytes_sum": sum(a["tool_result_utf8_bytes_sum"] for a in agents.values()),
-        "duplicate_tool_call_count": sum(a["duplicate_tool_call_count"] for a in agents.values()),
-        "prefetched_data_calls": sum(a["prefetched_data_calls"] for a in agents.values()),
-        "prefetched_data_utf8_bytes": sum(a["prefetched_data_utf8_bytes"] for a in agents.values()),
-        "structured_attempts": sum(a["structured_attempts"] for a in agents.values()),
-        "structured_successes": sum(a["structured_successes"] for a in agents.values()),
-        "structured_failures": sum(a["structured_failures"] for a in agents.values()),
-        "structured_fallbacks": sum(a["structured_fallbacks"] for a in agents.values()),
-        "structured_unsupported": sum(a["structured_unsupported"] for a in agents.values()),
-        "node_invocations": sum(a["node_invocations"] for a in agents.values()),
-        "node_wall_time_ms": round(sum(a["node_wall_time_ms"] for a in agents.values()), 3),
+        "llm_calls": sum(a["llm_calls"] for a in all_buckets),
+        "llm_success_count": sum(a["llm_success_count"] for a in all_buckets),
+        "llm_error_count": sum(a["llm_error_count"] for a in all_buckets),
+        "calls_with_provider_usage": sum(a["calls_with_provider_usage"] for a in all_buckets),
+        "calls_without_provider_usage": sum(a["calls_without_provider_usage"] for a in all_buckets),
+        "llm_calls_missing_input_tokens": sum(a["calls_missing_input_tokens"] for a in all_buckets),
+        "llm_calls_missing_output_tokens": sum(a["calls_missing_output_tokens"] for a in all_buckets),
+        "reported_input_tokens_sum": sum(a["reported_input_tokens_sum"] for a in all_buckets),
+        "reported_output_tokens_sum": sum(a["reported_output_tokens_sum"] for a in all_buckets),
+        "reported_reasoning_tokens_sum": sum(a["reported_reasoning_tokens_sum"] for a in all_buckets),
+        "reported_cached_input_tokens_sum": sum(a["reported_cached_input_tokens_sum"] for a in all_buckets),
+        "tool_calls": sum(a["tool_calls"] for a in all_buckets),
+        "tool_success_count": sum(a["tool_success_count"] for a in all_buckets),
+        "tool_error_count": sum(a["tool_error_count"] for a in all_buckets),
+        "tool_rounds": sum(a["tool_rounds"] for a in all_buckets),
+        "tool_result_utf8_bytes_sum": sum(a["tool_result_utf8_bytes_sum"] for a in all_buckets),
+        "duplicate_tool_call_count": sum(a["duplicate_tool_call_count"] for a in all_buckets),
+        "prefetched_data_calls": sum(a["prefetched_data_calls"] for a in all_buckets),
+        "prefetched_data_utf8_bytes": sum(a["prefetched_data_utf8_bytes"] for a in all_buckets),
+        "structured_attempts": sum(a["structured_attempts"] for a in all_buckets),
+        "structured_successes": sum(a["structured_successes"] for a in all_buckets),
+        "structured_failures": sum(a["structured_failures"] for a in all_buckets),
+        "structured_fallbacks": sum(a["structured_fallbacks"] for a in all_buckets),
+        "structured_unsupported": sum(a["structured_unsupported"] for a in all_buckets),
+        "node_invocations": sum(a["node_invocations"] for a in all_buckets),
+        "node_wall_time_ms": round(sum(a["node_wall_time_ms"] for a in all_buckets), 3),
     }
 
     # Usage coverage (run-level).
@@ -1782,6 +1907,26 @@ def _build_telemetry_dict(collector: RunMetricsCollector) -> dict[str, Any]:
 
     unattributed_llm = agents.get(AGENT_UNATTRIBUTED, {}).get("llm_calls", 0)
     unattributed_tool = agents.get(AGENT_UNATTRIBUTED, {}).get("tool_calls", 0)
+    # An event is attributed when it belongs to an agent *or* to a declared
+    # system component; only the "none" bucket makes the run incomplete.
+    agent_tokens = sum(a["reported_input_tokens_sum"] + a["reported_output_tokens_sum"]
+                       for name, a in agents.items() if name != AGENT_UNATTRIBUTED)
+    system_tokens = sum(a["reported_input_tokens_sum"] + a["reported_output_tokens_sum"]
+                        for a in system_components.values())
+    unattributed_tokens = (agents.get(AGENT_UNATTRIBUTED, {})
+                           .get("reported_input_tokens_sum", 0)
+                           + agents.get(AGENT_UNATTRIBUTED, {})
+                           .get("reported_output_tokens_sum", 0))
+    attribution_summary = {
+        "agent_calls": sum(a["llm_calls"] for name, a in agents.items()
+                           if name != AGENT_UNATTRIBUTED),
+        "system_calls": sum(a["llm_calls"] for a in system_components.values()),
+        "unattributed_calls": unattributed_llm,
+        "agent_tokens": agent_tokens,
+        "system_tokens": system_tokens,
+        "unattributed_tokens": unattributed_tokens,
+        "system_components": sorted(system_components),
+    }
     # Read the private flags directly: the caller (build_telemetry) holds the
     # lock, so we must not re-acquire it here.
     run_finished = collector._run_finished
@@ -1834,6 +1979,8 @@ def _build_telemetry_dict(collector: RunMetricsCollector) -> dict[str, Any]:
                 "reported_cached_input_tokens": ev.reported_cached_input_tokens,
                 "usage_source": ev.usage_source,
                 "usage_complete": ev.usage_complete,
+                "attribution_type": ev.attribution_type,
+                "component_id": ev.component_id,
                 "reported_usage_raw": ev.reported_usage_raw,
             }
             for ev in collector.llm_calls
@@ -1855,6 +2002,8 @@ def _build_telemetry_dict(collector: RunMetricsCollector) -> dict[str, Any]:
                 "result_utf8_bytes": ev.result_utf8_bytes,
                 "result_sha256": ev.result_sha256,
                 "duplicate_count": ev.duplicate_count,
+                "attribution_type": ev.attribution_type,
+                "component_id": ev.component_id,
             }
             for ev in collector.tool_calls
         ],
@@ -1937,11 +2086,13 @@ def _build_telemetry_dict(collector: RunMetricsCollector) -> dict[str, Any]:
         },
         "usage_coverage": usage_coverage,
         "usage_checks": usage_checks,
+        "attribution": attribution_summary,
         "audit_quality": audit_quality,
         "run_totals": run_totals,
         "unattributed_llm_events": unattributed_llm,
         "unattributed_tool_events": unattributed_tool,
         "agents": agents,
+        "system_components": system_components,
         **event_lists,
     }
 

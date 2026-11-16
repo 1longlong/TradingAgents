@@ -51,10 +51,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-BATCH_REL = "token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2"
+_DEFAULT_BATCH_REL = "token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2"
+BATCH_REL = __import__("os").environ.get("C3_BATCH_REL", _DEFAULT_BATCH_REL).strip("/")
 BATCH_DIR = REPO_ROOT / BATCH_REL
 C3 = BATCH_DIR / "c3"
-TAG = "c3-final-freeze"
+TAG = __import__("os").environ.get("C3_FREEZE_TAG", "c3-final-freeze")
 RECORD_FILE = C3 / "FREEZE_RECORD.json"
 REPORT_FILE = C3 / "FINAL_FREEZE_REPORT.md"
 FROZEN_FILE = C3 / "FROZEN_COMMIT"
@@ -62,8 +63,10 @@ HISTORY_FILE = C3 / "FREEZE_HISTORY.jsonl"
 SEAL_FILE = C3 / "RELEASE_SEAL.sha256"
 CODE_FREEZE_FILE = C3 / "code_freeze.txt"
 MANIFEST_FILE = BATCH_DIR / "MANIFEST.sha256"
-PROTOCOL_FILE = BATCH_DIR / "CAND01_BATCH_2X2_PROTOCOL_V2.md"
-GENERATOR_FILE = REPO_ROOT / "scripts" / "gen_cand01_batch_16run_specs_v2.py"
+PROTOCOL_FILE = BATCH_DIR / __import__("os").environ.get(
+    "C3_PROTOCOL_NAME", "CAND01_BATCH_2X2_PROTOCOL_V2.md")
+GENERATOR_FILE = REPO_ROOT / __import__("os").environ.get(
+    "C3_GENERATOR", "scripts/gen_cand01_batch_16run_specs_v2.py")
 
 RECORD_SCHEMA = 1
 

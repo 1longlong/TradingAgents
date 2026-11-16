@@ -49,8 +49,9 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-BATCH_DIR = (REPO_ROOT / "token_benchmarks" / "live_pilot_2x2"
-             / "cand01_batch_16run_v2")
+_DEFAULT_BATCH_REL = "token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2"
+BATCH_DIR = REPO_ROOT / __import__("os").environ.get(
+    "C3_BATCH_REL", _DEFAULT_BATCH_REL).strip("/")
 HISTORY_FILE = BATCH_DIR / "c3" / "FREEZE_HISTORY.jsonl"
 
 

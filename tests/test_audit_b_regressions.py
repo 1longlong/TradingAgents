@@ -310,6 +310,11 @@ def _run_single_with_stub_graph(tmp_path, monkeypatch, spec: dict, ambient: dict
     import types
 
     monkeypatch.setenv("TRADINGAGENTS_SKIP_FREEZE_CHECK", "1")
+    # The delivered V2 spec pins the tree it was generated against. This test
+    # runs the child in the current worktree, so point it at this tree's
+    # ``tradingagents`` import root; otherwise the import-root guard (correctly)
+    # refuses before the switches are ever applied.
+    spec = dict(spec, experiment_root=str(REPO_ROOT))
     captured = {}
 
     class _StubGraph:

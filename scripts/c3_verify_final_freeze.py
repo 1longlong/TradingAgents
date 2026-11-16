@@ -48,10 +48,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-BATCH_REL = "token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2"
+_DEFAULT_BATCH_REL = "token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2"
+BATCH_REL = __import__("os").environ.get("C3_BATCH_REL", _DEFAULT_BATCH_REL).strip("/")
 BATCH_DIR = REPO_ROOT / BATCH_REL
 C3 = BATCH_DIR / "c3"
-TAG = "c3-final-freeze"
+TAG = __import__("os").environ.get("C3_FREEZE_TAG", "c3-final-freeze")
 RECORD_FILE = C3 / "FREEZE_RECORD.json"
 REPORT_FILE = C3 / "FINAL_FREEZE_REPORT.md"
 FROZEN_FILE = C3 / "FROZEN_COMMIT"
@@ -59,8 +60,10 @@ HISTORY_FILE = C3 / "FREEZE_HISTORY.jsonl"
 SEAL_FILE = C3 / "RELEASE_SEAL.sha256"
 CODE_FREEZE_FILE = C3 / "code_freeze.txt"
 MANIFEST_FILE = BATCH_DIR / "MANIFEST.sha256"
-PROTOCOL_FILE = BATCH_DIR / "CAND01_BATCH_2X2_PROTOCOL_V2.md"
-GENERATOR_FILE = REPO_ROOT / "scripts" / "gen_cand01_batch_16run_specs_v2.py"
+PROTOCOL_FILE = BATCH_DIR / __import__("os").environ.get(
+    "C3_PROTOCOL_NAME", "CAND01_BATCH_2X2_PROTOCOL_V2.md")
+GENERATOR_FILE = REPO_ROOT / __import__("os").environ.get(
+    "C3_GENERATOR", "scripts/gen_cand01_batch_16run_specs_v2.py")
 HASH_MANIFEST_FILE = BATCH_DIR / "CONFIG_HASH_MANIFEST.csv"
 
 EXPECTED_RUNS = 16
@@ -86,10 +89,13 @@ def _load_json(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def verify(root: Path = REPO_ROOT) -> dict:
+def verify(root: Path = REPO_ROOT, *, batch_rel: str | None = None,
+           tag: str | None = None) -> dict:
     """Run every freeze check. Returns ``{"ok", "checks", "failures"}``."""
     root = Path(root).resolve()
-    batch = root / BATCH_REL
+    batch_rel = (batch_rel or BATCH_REL).strip("/")
+    tag = tag or TAG
+    batch = root / batch_rel
     c3 = batch / "c3"
     # Everything below is derived from ``root``. Using the module-level
     # constants here would make ``verify(other_root)`` inspect *this* checkout's
@@ -313,10 +319,10 @@ def verify(root: Path = REPO_ROOT) -> dict:
     # -- 10. tag + history -------------------------------------------------
     tag_object = _git(root, "rev-parse", f"refs/tags/{TAG}^{{commit}}")
     if tag_object != head:
-        bad(f"tag {TAG} points at {tag_object[:12] or 'nothing'}, not HEAD "
+        bad(f"tag {tag} points at {tag_object[:12] or 'nothing'}, not HEAD "
             f"{head[:12]}")
     else:
-        ok(f"tag {TAG} names HEAD")
+        ok(f"tag {tag} names HEAD")
     tag_sha = _git(root, "rev-parse", f"refs/tags/{TAG}")
     if tag_sha != record.get("tag_object_sha"):
         bad(f"tag object is {tag_sha[:12]}, the record says "

@@ -249,3 +249,22 @@ token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/c3/FROZEN_COMMIT
 token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/c3/FREEZE_RECORD.json
 token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/c3/FREEZE_HISTORY.jsonl
 token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/c3/FINAL_FREEZE_REPORT.md
+
+# V3 batch: run-time artefacts written by the harness into the registered spec
+# directories. They are excluded from the code fingerprint and from MANIFEST,
+# so ignoring them locally is what lets a paid run leave the certified tree
+# clean. Only run-time output is listed; specs, protocol and baseline are
+# tracked.
+token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/specs/*/code_state.json
+token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/specs/*/runs/
+token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/specs/*/summary.json
+token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/specs/*/summary.csv
+token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/specs/*/summary.md
+token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/specs/*/summary_agents.csv
+token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/specs/*/effective_config.json
+token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/specs/*/runner_report.json
+token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/specs/*/refusal.json
+token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/c3/FROZEN_COMMIT
+token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/c3/FREEZE_RECORD.json
+token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/c3/FREEZE_HISTORY.jsonl
+token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/c3/FINAL_FREEZE_REPORT.md
