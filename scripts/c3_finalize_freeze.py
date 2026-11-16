@@ -420,7 +420,10 @@ def main(argv: list[str] | None = None) -> int:
     # Verify immediately, and fail the certification if it does not hold.
     from c3_verify_final_freeze import verify
 
-    result = verify(REPO_ROOT)
+    result = verify(
+        REPO_ROOT, batch_rel=BATCH_REL, tag=TAG,
+        protocol_name=PROTOCOL_FILE.name,
+        generator_rel=GENERATOR_FILE.relative_to(REPO_ROOT).as_posix())
     if not result["ok"]:
         for failure in result["failures"]:
             print(f"FAIL  {failure}", file=sys.stderr)

@@ -90,19 +90,24 @@ def _load_json(path: Path) -> dict:
 
 
 def verify(root: Path = REPO_ROOT, *, batch_rel: str | None = None,
-           tag: str | None = None) -> dict:
+           tag: str | None = None, protocol_name: str | None = None,
+           generator_rel: str | None = None) -> dict:
     """Run every freeze check. Returns ``{"ok", "checks", "failures"}``."""
     root = Path(root).resolve()
     batch_rel = (batch_rel or BATCH_REL).strip("/")
     tag = tag or TAG
+    # A re-registered version names its own protocol and generator; the V2
+    # defaults keep the historical invocation unchanged.
+    protocol_name = protocol_name or Path(PROTOCOL_FILE).name
+    generator_rel = generator_rel or Path(GENERATOR_FILE).relative_to(REPO_ROOT).as_posix()
     batch = root / batch_rel
     c3 = batch / "c3"
     # Everything below is derived from ``root``. Using the module-level
     # constants here would make ``verify(other_root)`` inspect *this* checkout's
     # files while claiming to check another tree (audit round 3, L-3).
     manifest_file = batch / "MANIFEST.sha256"
-    protocol_file = batch / "CAND01_BATCH_2X2_PROTOCOL_V2.md"
-    generator_file = root / "scripts" / "gen_cand01_batch_16run_specs_v2.py"
+    protocol_file = batch / protocol_name
+    generator_file = root / generator_rel
     code_freeze_file = c3 / "code_freeze.txt"
     seal_file = c3 / "RELEASE_SEAL.sha256"
     hash_manifest_file = batch / "CONFIG_HASH_MANIFEST.csv"
@@ -299,11 +304,11 @@ def verify(root: Path = REPO_ROOT, *, batch_rel: str | None = None,
 
     # -- 7. protocol / generator / sealed release files --------------------
     if _sha256(protocol_file) != record.get("protocol_sha256"):
-        bad("CAND01_BATCH_2X2_PROTOCOL_V2.md has changed since certification")
+        bad(f"{protocol_name} has changed since certification")
     else:
         ok("protocol digest matches the record")
     if _sha256(generator_file) != record.get("generator_sha256"):
-        bad("gen_cand01_batch_16run_specs_v2.py has changed since certification")
+        bad(f"{generator_rel} has changed since certification")
     else:
         ok("generator digest matches the record")
     # Audit round 2 (F5): these fields were recorded and never recomputed.
