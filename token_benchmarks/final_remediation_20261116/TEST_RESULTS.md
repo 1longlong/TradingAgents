@@ -27,12 +27,12 @@ $ TZ=UTC .venv/bin/python -m pytest -q
 
 ```
 $ TZ=UTC .venv/bin/python -m pytest -q
-4 failed, 2226 passed, 2 skipped, 26 warnings, 319 subtests passed in 23.48s
+4 failed, 2227 passed, 2 skipped, 26 warnings, 319 subtests passed in 22.77s
 ```
 
 | | 基线 | 修复后 |
 | --- | --- | --- |
-| passed | 2,207 | **2,226**（+19 新增测试） |
+| passed | 2,207 | **2,227**（+20 新增测试） |
 | failed | 4 | **4（同一组）** |
 | skipped | 2 | 2 |
 | subtests | 319 | 319 |
@@ -44,7 +44,7 @@ $ TZ=UTC .venv/bin/python -m pytest -q
 
 | 套件 | 结果 |
 | --- | --- |
-| `tests/test_final_remediation.py`（新增） | **19 passed** |
+| `tests/test_final_remediation.py`（新增） | **20 passed** |
 | `test_observability.py` + `test_token_benchmark.py` + `test_c3_regressions.py` + `test_c3_final_freeze.py` + `test_memory_isolation.py` + `test_system_attribution.py` + `test_final_remediation.py` | **426 passed** |
 | CAND-01 single-pass / news / Finnhub / GDELT / PIT / structured（11 个文件） | **360 passed, 86 subtests passed** |
 
@@ -83,9 +83,9 @@ defects detected: 4/4
 
 | 项 | 值 |
 | --- | --- |
-| collected（修复后完整套件） | 2,227（2221 passed + 4 failed + 2 skipped） |
+| collected（修复后完整套件） | 2,233（2227 passed + 4 failed + 2 skipped） |
 | subtests | 319 |
-| 新增测试 | 19 |
+| 新增测试 | 20 |
 | 新增失败 | 0 |
 | 付费调用 | **0** |
 | 外部 API 调用 | **0** |

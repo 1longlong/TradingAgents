@@ -26,7 +26,7 @@
 | 阶段 | 结果 |
 | --- | --- |
 | 修复前基线（同一 worktree） | 4 failed / 2207 passed / 2 skipped / 319 subtests（4 个均为该 worktree 固有：2 个跨 worktree 的 V3 规格路径检查 + 2 个 `cli_prefs` 环境耦合） |
-| 修复后完整套件 | **4 failed / 2226 passed / 2 skipped / 319 subtests**；**新增失败 0**；通过数 +19 |
+| 修复后完整套件 | **4 failed / 2227 passed / 2 skipped / 319 subtests**；**新增失败 0**；通过数 +20 |
 | 新增测试 | `tests/test_final_remediation.py` **20 项**全部通过 |
 | 专项 | observability/token/c3/memory/attribution/remediation **426 passed**；CAND-01+news+PIT+structured **360 passed, 86 subtests** |
 | 缺陷可检测性 | pre-fix 探针 **4/4 detected**；修复后 0/4 |
@@ -43,9 +43,11 @@ CAND-01 single-pass、PIT、Finnhub-only/GDELT 禁用/PF-01、Memory 隔离、sy
 
 三个只读 Subagent 在同一 commit（`e0ea1b0`，代码指纹 `b8ba9547…`）上审计：
 
-- **Audit A（产品逻辑）**：见 `INDEPENDENT_AUDIT.md`
-- **Audit B（遥测与基础设施）**：见 `INDEPENDENT_AUDIT.md`
-- **Audit C（回归与数据安全）**：见 `INDEPENDENT_AUDIT.md`
+- **Audit A（产品逻辑）**：**PASS**
+- **Audit B（遥测与基础设施）**：**PASS**
+- **Audit C（回归与数据安全）**：**PASS**
+
+详见 `INDEPENDENT_AUDIT.md`。
 
 ## 6. 最终冻结
 
