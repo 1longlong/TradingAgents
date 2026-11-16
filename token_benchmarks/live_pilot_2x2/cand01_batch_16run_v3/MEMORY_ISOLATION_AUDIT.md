@@ -12,15 +12,16 @@ R05 (AAPL) changed R06's execution path and token cost.
 | Element | Value |
 | --- | --- |
 | Baseline | `memory/baseline_v3.md` (immutable, tracked, hashed) |
-| Baseline SHA-256 | `01102211cc012807956e3a31bafc587b90d518daa3335d07d33c571cfecf8c96` |
+| Baseline SHA-256 | `e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855` |
 | Mode | `per_run_snapshot_copy` |
 | Per-run copy | `specs/<run>/runs/run_01/attempt_MM/memory/trading_memory.md` |
 | Write-back to baseline | never |
 | Verification | before the graph: baseline hash, copy hash == baseline, copy inside its attempt dir, copy != baseline; after the graph: baseline hash unchanged |
 
 The baseline contains no `pending` entries, so no run triggers the pre-graph
-reflector. It keeps the one pre-experiment NVDA entry; the AAPL entry created by
-the 2026-11-16 run is excluded (provenance recorded in
+reflector. It is deliberately empty: both entries in the developer log were created
+by prior experiment runs (NVDA by an earlier round, AAPL by the 2026-11-16
+batch), so no ticker gets a memory advantage (provenance in
 `memory/baseline_v3.provenance.json`).
 
 ## 3. Wiring

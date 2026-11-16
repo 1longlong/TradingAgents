@@ -19,14 +19,14 @@
     }
   ],
   "checkpoint_enabled": false,
-  "config_sha256": "6fc1ef8a440cb07ffbf587fc217567a0d31c0ef1d8cbb78f385b649f3647031c",
+  "config_sha256": "02631b18eef003a069b5523051c8869d5baecb33c7d8fca3d333a61aec1362b9",
   "deep_model": "CS5351/DeepSeek-V4-Flash",
   "description": "CAND-01 x batch-macro 2x2, arm CC on AAPL (execution position 7); protocol V3",
   "experiment_id": "R07",
   "measured_runs": 1,
   "memory": {
     "baseline_relpath": "memory/baseline_v3.md",
-    "baseline_sha256": "01102211cc012807956e3a31bafc587b90d518daa3335d07d33c571cfecf8c96",
+    "baseline_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "mode": "per_run_snapshot_copy"
   },
   "news_scope": {

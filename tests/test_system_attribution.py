@@ -154,6 +154,39 @@ class TestReflectorAttribution:
             pass
 
 
+class TestAttributionIntegrityGuards:
+    def test_an_agent_id_cannot_be_used_as_a_system_component(self):
+        with pytest.raises(ValueError, match="is an agent id"):
+            with o.system_component_scoped(o.AGENT_MARKET_ANALYST):
+                pass
+
+    def test_a_system_component_id_cannot_be_used_as_an_agent(self):
+        with pytest.raises(ValueError, match="is a system component"):
+            with o.agent_scoped(o.SYSTEM_COMPONENT_PRE_GRAPH_REFLECTOR):
+                pass
+
+    def test_a_tampered_flag_cannot_hide_an_unattributed_event(self):
+        """The aggregate flag is a self-report; the event log is evidence."""
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+        import token_benchmark as tb
+
+        payload = TestHarnessAcceptsSystemAttribution._payload()
+        payload["audit_quality"]["attribution_complete"] = True   # tampered
+        payload["attribution"].update({"agent_calls": 1, "system_calls": 0,
+                                       "unattributed_calls": 1,
+                                       "system_tokens": 0,
+                                       "unattributed_tokens": 15})
+        payload["llm_call_events"][1] = {
+            **payload["llm_call_events"][1],
+            "attribution_type": "none", "component_id": None,
+        }
+        metrics = tb.extract_run_metrics(payload, None, 0)
+        assert metrics["valid"] is False
+        assert metrics["invalid_reason"] == tb.INVALID_USAGE_INCOMPLETE
+
+
 class TestHarnessAcceptsSystemAttribution:
     @staticmethod
     def _payload():
@@ -203,7 +236,16 @@ class TestHarnessAcceptsSystemAttribution:
 
         payload = self._payload()
         payload["audit_quality"]["attribution_complete"] = False
-        payload["attribution"]["unattributed_calls"] = 1
+        # Make one event genuinely unattributed and keep the summary closed,
+        # so the refusal is the missing attribution and not an inconsistency.
+        payload["llm_call_events"][1] = {
+            **payload["llm_call_events"][1],
+            "attribution_type": "none", "component_id": None,
+        }
+        payload["attribution"].update({"agent_calls": 1, "system_calls": 0,
+                                       "unattributed_calls": 1,
+                                       "system_tokens": 0,
+                                       "unattributed_tokens": 15})
         metrics = tb.extract_run_metrics(payload, None, 0)
         assert metrics["valid"] is False
         assert metrics["invalid_reason"] == tb.INVALID_USAGE_INCOMPLETE

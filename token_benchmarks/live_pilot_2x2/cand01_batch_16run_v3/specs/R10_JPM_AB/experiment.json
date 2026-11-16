@@ -19,14 +19,14 @@
     }
   ],
   "checkpoint_enabled": false,
-  "config_sha256": "ee050570a44ca9092908e89083f863edfc65eb8c8aaa28e7c6bda1b25ca4dcfe",
+  "config_sha256": "d9742802cea2e7b6f38d9faa1cb90add21374a13f9b52c8530daf90f7d0561cf",
   "deep_model": "CS5351/DeepSeek-V4-Flash",
   "description": "CAND-01 x batch-macro 2x2, arm AB on JPM (execution position 10); protocol V3",
   "experiment_id": "R10",
   "measured_runs": 1,
   "memory": {
     "baseline_relpath": "memory/baseline_v3.md",
-    "baseline_sha256": "01102211cc012807956e3a31bafc587b90d518daa3335d07d33c571cfecf8c96",
+    "baseline_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "mode": "per_run_snapshot_copy"
   },
   "news_scope": {

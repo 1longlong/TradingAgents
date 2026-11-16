@@ -8,10 +8,10 @@ number; each block is the tail of a real run.
 
 ```
 $ TZ=UTC .venv/bin/python -m pytest -q
-2 failed, 2201 passed, 2 skipped, 26 warnings, 319 subtests passed in 25.08s
+2 failed, 2208 passed, 2 skipped, 26 warnings, 319 subtests passed in 22.76s
 ```
 
-Collected: **2205** (2201 passed + 2 failed + 2 skipped); 319 subtests passed.
+Collected: **2212** (2208 passed + 2 failed + 2 skipped); 319 subtests passed.
 
 | # | Failure | Status |
 | --- | --- | --- |
@@ -32,24 +32,24 @@ existing failure.
 
 | | Baseline `15270b1` | This candidate |
 | --- | --- | --- |
-| passed | 2,163 | **2,201** (+38) |
+| passed | 2,163 | **2,208** (+45) |
 | failed | 2 | 2 (same two) |
 | skipped | 2 | 2 (`langchain_aws` absent; live DeepSeek key absent) |
 | subtests | 319 | 319 |
 | **new failures** | — | **0** |
 
-## 2. New tests (38)
+## 2. New tests (45)
 
 | File | Tests | Result |
 | --- | --- | --- |
-| `tests/test_system_attribution.py` | 10 | 10 passed |
-| `tests/test_memory_isolation.py` | 17 | 17 passed |
-| `tests/test_cand01_batch_16run_v3_infra.py` | 11 | 11 passed |
+| `tests/test_system_attribution.py` | 13 | 13 passed |
+| `tests/test_memory_isolation.py` | 20 | 20 passed |
+| `tests/test_cand01_batch_16run_v3_infra.py` | 12 | 12 passed |
 
 ```
 $ TZ=UTC .venv/bin/python -m pytest tests/test_system_attribution.py \
     tests/test_memory_isolation.py tests/test_cand01_batch_16run_v3_infra.py -q
-38 passed
+45 passed
 ```
 
 ## 3. Targeted suites

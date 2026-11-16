@@ -335,6 +335,32 @@ class TestHarnessRecordsMemory:
         assert metrics["memory"]["baseline_unchanged"] is False
 
 
+class TestMemoryEvidenceIsRequired:
+    def test_a_memory_run_without_state_evidence_is_invalid(self, tmp_path):
+        """Audit A/C M1: a run that declares isolation but leaves no
+        memory_state.json must not be a valid sample."""
+        batch = _copy_batch(tmp_path)
+        directory = batch / "specs" / "R01_NVDA_C0"
+        registration = json.loads((directory / "experiment.json").read_text())
+
+        def runner(spec_path, exp_dir, run_index, attempt=1):
+            spec = json.loads(Path(spec_path).read_text())
+            runtime = Path(spec["results_dir"])
+            (runtime / "telemetry").mkdir(parents=True, exist_ok=True)
+            tele = runtime / "telemetry" / "run-x-1.json"
+            tele.write_text(json.dumps(_valid_payload()))
+            # Deliberately no memory_state.json: the run's memory evidence is
+            # missing (killed child, deleted copy).
+            return {"status": "ok", "returncode": 0, "error": None,
+                    "report": {"status": "completed", "run_status": "completed",
+                               "telemetry_path": str(tele)}}
+
+        metrics = tb.execute_measured_run(directory, registration,
+                                          registration["cases"][0], 1, runner=runner)
+        assert metrics["valid"] is False
+        assert metrics["invalid_reason"] == tb.INVALID_MEMORY_STATE_MISSING
+
+
 class TestDoctoredRegistrationCannotBypassIsolation:
     def test_dropping_memory_and_protocol_version_is_still_refused(self, tmp_path, monkeypatch):
         """Audit B: deleting the two fields that *declare* isolation must not
@@ -379,5 +405,8 @@ class TestBaselineProvenance:
             (BATCH / "memory/baseline_v3.provenance.json").read_text(encoding="utf-8"))
         assert provenance["baseline_sha256"] == tb._sha256_file(BASELINE)
         assert provenance["baseline_pending"] == 0
-        assert provenance["excluded"], "the experiment-generated entry must be documented"
-        assert provenance["kept_entries"], "pre-experiment history must be kept"
+        assert provenance["excluded"], "the experiment-generated entries must be documented"
+        if not provenance["kept_entries"]:
+            # An intentionally empty baseline is allowed only when it says why.
+            assert provenance["empty_baseline"] is True
+            assert provenance["empty_reason"].strip()

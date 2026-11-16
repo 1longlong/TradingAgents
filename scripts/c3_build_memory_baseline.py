@@ -61,6 +61,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--exclude", action="append", default=[],
                         metavar="TICKER:YYYY-MM-DD",
                         help="entry created by the experiment being baselined")
+    parser.add_argument("--allow-empty", action="store_true",
+                        help="permit a baseline with no entries (when every "
+                             "entry was experiment-generated)")
+    parser.add_argument("--reason", default="",
+                        help="why the baseline is empty (recorded in provenance)")
     args = parser.parse_args(argv)
 
     if not args.source.is_file():
@@ -87,14 +92,18 @@ def main(argv: list[str] | None = None) -> int:
             kept.append(entry)
 
     if not kept:
-        print("REFUSED: every entry was excluded; a baseline cannot be empty")
-        return 2
+        if not args.allow_empty or not args.reason.strip():
+            print("REFUSED: every entry was excluded; pass --allow-empty --reason "
+                  "to record an intentionally empty baseline")
+            return 2
+        kept = []
     if any(entry["pending"] for entry in kept):
         print("REFUSED: the baseline would still contain pending entries; "
               "each would trigger a pre-graph reflection")
         return 2
 
-    out_text = SEPARATOR.join(entry["raw"] for entry in kept) + SEPARATOR
+    out_text = (SEPARATOR.join(entry["raw"] for entry in kept) + SEPARATOR
+                if kept else "")
     out_bytes = out_text.encode("utf-8")
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_bytes(out_bytes)
@@ -112,6 +121,8 @@ def main(argv: list[str] | None = None) -> int:
         "baseline_entries": len(kept),
         "baseline_pending": 0,
         "kept_entries": [{"ticker": e["ticker"], "date": e["date"]} for e in kept],
+        "empty_baseline": not kept,
+        "empty_reason": args.reason.strip() if not kept else "",
     }
     provenance_path = args.out.with_suffix(".provenance.json")
     provenance_path.write_text(

@@ -1,7 +1,7 @@
 # CAND-01 V3 工程修复最终报告
 
 **日期：** 2026-11-16 · **基线：** `15270b1` / tree `c827f414…` / 指纹 `03c76db6…`
-**结论：** 两个根因均已修复并有测试证据；新增 38 个测试全部通过；全量测试无新增失败；等待三方独立审计对新冻结版本的结论。
+**结论：** 两个根因均已修复并有测试证据；新增 45 个测试全部通过；全量测试无新增失败；等待三方独立审计对新冻结版本的结论。
 
 ## 1. 两个根因是否彻底解决
 
@@ -24,7 +24,7 @@
 **根因（已确认）：** 单一开发日志跨运行共享；一次运行写入的 pending 条目会让下一次运行在进入图之前执行 Reflector 反思，改变那次运行的 prompt 上下文与 token 消耗（R05 → R06 即如此）。
 
 **修复：**
-- 唯一不可变快照 `memory/baseline_v3.md`（sha256 `01102211…f8c96`，1 条 NVDA 历史条目，0 pending）；来源、保留/排除项和哈希记录在 `memory/baseline_v3.provenance.json` 与 `MEMORY_SNAPSHOT_PROVENANCE.md`；
+- 唯一不可变快照 `memory/baseline_v3.md`（sha256 `e3b0c442…b855`（空快照，与所有 ticker 对称），0 条条目，0 pending（对称空快照，理由见 provenance））；来源、保留/排除项和哈希记录在 `memory/baseline_v3.provenance.json` 与 `MEMORY_SNAPSHOT_PROVENANCE.md`；
 - 每个 Run 在 `…/attempt_MM/memory/trading_memory.md` 获得自己的副本；
 - `_config_for_spec` 在构图前把 `memory_log_path` 指向该副本；
 - 运行前 gate 校验：快照哈希、副本哈希==快照、副本位于自己的 attempt 目录、副本不是快照；运行后 `memory_state.json` 证明快照未变；快照被改动则 run INVALID（`memory_snapshot_modified`）；
@@ -36,16 +36,16 @@
 
 | 文件 | 数量 | 通过 |
 | --- | --- | --- |
-| `tests/test_system_attribution.py` | 10 | 10 |
-| `tests/test_memory_isolation.py` | 17 | 17 |
-| `tests/test_cand01_batch_16run_v3_infra.py` | 11 | 11 |
-| **合计** | **38** | **38** |
+| `tests/test_system_attribution.py` | 13 | 13 |
+| `tests/test_memory_isolation.py` | 20 | 20 |
+| `tests/test_cand01_batch_16run_v3_infra.py` | 12 | 12 |
+| **合计** | **45** | **45** |
 
 ## 3. 完整测试结果
 
 | | 基线 `15270b1` | 本候选 |
 | --- | --- | --- |
-| passed | 2,163 | **2,201**（+38） |
+| passed | 2,163 | **2,208**（+45） |
 | failed | 2 | 2（同一组） |
 | skipped | 2 | 2 |
 | subtests | 319 | 319 |

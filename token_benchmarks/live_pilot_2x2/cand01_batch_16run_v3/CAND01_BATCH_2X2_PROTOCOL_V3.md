@@ -141,22 +141,22 @@ Run IDs are assigned before execution, in execution order.
 
 | Run | Pos | Block | Arm | `batch_macro` | `single_pass` | `structured` | `s2_downstream` | `config_sha256` |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `R01` | 1  | NVDA | C0 | false | true  | true  | true  | `5fc3a52d779da857badb52b644620b1bb987a744e0d065604f2568071bdbe550` |
-| `R02` | 2  | NVDA | AB | true  | false | true  | true  | `082cb36ccfcaab1001a4c5479bc70551c4c847ce76da266295045a3c41366969` |
-| `R03` | 3  | NVDA | CC | true  | true  | true  | true  | `a05775c5b62e7cfb937f1f354e081731048614dfe0fb81700527ac2dc5576a33` |
-| `R04` | 4  | NVDA | B  | false | false | true  | true  | `5b5b2b10f94c9c699081aa92557006acbbbcd5a0a2e105036ae219652d346197` |
-| `R05` | 5  | AAPL | C0 | false | true  | true  | true  | `69084a290d7304df68284648e15007a7cd1b167458e200ea0699443ed28e091e` |
-| `R06` | 6  | AAPL | B  | false | false | true  | true  | `efccdc081e08c0cb013e752b084e342da68ab6b50907528318c57558560acd65` |
-| `R07` | 7  | AAPL | CC | true  | true  | true  | true  | `6fc1ef8a440cb07ffbf587fc217567a0d31c0ef1d8cbb78f385b649f3647031c` |
-| `R08` | 8  | AAPL | AB | true  | false | true  | true  | `38364cad01bc1ab12ba95518367651d76b16d517d1a717422a1635322d0d2248` |
-| `R09` | 9  | JPM | C0 | false | true  | true  | true  | `4827f4115e811278b6d359e0e4deb3a794156f91a7e4a0262838093263e531cb` |
-| `R10` | 10 | JPM | AB | true  | false | true  | true  | `ee050570a44ca9092908e89083f863edfc65eb8c8aaa28e7c6bda1b25ca4dcfe` |
-| `R11` | 11 | JPM | B  | false | false | true  | true  | `0d10cea66afb111b1c9a255053a8563793a854601fe79e2edaf83639c5e441db` |
-| `R12` | 12 | JPM | CC | true  | true  | true  | true  | `d8073546061751c2a9e4b0d669652446da55c668bb15f39ec1cb5e1fcc7c98db` |
-| `R13` | 13 | XOM | C0 | false | true  | true  | true  | `089eac5c6d5426a5f11650ce827bfd515d77765c96a98eb85fdf7035189658be` |
-| `R14` | 14 | XOM | CC | true  | true  | true  | true  | `60e7160a375aa53b4b116e2c77bd175ef9e5a6c17e35e159639fdf28ce572dab` |
-| `R15` | 15 | XOM | B  | false | false | true  | true  | `275a2c1ac93e5362159207e95fbe1416e5a7225eb9f758200b22678c36bb0f8e` |
-| `R16` | 16 | XOM | AB | true  | false | true  | true  | `81234d74106f3e59e4bf5e49f2dc130131d9d2e3decf037421840e39ae71264b` |
+| `R01` | 1  | NVDA | C0 | false | true  | true  | true  | `c95d98156125537fc43e38a42a180d6362f6b00600e66be6c081779c013c79cf` |
+| `R02` | 2  | NVDA | AB | true  | false | true  | true  | `eddf9bfb866956d0abe9123cb25ccf7b224fd40f4bcd7cfbf1e64acc6ff8fb50` |
+| `R03` | 3  | NVDA | CC | true  | true  | true  | true  | `6af2941c30dde392d8935b7ab6be9091dafe6e5b484692c12891868014c06e77` |
+| `R04` | 4  | NVDA | B  | false | false | true  | true  | `a84b4a2bd260b5b6f387e86e8128c6f3d46c30e1c3ec2a9e778729e043cb89cd` |
+| `R05` | 5  | AAPL | C0 | false | true  | true  | true  | `86490c887b36d4fb6d352c8fa246f07250427e26c4506d68e7a9dc17ba7a24f6` |
+| `R06` | 6  | AAPL | B  | false | false | true  | true  | `1b627aeceb34aa2a7834b876e5d0e52de30fe308bd2f67cd0af6352a4d7c2c6e` |
+| `R07` | 7  | AAPL | CC | true  | true  | true  | true  | `02631b18eef003a069b5523051c8869d5baecb33c7d8fca3d333a61aec1362b9` |
+| `R08` | 8  | AAPL | AB | true  | false | true  | true  | `21a10307c9d3de82455f0d0505b7f0bfe6e7a0a368ba00814331ca459abb00fd` |
+| `R09` | 9  | JPM | C0 | false | true  | true  | true  | `9a7ad8d7ed9e416bd28a242d5796c9e9dd53ee57c0c8d8b8364d9425ccd86af4` |
+| `R10` | 10 | JPM | AB | true  | false | true  | true  | `d9742802cea2e7b6f38d9faa1cb90add21374a13f9b52c8530daf90f7d0561cf` |
+| `R11` | 11 | JPM | B  | false | false | true  | true  | `907a89cf3eee7e7d6e7debfc30b7bcba1afbc915d5b223a62b234d4506d74d76` |
+| `R12` | 12 | JPM | CC | true  | true  | true  | true  | `bff92429c84d145ae097782b071d6e84ddce42daf215c19097e0c7bdfbc82b4e` |
+| `R13` | 13 | XOM | C0 | false | true  | true  | true  | `c044df407a21c37bf492598ea54ce02e2cdce62db618b07d8f3cf2f37b36aa10` |
+| `R14` | 14 | XOM | CC | true  | true  | true  | true  | `7c7990f9e14f86613f99b38e90ae546a69052a38c4fcb5895ddbc7493a9cab98` |
+| `R15` | 15 | XOM | B  | false | false | true  | true  | `3aa4f8210c245b1525e9eeca91a4ecb66d533b3c216d7fc697c9b8a3a6a2767f` |
+| `R16` | 16 | XOM | AB | true  | false | true  | true  | `3a6c8d9526852ff63d19eaed9fde6f017d7efa4e3559370abadf22f672c9b3e4` |
 
 Machine-readable copies: `CONFIG_HASH_MANIFEST.csv`, `RUN_MANIFEST_TEMPLATE.csv`,
 `SWITCH_MATRIX.csv` (all generated, never hand-edited).
@@ -230,3 +230,6 @@ python scripts/c3_verify_final_freeze.py
 * `s2_downstream` has no OFF implementation.
 * PIT is day-granular.
 * The model endpoint is addressed by name; no model-version pin is possible.
+* The endpoint URL is not part of `config_sha256` (it is ambient
+  `TRADINGAGENTS_LLM_BACKEND_URL`, set by `apply_cityu_env`); the runbook
+  pins it, the hash cannot.

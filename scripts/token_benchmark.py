@@ -512,6 +512,11 @@ INVALID_USAGE_MISMATCH = "token_usage_mismatch"
 INVALID_TELEMETRY_INCOMPLETE = "telemetry_incomplete"
 INVALID_BUDGET_CONFIG = "budget_config_invalid"
 INVALID_MEMORY_BASELINE_MODIFIED = "memory_snapshot_modified"
+INVALID_MEMORY_STATE_MISSING = "memory_state_missing"
+# Attribution sentinels, mirrored from tradingagents.observability so the
+# validator does not import the product at module load.
+_ATTRIBUTION_NONE = "none"
+_AGENT_UNATTRIBUTED = "unattributed"
 
 #: The four usage verdicts (audit C round 5, U-1). They are a *decision*, not a
 #: description: only ``VALID`` may produce a measured sample.
@@ -695,8 +700,40 @@ def usage_verdict(payload: dict, *, replay_used: int | None = None) -> dict:
         incomplete.append("the telemetry's own usage_coverage is not complete")
     if audit.get("usage_complete") is False:
         incomplete.append("audit_quality.usage_complete is false")
-    if audit.get("attribution_complete") is False:
-        incomplete.append("usage could not be attributed to an agent")
+    if audit.get("attribution_complete") is not True:
+        # ``is False`` let a missing flag, or an integer 0, pass as attributed.
+        incomplete.append("usage could not be attributed (attribution_complete is not true)")
+    # The aggregate flag is the producer's self-report; an event that says
+    # ``attribution_type="none"`` (or, for schema-1 payloads, an
+    # ``agent_id="unattributed"`` without a system type) is direct evidence and
+    # must invalidate the run even if the flag was tampered with.
+    raw_events = payload.get("llm_call_events")
+    events = ([event for event in raw_events if isinstance(event, dict)]
+              if isinstance(raw_events, list) else [])
+    unattributed_events = [
+        event for event in events
+        if event.get("attribution_type") == _ATTRIBUTION_NONE
+        or ("attribution_type" not in event
+            and event.get("agent_id") == _AGENT_UNATTRIBUTED)
+    ]
+    if unattributed_events:
+        incomplete.append(
+            f"{len(unattributed_events)} provider call(s) carry no attribution in the event log")
+    attribution_summary = payload.get("attribution")
+    if isinstance(attribution_summary, dict):
+        if attribution_summary.get("unattributed_calls"):
+            incomplete.append(
+                f"the attribution summary counts {attribution_summary['unattributed_calls']} "
+                f"unattributed call(s)")
+        try:
+            accounted = (int(attribution_summary.get("agent_calls") or 0)
+                         + int(attribution_summary.get("system_calls") or 0)
+                         + int(attribution_summary.get("unattributed_calls") or 0))
+        except (TypeError, ValueError):
+            accounted = None
+        if calls and accounted is not None and accounted != calls:
+            mismatch.append(
+                f"the attribution summary accounts for {accounted} calls, the run made {calls}")
     if audit.get("telemetry_complete") is False:
         incomplete.append("the run did not finalize its telemetry")
     if payload.get("unattributed_llm_events"):
@@ -2666,6 +2703,9 @@ def execute_measured_run(exp_dir: Path, experiment: dict, case: dict,
     # the cap is unknown, so neither "within budget" nor "uncapped" can be
     # claimed. Fail closed rather than treating it as an uncapped run (U-2).
     # V3 memory isolation evidence, written by the child next to its spec.
+    # A run that declares the contract but produces no evidence is not a
+    # sample: without the file, a modified baseline would be undetectable, so
+    # absence is an invalidity, not a pass (audit A/C M1).
     memory_state = {}
     if run_dir is not None and (run_dir / MEMORY_STATE_FILE).is_file():
         memory_state = _load_json(run_dir / MEMORY_STATE_FILE)
@@ -2674,6 +2714,13 @@ def execute_measured_run(exp_dir: Path, experiment: dict, case: dict,
             metrics["invalid_reason"] = (metrics.get("invalid_reason")
                                          or INVALID_MEMORY_BASELINE_MODIFIED)
             metrics["valid"] = False
+    _run_spec = {}
+    if run_dir is not None and (run_dir / "spec.json").is_file():
+        _run_spec = _load_json(run_dir / "spec.json")
+    if isinstance(_run_spec, dict) and _run_spec.get("memory") and not memory_state:
+        metrics["invalid_reason"] = (metrics.get("invalid_reason")
+                                     or INVALID_MEMORY_STATE_MISSING)
+        metrics["valid"] = False
     if budget_state is not None and not budget_state["ok"]:
         metrics["invalid_reason"] = metrics.get("invalid_reason") or INVALID_BUDGET_CONFIG
         metrics["valid"] = False
@@ -2820,6 +2867,9 @@ def _read_attempt(run_dir: Path, run_index: int) -> dict | None:
     metrics["telemetry_path"] = _portable_path(
         tele_path, run_dir.parent.parent.parent)
     memory_path = run_dir / MEMORY_STATE_FILE
+    spec_path = run_dir / "spec.json"
+    run_spec = _load_json(spec_path) if spec_path.is_file() else {}
+    memory_state = {}
     if memory_path.is_file():
         memory_state = _load_json(memory_path)
         metrics["memory"] = memory_state
@@ -2827,6 +2877,10 @@ def _read_attempt(run_dir: Path, run_index: int) -> dict | None:
             metrics["invalid_reason"] = (metrics.get("invalid_reason")
                                          or INVALID_MEMORY_BASELINE_MODIFIED)
             metrics["valid"] = False
+    if isinstance(run_spec, dict) and run_spec.get("memory") and not memory_state:
+        metrics["invalid_reason"] = (metrics.get("invalid_reason")
+                                     or INVALID_MEMORY_STATE_MISSING)
+        metrics["valid"] = False
     if not metrics.get("valid"):
         # The stored telemetry explains why this attempt is not a measured
         # sample (failed business run, failed LLM call, or missing usage), so a
@@ -3716,19 +3770,10 @@ def _frozen_switch_matrix() -> dict[str, dict]:
     arm a Run ID runs*; the per-run ``experiment.json`` is only a restatement,
     and a restatement that agrees with itself proves nothing (audit B-10).
     """
-    import csv
-
-    path = (Path(__file__).resolve().parent.parent
-            / "token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2"
-            / "SWITCH_MATRIX.csv")
-    if not path.is_file():
-        return {}
+    rows = _frozen_switch_matrix_rows()
     out: dict[str, dict] = {}
-    with path.open(newline="", encoding="utf-8") as fh:
-        for row in csv.DictReader(fh):
-            run_id = (row.get("run_id") or "").strip()
-            if not run_id:
-                continue
+    for run_id, row in rows.items():
+        if True:
             out[run_id] = {
                 key: (row.get(key) or "").strip().lower() in {"true", "1", "yes"}
                 for key in ("batch_macro", "single_pass", "structured", "s2_downstream")

@@ -23,7 +23,7 @@ Under ``--out`` (a fresh, empty directory)::
     experiment.json            round-level description (not itself runnable)
     specs/<RUN_ID>/experiment.json   per-run experiment definition
     specs/<RUN_ID>/spec.json         the run spec the child is handed
-    specs/<RUN_ID>/code_state.json   provenance of the generating state
+    code_state.json (one file at the batch root)   provenance of the generating state
     SWITCH_MATRIX.csv          one row per run: the four switches
     RUN_MANIFEST_TEMPLATE.csv  one row per run: identity, order, switches, hashes
     CONFIG_HASH_MANIFEST.csv   one row per run: the full config_sha256
@@ -33,8 +33,10 @@ Exit codes: 0 ok, 2 refused (bad definition / unsupported switch / non-empty out
 
 Usage
 -----
-    python scripts/gen_cand01_batch_16run_specs_v2.py --out <dir>
-    python scripts/gen_cand01_batch_16run_specs_v2.py --out <dir> --check
+    python scripts/gen_cand01_batch_16run_specs_v3.py --out <dir> \
+    --memory-baseline <dir>/memory/baseline_v3.md
+    python scripts/gen_cand01_batch_16run_specs_v3.py --out <dir> \
+    --memory-baseline <dir>/memory/baseline_v3.md --check
 """
 
 from __future__ import annotations

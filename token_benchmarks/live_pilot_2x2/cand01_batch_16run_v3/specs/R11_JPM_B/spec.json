@@ -16,13 +16,13 @@
     "ticker": "JPM",
     "trade_date": "2026-09-23"
   },
-  "config_sha256": "0d10cea66afb111b1c9a255053a8563793a854601fe79e2edaf83639c5e441db",
+  "config_sha256": "907a89cf3eee7e7d6e7debfc30b7bcba1afbc915d5b223a62b234d4506d74d76",
   "deep_model": "CS5351/DeepSeek-V4-Flash",
   "experiment_id": "R11",
   "experiment_root": "/home/sky/cs5351/TradingAgents/.worktrees/cand01_v3",
   "memory": {
     "baseline_relpath": "memory/baseline_v3.md",
-    "baseline_sha256": "01102211cc012807956e3a31bafc587b90d518daa3335d07d33c571cfecf8c96",
+    "baseline_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "mode": "per_run_snapshot_copy"
   },
   "news_scope": {

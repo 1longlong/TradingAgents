@@ -366,6 +366,8 @@ def agent_scoped(agent_id: str | None):
     if agent_id is None:
         yield
         return
+    if agent_id in SYSTEM_COMPONENT_IDS:
+        raise ValueError(f"{agent_id!r} is a system component, not an agent")
     token = _current_attribution_var.set(
         AttributionContext(ATTRIBUTION_AGENT, agent_id=agent_id))
     try:
@@ -385,8 +387,14 @@ def system_component_scoped(component_id: str):
     """
     if not isinstance(component_id, str) or not component_id.strip():
         raise ValueError("component_id must be a non-empty string")
+    component = component_id.strip()
+    if component in ALL_AGENT_IDS:
+        # An agent is not a system component. Allowing this would move an
+        # agent's provider calls out of the per-agent comparison while the
+        # attribution audit still passed.
+        raise ValueError(f"{component!r} is an agent id, not a system component")
     token = _current_attribution_var.set(
-        AttributionContext(ATTRIBUTION_SYSTEM, component_id=component_id.strip()))
+        AttributionContext(ATTRIBUTION_SYSTEM, component_id=component))
     try:
         yield
     finally:
