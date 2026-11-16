@@ -36,6 +36,9 @@ class Scripted:
         self.seen.append(list(messages))
         return self.replies.pop(0)
 
+    def invoke(self, messages, **kwargs):
+        return self(messages)
+
     def bind_tools(self, tools, **kwargs):
         from langchain_core.runnables import RunnableLambda
         return RunnableLambda(self)
