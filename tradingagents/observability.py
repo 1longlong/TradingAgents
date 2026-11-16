@@ -109,6 +109,7 @@ __all__ = [
     "attrib_agent_node",
     "attrib_tool_round",
     "record_prefetch_call",
+    "record_tool_round",
     "record_structured_attempt",
     # Collector
     "RunMetricsCollector",
@@ -2507,6 +2508,27 @@ def _record_tool_round(agent_id, number_of_tool_calls, started_at, ended_at, sta
         collector.record_tool_round(event)
     except Exception:  # noqa: BLE001
         logger.debug("Could not record tool round", exc_info=True)
+
+
+def record_tool_round(
+    *,
+    number_of_tool_calls: int,
+    started_at: float,
+    ended_at: float,
+    status: str = "ok",
+    error_type: str | None = None,
+    agent_id: str | None = None,
+) -> None:
+    """Record one tool round from a runner that is not the graph's ``ToolNode``.
+
+    A round is one model turn's batch of tool calls executed and returned. The
+    graph's ``attrib_tool_round`` wrapper records rounds for ``ToolNode``; the
+    single-pass analyst loop executes its tools in-process, so it calls this.
+    """
+    _record_tool_round(
+        agent_id or get_current_agent_id() or AGENT_UNATTRIBUTED,
+        number_of_tool_calls, started_at, ended_at, status, error_type,
+    )
 
 
 def record_prefetch_call(source: str, fn: Callable, *args, **kwargs):

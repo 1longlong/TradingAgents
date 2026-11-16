@@ -19,11 +19,12 @@ all three agents log the same warnings when fallback fires.
 from __future__ import annotations
 
 import logging
+import re
 import time
 from collections.abc import Callable
 from typing import Any, TypeVar
 
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import BaseModel
 
@@ -387,6 +388,83 @@ def _single_pass_messages(messages: list[Any]) -> list[Any]:
     ]
 
 
+# ---------------------------------------------------------------------------
+# Tool-call protocol markup (DeepSeek DSML and similar)
+# ---------------------------------------------------------------------------
+# A model behind an OpenAI-compatible endpoint may emit its native tool-call
+# syntax as *plain text* instead of a structured ``tool_calls`` field. When that
+# text is the only thing an analyst produced, it must not be stored as the
+# report: the markup is not analysis, and downstream nodes would read protocol
+# tokens instead of market evidence (V3: R07 1,922 chars, R14 346 chars).
+#
+# The rule is: never return markup, never silently return "", and never strip
+# the text down to nothing. If analysis-bearing parameter values can be
+# recovered, use them; otherwise return an explicit unavailable report.
+_PROTOCOL_MARKERS = ("｜｜DSML｜｜", "<｜｜")
+_MARKUP_PARAMETER_RE = re.compile(
+    r'parameter\s+name="(?P<name>[^"]+)"[^>]*>(?P<value>.*?)</｜｜DSML｜｜\s*parameter>',
+    re.S,
+)
+_ANALYSIS_PARAMETER_NAMES = frozenset({
+    "summary", "analysis", "rationale", "thesis", "report", "content", "text",
+    "evidence", "key_evidence", "stance", "recommendation",
+})
+MIN_RECOVERED_REPORT_CHARS = 120
+REPORT_UNAVAILABLE_TEMPLATE = (
+    "[REPORT UNAVAILABLE — {agent} returned tool-call protocol markup instead "
+    "of an analysis. No usable report text was produced in this run; downstream "
+    "agents must treat this evidence as missing.]"
+)
+
+
+def looks_like_protocol_markup(text: str) -> bool:
+    """True when a model reply carries native tool-call markup as text."""
+    return bool(text) and any(marker in text for marker in _PROTOCOL_MARKERS)
+
+
+def sanitize_analyst_text(text: str, *, agent_name: str) -> tuple[str, dict[str, Any]]:
+    """Return ``(report_text, info)`` with protocol markup never leaking out.
+
+    * clean text -> unchanged;
+    * markup that carries analysis-bearing parameter values -> those values;
+    * markup with no usable analysis -> an explicit ``REPORT UNAVAILABLE``
+      sentence (never ``""``, never the markup).
+
+    The original event is recorded as a ``markup_sanitized`` structured event so
+    the run's telemetry keeps the fact, and a warning is logged either way.
+    """
+    if not text or not looks_like_protocol_markup(text):
+        return text, {"markup": False}
+    recovered = []
+    for match in _MARKUP_PARAMETER_RE.finditer(text):
+        if match.group("name") in _ANALYSIS_PARAMETER_NAMES:
+            value = match.group("value").strip()
+            if value:
+                recovered.append(value)
+    recovered_text = "\n\n".join(recovered)
+    if len(recovered_text) >= MIN_RECOVERED_REPORT_CHARS:
+        logger.warning(
+            "%s: recovered %d chars of analysis from tool-call protocol markup "
+            "(raw reply %d chars was discarded)", agent_name, len(recovered_text),
+            len(text))
+        record_structured_attempt(
+            agent_name, kind="markup_sanitized", used_fallback=True,
+            error=ValueError("recovered report text from tool-call protocol markup"),
+        )
+        return recovered_text, {"markup": True, "recovered_chars": len(recovered_text),
+                                "raw_chars": len(text)}
+    unavailable = REPORT_UNAVAILABLE_TEMPLATE.format(agent=agent_name)
+    logger.warning(
+        "%s: reply was tool-call protocol markup with no analysis text; "
+        "storing an explicit REPORT UNAVAILABLE (raw %d chars)",
+        agent_name, len(text))
+    record_structured_attempt(
+        agent_name, kind="markup_sanitized", used_fallback=True,
+        error=ValueError("tool-call protocol markup contained no analysis text"),
+    )
+    return unavailable, {"markup": True, "recovered_chars": 0, "raw_chars": len(text)}
+
+
 def finalize_analyst_report(
     llm: Any,
     structured_llm: Any | None,
@@ -461,7 +539,8 @@ def finalize_analyst_report(
             agent_name, kind="failure", used_fallback=True, error=exc,
             started_at=started_at, ended_at=time.monotonic(),
         )
-        return free_text_block, None
+        safe_text, _info = sanitize_analyst_text(free_text_block, agent_name=agent_name)
+        return safe_text, None
 
 
 
@@ -568,7 +647,32 @@ def run_data_tools(
         return {**stripped, **trusted}
 
     def _run(calls: list[dict[str, Any]]) -> list[Any]:
+        # One ``_run`` invocation is exactly one tool round: the model asked for
+        # this batch, the runner executes it, and the ToolMessages go back to the
+        # model. Single-pass never touches the graph's ToolNode, so without this
+        # the round counter stays 0 even though rounds happened (V3 finding).
+        from tradingagents.observability import record_tool_round
+
+        if not calls:
+            # No model turn, no round: the loop calls the runner only when the
+            # model actually asked for tools.
+            return []
+        round_started = time.monotonic()
+        round_status, round_error = "ok", None
         results = []
+        try:
+            return _execute_calls(calls, results)
+        except BaseException as exc:  # noqa: BLE001 - re-raised unchanged
+            round_status, round_error = "error", type(exc).__name__
+            raise
+        finally:
+            record_tool_round(
+                number_of_tool_calls=len(calls), started_at=round_started,
+                ended_at=time.monotonic(), status=round_status,
+                error_type=round_error,
+            )
+
+    def _execute_calls(calls: list[dict[str, Any]], results: list[Any]) -> list[Any]:
         for call in calls:
             name = call.get("name")
             tool = by_name.get(name)
@@ -678,7 +782,35 @@ def _schema_tool_call(result: Any, schema_tool: str) -> dict[str, Any] | None:
     return None
 
 
-def _single_pass_free_text(llm: Any, history: list[Any], agent_name: str) -> str:
+def _free_text_retry(
+    prompt: Any, llm: Any, history: list[Any], agent_name: str
+) -> tuple[str, Any]:
+    """One prose retry that cannot replay a dangling tool call.
+
+    ``finalize_single_pass`` appends the assistant turn to ``history`` *before*
+    validating its schema call. When validation fails, replaying ``history``
+    unchanged sends an assistant message with ``tool_calls`` and no matching
+    ``ToolMessage`` (V3 R12: provider 400), and invoking bare ``llm`` drops the
+    analyst system prompt. This helper drops a trailing tool-call-only assistant
+    turn and goes through the caller's prompt, so both the message pairing and
+    the system prompt are correct.
+    """
+    retry_history = list(history)
+    if retry_history:
+        last = retry_history[-1]
+        if getattr(last, "type", None) == "ai" and getattr(last, "tool_calls", None):
+            retry_history.pop()
+    messages = _single_pass_messages(retry_history)
+    response = ((prompt | llm).invoke(messages) if prompt is not None
+                else llm.invoke(messages))
+    text = getattr(response, "content", "") or ""
+    sanitized, _info = sanitize_analyst_text(text, agent_name=agent_name)
+    return sanitized, response
+
+
+def _single_pass_free_text(
+    llm: Any, history: list[Any], agent_name: str, prompt: Any = None
+) -> str:
     """Ask once for a prose report over the history gathered so far.
 
     The last-resort ending for the single-pass loop: the model never produced a
@@ -693,8 +825,7 @@ def _single_pass_free_text(llm: Any, history: list[Any], agent_name: str) -> str
     warning and never dressed up as a valid structured report (``report_obj``
     stays ``None``); it is a run-quality anomaly to flag, not a normal ending.
     """
-    response = llm.invoke(_single_pass_messages(history))
-    content = getattr(response, "content", "") or ""
+    content, _response = _free_text_retry(prompt, llm, history, agent_name)
     if not content.strip():
         logger.warning("%s: single-pass ending produced no text", agent_name)
     return content
@@ -846,8 +977,10 @@ def finalize_single_pass(
                 # The loop may already hold data-tool results, and those are
                 # what the free-text answer has to stand on, so finalise over
                 # them rather than over the pre-loop history.
-                response = llm.invoke(_single_pass_messages(history))
-                text = getattr(response, "content", "") or ""
+                # ``history`` still ends with the schema-carrying turn: the
+                # retry helper drops it (no dangling tool_call) and goes through
+                # ``prompt`` (system prompt preserved) — V3 R12's 400.
+                text, response = _free_text_retry(prompt, llm, history, agent_name)
                 # Fold the free-text answer into history so the shared state
                 # carries the data-tool rounds *with* their results, then close
                 # on the prose turn.
@@ -869,7 +1002,7 @@ def finalize_single_pass(
             # does in RC1 whenever structure is unavailable.
             prose = getattr(result, "content", "") or ""
             if not prose.strip():
-                prose = _single_pass_free_text(llm, history, agent_name)
+                prose = _single_pass_free_text(llm, history, agent_name, prompt=prompt)
             record_structured_attempt(agent_name, kind="failure", used_fallback=True)
             # The prose turn is itself the terminating assistant turn, so keep
             # it (drop_last=False). Earlier data-tool rounds ride along with the
@@ -908,7 +1041,7 @@ def finalize_single_pass(
     )
     logger.info("%s: single-pass loop ended without a schema call (%s)",
                 agent_name, exhausted)
-    prose = _single_pass_free_text(llm, history, agent_name)
+    prose = _single_pass_free_text(llm, history, agent_name, prompt=prompt)
     # The data-tool rounds ride along with the results this runner executed, and
     # the free-text answer closes the sequence, so shared state has no dangling
     # tool call for the graph to replay.
