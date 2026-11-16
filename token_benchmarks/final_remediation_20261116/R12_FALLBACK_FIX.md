@@ -23,13 +23,16 @@ response = llm.invoke(_single_pass_messages(history))
 - 通过调用方传入的 `prompt` 发起请求（`(prompt | llm).invoke(...)`），system prompt 保留；
 - 返回值统一经过 `sanitize_analyst_text`（见 DSML 修复）。
 
-三处调用点全部改用它：
+三处 fallback 调用点全部改用它：
 
 | 位置 | 场景 |
 | --- | --- |
 | schema 校验失败分支（原 849） | R12 的 400 路径 |
 | `_single_pass_free_text`（prose 为空 / 轮次耗尽） | fallback 的 system prompt |
 | `finalize_analyst_report` 的失败分支 | 两段式路径的 fallback 文本也会 sanitize |
+| `finalize_analyst_report` / `finalize_single_pass` 的 `structured_llm is None` 分支 | 无结构化能力时返回的 prose 也会 sanitize |
+
+另外修复了审计 A 的 mixed-turn 悬空调用：schema+data 同一轮时，只保留 data calls 在 assistant turn 上（schema call 被剥离），避免下一次请求重放未解析的 schema call id。
 
 `_terminal_messages` 未改：它只保留带已执行 ToolMessage 的 assistant turn，悬空 schema turn 本来就会被跳过。
 
@@ -43,6 +46,8 @@ response = llm.invoke(_single_pass_messages(history))
 | `test_a_second_failure_is_reported_not_swallowed` | 第二次失败抛出真实异常（`RuntimeError`），不吞掉 |
 | `test_normal_structured_output_is_unchanged` | 合法 schema 输出仍直接返回，无额外调用 |
 | `test_markup_in_the_single_pass_fallback_never_reaches_the_report` | fallback 的 markup 不会进入报告 |
+| `test_a_mixed_schema_plus_data_turn_leaves_no_dangling_call` | mixed（schema+data）轮次：只执行 data calls，schema call 从 assistant turn 剥离，下一次请求无悬空 id |
+| `test_a_non_empty_prose_turn_is_sanitized_too` | 模型直接在 prose 里返回 markup 时也会被 sanitize（审计 A 的 HIGH） |
 
 ## 4. 证明测试能抓到缺陷
 

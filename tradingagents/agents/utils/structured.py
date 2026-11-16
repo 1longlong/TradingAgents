@@ -407,7 +407,9 @@ _MARKUP_PARAMETER_RE = re.compile(
 )
 _ANALYSIS_PARAMETER_NAMES = frozenset({
     "summary", "analysis", "rationale", "thesis", "report", "content", "text",
-    "evidence", "key_evidence", "stance", "recommendation",
+    "evidence", "key_evidence", "stance", "recommendation", "interpretation",
+    "risks", "key_levels", "key_figures", "invalidation", "scenario_set",
+    "catalysts", "valuation", "conclusion", "outlook", "reasoning",
 })
 MIN_RECOVERED_REPORT_CHARS = 120
 REPORT_UNAVAILABLE_TEMPLATE = (
@@ -435,6 +437,18 @@ def sanitize_analyst_text(text: str, *, agent_name: str) -> tuple[str, dict[str,
     """
     if not text or not looks_like_protocol_markup(text):
         return text, {"markup": False}
+    # Prose before the first protocol token is genuine analysis: keep it rather
+    # than replacing the whole reply (audit A: 664 chars of analysis followed by
+    # a symbol-only call was being discarded).
+    first_marker = min(text.find(marker) for marker in _PROTOCOL_MARKERS
+                       if marker in text)
+    prose_before = text[:first_marker].strip()
+    if len(prose_before) >= MIN_RECOVERED_REPORT_CHARS:
+        logger.warning(
+            "%s: kept %d chars of prose and dropped trailing tool-call markup",
+            agent_name, len(prose_before))
+        return prose_before, {"markup": True, "recovered_chars": len(prose_before),
+                              "raw_chars": len(text)}
     recovered = []
     for match in _MARKUP_PARAMETER_RE.finditer(text):
         if match.group("name") in _ANALYSIS_PARAMETER_NAMES:
@@ -447,10 +461,6 @@ def sanitize_analyst_text(text: str, *, agent_name: str) -> tuple[str, dict[str,
             "%s: recovered %d chars of analysis from tool-call protocol markup "
             "(raw reply %d chars was discarded)", agent_name, len(recovered_text),
             len(text))
-        record_structured_attempt(
-            agent_name, kind="markup_sanitized", used_fallback=True,
-            error=ValueError("recovered report text from tool-call protocol markup"),
-        )
         return recovered_text, {"markup": True, "recovered_chars": len(recovered_text),
                                 "raw_chars": len(text)}
     unavailable = REPORT_UNAVAILABLE_TEMPLATE.format(agent=agent_name)
@@ -458,10 +468,6 @@ def sanitize_analyst_text(text: str, *, agent_name: str) -> tuple[str, dict[str,
         "%s: reply was tool-call protocol markup with no analysis text; "
         "storing an explicit REPORT UNAVAILABLE (raw %d chars)",
         agent_name, len(text))
-    record_structured_attempt(
-        agent_name, kind="markup_sanitized", used_fallback=True,
-        error=ValueError("tool-call protocol markup contained no analysis text"),
-    )
     return unavailable, {"markup": True, "recovered_chars": 0, "raw_chars": len(text)}
 
 
@@ -514,7 +520,8 @@ def finalize_analyst_report(
         return free_text_block, None
     if structured_llm is None:
         record_structured_attempt(agent_name, kind="unsupported", used_fallback=True)
-        return free_text_block, None
+        safe_text, _info = sanitize_analyst_text(free_text_block, agent_name=agent_name)
+        return safe_text, None
 
     structured_messages = _prepare_structured_messages(messages)
 
@@ -661,7 +668,10 @@ def run_data_tools(
         round_status, round_error = "ok", None
         results = []
         try:
-            return _execute_calls(calls, results)
+            executed = _execute_calls(calls, results)
+            if executed and all(getattr(m, "status", None) == "error" for m in executed):
+                round_status = "error"
+            return executed
         except BaseException as exc:  # noqa: BLE001 - re-raised unchanged
             round_status, round_error = "error", type(exc).__name__
             raise
@@ -914,7 +924,9 @@ def finalize_single_pass(
         if getattr(result, "tool_calls", None):
             return "", None, [result]  # graph's tool node runs it; normal loop
         record_structured_attempt(agent_name, kind="unsupported", used_fallback=True)
-        return (getattr(result, "content", "") or ""), None, [result]
+        safe_text, _info = sanitize_analyst_text(
+            getattr(result, "content", "") or "", agent_name=agent_name)
+        return safe_text, None, [result]
 
     bound = llm.bind_tools([*tools, schema])
     history = list(messages)
@@ -943,6 +955,15 @@ def finalize_single_pass(
             logger.info(
                 "%s: schema and data tools requested in one turn; running the "
                 "data tool(s) first", agent_name)
+            # The schema call is not executed, so it must not stay on the
+            # assistant turn: the next request would carry an unresolved
+            # tool_call id and an OpenAI-compatible provider rejects it exactly
+            # like R12 (audit A, MEDIUM). Keep only the data calls.
+            data_only = [c for c in all_calls if c.get("name") != schema_tool]
+            result = result.model_copy(update={"tool_calls": data_only})
+            history[-1] = result
+            emitted[-1] = result
+            all_calls = data_only
         if schema_call is not None and not mixed:
             started_at = time.monotonic()
             try:
@@ -1003,6 +1024,12 @@ def finalize_single_pass(
             prose = getattr(result, "content", "") or ""
             if not prose.strip():
                 prose = _single_pass_free_text(llm, history, agent_name, prompt=prompt)
+            else:
+                # A reply can be protocol markup even when it carries no
+                # tool_calls (the V3 R07/R14 mechanism); sanitize this path too
+                # (audit A, HIGH).
+                prose, _markup_info = sanitize_analyst_text(
+                    prose, agent_name=agent_name)
             record_structured_attempt(agent_name, kind="failure", used_fallback=True)
             # The prose turn is itself the terminating assistant turn, so keep
             # it (drop_last=False). Earlier data-tool rounds ride along with the

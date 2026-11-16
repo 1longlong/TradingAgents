@@ -24,7 +24,7 @@ V3 中所有 single-pass 运行 `tool_rounds = 0`，尽管它们执行了 23–3
 | 没有工具调用 | 0 | `test_no_tool_call_is_no_round` |
 | 一次回复含 2 个工具调用 | 1 轮、2 calls | `test_one_model_turn_with_two_calls_is_one_round` |
 | 两轮（1 个 + 2 个调用） | 2 轮、[1, 2] | `test_two_rounds_are_two_rounds` |
-| 工具失败 | 仍记 1 轮，ToolMessage status=error | `test_a_failing_tool_still_counts_as_a_round` |
+| 工具失败 | 仍记 1 轮、`status="error"`、ToolMessage status=error | `test_a_failing_tool_still_counts_as_a_round` |
 | 聚合到遥测 | `run_totals.tool_rounds == 1`、per-agent 一致 | `test_rounds_reach_the_telemetry_payload` |
 
 ## 4. 不重复计数

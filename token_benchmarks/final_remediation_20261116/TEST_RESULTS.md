@@ -27,12 +27,12 @@ $ TZ=UTC .venv/bin/python -m pytest -q
 
 ```
 $ TZ=UTC .venv/bin/python -m pytest -q
-4 failed, 2221 passed, 2 skipped, 26 warnings, 319 subtests passed in 22.92s
+4 failed, 2226 passed, 2 skipped, 26 warnings, 319 subtests passed in 23.48s
 ```
 
 | | 基线 | 修复后 |
 | --- | --- | --- |
-| passed | 2,207 | **2,221**（+14 新增测试） |
+| passed | 2,207 | **2,226**（+19 新增测试） |
 | failed | 4 | **4（同一组）** |
 | skipped | 2 | 2 |
 | subtests | 319 | 319 |
@@ -44,7 +44,7 @@ $ TZ=UTC .venv/bin/python -m pytest -q
 
 | 套件 | 结果 |
 | --- | --- |
-| `tests/test_final_remediation.py`（新增） | **14 passed** |
+| `tests/test_final_remediation.py`（新增） | **19 passed** |
 | `test_observability.py` + `test_token_benchmark.py` + `test_c3_regressions.py` + `test_c3_final_freeze.py` + `test_memory_isolation.py` + `test_system_attribution.py` + `test_final_remediation.py` | **426 passed** |
 | CAND-01 single-pass / news / Finnhub / GDELT / PIT / structured（11 个文件） | **360 passed, 86 subtests passed** |
 
@@ -70,6 +70,8 @@ defects detected: 4/4
 | 改回裸 `llm.invoke` | `test_retry_keeps_the_analyst_system_prompt` | FAILED |
 | 跳过 `sanitize_analyst_text` | `test_markup_in_the_single_pass_fallback_never_reaches_the_report` | FAILED |
 | 删除 `record_tool_round` | `TestToolRounds`（4 项） | 4 FAILED |
+| 跳过 prose 出口 sanitize | `test_a_non_empty_prose_turn_is_sanitized_too` | FAILED |
+| mixed 轮次保留 schema call | `test_a_mixed_schema_plus_data_turn_leaves_no_dangling_call` | FAILED |
 
 每次 mutation 后都用 `git show HEAD:<file>` 恢复并核对 `git status`。
 
@@ -83,7 +85,7 @@ defects detected: 4/4
 | --- | --- |
 | collected（修复后完整套件） | 2,227（2221 passed + 4 failed + 2 skipped） |
 | subtests | 319 |
-| 新增测试 | 14 |
+| 新增测试 | 19 |
 | 新增失败 | 0 |
 | 付费调用 | **0** |
 | 外部 API 调用 | **0** |

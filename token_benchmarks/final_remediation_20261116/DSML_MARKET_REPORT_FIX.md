@@ -27,7 +27,10 @@ R14 只有 346 字符（仅一次 snapshot 调用，无分析），R07 有 1,922
 
 - 不做“删除所有尖括号”的粗暴过滤：只提取有语义的参数值，其余丢弃；没有分析时明确报不可用。
 - 每次 sanitize 都记录 `markup_sanitized` 结构化事件（`used_fallback=True`）并写 warning，原始错误/长度信息保留在日志与事件里。
-- 应用点：`_free_text_retry`（single-pass 的全部 fallback 出口）与 `finalize_analyst_report` 的失败出口（两段式路径也受保护）。
+- 应用点：`_free_text_retry`（single-pass 的全部 fallback 出口）、`finalize_single_pass` 的**直接 prose 出口**、以及 `finalize_analyst_report` / `finalize_single_pass` 的两处 `structured_llm is None` 出口。审计 A/B 指出这些出口原先会漏出 markup，已全部覆盖。
+- 混合文本（分析 + 尾部 markup）保留第一个协议标记之前的全部 prose，而不是整段丢弃。
+- 参数白名单扩展到 schema 的真实字段：`interpretation`、`risks`、`key_levels`、`key_figures`、`invalidation`、`scenario_set`、`catalysts`、`valuation` 等。
+- 遥测：markup 清理写 warning 日志，但**不再**额外记一条 `markup_sanitized` structured event（审计 B M1：那会使 `structured_attempts` 重复计数）；`structured_*` 计数保持“每个 fallback 恰好一条事件”。
 
 ## 3. 测试（R07/R14 脱敏历史）
 
@@ -37,6 +40,10 @@ R14 只有 346 字符（仅一次 snapshot 调用，无分析），R07 有 1,922
 | `test_r07_markup_is_recovered_without_markers` | 恢复出含 AAPL/336.76/SMA/MACD/RSI 的文本，且无 `｜｜DSML｜｜` |
 | `test_r14_markup_becomes_an_explicit_unavailable_report` | 输出等于 `REPORT_UNAVAILABLE_TEMPLATE`，非空、无 markup |
 | `test_markup_in_the_single_pass_fallback_never_reaches_the_report` | 端到端：fallback 返回 markup 时，报告里不含 markup 且保留 SMA |
+| `test_a_non_empty_prose_turn_is_sanitized_too` | 直接在 prose 里返回 markup 的出口 |
+| `test_structured_llm_none_still_sanitizes_the_two_call_fallback` | 无结构化能力的两段式出口 |
+| `test_analysis_before_markup_is_kept` | 分析 + 尾部 markup：prose 全保留 |
+| `test_schema_fields_beyond_summary_are_recovered` | `interpretation`/`risks`/`key_levels` 等字段可恢复 |
 
 R07/R14 的夹具是从原始 `full_states_log` 中抽取的 markup 结构（脱敏、不含真实决策文本之外的内容）。
 

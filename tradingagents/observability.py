@@ -2588,8 +2588,10 @@ def record_structured_attempt(
 ) -> None:
     """Record a structured-output attempt outcome through the current collector.
 
-    ``kind`` is ``"success"``, ``"failure"`` or ``"unsupported"``. Pure
-    observability: never alters structured/fallback behavior.
+    ``kind`` is ``"success"``, ``"failure"``, ``"unsupported"`` or
+    ``"markup_sanitized"`` (the last records that a report containing tool-call
+    protocol markup was cleaned; it is not counted as a structured success or
+    failure). Pure observability: never alters structured/fallback behavior.
     """
     collector = get_current_collector()
     if collector is None:

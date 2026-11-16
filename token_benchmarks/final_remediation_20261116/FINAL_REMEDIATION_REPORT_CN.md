@@ -18,7 +18,7 @@
 ## 2. 修复内容（一句话版）
 
 1. **R12**：`finalize_single_pass` 的失败重试改为 `_free_text_retry` —— 弹掉尾部悬空 tool_call 的 assistant turn，并通过 `prompt | llm` 调用（system prompt 保留）；三处 fallback 出口统一使用。
-2. **DSML**：`sanitize_analyst_text` 在报告出口拦截协议 markup；能从 `summary/analysis/evidence/...` 参数恢复分析文本，否则写入明确的 `REPORT UNAVAILABLE`（非空、非 markup），并记录 `markup_sanitized` 事件。
+2. **DSML**：`sanitize_analyst_text` 在所有报告出口（single-pass prose、两层 fallback、两处 `structured_llm is None`）拦截协议 markup；优先保留 markup 之前的 prose，其次从 `summary/interpretation/risks/key_levels/...` 参数恢复，否则写入明确的 `REPORT UNAVAILABLE`（非空、非 markup）。审计 A 的 mixed prose+markup 丢内容、字段白名单过窄、直接 prose 出口漏 markup 均已修复。
 3. **rounds**：`run_data_tools` 每个非空工具批次记录一轮（`observability.record_tool_round`），空批次不计，失败仍计；与图 `ToolNode` 路径不重复计数。
 
 ## 3. 测试
@@ -26,8 +26,8 @@
 | 阶段 | 结果 |
 | --- | --- |
 | 修复前基线（同一 worktree） | 4 failed / 2207 passed / 2 skipped / 319 subtests（4 个均为该 worktree 固有：2 个跨 worktree 的 V3 规格路径检查 + 2 个 `cli_prefs` 环境耦合） |
-| 修复后完整套件 | **4 failed / 2221 passed / 2 skipped / 319 subtests**；**新增失败 0**；通过数 +14 |
-| 新增测试 | `tests/test_final_remediation.py` 14 项全部通过 |
+| 修复后完整套件 | **4 failed / 2226 passed / 2 skipped / 319 subtests**；**新增失败 0**；通过数 +19 |
+| 新增测试 | `tests/test_final_remediation.py` **19 项**全部通过 |
 | 专项 | observability/token/c3/memory/attribution/remediation **426 passed**；CAND-01+news+PIT+structured **360 passed, 86 subtests** |
 | 缺陷可检测性 | pre-fix 探针 **4/4 detected**；修复后 0/4 |
 | Mutation | 悬空 turn、丢 system prompt、跳过 sanitize、删除 round hook 全部被测试抓住 |

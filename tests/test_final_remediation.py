@@ -23,6 +23,7 @@ from tradingagents import observability as o
 from tradingagents.agents.utils.structured import (
     REPORT_UNAVAILABLE_TEMPLATE,
     _schema_tool_name,
+    finalize_analyst_report,
     finalize_single_pass,
     looks_like_protocol_markup,
     run_data_tools,
@@ -161,6 +162,69 @@ class TestR12Fallback:
         assert len(llm.seen) == 1
 
 
+class TestAuditAFollowUps:
+    """Findings from independent audit A on the first remediation candidate."""
+
+    def test_a_non_empty_prose_turn_is_sanitized_too(self):
+        markup = ('<｜｜DSML｜｜ calls> <｜｜DSML｜｜ invoke name="get_verified_market_snapshot"> '
+                  '<｜｜DSML｜｜ parameter name="symbol">XOM</｜｜DSML｜｜ parameter> '
+                  '</｜｜DSML｜｜ invoke> </｜｜DSML｜｜ calls>')
+        (text, _report, _messages), _llm = _run([AIMessage(content=markup)])
+        assert not looks_like_protocol_markup(text)
+        assert text.strip()
+
+    def test_structured_llm_none_still_sanitizes_the_two_call_fallback(self):
+        markup = TestDsmlSanitizer.R07_LIKE
+        text, report = finalize_analyst_report(
+            llm=None, structured_llm=None, messages=[HumanMessage(content="AAPL")],
+            render=_render, agent_name="market_analyst", free_text_block=markup)
+        assert report is None
+        assert not looks_like_protocol_markup(text)
+        assert "AAPL closed at 336.76" in text
+
+    def test_a_mixed_schema_plus_data_turn_leaves_no_dangling_call(self):
+        schema_name = _schema_tool_name(_Stance)
+        data_call = {"name": "get_indicators", "args": {"symbol": "JPM"},
+                     "id": "d-1", "type": "tool_call"}
+        schema_call = {"name": schema_name, "args": {"stance": "Mildly Bearish",
+                       "summary": "x"}, "id": "s-1", "type": "tool_call"}
+
+        def run_tools(batch):
+            return [ToolMessage(content="data", name=c["name"], tool_call_id=c["id"])
+                    for c in batch]
+
+        (text, _report, _messages), llm = _run([
+            AIMessage(content="", tool_calls=[data_call, schema_call]),
+            _schema_call({"stance": "Neutral", "summary": "final"}, "s-2"),
+        ], run_tools=run_tools)
+        assert text == "final"
+        assert len(llm.seen) == 2
+        assert _pairing_errors(llm.seen[1]) == [], (
+            "the mixed turn's schema call id was still unresolved on the next request")
+
+    def test_analysis_before_markup_is_kept(self):
+        prose = ("XOM trades at 112.40 above its 50-day average with rising volume and a "
+                 "constructive MACD; support sits at 108.20 and resistance at 118.00. "
+                 "The trend is intact but extended. ")
+        mixed = prose + ('<｜｜DSML｜｜ calls> <｜｜DSML｜｜ invoke name="get_prediction_markets"> '
+                         '<｜｜DSML｜｜ parameter name="symbol">XOM</｜｜DSML｜｜ parameter> '
+                         '</｜｜DSML｜｜ invoke> </｜｜DSML｜｜ calls>')
+        text, info = sanitize_analyst_text(mixed, agent_name="market_analyst")
+        assert info["markup"] is True
+        assert text.strip() == prose.strip()
+        assert not looks_like_protocol_markup(text)
+
+    def test_schema_fields_beyond_summary_are_recovered(self):
+        markup = ('<｜｜DSML｜｜ calls> <｜｜DSML｜｜ invoke name="final_report"> '
+                  '<｜｜DSML｜｜ parameter name="interpretation">MACD crossed above its signal line on 2026-09-21 and RSI is 58, so momentum is constructive but not extended.</｜｜DSML｜｜ parameter> '
+                  '<｜｜DSML｜｜ parameter name="risks">A daily close below 321.16 invalidates the setup, and a gap through 333.52 would force a fast reduction.</｜｜DSML｜｜ parameter> '
+                  '<｜｜DSML｜｜ parameter name="key_levels">Support sits at 321.16 and 333.52; resistance is 344.50 and 345.08.</｜｜DSML｜｜ parameter> '
+                  '</｜｜DSML｜｜ invoke> </｜｜DSML｜｜ calls>')
+        text, info = sanitize_analyst_text(markup, agent_name="market_analyst")
+        assert info["recovered_chars"] > 0
+        assert "MACD" in text and "321.16" in text and "344.50" in text
+
+
 class TestDsmlSanitizer:
     R07_LIKE = ('<｜｜DSML｜｜ calls> <｜｜DSML｜｜ invoke name="final_report"> '
                 '<｜｜DSML｜｜ parameter name="symbol" string="true">AAPL</｜｜DSML｜｜ parameter> '
@@ -263,3 +327,5 @@ class TestToolRounds:
         assert result[0].status == "error"
         assert len(collector.tool_rounds) == 1
         assert collector.tool_rounds[0].number_of_tool_calls == 1
+        assert collector.tool_rounds[0].status == "error", (
+            "a round whose every call failed should not be recorded as ok")
