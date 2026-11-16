@@ -50,5 +50,5 @@ $ git diff e3b5cca --stat
 ## 5. 已知残留（记录、接受）
 
 1. 该 worktree 的 2 个 V3 infra 测试因规格内嵌绝对路径而失败（跨 worktree 固有问题，非本轮引入）。
-2. markup 清理只写 warning 日志，不新增 structured event（避免 `structured_*` 重复计数）；如需聚合，可在下一版加专用计数列。
+2. markup 清理记录 `markup_sanitized` 事件并提供独立计数 `structured_markup_sanitized`；不计入 `structured_attempts`/`structured_fallbacks`，因此 `attempts == success + failure + unsupported` 仍成立。
 3. 单次 pass 的 `tool_rounds` 现在与图路径语义一致，但历史 V3 数据的 `tool_rounds=0` 保持原样（不重写历史）。

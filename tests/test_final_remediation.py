@@ -266,6 +266,37 @@ class TestDsmlSanitizer:
         assert "SMA" in text
 
 
+class TestMarkupTelemetry:
+    def test_one_markup_fallback_is_one_attempt_with_its_own_counter(self):
+        """Audit A/B: the markup event must be recorded, but not as a second
+        structured attempt (attempts == success + failure + unsupported)."""
+        markup = TestDsmlSanitizer.R14_LIKE
+        collector = o.RunMetricsCollector()
+        collector.begin_run(ticker="XOM", trade_date="2026-09-23")
+        llm = _Scripted([
+            _schema_call({"stance": "Mildly Bearish", "summary": "x"}),
+            AIMessage(content=markup),
+        ])
+        with o.run_scoped(collector), o.agent_scoped("market_analyst"):
+            text, _report, _messages = finalize_single_pass(
+                llm=llm, structured_llm=llm, prompt=_prompt(),
+                messages=[HumanMessage(content="XOM")], tools=[], schema=_Stance,
+                render=_render, agent_name="market_analyst",
+                run_tools=lambda batch: [], state={},
+            )
+        collector.finish_run("completed")
+        payload = collector.build_telemetry()
+        agg = payload["agents"]["market_analyst"]
+        kinds = [e["kind"] for e in payload["structured_events"]]
+        assert "markup_sanitized" in kinds
+        assert agg["structured_attempts"] == 1
+        assert agg["structured_markup_sanitized"] == 1
+        assert agg["structured_attempts"] == (
+            agg["structured_successes"] + agg["structured_failures"]
+            + agg["structured_unsupported"])
+        assert not looks_like_protocol_markup(text)
+
+
 class TestToolRounds:
     class _Tool:
         name = "t"

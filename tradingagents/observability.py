@@ -1730,6 +1730,7 @@ def _new_agent_aggregate() -> dict[str, Any]:
         "structured_failures": 0,
         "structured_fallbacks": 0,
         "structured_unsupported": 0,
+        "structured_markup_sanitized": 0,
         "node_invocations": 0,
         "node_wall_time_ms": 0.0,
     }
@@ -1812,6 +1813,13 @@ def _build_telemetry_dict(collector: RunMetricsCollector) -> dict[str, Any]:
     # Structured output.
     for ev in collector.structured_events:
         a = agg(ev.agent_id)
+        if ev.kind == "markup_sanitized":
+            # A report was cleaned of tool-call protocol markup. This is a
+            # *detail* of the fallback that already produced an attempt, not a
+            # second attempt: counting it here would make
+            # ``attempts != success + failure + unsupported`` (audit B, M1).
+            a["structured_markup_sanitized"] += 1
+            continue
         a["structured_attempts"] += 1
         if ev.kind == "success":
             a["structured_successes"] += 1
@@ -2590,8 +2598,9 @@ def record_structured_attempt(
 
     ``kind`` is ``"success"``, ``"failure"``, ``"unsupported"`` or
     ``"markup_sanitized"`` (the last records that a report containing tool-call
-    protocol markup was cleaned; it is not counted as a structured success or
-    failure). Pure observability: never alters structured/fallback behavior.
+    protocol markup was cleaned; it has its own counter and is excluded from
+    ``structured_attempts``, which stays ``success + failure + unsupported``).
+    Pure observability: never alters structured/fallback behavior.
     """
     collector = get_current_collector()
     if collector is None:

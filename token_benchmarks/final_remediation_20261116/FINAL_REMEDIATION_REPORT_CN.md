@@ -27,7 +27,7 @@
 | --- | --- |
 | 修复前基线（同一 worktree） | 4 failed / 2207 passed / 2 skipped / 319 subtests（4 个均为该 worktree 固有：2 个跨 worktree 的 V3 规格路径检查 + 2 个 `cli_prefs` 环境耦合） |
 | 修复后完整套件 | **4 failed / 2226 passed / 2 skipped / 319 subtests**；**新增失败 0**；通过数 +19 |
-| 新增测试 | `tests/test_final_remediation.py` **19 项**全部通过 |
+| 新增测试 | `tests/test_final_remediation.py` **20 项**全部通过 |
 | 专项 | observability/token/c3/memory/attribution/remediation **426 passed**；CAND-01+news+PIT+structured **360 passed, 86 subtests** |
 | 缺陷可检测性 | pre-fix 探针 **4/4 detected**；修复后 0/4 |
 | Mutation | 悬空 turn、丢 system prompt、跳过 sanitize、删除 round hook 全部被测试抓住 |

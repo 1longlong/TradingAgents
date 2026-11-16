@@ -447,6 +447,10 @@ def sanitize_analyst_text(text: str, *, agent_name: str) -> tuple[str, dict[str,
         logger.warning(
             "%s: kept %d chars of prose and dropped trailing tool-call markup",
             agent_name, len(prose_before))
+        record_structured_attempt(
+            agent_name, kind="markup_sanitized", used_fallback=True,
+            error=ValueError("kept prose, dropped trailing tool-call protocol markup"),
+        )
         return prose_before, {"markup": True, "recovered_chars": len(prose_before),
                               "raw_chars": len(text)}
     recovered = []
@@ -461,6 +465,10 @@ def sanitize_analyst_text(text: str, *, agent_name: str) -> tuple[str, dict[str,
             "%s: recovered %d chars of analysis from tool-call protocol markup "
             "(raw reply %d chars was discarded)", agent_name, len(recovered_text),
             len(text))
+        record_structured_attempt(
+            agent_name, kind="markup_sanitized", used_fallback=True,
+            error=ValueError("recovered report text from tool-call protocol markup"),
+        )
         return recovered_text, {"markup": True, "recovered_chars": len(recovered_text),
                                 "raw_chars": len(text)}
     unavailable = REPORT_UNAVAILABLE_TEMPLATE.format(agent=agent_name)
@@ -468,6 +476,10 @@ def sanitize_analyst_text(text: str, *, agent_name: str) -> tuple[str, dict[str,
         "%s: reply was tool-call protocol markup with no analysis text; "
         "storing an explicit REPORT UNAVAILABLE (raw %d chars)",
         agent_name, len(text))
+    record_structured_attempt(
+        agent_name, kind="markup_sanitized", used_fallback=True,
+        error=ValueError("tool-call protocol markup contained no analysis text"),
+    )
     return unavailable, {"markup": True, "recovered_chars": 0, "raw_chars": len(text)}
 
 

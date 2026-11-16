@@ -30,7 +30,7 @@ R14 只有 346 字符（仅一次 snapshot 调用，无分析），R07 有 1,922
 - 应用点：`_free_text_retry`（single-pass 的全部 fallback 出口）、`finalize_single_pass` 的**直接 prose 出口**、以及 `finalize_analyst_report` / `finalize_single_pass` 的两处 `structured_llm is None` 出口。审计 A/B 指出这些出口原先会漏出 markup，已全部覆盖。
 - 混合文本（分析 + 尾部 markup）保留第一个协议标记之前的全部 prose，而不是整段丢弃。
 - 参数白名单扩展到 schema 的真实字段：`interpretation`、`risks`、`key_levels`、`key_figures`、`invalidation`、`scenario_set`、`catalysts`、`valuation` 等。
-- 遥测：markup 清理写 warning 日志，但**不再**额外记一条 `markup_sanitized` structured event（审计 B M1：那会使 `structured_attempts` 重复计数）；`structured_*` 计数保持“每个 fallback 恰好一条事件”。
+- 遥测：markup 清理写 warning 日志，并记录一条 `markup_sanitized` structured event；该事件有**独立计数** `structured_markup_sanitized`，**不**计入 `structured_attempts`/`structured_fallbacks`，因此 `attempts == success + failure + unsupported` 仍成立（同时满足审计 A 的“必须记录”与审计 B 的“不得重复计数”）。
 
 ## 3. 测试（R07/R14 脱敏历史）
 
