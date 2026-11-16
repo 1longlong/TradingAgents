@@ -268,3 +268,8 @@ token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/c3/FROZEN_COMMIT
 token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/c3/FREEZE_RECORD.json
 token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/c3/FREEZE_HISTORY.jsonl
 token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/c3/FINAL_FREEZE_REPORT.md
+
+# Final remediation release metadata (written after the code commit, like the V2/V3 freeze files)
+token_benchmarks/final_remediation_20261116/FINAL_FREEZE_REPORT.md
+token_benchmarks/final_remediation_20261116/FINAL_COMMIT.txt
+token_benchmarks/final_remediation_20261116/MANIFEST.sha256
