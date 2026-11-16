@@ -184,7 +184,7 @@ class TestValidationFailsClosed:
         spec_path.parent.mkdir(parents=True)
         spec_path.write_text(json.dumps(spec))
         spec["_spec_path"] = str(spec_path)
-        with pytest.raises(tb.RunRefused, match="no memory isolation block"):
+        with pytest.raises(tb.RunRefused, match="no memory isolation block|missing required field"):
             tb._preflight_gate(spec)
 
     def test_a_registration_with_a_wrong_snapshot_hash_is_refused(self, tmp_path):
@@ -335,6 +335,23 @@ class TestHarnessRecordsMemory:
         assert metrics["memory"]["baseline_unchanged"] is False
 
 
+class TestStrippedSpecCannotRun:
+    def test_a_spec_claiming_r01_without_its_definition_is_refused(self):
+        """Audit B M1: deleting the identity fields must not fall back to the
+        shipped default arm and the shared developer log."""
+        spec = {
+            "experiment_id": "R01",
+            "case": {"case_id": "NVDA_2026-09-23", "ticker": "NVDA",
+                     "trade_date": "2026-09-23", "analysts": ["market"],
+                     "research_rounds": 1, "risk_rounds": 1},
+            "provider": "openai_compatible",
+            "quick_model": "CS5351/DeepSeek-V4-Flash",
+            "deep_model": "CS5351/DeepSeek-V4-Flash",
+        }
+        with pytest.raises(tb.RunRefused, match="registered run"):
+            tb._preflight_gate(spec)
+
+
 class TestMemoryEvidenceIsRequired:
     def test_a_memory_run_without_state_evidence_is_invalid(self, tmp_path):
         """Audit A/C M1: a run that declares isolation but leaves no
@@ -380,7 +397,7 @@ class TestDoctoredRegistrationCannotBypassIsolation:
         spec_path.parent.mkdir(parents=True)
         spec_path.write_text(json.dumps(spec))
         spec["_spec_path"] = str(spec_path)
-        with pytest.raises(tb.RunRefused, match="no memory isolation block"):
+        with pytest.raises(tb.RunRefused, match="no memory isolation block|missing required field"):
             tb._preflight_gate(spec)
 
     def test_the_registration_preflight_also_refuses_it(self, tmp_path, monkeypatch):

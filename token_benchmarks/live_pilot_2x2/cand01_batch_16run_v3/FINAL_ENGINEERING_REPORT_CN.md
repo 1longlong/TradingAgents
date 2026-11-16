@@ -1,7 +1,7 @@
 # CAND-01 V3 工程修复最终报告
 
 **日期：** 2026-11-16 · **基线：** `15270b1` / tree `c827f414…` / 指纹 `03c76db6…`
-**结论：** 两个根因均已修复并有测试证据；新增 45 个测试全部通过；全量测试无新增失败；等待三方独立审计对新冻结版本的结论。
+**结论：** 两个根因均已修复并有测试证据；新增 46 个测试全部通过；全量测试无新增失败；等待三方独立审计对新冻结版本的结论。
 
 ## 1. 两个根因是否彻底解决
 
@@ -37,15 +37,15 @@
 | 文件 | 数量 | 通过 |
 | --- | --- | --- |
 | `tests/test_system_attribution.py` | 13 | 13 |
-| `tests/test_memory_isolation.py` | 20 | 20 |
+| `tests/test_memory_isolation.py` | 21 | 21 |
 | `tests/test_cand01_batch_16run_v3_infra.py` | 12 | 12 |
-| **合计** | **45** | **45** |
+| **合计** | **46** | **46** |
 
 ## 3. 完整测试结果
 
 | | 基线 `15270b1` | 本候选 |
 | --- | --- | --- |
-| passed | 2,163 | **2,208**（+45） |
+| passed | 2,163 | **2,209**（+46） |
 | failed | 2 | 2（同一组） |
 | skipped | 2 | 2 |
 | subtests | 319 | 319 |
@@ -55,8 +55,19 @@
 
 ## 4. 三方独立审计
 
-由三个只读 Subagent 对同一不可变 commit/tree/fingerprint 执行，结论见
-`INDEPENDENT_AUDIT_A.md`、`INDEPENDENT_AUDIT_B.md`、`INDEPENDENT_AUDIT_C.md`。
+三个只读 Subagent 在独立上下文中审计了候选 `6e66dca`（tree `3119b075`），
+并在修复后对 `f19d6ed`（tree `5f6640ac`）做了增量复核。
+
+| 审计 | 结论 | 主要发现（均已在冻结前修复） |
+| --- | --- | --- |
+| A（产品代码与 Memory） | PASS_WITH_FINDINGS | 无 memory_state.json 时 fail-open；scope API 可把 agent 伪装成 system；U-1 信任自报标志；NVDA/AAPL 快照不对称 |
+| B（Harness 与协议） | PASS_WITH_FINDINGS | schema 3 被拒、gate 比较 9 vs 3 字段（已在 6e66dca 修）；通用子进程绕过；臂矩阵硬编码 V2；文档断言 |
+| C（Usage、遥测与安全） | PASS_WITH_FINDINGS | 无状态文件时 fail-open；U-1 只看聚合标志；`.env`/历史/密钥未受影响 |
+
+修复项：M1 缺证据即 INVALID；A1/A2 归因完整性加固；L1 臂矩阵随活动批次；
+L2/L4/L5 文档更正；快照改为**空且对称**（两条日志条目都是本研究先前运行
+生成的，保留 NVDA 会让唯一完整 2×2 块获得记忆优势；见 provenance 的
+`empty_baseline/empty_reason`）。完整报告见同目录 `INDEPENDENT_AUDIT_A/B/C.md`。
 
 ## 5. 新 commit / tag
 

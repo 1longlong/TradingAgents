@@ -69,6 +69,12 @@ therefore shared mutable state: R05 changed R06's execution path. V3 fixes this:
 Provenance of the baseline (what was kept, what was excluded, and why) is in
 `memory/baseline_v3.provenance.json` and in `MEMORY_SNAPSHOT_PROVENANCE.md`.
 
+**The baseline is empty** (`sha256 e3b0c442…b855`, 0 entries). Both entries in
+the developer log were created by prior runs of this study (NVDA by an earlier
+round, AAPL by the 2026-11-16 V2 batch), so keeping either would have given one
+ticker a memory advantage. Every V3 run therefore starts with no memory
+context, symmetrically; the provenance records `empty_baseline` and the reason.
+
 ## 2. Usage attribution validation
 
 Every provider-usage event must carry:

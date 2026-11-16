@@ -3814,6 +3814,25 @@ def _preflight_gate(spec: dict, *, memory_attempt_dir: Path | None = None) -> di
     # legitimate measurement rather than a malformed one. ``_spec_belongs_to_
     # frozen_batch`` also checks the spec's path, so deleting the field that
     # says "I am R01" cannot downgrade a registered run to a generic one.
+    # A spec that names a registered Run ID must carry that run's definition.
+    # The path-based check below is skipped for a spec outside the batch, so a
+    # stripped spec could otherwise claim "R01" and fall back to DEFAULT_CONFIG
+    # (the AB arm) and the shared developer log (audit B M1).
+    run_id_claim = spec.get("experiment_id")
+    if run_id_claim and run_id_claim in _frozen_switch_matrix():
+        required_definition = ["config_sha256", "switches", "registration_dir"]
+        if _requires_memory_isolation(
+                _load_json(_frozen_batch_dir() / EXPERIMENT_FILE)
+                if (_frozen_batch_dir() / EXPERIMENT_FILE).is_file() else {}):
+            required_definition.append("memory")
+        absent = [key for key in required_definition if not spec.get(key)]
+        if absent:
+            raise RunRefused(
+                f"{run_id_claim} is a registered run, but the spec is missing "
+                f"required field(s) {absent}; a registered run cannot fall back "
+                f"to the shipped default arm or the shared memory log"
+            )
+
     if _spec_belongs_to_frozen_batch(spec):
         missing_required = [key for key in _SPEC_REQUIRED_FIELDS if key not in spec]
         if missing_required:
