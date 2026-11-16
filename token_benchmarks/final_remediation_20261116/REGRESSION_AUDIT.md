@@ -45,7 +45,7 @@ $ git diff e3b5cca --stat
 
 - 模型、temperature、prompt 文本、schema 定义、single-pass 的轮次预算（`SINGLE_PASS_MAX_ROUNDS`）均未改。
 - 只改“失败后如何重试”“报告文本如何清理”“轮次如何记录”三处。
-- `markup_sanitized` 是新的事件 kind，不参与 success/failure/unsupported 计数；telemetry schema 版本不需要升级（无字段变更）。
+- `markup_sanitized` 是新的事件 kind，不参与 success/failure/unsupported 计数；新增的是**向后兼容**的聚合字段 `structured_markup_sanitized`（per-agent 与 run_totals），旧 payload 仍可读，因此 telemetry schema 版本不需要升级。
 
 ## 5. 已知残留（记录、接受）
 

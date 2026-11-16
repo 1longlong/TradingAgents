@@ -1878,6 +1878,7 @@ def _build_telemetry_dict(collector: RunMetricsCollector) -> dict[str, Any]:
         "structured_failures": sum(a["structured_failures"] for a in all_buckets),
         "structured_fallbacks": sum(a["structured_fallbacks"] for a in all_buckets),
         "structured_unsupported": sum(a["structured_unsupported"] for a in all_buckets),
+        "structured_markup_sanitized": sum(a["structured_markup_sanitized"] for a in all_buckets),
         "node_invocations": sum(a["node_invocations"] for a in all_buckets),
         "node_wall_time_ms": round(sum(a["node_wall_time_ms"] for a in all_buckets), 3),
     }

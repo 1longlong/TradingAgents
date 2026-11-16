@@ -60,6 +60,6 @@ CAND-01 single-pass、PIT、Finnhub-only/GDELT 禁用/PF-01、Memory 隔离、sy
 ## 8. 明确的残留（记录、接受）
 
 1. 跨 worktree 的 V3 规格绝对路径导致该 worktree 的 2 个 infra 测试失败（非本轮引入；原始 `cand01_v3` 中仅 `cli_prefs` 2 项失败）。
-2. `markup_sanitized` 事件只进入 `structured_events` 与日志，未新增 summary 列。
+2. `markup_sanitized` 事件有独立计数 `structured_markup_sanitized`（per-agent + `run_totals`），不计入 `structured_attempts`/`structured_fallbacks`；summary CSV 的列未新增。
 3. 历史 V3 的 `tool_rounds=0` 不重写；新运行才有真实值。
 4. 没有重新跑任何真实实验；R12 的修复仅由离线夹具验证。

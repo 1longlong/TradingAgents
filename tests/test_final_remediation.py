@@ -294,6 +294,7 @@ class TestMarkupTelemetry:
         assert agg["structured_attempts"] == (
             agg["structured_successes"] + agg["structured_failures"]
             + agg["structured_unsupported"])
+        assert payload["run_totals"]["structured_markup_sanitized"] == 1
         assert not looks_like_protocol_markup(text)
 
 
