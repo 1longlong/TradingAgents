@@ -56,7 +56,8 @@ from tradingagents.dataflows.utils import safe_ticker_component
 # ``news_scope`` and ``budget`` -- and the run-level ``experiment_root``. The
 # validator still accepts v1 so every archived experiment stays readable.
 TOOL_SCHEMA_VERSION = 2
-SUPPORTED_EXPERIMENT_SCHEMAS = (1, 2)
+#: 3 adds the per-run memory-isolation contract (V3).
+SUPPORTED_EXPERIMENT_SCHEMAS = (1, 2, 3)
 
 # Valid analyst wire keys as used by ``GraphSetup`` / ``TradingAgentsGraph``.
 VALID_ANALYSTS = ("market", "social", "news", "fundamentals")
@@ -1858,6 +1859,23 @@ def _requires_memory_isolation(definition: dict | None) -> bool:
     return str(definition.get("protocol_version") or "").startswith("V3")
 
 
+def _batch_requires_memory_isolation(registration_dir: Path) -> bool:
+    """Whether a registration's *batch* declares the memory contract.
+
+    A per-run registration can be edited to drop ``memory`` and
+    ``protocol_version``; the batch experiment cannot be, because the gate
+    reads it as well. This is the durable half of the requirement.
+    """
+    path = Path(registration_dir)
+    directory = path.parent if path.is_file() else path
+    batch = _memory_batch_dir(directory)
+    try:
+        experiment = _load_json(batch / EXPERIMENT_FILE)
+    except Exception:  # noqa: BLE001 - no readable batch contract to enforce
+        return False
+    return _requires_memory_isolation(experiment)
+
+
 def _memory_batch_dir(exp_dir: Path) -> Path:
     """The batch directory a registration lives in (``<batch>/specs/<run>``)."""
     return Path(exp_dir).resolve().parents[1]
@@ -2921,8 +2939,13 @@ def _preflight_registration(exp_dir: Path, experiment: dict, case: dict) -> None
         # V3: a registration of this protocol that declares no memory snapshot
         # is refused before any attempt directory exists. V2 registrations stay
         # runnable (they predate the isolation contract).
-        if _requires_memory_isolation(experiment):
-            memory_block_for_registration(exp_dir, experiment)
+        if (_requires_memory_isolation(experiment)
+                or _batch_requires_memory_isolation(exp_dir)):
+            block = memory_block_for_registration(exp_dir, experiment)
+            if block is None:
+                raise RunRefused(
+                    "registration declares no memory snapshot; a V3 run must "
+                    "start from one immutable snapshot")
 
 
 def _mark_run_started(exp_dir: Path, experiment: dict, case: dict, run_index: int,
@@ -3776,10 +3799,21 @@ def _preflight_gate(spec: dict, *, memory_attempt_dir: Path | None = None) -> di
         # its own it cannot notice that the spec file disagrees with the
         # registration it points at. Compare every field the two share.
         if isinstance(definition, dict):
+            # ``memory`` is declared by the registration and *specialised* by
+            # the attempt (run copy path/hash, pending counts). Compare only
+            # the declared fields; the run-specific ones are validated by
+            # ``validate_memory_spec`` against the snapshot itself.
+            spec_view, definition_view = spec, definition
+            if isinstance(spec.get("memory"), dict) and isinstance(definition.get("memory"), dict):
+                declared = ("mode", "baseline_relpath", "baseline_sha256")
+                spec_view = dict(spec, memory={k: spec["memory"].get(k) for k in declared})
+                definition_view = dict(definition,
+                                       memory={k: definition["memory"].get(k) for k in declared})
             disagreement = {
-                key: (spec[key], definition[key])
-                for key in set(spec) & set(definition)
-                if key not in _SPEC_VOLATILE_FIELDS and spec[key] != definition[key]
+                key: (spec_view[key], definition_view[key])
+                for key in set(spec_view) & set(definition_view)
+                if key not in _SPEC_VOLATILE_FIELDS
+                and spec_view[key] != definition_view[key]
             }
             if disagreement:
                 raise RunRefused(
@@ -3884,7 +3918,9 @@ def _preflight_gate(spec: dict, *, memory_attempt_dir: Path | None = None) -> di
         if attempt_dir is None and spec.get("_spec_path"):
             attempt_dir = Path(spec["_spec_path"]).parent
         validate_memory_spec(spec, attempt_dir=attempt_dir)
-    elif _requires_memory_isolation(registration):
+    elif (_requires_memory_isolation(registration)
+          or (registration_path is not None
+              and _batch_requires_memory_isolation(registration_path))):
         raise RunRefused(
             "spec carries no memory isolation block; a V3 run must start from "
             "its own copy of the immutable snapshot")

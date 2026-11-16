@@ -73,6 +73,15 @@ def test_config_hashes_recompute_and_are_distinct():
     assert len(set(hashes)) == 16
 
 
+def test_schema_3_is_accepted_by_the_harness():
+    """The harness must run a V3 registration, not reject it on schema."""
+    import scripts.token_benchmark as tb
+
+    assert 3 in tb.SUPPORTED_EXPERIMENT_SCHEMAS
+    registration = _runs()[0]
+    tb.validate_experiment(registration)  # must not raise
+
+
 def test_the_hashed_field_set_includes_memory():
     assert "memory" in gv3.HASHED_FIELDS
     import scripts.token_benchmark as tb

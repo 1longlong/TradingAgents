@@ -335,6 +335,40 @@ class TestHarnessRecordsMemory:
         assert metrics["memory"]["baseline_unchanged"] is False
 
 
+class TestDoctoredRegistrationCannotBypassIsolation:
+    def test_dropping_memory_and_protocol_version_is_still_refused(self, tmp_path, monkeypatch):
+        """Audit B: deleting the two fields that *declare* isolation must not
+        turn a V3 run into a shared-memory run. The batch contract still says
+        isolation, so the spec without a memory block is refused."""
+        batch = _copy_batch(tmp_path)
+        monkeypatch.setenv("TRADINGAGENTS_C3_BATCH", str(batch))
+        directory = batch / "specs" / "R01_NVDA_C0"
+        registration = json.loads((directory / "experiment.json").read_text())
+        registration.pop("memory")
+        registration.pop("protocol_version")
+        registration["config_sha256"] = tb.registration_sha256(registration)
+        (directory / "experiment.json").write_text(json.dumps(registration))
+        spec = tb.build_run_spec(directory, registration, registration["cases"][0], 1, 1)
+        assert "memory" not in spec
+        spec_path = directory / "runs" / "run_01" / "attempt_01" / "spec.json"
+        spec_path.parent.mkdir(parents=True)
+        spec_path.write_text(json.dumps(spec))
+        spec["_spec_path"] = str(spec_path)
+        with pytest.raises(tb.RunRefused, match="no memory isolation block"):
+            tb._preflight_gate(spec)
+
+    def test_the_registration_preflight_also_refuses_it(self, tmp_path, monkeypatch):
+        batch = _copy_batch(tmp_path)
+        monkeypatch.setenv("TRADINGAGENTS_C3_BATCH", str(batch))
+        directory = batch / "specs" / "R01_NVDA_C0"
+        registration = json.loads((directory / "experiment.json").read_text())
+        registration.pop("memory")
+        registration.pop("protocol_version")
+        registration["config_sha256"] = tb.registration_sha256(registration)
+        with pytest.raises(tb.RunRefused, match="no memory snapshot"):
+            tb._preflight_registration(directory, registration, registration["cases"][0])
+
+
 class TestBaselineProvenance:
     def test_the_baseline_has_no_pending_entries(self):
         text = BASELINE.read_text(encoding="utf-8")
