@@ -1,0 +1,38 @@
+{
+  // CS5351 project OpenCode permissions.
+  // NOTE (uncertainty): the exact schema for permissions.jsonc could not be
+  // fully verified against the installed OpenCode version in this environment.
+  // This is the minimal documented form; it uses only widely-supported keys.
+  // See docs/debt-register.md (DEBT-004) and docs/architecture/risk-list.md.
+  //
+  // Rules are DENY by default; explicit allow/ask entries are the only things
+  // that permit an action. No network or paid-API permission is granted here.
+
+  "allow": [
+    "read",
+    "edit",
+    "bash:pytest",
+    "bash:ruff"
+  ],
+  "ask": [
+    "bash:git commit",
+    "bash:git push"
+  ],
+  "deny": [
+    "bash:git push:force",
+    "bash:git rebase",
+    "bash:git checkout origin/*",
+    "bash:git branch -D",
+    // Block any command that fetches external data or calls a paid LLM.
+    "bash:curl",
+    "bash:wget",
+    "bash:*openai*",
+    "bash:*anthropic*",
+    "bash:*google*",
+    // Block reading environment/secret files.
+    "read:.env",
+    "read:.env.enterprise",
+    "read:*.pem",
+    "read:*.key"
+  ]
+}

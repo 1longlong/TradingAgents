@@ -59,3 +59,24 @@ jobs:
         # The repo is fully clean under the strict select, so we lint everything
         # (generated results/ is excluded via pyproject extend-exclude).
         run: ruff check .
+
+  # ---------------------------------------------------------------------------
+  # Safe, deterministic governance gate (added by CS5351 scaffold).
+  # Validates the required artifact tree, parses JSON/JSONC/YAML, validates
+  # docs/req/requirements.yaml against docs/req/req-schema.json using the REAL
+  # draft-2020-12 JSON Schema (jsonschema is installed here so the actual
+  # schema — not the local subset fallback — is enforced), and scans for likely
+  # secrets. It is fully offline: no network, no paid API, no vendor call.
+  # ---------------------------------------------------------------------------
+  governance-validation:
+    name: governance documentation/schema validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install validation deps (jsonschema for real schema, PyYAML for YAML)
+        run: pip install jsonschema pyyaml
+      - name: Validate required artifacts, YAML/JSONC, real schema, and secrets
+        run: python scripts/validate/validate_requirements.py
