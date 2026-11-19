@@ -79,3 +79,23 @@ Legend:
 4. A changed requirement or test plan needs a new human review before dependent implementation.
 5. This matrix is updated in the same change as the code or test it maps.
 6. `planned` never means `passing`; only `docs/architecture/evaluation-logbook.md` records executed results.
+
+
+## Analysis-path repair mapping — 2026-11-06
+
+Execution results are recorded in `evaluation-logbook.md`; the following nodes map the repaired contracts without changing requirement approval status.
+
+| Requirements / invariants | Verification nodes |
+| --- | --- |
+| REQ-WEB-001, REQ-WEB-013 | `test/offline/test_web_analysis_flow.py::test_server_endpoint_and_locks_survive_browser_defaults`; frontend `tests/analysis-flow.test.tsx` provider/model submission case |
+| REQ-WEB-002, REQ-WEB-005, REQ-WEB-009, INV-WEB-001 | `test/offline/test_web_analysis_flow.py::test_real_graph_runner_through_core_graph_to_report` |
+| REQ-WEB-007 | `test/offline/test_web_analysis_flow.py::test_completed_snapshot_contains_report_messages_and_counters`, `test_expired_event_cursor_returns_full_snapshot`; frontend reload/failure snapshot cases; Chromium wizard completion/reload case |
+| INV-WEB-003 | `test/offline/test_web_analysis_flow.py::test_real_runner_failure_is_correlated_and_redacted` |
+| INV-WEB-009 | `test/offline/test_web_analysis_flow.py::test_artifact_initialization_failure_releases_slot` |
+| REQ-WEB-009, INV-WEB-001 | `test/offline/test_web_analysis_flow.py::test_repeated_analysis_keeps_each_run_and_legacy_artifacts` |
+| REQ-WEB-002, REQ-WEB-007 | `test/offline/test_web_analysis_flow.py::test_resumed_run_is_running`; frontend `tests/run-store.test.ts` resumed/snapshot fallback cases |
+
+
+### Market-data error follow-up — 2026-11-06
+
+REQ-WEB-002/005 and INV-WEB-003/010 map to `test/offline/test_web_analysis_flow.py::test_real_market_tool_rate_limit_is_not_reported_as_llm_failure` and `::test_failure_categories_do_not_expose_exception_details`. A failed data request must remain a failed task with a truthful market-data explanation; these cases do not authorize fabricated data, a successful result, or implicit vendor fallback.

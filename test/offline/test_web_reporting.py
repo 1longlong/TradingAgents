@@ -99,7 +99,7 @@ def test_run_writes_message_log_sections_and_complete_report(tree_client):
     terminal = wait_terminal(client, run_id)
     assert terminal["status"] == "completed"
 
-    run_dir = tree.results_dir / "AAPL" / "2026-11-03"
+    run_dir = tree.results_dir / "web_runs" / run_id
     assert (run_dir / "message_tool.log").is_file()
     assert (run_dir / "reports" / "market_report.md").is_file()
     assert (run_dir / "reports" / "final_trade_decision.md").is_file()
@@ -113,7 +113,7 @@ def test_run_does_not_write_full_states_log(tree_client):
     tree, client = tree_client
     started = client.post("/api/runs", json=_body())
     wait_terminal(client, started.json()["run_id"])
-    state_logs = list((tree.results_dir / "AAPL").rglob("full_states_log_*.json"))
+    state_logs = list((tree.results_dir / "web_runs").rglob("full_states_log_*.json"))
     assert state_logs == []
 
 

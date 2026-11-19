@@ -54,7 +54,17 @@
     "medium": "中等",
     "deep": "深度",
     "keyConfigured": "密钥已配置",
-    "keyNotConfigured": "密钥未配置"
+    "keyNotConfigured": "密钥未配置",
+    "modelsRequired": "请填写快速模型和深度模型。",
+    "loadingConfig": "正在加载服务端配置…",
+    "envLocked": "由服务端环境配置锁定。",
+    "serverEndpoint": "使用服务端配置的模型接口。",
+    "keyStatus": {
+      "configured": "密钥已配置",
+      "not_configured": "服务端尚未配置该提供商的密钥。",
+      "not_required": "无需 API 密钥",
+      "unknown": "请检查服务端认证配置"
+    }
   },
   "live": {
     "title": "实时运行",
@@ -69,7 +79,13 @@
     "connection": "连接",
     "runId": "运行 ID",
     "status": "状态",
-    "waiting": "等待事件..."
+    "waiting": "等待事件...",
+    "phases": {
+      "preparing": "准备中",
+      "configuration": "初始化模型服务",
+      "context": "加载分析上下文",
+      "analysis": "执行分析"
+    }
   },
   "report": {
     "title": "报告",

@@ -1,8 +1,10 @@
-"""Translate accumulated graph chunks into WebUI events."""
+"""Project real graph state: REQ-WEB-002, ADR-001, INV-WEB-014."""
 
 from __future__ import annotations
 
 from datetime import datetime
+
+from tradingagents.graph.analyst_execution import ANALYST_NODE_SPECS
 
 _SECTION_TITLES = {
     "market_report": "Market Analysis",
@@ -18,9 +20,11 @@ _SECTION_TITLES = {
 class StreamProjector:
     """Stateful projector for LangGraph ``stream_mode='values'`` chunks."""
 
-    def __init__(self):
+    def __init__(self, analysts=None):
         self._seen_messages: set[str] = set()
         self.sections: dict[str, str] = {}
+        self.analysts = list(ANALYST_NODE_SPECS if analysts is None else analysts)
+        self._statuses: dict[str, str] = {}
 
     def project(self, chunk: dict) -> list[dict]:
         events: list[dict] = []
@@ -110,4 +114,34 @@ class StreamProjector:
                 }
             )
 
+        # Infer progress from actual graph state, as the CLI does (REQ-WEB-002).
+        phases = [
+            (
+                ANALYST_NODE_SPECS[key].agent_node,
+                bool(chunk.get(ANALYST_NODE_SPECS[key].report_key)),
+            )
+            for key in self.analysts
+        ]
+        phases.extend(
+            [
+                (
+                    "Research Team",
+                    bool(chunk.get("investment_plan") or debate.get("judge_decision")),
+                ),
+                ("Trader", bool(chunk.get("trader_investment_plan"))),
+                (
+                    "Risk Team",
+                    bool(chunk.get("final_trade_decision") or risk.get("judge_decision")),
+                ),
+            ]
+        )
+        active_found = False
+        for agent, complete in phases:
+            status = "completed" if complete else "pending" if active_found else "in_progress"
+            active_found = active_found or not complete
+            if self._statuses.get(agent) != status:
+                self._statuses[agent] = status
+                events.append(
+                    {"type": "agent.status", "payload": {"agent": agent, "status": status}}
+                )
         return events

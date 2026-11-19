@@ -1,3 +1,4 @@
+// REQ-WEB-002/007, ADR-007: restore snapshots before consuming subsequent events.
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
@@ -13,7 +14,11 @@ export function LiveRunPage() {
   const { t } = useTranslation();
   const { runId = "" } = useParams();
   const [store] = useState(() => createRunStore());
-  const state = useSyncExternalStore(store.subscribe, store.getState, store.getState);
+  const state = useSyncExternalStore(
+    store.subscribe,
+    store.getState,
+    store.getState,
+  );
   const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -22,11 +27,17 @@ export function LiveRunPage() {
 
     async function connect() {
       try {
-        const snapshot = (await getRun(runId)) as unknown as Record<string, unknown>;
+        const snapshot = (await getRun(runId)) as unknown as Record<
+          string,
+          unknown
+        >;
         if (stopped) return;
         store.getState().applySnapshot(snapshot);
+        if (TERMINAL.has(String(snapshot.status))) return;
         store.getState().setConnection("connecting");
-        source = new EventSource(runEventsUrl(runId, Number(snapshot.last_seq ?? 0)));
+        source = new EventSource(
+          runEventsUrl(runId, Number(snapshot.last_seq ?? 0)),
+        );
         source.onopen = () => store.getState().setConnection("live");
         source.onerror = () => store.getState().setConnection("reconnecting");
 
@@ -34,7 +45,7 @@ export function LiveRunPage() {
           try {
             const event = JSON.parse(message.data) as RunEvent;
             store.getState().applyEvent(event);
-            if (["run.completed", "run.failed", "run.cancelled"].includes(event.type)) {
+            if (TERMINAL.has(store.getState().status)) {
               source?.close();
               store.getState().setConnection("closed");
             }
@@ -45,6 +56,7 @@ export function LiveRunPage() {
 
         for (const eventType of [
           "run.preparing",
+          "run.phase",
           "run.started",
           "run.resumed",
           "agent.status",
@@ -59,11 +71,12 @@ export function LiveRunPage() {
         ]) {
           source.addEventListener(eventType, handleEvent as EventListener);
         }
-      } catch {
+      } catch (exc) {
         store.getState().applySnapshot({
           run_id: runId,
           status: "failed",
           last_seq: 0,
+          error: exc instanceof Error ? exc.message : String(exc),
         });
       }
     }
@@ -78,7 +91,10 @@ export function LiveRunPage() {
   async function handleCancel() {
     setActionError(null);
     try {
-      await cancelRun(runId);
+      const snapshot = await cancelRun(runId);
+      store
+        .getState()
+        .applySnapshot(snapshot as unknown as Record<string, unknown>);
     } catch (exc) {
       setActionError(exc instanceof Error ? exc.message : String(exc));
     }
@@ -91,7 +107,10 @@ export function LiveRunPage() {
     <main className="mx-auto max-w-6xl px-6 py-10">
       <header className="mb-8 flex items-start justify-between gap-4">
         <div>
-          <Link className="text-sm text-cyan-300 hover:text-cyan-200" to="/history">
+          <Link
+            className="text-sm text-cyan-300 hover:text-cyan-200"
+            to="/history"
+          >
             ← {t("nav.history")}
           </Link>
           <h1 className="mt-3 text-3xl font-semibold text-slate-100">
@@ -110,7 +129,52 @@ export function LiveRunPage() {
           {t("live.review")}
         </p>
       ) : null}
-      {actionError ? <p className="mb-5 text-sm text-red-300">{actionError}</p> : null}
+      {state.error ? (
+        <p role="alert" className="mb-5 text-sm text-red-300">
+          {state.error}
+        </p>
+      ) : null}
+      {state.warnings.map((warning) => (
+        <p key={warning} className="mb-3 text-amber-300">
+          {warning}
+        </p>
+      ))}
+      {state.signal ? (
+        <p className="mb-4 text-lg text-slate-100">
+          {t("history.rating")}: {state.signal}
+        </p>
+      ) : null}
+      <p className="mb-4 text-sm text-slate-400">
+        {t(`live.phases.${state.phase}`, { defaultValue: state.phase })}
+      </p>
+      {Object.keys(state.agents).length > 0 ? (
+        <ul className="mb-4 flex flex-wrap gap-3 text-sm text-slate-300">
+          {Object.entries(state.agents).map(([agent, status]) => (
+            <li key={agent}>
+              {agent}: {status}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {Object.keys(state.stats).length > 0 ? (
+        <p className="mb-4 text-sm text-slate-300">
+          {t("live.stats")}:{" "}
+          {Object.entries(state.stats)
+            .map(([key, value]) => `${key}: ${value}`)
+            .join(" · ")}
+        </p>
+      ) : null}
+      {state.artifactId ? (
+        <Link
+          className="mb-5 block text-cyan-300"
+          to={`/history/${state.artifactId}`}
+        >
+          {t("report.complete")}
+        </Link>
+      ) : null}
+      {actionError ? (
+        <p className="mb-5 text-sm text-red-300">{actionError}</p>
+      ) : null}
 
       <div className="mb-6 flex flex-wrap gap-3">
         <button
@@ -160,7 +224,9 @@ export function LiveRunPage() {
             <div className="max-h-[28rem] space-y-4 overflow-auto">
               {Object.entries(state.sections).map(([section, content]) => (
                 <article key={section}>
-                  <h3 className="mb-2 font-mono text-xs text-slate-400">{section}</h3>
+                  <h3 className="mb-2 font-mono text-xs text-slate-400">
+                    {section}
+                  </h3>
                   <Markdown>{content}</Markdown>
                 </article>
               ))}

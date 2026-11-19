@@ -54,7 +54,17 @@
     "medium": "Medium",
     "deep": "Deep",
     "keyConfigured": "Key configured",
-    "keyNotConfigured": "Key not configured"
+    "keyNotConfigured": "Key not configured",
+    "modelsRequired": "Enter both model IDs.",
+    "loadingConfig": "Loading server configuration...",
+    "envLocked": "Configured by the server environment.",
+    "serverEndpoint": "Using the endpoint configured on the server.",
+    "keyStatus": {
+      "configured": "Key configured",
+      "not_configured": "Provider key is missing on the server.",
+      "not_required": "No API key required",
+      "unknown": "Check server authentication configuration"
+    }
   },
   "live": {
     "title": "Live Run",
@@ -69,7 +79,13 @@
     "connection": "Connection",
     "runId": "Run ID",
     "status": "Status",
-    "waiting": "Waiting for events..."
+    "waiting": "Waiting for events...",
+    "phases": {
+      "preparing": "Preparing",
+      "configuration": "Initializing provider",
+      "context": "Loading analysis context",
+      "analysis": "Running analysis"
+    }
   },
   "report": {
     "title": "Report",

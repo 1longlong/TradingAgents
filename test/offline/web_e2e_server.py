@@ -55,7 +55,6 @@ def fake_fetch_announcements(*args, **kwargs):
     }
 
 
-
 class E2ERunner:
     def run(self, request, emit, cancel_event) -> None:
         ticker = str(request["ticker"])
@@ -135,6 +134,10 @@ class E2ERunner:
 def create_e2e_app():
     root = Path(tempfile.mkdtemp(prefix="tradingagents-e2e-"))
     tree = build_fixture_tree(root)
+
+    import cli.prefs as prefs_module
+
+    prefs_module._PREFS_PATH = root / "cli_prefs.json"
 
     import tradingagents_web.api.announcements as announcements_module
     import tradingagents_web.runtime.backtest_runner as backtest_module

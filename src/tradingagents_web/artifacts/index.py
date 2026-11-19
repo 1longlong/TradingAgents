@@ -6,6 +6,7 @@ path, never persisted, and never sent to the browser as filesystem paths.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -43,9 +44,7 @@ class Artifact:
             "status": self.status,
             "rating": self.rating,
             "review": self.review,
-            "updated_at": datetime.fromtimestamp(
-                self.updated_at, tz=timezone.utc
-            ).isoformat(),
+            "updated_at": datetime.fromtimestamp(self.updated_at, tz=timezone.utc).isoformat(),
             "title": self.title,
         }
 
@@ -99,6 +98,7 @@ class ArtifactIndex:
     def scan(self) -> list[Artifact]:
         items: list[Artifact] = []
         items.extend(self._scan_runs())
+        items.extend(self._scan_web_runs())
         items.extend(self._scan_saved())
         items.extend(self._scan_backtests())
         items.extend(self._scan_decision_memory())
@@ -145,6 +145,49 @@ class ArtifactIndex:
                 )
         return found
 
+    def _scan_web_runs(self) -> list[Artifact]:
+        """Read isolated Web artifacts without changing legacy CLI history (ADR-001)."""
+        root = self.results_dir / "web_runs"
+        if not root.is_dir():
+            return []
+        found = []
+        for directory in sorted(root.iterdir()):
+            if not directory.is_dir() or directory.is_symlink():
+                continue
+            metadata = directory / "run.json"
+            try:
+                if metadata.is_symlink() or metadata.stat().st_size > 4096:
+                    continue
+                data = json.loads(metadata.read_text(encoding="utf-8"))
+                if not isinstance(data, dict) or data.get("run_id") != directory.name:
+                    continue
+                ticker = _safe_ticker(str(data.get("ticker", "")))
+                date = str(data.get("trade_date", ""))
+                status = str(data.get("status", "partial"))
+                if not ticker or not DATE_RE.fullmatch(date):
+                    continue
+                if status not in {"completed", "failed", "cancelled"}:
+                    status = "partial"
+                decision = _read(directory / "reports" / "final_trade_decision.md")
+                rating, review = _rating(decision)
+                found.append(
+                    Artifact(
+                        artifact_id=_digest(directory, self.results_dir),
+                        source="run",
+                        path=directory,
+                        ticker=ticker,
+                        date=date,
+                        status=status,
+                        rating=rating,
+                        review=review,
+                        updated_at=_mtime(directory),
+                        title=f"{ticker} {date}",
+                    )
+                )
+            except (OSError, ValueError):
+                continue
+        return found
+
     def _scan_saved(self) -> list[Artifact]:
         found: list[Artifact] = []
         saved_root = self.results_dir / "reports"
@@ -156,8 +199,10 @@ class ArtifactIndex:
             complete = saved_dir / "complete_report.md"
             complete_text = _read(complete) if complete.is_file() else None
             match = COMPLETE_TICKER_RE.search(complete_text or "")
-            ticker = _safe_ticker(match.group(1)) if match else _safe_ticker(
-                saved_dir.name.split("_", 1)[0]
+            ticker = (
+                _safe_ticker(match.group(1))
+                if match
+                else _safe_ticker(saved_dir.name.split("_", 1)[0])
             )
             if ticker is None:
                 continue
@@ -218,9 +263,7 @@ class ArtifactIndex:
     def _scan_decision_memory(self) -> list[Artifact]:
         if not self.memory_log_path.is_file():
             return []
-        entries = TradingMemoryLog(
-            {"memory_log_path": str(self.memory_log_path)}
-        ).load_entries()
+        entries = TradingMemoryLog({"memory_log_path": str(self.memory_log_path)}).load_entries()
         if not entries:
             return []
         tickers = sorted({entry["ticker"] for entry in entries})

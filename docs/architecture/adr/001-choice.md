@@ -61,3 +61,14 @@ Three facts make entry-point and state ownership safety-relevant:
 3. Add a database for run state and history — rejected: second source of truth and new storage.
 4. Allow concurrent runs with per-run configuration — rejected: requires core changes outside scope.
 5. Accept API keys in the browser — rejected: transmits plaintext credentials into a client surface.
+
+
+## Analysis-path repair refinement — 2026-11-06
+
+The user authorized repairing the reviewed WebUI defects while preserving the core and CLI. Final review remains pending; this is not a GitHub review-marker approval.
+
+Web analyses now write `results_dir/web_runs/<run_id>/` rather than sharing a ticker/date directory with earlier runs or the CLI. Existing report formats are retained. A small atomic `run.json` sidecar records identity, analysis date, and lifecycle status. The read-only artifact scanner accepts this additional source while retaining all legacy readers. Interrupted nonterminal sidecars appear as partial artifacts after a restart; they do not restore active tasks. Saved report trees append the run ID to the existing timestamp-based filename.
+
+A complete, consistent display snapshot accompanies the SSE cursor. Expired cursors receive a snapshot; terminal snapshots need no new stream. Server environment overrides remain authoritative over browser defaults. Correlated failure details are safe for the browser, while diagnostics are redacted on the server. The single-run slot stays owned until worker cleanup finishes.
+
+These refinements avoid stale mixed reports and missing reload results without modifying `src/cli/` or `src/tradingagents/`, adding a database, or changing business analysis semantics.

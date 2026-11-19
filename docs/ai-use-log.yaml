@@ -2,7 +2,7 @@ schema_version: '1.0'
 entries:
   - id: AI-20261024-001
     date: '2026-10-24'
-    tool: Codex API assistant
+    tool: OpenCode
     model: Not exposed by the host
     purpose: >-
       Implement user-authorized preparation improvements and CI blocking gates;
@@ -42,7 +42,7 @@ entries:
       - No real model API or user session export is claimed by this record.
   - id: AI-20261024-002
     date: '2026-10-24'
-    tool: Codex API assistant
+    tool: OpenCode
     model: Not exposed by the host
     purpose: >-
       Clean generated intermediate files and caches, organize preparation records,
@@ -443,3 +443,77 @@ entries:
       - Not run: real backtest model/data calls, real announcement network calls, Firefox/WebKit, clean install, full mypy/Bandit/pip-audit.
       - Startup help and banner text were corrected to describe analysis, backtest, and history instead of the Iteration-1 read-only wording.
       - No push, merge, deployment, or remote setting change was performed.
+  - id: AI-20261106-007
+    date: '2026-11-06'
+    tool: OpenCode
+    model: Not exposed by the host
+    purpose: >-
+      Repair the user-reviewed WebUI analysis path: effective configuration,
+      provider/model selection, snapshot recovery, safe diagnostics, startup
+      cleanup, isolated reports, and real graph progress; preserve core and CLI.
+    source: Current user conversation and explicit local Chromium authorization
+    human_review: Implementation authorized; final review pending
+    paths:
+      - architecture-blueprint.md
+      - docs/ai-use-log.yaml
+      - docs/architecture/adr/001-choice.md
+      - docs/architecture/evaluation-logbook.md
+      - docs/architecture/trace-matrix.md
+      - docs/bug-diary.md
+      - docs/debt-register.md
+      - docs/review-memo.md
+      - src/tradingagents_web/api/config.py
+      - src/tradingagents_web/api/runs.py
+      - src/tradingagents_web/artifacts/index.py
+      - src/tradingagents_web/errors.py
+      - src/tradingagents_web/frontend/e2e/run.spec.ts
+      - src/tradingagents_web/frontend/src/api/runClient.ts
+      - src/tradingagents_web/frontend/src/i18n/en.json
+      - src/tradingagents_web/frontend/src/i18n/zh.json
+      - src/tradingagents_web/frontend/src/pages/LiveRunPage.tsx
+      - src/tradingagents_web/frontend/src/pages/NewAnalysisPage.tsx
+      - src/tradingagents_web/frontend/src/stores/runStore.ts
+      - src/tradingagents_web/frontend/tests/analysis-flow.test.tsx
+      - src/tradingagents_web/frontend/tests/run-store.test.ts
+      - src/tradingagents_web/runtime/artifacts_writer.py
+      - src/tradingagents_web/runtime/coordinator.py
+      - src/tradingagents_web/runtime/graph_runner.py
+      - src/tradingagents_web/runtime/projector.py
+      - test/offline/test_web_analysis_flow.py
+      - test/offline/test_web_reporting.py
+      - test/offline/test_web_runs.py
+      - test/offline/web_e2e_server.py
+    notes:
+      - Product-code edits are confined to src/tradingagents_web; no core, CLI, dependency, or CI edits.
+      - Added real-core offline integration; providers/identity are replaced, not the graph runner or core graph.
+      - Web backend 156 passed; frontend 30 passed; Chromium 6 passed; Web typing, lint, build, and structure checks passed.
+      - Full socket-disabled regression earlier in the repair reported 1139 passed, 5 failed, 1 skipped, and 88 subtests.
+      - Four full-suite failures are existing baseline issues; one live DeepSeek test was blocked by disabled networking.
+      - Two existing tests changed only their Web artifact-path expectations; no assertion or threshold was weakened.
+      - Python verification disabled dotenv loading and isolated CLI preference reads.
+      - No live provider verification, Git commit, push, merge, deployment, or credential change was performed.
+  - id: AI-20261106-008
+    date: '2026-11-06'
+    tool: OpenCode
+    model: Not exposed by the host
+    purpose: >-
+      Diagnose the user-supplied Yahoo Finance rate-limit traceback and repair
+      misleading Web error classification without changing core/CLI or vendor policy.
+    source: Current user conversation and supplied correlation c_6c77fd7723f2 traceback
+    human_review: Continuing authorized Web repair; final review pending
+    paths:
+      - src/tradingagents_web/errors.py
+      - test/offline/test_web_analysis_flow.py
+      - docs/bug-diary.md
+      - docs/architecture/trace-matrix.md
+      - docs/review-memo.md
+      - docs/architecture/evaluation-logbook.md
+      - docs/ai-use-log.yaml
+    notes:
+      - Confirmed raw YFRateLimitError after existing core retries in tools_market.
+      - Added genuine tool-call-path regression with actual graph, market tool and router; provider boundaries are offline fakes.
+      - Preserve failure state, checkpoint artifacts, memory semantics, safe messages and redacted diagnostics.
+      - No live API calls, credential reads, new vendor, implicit fallback, additional retries, Git commit or push.
+      - Analysis-path tests 14 passed; complete Web backend suite 161 passed; changed lint and Web typing passed.
+      - User explicitly chose to continue with Yahoo Finance; no alternative data-vendor key is available.
+      - External Yahoo rate-limit recovery remains unverified; the repair does not claim successful live analysis.

@@ -185,3 +185,37 @@ Still required before implementation:
 ## Historical context
 
 The four inherited baseline failures and the mypy/Bandit findings in `docs/bug-diary.md` and `docs/debt-register.md` remain open. They are not repaired, waived, or reclassified by these documents.
+
+
+## 2026-11-06 — Analysis-path repair verification
+
+Authorization: the user requested the reviewed Web-only fixes and separately confirmed local Chromium verification. Product changes are confined to `src/tradingagents_web/`; the original core, CLI, dependency declarations, and CI configuration are unchanged.
+
+| Check | Actual result |
+| --- | --- |
+| Complete Web backend suite (`test/offline/test_web_*.py`, sockets disabled) | **156 passed** |
+| New real-core integration | Actual GraphRunner, TradingAgentsGraph/LangGraph, checkpoint setup/cleanup, memory, report writer, and history/download APIs passed with an offline chat model and identity lookup; no FakeGraphRunner in this case |
+| Frontend Vitest | **30 passed**, 9 files; includes provider/model submission, terminal reload/error rendering, and snapshot fallback |
+| Chromium Playwright | **6 passed**, including completed-run reload and cancellation; uses the existing deterministic E2E runner, not a live provider |
+| Web package typing | `mypy src/tradingagents_web --follow-imports=silent`: **PASS**, 31 source files |
+| Changed Python/Frontend lint and TypeScript checks | **PASS** |
+| Frontend production build | **PASS**; generated local static assets are not committed; the large-chunk warning remains performance debt |
+| Structure gate and core/CLI diff | **PASS**; no diff under `src/cli/`, `src/tradingagents/`, or `src/main.py` |
+| Complete socket-disabled regression earlier in this repair | **1139 passed, 5 failed, 1 skipped, 88 subtests**; details below |
+
+The complete regression's failures comprise the four previously documented baseline failures plus `test/live/test_deepseek_live.py::TestDeepSeekLiveStructuredOutput::test_v4_flash_returns_structured_output`. That live test was eligible in the inherited process environment and was blocked by the disabled-network guard; it is not successful live verification. No assertion, skip condition, integration marker, or core implementation was changed to clear these results. The final Web-only suite above includes the subsequently added regional-provider/keyless-endpoint case.
+
+Python checks set `PYTHON_DOTENV_DISABLED=1` and redirected CLI preference reads to test-owned or nonexistent temporary paths. Chromium was initially blocked by the sandbox and automatic approval; it ran only after the user explicitly approved this local test. Firefox/WebKit, real provider/model/data behavior, full-source mypy/Bandit, dependency audits, clean installation, hosted CI, and GitHub review markers were not verified by this repair.
+
+No Git commit, push, merge, deployment, or credential change was performed. Final human review remains pending; successful offline checks do not establish real-provider availability or model quality.
+
+
+## 2026-11-06 — User-reported Yahoo Finance throttling
+
+- Evidence: the user supplied the actual traceback for `c_6c77fd7723f2`. Yahoo Finance raised `YFRateLimitError` in `get_stock_data` / `tools_market` after the existing retry backoff. This is a market-data failure; the trace does not establish a DeepSeek authentication failure.
+- Product repair: Web-only error classification now identifies Yahoo throttling, typed data unavailability, absent data, and missing data-vendor configuration. Unknown execution exceptions use a neutral message. Raw exception strings remain server-side and redacted.
+- Offline reproduction: the actual GraphRunner, core LangGraph, market ToolNode, stock tool and vendor router are exercised with isolated model, identity and Yahoo boundaries. The Yahoo boundary raises the same final exception. The task fails with an explicit data-source classification, no final rating/decision-memory write, and retained checkpoint artifacts.
+- Results: **14 analysis-path tests passed; complete Web backend suite 161 passed; changed Python lint passed; Web package mypy passed for 31 source files**. Source-boundary and whitespace checks passed. No frontend code changed for this follow-up; prior frontend/browser evidence remains recorded in the preceding entry.
+- User choice: no alternative data-vendor key is available; continue using Yahoo Finance. No automatic vendor fallback, new source, added provider retries, background resubmission, or live API test is introduced.
+- Limitation: the presentation repair cannot remove an external rate limit. A real Yahoo-backed run remains dependent on Yahoo returning usable data. Actual live recovery has not been verified.
+- No original core/CLI, dependency, CI, credential, Git commit or remote state changes.

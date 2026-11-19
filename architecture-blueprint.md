@@ -15,7 +15,7 @@ The WebUI is a **local, single-user, single-active-run presentation layer**. It 
 
 1. Expose the complete CLI analysis workflow through a browser: the eight selection steps, live run view, completion summary, and full I–V report.
 2. Preserve every deterministic boundary already enforced by the core and CLI: ticker and path validation, analysis-date limits, rating integrity, portfolio semantics, point-in-time data access, memory isolation, and checkpoint behaviour.
-3. Keep `src/tradingagents/` and `src/cli/` unchanged. The WebUI calls existing public Python interfaces, reads existing artifacts, and writes only artifact types the CLI already writes.
+3. Keep `src/tradingagents/` and `src/cli/` unchanged. The WebUI calls existing public Python interfaces, reads existing artifacts, and preserves CLI report formats. Web-only lifecycle metadata accompanies isolated Web run artifacts.
 4. Provide read-only history over existing artifacts without a database or a retention change.
 5. Expose the existing backtest capability with the same parameters and result semantics as the CLI.
 6. Keep provider keys server-side. The browser never receives keys or server filesystem paths.
@@ -176,7 +176,8 @@ Rules:
 Owned by `src/tradingagents_web/artifacts/index.py`, `artifacts/readers.py`, and `artifacts/downloads.py`.
 
 Sources:
-- Run directory: `<results_dir>/<ticker>/<date>/` with `message_tool.log` and `reports/*.md`.
+- Legacy CLI run directory: `<results_dir>/<ticker>/<date>/` with `message_tool.log` and `reports/*.md`; the Web layer never rewrites it.
+- Web run directory: `<results_dir>/web_runs/<run_id>/`, with the same message/section report formats and a `run.json` lifecycle sidecar. Each run has its own directory, including repeated analyses of the same ticker/date. The sidecar is artifact metadata, not an index database or cross-process task recovery mechanism.
 - API-style state log: `<results_dir>/<ticker>/TradingAgentsStrategy_logs/full_states_log_<date>.json` when present.
 - Saved report tree: `<results_dir>/reports/<ticker>_<timestamp>/` with `1_analysts` … `5_portfolio` and `complete_report.md`.
 - Backtest run: `<results_dir>/backtest/<run_id>/` and its `trading_memory.md`.
@@ -310,7 +311,7 @@ States: `idle`, `starting`, `running`, `cancelling`, `completed`, `failed`, `can
 
 Only one run may be in `starting`, `running`, or `cancelling`.
 
-Run record: `run_id`, request fields, `status`, `started_at`, `finished_at`, `last_seq`, `signal`, `review`, `artifact_ids`, `warnings`, and a safe error category.
+Run record: `run_id`, effective request fields, `status`, `started_at`, `finished_at`, `last_seq`, `signal`, `review`, `artifact_id`, `warnings`, a safe correlated error, report sections, the last 500 messages/tools, agent statuses, counters, and execution phase. Snapshot content and its event cursor are captured under the same lock.
 
 `GET /api/runs/{run_id}` returns the snapshot; `GET /api/runs/{run_id}/events` returns SSE.
 
@@ -339,9 +340,9 @@ If checkpointing was disabled, the run cannot be resumed. If enabled, the existi
 ### 8.5 Report and artifact contract
 
 - `write_report_tree` remains the only report-layout writer.
-- The run directory layout follows the CLI path.
+- Web runs use isolated `results_dir/web_runs/<run_id>/` directories; legacy CLI paths remain unchanged.
 - The runtime artifact writer mirrors the CLI's `message_tool.log` and `reports/<section>.md` writes.
-- On successful completion the coordinator auto-saves the complete report tree to `results_dir/reports/<ticker>_<timestamp>/`, matching the CLI default save choice.
+- On successful completion the coordinator auto-saves the complete report tree to `results_dir/reports/<ticker>_<timestamp>_<run_id>/`, retaining the existing report-tree format while preventing same-second collisions.
 - Downloads resolve an artifact id server-side; `kind=complete|archive|section`.
 - The complete Markdown report and a zip of existing report artifacts are the supported downloads. No PDF/Word.
 - A report-save failure produces `run.completed` with `warnings: ["report_save_failed"]`; it does not rewrite the analysis result.

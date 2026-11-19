@@ -1,4 +1,4 @@
-"""Start, inspect, cancel, and stream one analysis run."""
+"""Analysis requests: REQ-WEB-005/013, ADR-001, INV-WEB-001/009."""
 
 from __future__ import annotations
 
@@ -11,9 +11,11 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from cli.utils import _llm_provider_table
 from tradingagents.dataflows.symbol_utils import normalize_symbol
 from tradingagents.dataflows.utils import safe_ticker_component
+from tradingagents.default_config import _apply_env_overrides
 from tradingagents.graph.analyst_execution import ANALYST_NODE_SPECS
 from tradingagents.graph.trading_graph import _validate_trade_date
 from tradingagents.llm_clients.api_key_env import PROVIDER_API_KEY_ENV
+from tradingagents_web.api.config import effective_defaults
 from tradingagents_web.api.portfolio import parse_portfolio
 from tradingagents_web.errors import error_response
 from tradingagents_web.models.requests import RunRequest
@@ -22,9 +24,7 @@ from tradingagents_web.runtime.coordinator import RunConflict
 router = APIRouter(prefix="/api", tags=["runs"])
 
 _KNOWN_ANALYSTS = set(ANALYST_NODE_SPECS)
-_KNOWN_PROVIDERS = {key for _, key, _ in _llm_provider_table()} | set(
-    PROVIDER_API_KEY_ENV
-)
+_KNOWN_PROVIDERS = {key for _, key, _ in _llm_provider_table()} | set(PROVIDER_API_KEY_ENV)
 
 
 def _settings(request: Request):
@@ -36,35 +36,40 @@ def _coordinator(request: Request):
 
 
 def _build_config(request, req: RunRequest) -> dict:
-    from tradingagents.default_config import DEFAULT_CONFIG
-
-    config = DEFAULT_CONFIG.copy()
+    """Honor omitted values and server environment locks (REQ-WEB-013, ADR-001)."""
+    config = effective_defaults()
     config.update(
         {
             "results_dir": str(request.app.state.settings.results_dir),
             "memory_log_path": str(request.app.state.settings.memory_log_path),
             "data_cache_dir": str(request.app.state.settings.data_cache_dir),
-            "llm_provider": req.llm_provider.lower(),
-            "backend_url": req.backend_url,
-            "quick_think_llm": req.quick_think_llm
-            or DEFAULT_CONFIG.get("quick_think_llm"),
-            "deep_think_llm": req.deep_think_llm
-            or DEFAULT_CONFIG.get("deep_think_llm"),
-            "google_thinking_level": req.google_thinking_level,
-            "openai_reasoning_effort": req.openai_reasoning_effort,
-            "anthropic_effort": req.anthropic_effort,
-            "output_language": req.output_language,
-            "checkpoint_enabled": req.checkpoint,
         }
     )
-    if not os.environ.get("TRADINGAGENTS_MAX_DEBATE_ROUNDS"):
+    supplied = req.model_dump(exclude_unset=True, exclude_none=True)
+    for key in (
+        "llm_provider",
+        "backend_url",
+        "quick_think_llm",
+        "deep_think_llm",
+        "google_thinking_level",
+        "openai_reasoning_effort",
+        "anthropic_effort",
+        "output_language",
+    ):
+        if key in supplied:
+            config[key] = supplied[key]
+    if "checkpoint" in supplied:
+        config["checkpoint_enabled"] = req.checkpoint
+    if "research_depth" in supplied:
         config["max_debate_rounds"] = req.research_depth
-    if not os.environ.get("TRADINGAGENTS_MAX_RISK_ROUNDS"):
         config["max_risk_discuss_rounds"] = req.research_depth
+    _apply_env_overrides(config)
+    config["llm_provider"] = config["llm_provider"].lower()
     return config
 
 
 def _validated_payload(request: Request, req: RunRequest) -> dict:
+    config = _build_config(request, req)
     ticker = normalize_symbol(req.ticker)
     safe_ticker_component(ticker)
     trade_date = _validate_trade_date(req.trade_date)
@@ -77,11 +82,13 @@ def _validated_payload(request: Request, req: RunRequest) -> dict:
         if not analysts:
             raise ValueError("crypto analysis requires at least one non-fundamentals analyst")
 
-    if req.research_depth not in {1, 3, 5}:
+    if req.research_depth not in {1, 3, 5} and not os.environ.get(
+        "TRADINGAGENTS_MAX_DEBATE_ROUNDS"
+    ):
         raise ValueError("research_depth must be 1, 3, or 5")
-    if req.llm_provider.lower() not in _KNOWN_PROVIDERS:
+    if config["llm_provider"] not in _KNOWN_PROVIDERS:
         raise ValueError("unknown LLM provider")
-    for model_id in (req.quick_think_llm, req.deep_think_llm):
+    for model_id in (config.get("quick_think_llm"), config.get("deep_think_llm")):
         if model_id is not None and not model_id.strip():
             raise ValueError("model IDs must not be blank")
 
@@ -91,17 +98,16 @@ def _validated_payload(request: Request, req: RunRequest) -> dict:
         portfolio = parse_portfolio(req.portfolio_json)
         fingerprint = portfolio.fingerprint()
 
-    config = _build_config(request, req)
     return {
         "ticker": ticker,
         "trade_date": trade_date,
         "asset_type": req.asset_type,
         "analysts": analysts,
-        "research_depth": req.research_depth,
-        "llm_provider": req.llm_provider.lower(),
-        "quick_think_llm": req.quick_think_llm,
-        "deep_think_llm": req.deep_think_llm,
-        "checkpoint_enabled": req.checkpoint,
+        "research_depth": config["max_debate_rounds"],
+        "llm_provider": config["llm_provider"],
+        "quick_think_llm": config["quick_think_llm"],
+        "deep_think_llm": config["deep_think_llm"],
+        "checkpoint_enabled": config["checkpoint_enabled"],
         "portfolio": portfolio,
         "portfolio_fingerprint": fingerprint,
         "config": config,

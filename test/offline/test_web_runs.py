@@ -137,7 +137,7 @@ def test_cancel_keeps_already_written_partial_artifacts(tmp_path, monkeypatch):
     assert started.status_code == 201, started.text
     assert fake.started.wait(timeout=2.0)
 
-    report = tree.results_dir / "NVDA" / "2026-11-01" / "reports" / "market_report.md"
+    report = tree.results_dir / "web_runs" / started.json()["run_id"] / "reports" / "market_report.md"
     for _ in range(200):
         if report.is_file():
             break

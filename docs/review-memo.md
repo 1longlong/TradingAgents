@@ -227,3 +227,20 @@ The existing base branch does not contain these new checks. Their first introduc
 - Not run: real `run_backtest` model/data calls, real announcement network calls, Firefox/WebKit, clean install, full mypy/Bandit/pip-audit, GitHub review markers.
 - Startup help/banner text was corrected after implementation to describe analysis, backtest, and history instead of the Iteration-1 read-only wording.
 - No push, merge, deployment, or remote setting change was performed.
+
+
+## Analysis-path repair authorization — 2026-11-06
+
+- The user requested a read-only investigation of basic WebUI analysis, then explicitly authorized the proposed repairs after confirming that original CLI/core functionality must remain unchanged.
+- Product-code allowlist: `src/tradingagents_web/`. Supporting changes cover Web tests, architecture refinement, traceability, bug records, and actual AI-use/verification evidence. No original core/CLI source, dependencies, CI rules, or credentials are modified.
+- Scope: effective configuration and provider/model selection; complete snapshots/SSE recovery; safe visible failures and correlated redacted logs; artifact initialization cleanup; isolated per-run reports; real graph progress and resume state.
+- Test changes retain assertions; two existing artifact-path expectations now point to the isolated Web run directory. The offline integration test uses actual GraphRunner, TradingAgentsGraph, LangGraph, memory and report writers, replacing only model/identity-provider boundaries. Browser tests also retain existing assertions and add reload verification.
+- The user explicitly authorized local Chromium browser verification after automatic approval initially applied the earlier preparation-only no-test instruction. No live model/data smoke, Git commit, push, merge, or deployment is authorized by that approval.
+- Final human review and GitHub review markers remain pending. Requirements retain their existing approval/status records.
+
+
+## Real API failure follow-up — 2026-11-06
+
+The user supplied a real-run traceback for `c_6c77fd7723f2`. The direct exception is Yahoo Finance throttling in the market tool, rather than an LLM-authentication error. Continuing the authorized Web-only repair, the error mapper now distinguishes this condition and typed market-data failures from other execution errors. No original CLI/core behavior, vendor policy, retry budget, credentials, or external-service configuration is changed. Validation uses an actual tool-calling core graph with isolated fake provider boundaries. Live provider calls remain unrun; resolving actual Yahoo throttling requires data-source recovery or an explicitly chosen existing vendor configuration.
+
+The user subsequently confirmed that no alternative vendor key is available and chose to continue using Yahoo Finance. Keep the existing vendor selection and retry policy; do not add implicit fallbacks or background live requests.
