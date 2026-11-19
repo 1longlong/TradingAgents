@@ -342,7 +342,6 @@ def _backtest_body():
 
 def _install_backtest_fake(monkeypatch):
     import tradingagents_web.runtime.backtest_runner as module
-
     from tradingagents.agents.utils.memory import TradingMemoryLog
     from tradingagents.backtest import BacktestResult
 

@@ -12,6 +12,9 @@ Both vendors withhold on one shared rule (``date_window.withhold_live_profile``)
 so switching ``fundamental_data`` between them cannot reintroduce the leak. The
 statement tools stay point-in-time by filtering on ``curr_date``, and a live run
 is unchanged. All API access is mocked.
+
+Traceability: NFR-PIT-001 (point-in-time integrity); supports INV-3 (no
+look-ahead) on the covered path.
 """
 from __future__ import annotations
 

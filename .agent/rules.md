@@ -33,3 +33,16 @@ Scope: incremental development of the existing TradingAgents system. Current dir
 5. Discovery may start before design artifacts are populated. Use Plan for discussion and Docs for agreed drafts and data validation; product implementation remains gated on the relevant completed artifacts and approvals.
 
 See `docs/code-governance/structural-constraints.md` and `verification-constraints.md` for detailed structure and verification rules.
+
+
+## Imported core constraints
+
+Release core protections (deterministic evidence, fail-closed gate, output guards,
+budget reservations, durable usage, point-in-time checks) remain binding. Core
+IDs are `FR-DQG-*`, `FR-DDT-*`, `NFR-*` and `INV-*`; WebUI IDs remain
+`REQ-WEB-*` and `INV-WEB-*`. Preserve both sets. The current canonical layout is
+`src/` and `test/`; prior root-layout exceptions are historical. No live benchmark,
+production threshold tuning, paid service, or additional feature is authorized
+by this merge. Release agent-permission proposals remain inactive; the existing
+V1 permission configuration is retained without widening it. Human approvals
+retain their actual scope, and this merge does not manufacture new approval.

@@ -55,3 +55,80 @@ Treat changes to the baseline core, ratings and structured outputs, data-time bo
 New or modified modules and functions must cite their actual ADR IDs, requirement IDs, and relevant invariant IDs in concise module or function documentation, consistent with `docs/architecture/trace-matrix.md`. Preserve existing content during mechanical relocation and record that scope in the trace matrix. Do not invent IDs or rewrite unrelated baseline code to manufacture coverage.
 
 Before changing safety-relevant paths, dependency direction, or public contracts, update the architecture decision, impact analysis, and test plan and obtain human approval. Missing traceability in untouched baseline code remains outstanding governance coverage; do not claim it is complete.
+
+
+## Imported core structural contracts
+
+# Structural Constraints
+
+These constraints govern the structure of the CS5351 feature code. They keep the
+module layout consistent with the rest of `src/tradingagents/` and preserve the
+upstream conventions.
+
+## Source tree after integration
+
+Canonical source packages live under `src/tradingagents/`, `src/cli/`, and
+`src/tradingagents_web/`; tests live under `test/offline/` and `test/live/`.
+The layout migration was already present on the WebUI branch. Do not introduce
+parallel root-level source trees. Existing import names and CLI entry points
+remain stable.
+
+## New package boundaries
+
+- `src/tradingagents/evidence/` — the deterministic Data Quality Gate core. It is
+  pure and LLM-free; no module in it calls a network or an LLM.
+- `src/tradingagents/debate/` — the dynamic debate-termination package. The
+  `evaluator.py` is pure; the LangGraph node factory is the only module that
+  reads/writes `AgentState`.
+
+## Cross-package rules
+
+- `src/tradingagents/graph/data_quality_gate.py` orchestrates the evidence package
+  and writes only JSON-safe dicts/lists/strings into `AgentState` (never frozen
+  dataclasses).
+- `src/tradingagents/debate/evaluator_node.py` wraps the pure evaluator and reads
+  the gate manifest / turn state off `AgentState`.
+- Router path maps (`DEBATE_PATH_MAP`, `DEBATE_EVALUATOR_PATH_MAP`) must be
+  complete so a fall-through return can never hit a missing edge (#1088).
+
+## Test tree
+
+- Deterministic tests live under `test/offline/`; external-service tests live under `test/live/`.
+- Test modules for the feature work are named per the module they exercise
+  (e.g. `test/offline/test_debate_evaluator.py`, `test/offline/test_data_quality_gate_graph.py`).
+- Vendor/live tests are marked `@pytest.mark.integration`.
+
+## Naming conventions
+
+- Modules, classes, and functions follow the repository's existing snake_case /
+  PascalCase conventions.
+- Reason codes and rule IDs are stable UPPER_SNAKE strings (e.g.
+  `blocked_critical_failure`, `gate_blocked`, `continue_for_new_evidence`).
+
+## Serialization
+
+- Evidence/decision dataclasses implement `to_dict`/`from_dict` with fixed,
+  deterministic field ordering.
+- `Decimal` serializes to a fixed-precision string; enums serialize to stable
+  `.value`.
+
+## Per-module / per-function trace and ADR rule
+
+- **Every new or changed module or public function MUST be traceable to a
+  requirement ID and an invariant** (or an explicit ADR), recorded in
+  `docs/architecture/trace-matrix.md` in the same change. A function with no
+  traceable requirement/invariant is out of scope.
+- A module that enforces a safety property MUST name that invariant in its
+  docstring (e.g. "enforces INV-1").
+- **Safety-critical changes** to a module that enforces fail-closed, determinism,
+  budget, permission, or prompt behavior require an **ADR + explicit human
+  approval** before merge.
+
+## Prohibited
+
+- No new top-level package that duplicates an existing one.
+- No duplicate root-level source or test tree.
+- No LLM/network call inside `evidence` or `debate` pure modules.
+- No import of a private package across the gate/debate boundary without a
+  documented reason.
+- No untraced module/function (see the trace rule above).

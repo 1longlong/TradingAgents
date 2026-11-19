@@ -147,6 +147,20 @@ def test_ai_log_unchanged_blocks_code(tmp_path, monkeypatch):
         gates.check_ai_log(tmp_path, "base", "head")
 
 
+def test_ai_log_imports_legacy_list_without_waiving_new_coverage(tmp_path, monkeypatch):
+    monkeypatch.setattr(gates, "changes", lambda *args: {"src/new.py", "docs/ai-use-log.yaml"})
+    old = {"id": "AUL-001", "scope": "historic release work"}
+    new = {"id": "merge", "date": "2026-11-19", "tool": "OpenCode", "purpose": "merge",
+           "human_review": "pending", "paths": ["src/new.py"]}
+    monkeypatch.setattr(gates, "blob", lambda root, ref, path: yaml.safe_dump(
+        {"entries": [old, new]} if ref == "head" else [old]
+    ))
+    gates.check_ai_log(tmp_path, "base", "head")
+    new["paths"] = []
+    with pytest.raises(gates.GateError, match="do not cover"):
+        gates.check_ai_log(tmp_path, "base", "head")
+
+
 @pytest.fixture
 def approval_history(tmp_path, monkeypatch):
     approved = {"test/offline/test_feature.py": "tests", "docs/req/requirements.yaml": "req",

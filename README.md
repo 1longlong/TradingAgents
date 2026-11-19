@@ -297,7 +297,7 @@ TradingAgents persists two kinds of state across runs.
 
 ### Decision log
 
-The decision log is always on. Each completed run appends its decision to `~/.tradingagents/memory/trading_memory.md`. On the next run for the same ticker, TradingAgents fetches the realised return (raw, and alpha against the instrument's regional benchmark), generates a one-paragraph reflection, and injects the most recent same-ticker decisions plus recent cross-ticker lessons into the Portfolio Manager prompt, so each analysis carries forward what worked and what didn't.
+The decision log is always on. Each completed run appends its decision to `~/.src/tradingagents/memory/trading_memory.md`. On the next run for the same ticker, TradingAgents fetches the realised return (raw, and alpha against the instrument's regional benchmark), generates a one-paragraph reflection, and injects the most recent same-ticker decisions plus recent cross-ticker lessons into the Portfolio Manager prompt, so each analysis carries forward what worked and what didn't.
 
 Override the path with `TRADINGAGENTS_MEMORY_LOG_PATH`.
 
@@ -305,7 +305,7 @@ Override the path with `TRADINGAGENTS_MEMORY_LOG_PATH`.
 
 Checkpoint resume is opt-in via `--checkpoint`. When enabled, LangGraph saves state after each node so a crashed or interrupted run resumes from the last successful step instead of starting over. The run view says whether it resumed a saved run or started fresh. Checkpoints are cleared automatically on successful completion.
 
-Per-ticker SQLite databases live at `~/.tradingagents/cache/checkpoints/<TICKER>.db` (override the base with `TRADINGAGENTS_CACHE_DIR`). Use `--clear-checkpoints` to reset all of them before a run.
+Per-ticker SQLite databases live at `~/.src/tradingagents/cache/checkpoints/<TICKER>.db` (override the base with `TRADINGAGENTS_CACHE_DIR`). Use `--clear-checkpoints` to reset all of them before a run.
 
 ```bash
 tradingagents --checkpoint           # enable for this run
@@ -384,6 +384,11 @@ Please reference our work if you find *TradingAgents* provides you with some hel
 
 ## Development preparation and OpenCode
 
+The current branch integrates release `79103c3` into the existing WebUI layout.
+The unified requirements registry retains all 22 core and 26 WebUI requirements
+and their original IDs. Historical verification remains explicitly scoped;
+format normalization does not grant new product or human-review approval.
+
 The preparation branch is `feature/webui`, based on TradingAgents v0.5.0. Product source is under `src/`; deterministic and external-service tests are under `test/offline/` and `test/live/`. WebUI requirements are recorded in `docs/req/requirements.yaml`; architecture decisions are recorded in `architecture-blueprint.md` and `docs/architecture/adr/`. Iteration 1 (read-only history/report browser), Iteration 2 (single analysis run with wizard, SSE live view, cancellation, checkpoint toggle, and portfolio input), and Iteration 3 (backtest launch/results and announcements) are implemented. Later work remains blocked on test-plan, safety, governance, and dependency approvals. Empty or draft documents are not approval to implement features.
 
 Create an ignored persistent virtual environment, then install the declared development tools:
@@ -454,3 +459,125 @@ Runtime prompt/model changes require replay against an evaluator, fixed dataset,
 Configure GitHub branch protection/rulesets to require the stable **`blocking-gate`** status, human reviews, and dismissal of stale approvals. Only PR/review events report that merge status; push/manual runs report `branch-checks`, so they cannot satisfy or overwrite a PR approval verdict. The aggregation rejects failed, cancelled, or skipped jobs. Workflow files alone do not configure remote branch protection, and no remote setting or passing hosted run is implied. Merge-queue integration is not configured. There is no deployment or automatic release workflow.
 
 Local virtual environments, caches, build outputs, and OpenCode-generated plugin dependencies are rebuildable runtime artifacts ignored by Git. Create the development environment with the commands above when needed.
+
+---
+
+## CS5351 Course Project Section (Downstream Student Fork)
+
+> The content above is the upstream (TauricResearch) product guide, preserved
+> verbatim for attribution and reference. The sections below are the CS5351
+> course-project governance overlay maintained by the student fork.
+
+### Purpose
+
+This repository is a downstream fork of the upstream `TradingAgents` framework
+used as the vehicle for the **CS5351** graduate course project that extends the
+framework with two deterministic, governance-driven improvements:
+
+- **Deterministic Data Quality Gate (FR-DQG-001)** — an LLM-free gate that
+  validates market evidence against five deterministic classes and fails closed
+  on missing or low-quality evidence before the Bull/Bear debate opens.
+- **Dynamic, evidence-aware debate termination (FR-DDT-001)** — a deterministic
+  Debate Evaluator that ends the debate on evidence/model conflict staleness or
+  budget exhaustion instead of always running a fixed number of rounds.
+
+Full course-metadata and requirement/layout details live under [`docs/`](docs/).
+
+### Branch and Deliverable Status (do not assume)
+
+- Current working branch: `feature/data-quality-debate-control`.
+- **Phase 4A (deterministic offline baseline comparison) is completed and
+  human-approved with limitations** (WANG Yiwen 60536848, 2026-10-23). The base
+  commit `8abea81` is already pushed to `origin/feature/data-quality-debate-control`
+  (verified via `git ls-remote`). See [`docs/review-memo.md`](docs/review-memo.md).
+- **Phase 4B (live-provider benchmarking) and production threshold tuning have
+  NOT been performed** and remain prohibited without separate explicit human
+  authorization.
+- **Current status:** the 2026-11-06 maintenance fixes (guard/budget/audit,
+  FR-DQG-006/FR-DDT-002/003), the 2026-11-06 documentation/requirements revision,
+  and the 2026-11-10 repair batches (guard multiline containment, empty-map
+  override, shared ID uniqueness, plus the documentation/traceability batch) in
+  this revision form a **work-in-progress feature-branch checkpoint**, authorized
+  for commit/push by the human on 2026-11-10. They are technically verified
+  offline and **await explicit human review/acceptance**. Publishing this
+  checkpoint is not approval to merge or a claim that all defects are fixed.
+- **Next budget/participation repair is proposed, not implemented.** The measured
+  runtime accounting correction (DEBT-021), truthful partial-debate reporting
+  (DEBT-033), and subsequent live blocked-path verification still await approval
+  of the new plan/test matrix. Do not infer completion from this checkpoint.
+- **2026-11-10 human approval is PLAN + TESTS ONLY (not acceptance).** The human
+  authorized the November 10 repair plan and its test cases. Final human acceptance
+  remains **PENDING**; no traceability score is recorded.
+- **Verification is not all-green (recorded, not hidden).** The strict-offline
+  count-and-fail harness observes **4 known baseline failures** (3 date-sensitive
+  `test_ohlcv_cache_freshness` + the `test_no_data_handling` vendor-reachability
+  baseline) and **1 intercepted outbound socket attempt** (no connection made) from
+  that baseline, so NFR-OFF-001 stays **PARTIAL/OPEN** (DEBT-002/RISK-002). No
+  baseline test/CI/waiver was modified.
+- **Live check (2026-11-06, authorized, NVDA / 2026-11-05, school model
+  `CS5351/DeepSeek-V4-Flash`):** 18 successful model calls / 202,622 reported
+  tokens; final gate **degraded**; final signal **Overweight**. A first harness
+  attempt (18 calls / 178,453 tokens) failed only because the local streaming
+  harness omitted `graph.ticker` before logging — a harness error, **not** a
+  project bug; the corrected rerun totalled 36 calls / 381,075 reported tokens
+  (retry cost not hidden). Live verification is **not** exhaustive proof; two
+  **OPEN, unfixed** issues were found (see
+  [`docs/architecture/risk-list.md`](docs/architecture/risk-list.md) RISK-020 /
+  RISK-021 and DEBT-021 / DEBT-022).
+- **Nothing here has been submitted, presented, or graded.** Student identity is
+  confirmed as **WANG Yiwen**, CS5351 student ID **60536848** (see
+  [`transcripts/`](transcripts/) and [`docs/debt-register.md`](docs/debt-register.md)).
+  Team roster, contribution, and reflection data are **pending human input** and
+  are not fabricated.
+
+### Artifact Index
+
+| Path | Type | Description |
+| --- | --- | --- |
+| [`AGENTS.md`](AGENTS.md) | Governance | Coding-agent governance rules. |
+| [`architecture-blueprint.md`](architecture-blueprint.md) | Design | Master constraint/design document. |
+| [`Prompt.md`](Prompt.md) | Prompt | Static startup prompt for coding agents. |
+| [`Report.md`](Report.md) | Process | Phase progress report + student reflection. |
+| [`docs/req/requirements.yaml`](docs/req/requirements.yaml) | Requirements | Machine-readable PRD (validated against schema). |
+| [`docs/req/req-schema.json`](docs/req/req-schema.json) | Schema | CI validation schema for requirements. |
+| [`docs/architecture/adr/001-data-quality-gate.md`](docs/architecture/adr/001-data-quality-gate.md) | ADR | Deterministic Data Quality Gate decision. |
+| [`docs/architecture/adr/002-dynamic-debate-termination.md`](docs/architecture/adr/002-dynamic-debate-termination.md) | ADR | Dynamic debate-termination decision. |
+| [`docs/architecture/invariants.md`](docs/architecture/invariants.md) | Design | Non-negotiable system invariants. |
+| [`docs/architecture/trace-matrix.md`](docs/architecture/trace-matrix.md) | Trace | Requirement → artifact/source/test/evidence map. |
+| [`docs/architecture/memory-design.md`](docs/architecture/memory-design.md) | Design | Point-in-time / memory design notes. |
+| [`docs/architecture/option-ledger.md`](docs/architecture/option-ledger.md) | Decisions | Alternatives considered and why. |
+| [`docs/architecture/permission-model.md`](docs/architecture/permission-model.md) | Governance | Agent/permission model. |
+| [`docs/architecture/evaluation-logbook.md`](docs/architecture/evaluation-logbook.md) | Evidence | Per-verification evidence log. |
+| [`docs/architecture/risk-list.md`](docs/architecture/risk-list.md) | Risk | Known risks and mitigations. |
+| [`docs/architecture/evaluation-table.md`](docs/architecture/evaluation-table.md) | Evidence | Test/verification summary table. |
+| [`docs/architecture/runtime-policy-catalog.md`](docs/architecture/runtime-policy-catalog.md) | Policy | Runtime policy / config catalog. |
+| [`docs/code-governance/structural-constraints.md`](docs/code-governance/structural-constraints.md) | Governance | Module/structural constraints. |
+| [`docs/code-governance/verification-constraints.md`](docs/code-governance/verification-constraints.md) | Governance | How code must be verified. |
+| [`docs/code-governance/mcp-tool-manifest.md`](docs/code-governance/mcp-tool-manifest.md) | Governance | MCP tool manifest / usage policy. |
+| [`docs/ai-use-log.yaml`](docs/ai-use-log.yaml) | Governance | AI-tool use log (deterministic YAML upstream). |
+| [`docs/review-memo.md`](docs/review-memo.md) | Governance | Human review memo across phases. |
+| [`docs/debt-register.md`](docs/debt-register.md) | Debt | Known technical debt + uncertainty. |
+| [`docs/bug-diary.md`](docs/bug-diary.md) | Evidence | Detected defects & fixes. |
+| [`.opencode/permissions.jsonc`](.opencode/permissions.jsonc) | Governance | OpenCode permission config. |
+| [`.opencode/rules.md`](.opencode/rules.md) | Governance | OpenCode agent rules. |
+| [`.agent/rules.md`](.agent/rules.md) | Governance | Shared coding-agent rules. |
+| [`prompts/prompt_v1.0.yaml`](prompts/prompt_v1.0.yaml) | Prompt | v1.0 read-only analysis/frozen requirements (historical). |
+| [`prompts/prompt_v1.1.yaml`](prompts/prompt_v1.1.yaml) | Prompt | v1.1 implementation + verification + governance (prior authoritative; historical). |
+| [`prompts/prompt_v1.2.yaml`](prompts/prompt_v1.2.yaml) | Prompt | v1.2 implementation + verification + governance (prior authoritative; historical). |
+| [`prompts/prompt_v1.3.yaml`](prompts/prompt_v1.3.yaml) | Prompt | v1.3 plan-first + STOP + implementation + verification (current authoritative). |
+| [`docs/architecture/adr/004-governance-context-design.proposed.md`](docs/architecture/adr/004-governance-context-design.proposed.md) | ADR | PROPOSED context-assembly/compaction design (not implemented). |
+| [`docs/code-governance/ci-gate-matrix.md`](docs/code-governance/ci-gate-matrix.md) | Governance | CI gate matrix + PR review template + 8 debt categories (document only). |
+| [`docs/code-governance/agent-permissions-proposal.yaml`](docs/code-governance/agent-permissions-proposal.yaml) | Governance | Role×path deny-by-default whitelist PROPOSAL (not active). |
+| [`docs/code-governance/human-rules-proposal.md`](docs/code-governance/human-rules-proposal.md) | Governance | Proposed HUMAN-ONLY `.opencode/rules.md` text (awaiting manual adoption). |
+| [`transcripts/60536848-WANG-Yiwen.md`](transcripts/60536848-WANG-Yiwen.md) | Transcript | Annotated human-supervision record. |
+| [`src/README.md`](src/README.md) | Mapping | Documents the canonical source packages under `src/`. |
+| [`test/offline/README.md`](test/offline/README.md) | Mapping | Indexes deterministic tests under `test/offline/`. |
+| [`test/live/README.md`](test/live/README.md) | Mapping | Documents `integration`-marker live tests (opt-in). |
+
+### Source and test layout after integration
+
+The source packages are under `src/`: `src/tradingagents/`, `src/cli/`, and
+`src/tradingagents_web/`. Deterministic tests are under `test/offline/`;
+external-service tests are under `test/live/`. Imports and installed commands
+keep their existing names. The release core is integrated into these existing
+trees, with no duplicate root-level implementation.

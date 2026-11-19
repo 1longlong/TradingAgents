@@ -224,7 +224,7 @@ jobs:
     # Push/manual runs cannot satisfy the merge gate or overwrite a PR verdict.
     name: ${{ (github.event_name == 'pull_request' || github.event_name == 'pull_request_review') && 'blocking-gate' || 'branch-checks' }}
     if: always()
-    needs: [context, regression, static-analysis, architecture-security, requirements, review-and-log, semantic-evaluation, smoke-install]
+    needs: [context, regression, static-analysis, architecture-security, requirements, review-and-log, semantic-evaluation, smoke-install, governance-validation]
     runs-on: ubuntu-latest
     steps:
       - name: Reject failed, cancelled, or skipped prerequisites
@@ -239,3 +239,19 @@ jobs:
               raise SystemExit(f'Blocking prerequisites: {blocked}')
           print('All blocking prerequisites succeeded')
           PY
+
+  governance-validation:
+    name: governance documentation/schema validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install validation deps (jsonschema for real schema, PyYAML for YAML)
+        run: pip install jsonschema pyyaml
+      - name: Validate required artifacts, YAML/JSONC, real schema, and secrets
+        run: python scripts/validate/validate_requirements.py

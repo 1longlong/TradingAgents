@@ -1,3 +1,216 @@
+# Integrated core and WebUI records
+
+The canonical layout is `src/` and `test/`. The core records below describe the
+release data-quality gate, evidence, debate, usage ledger and output guards;
+the WebUI records describe the presentation extension over that core. Existing
+requirement and invariant IDs remain scoped to their original modules. An
+unqualified core ADR number refers to the release ADR with its descriptive
+filename; a WebUI ADR number refers to the WebUI ADR with its descriptive
+filename. Both sets remain present. Historical approvals retain their original
+scope and do not approve this merge or a new feature. Verification results are
+historical unless explicitly identified as a merged-tree run.
+
+## Release core
+
+# Traceability Matrix
+
+Maps every requirement ID to its design artifacts, source files, tests, and
+current verification evidence, plus a runtime/audit-monitor column. This file
+MUST be updated in the same change that adds or changes a requirement. `TODO`
+items are real gaps, not a claim of completeness.
+
+The **Runtime/audit monitor** column separates what actually exists today
+(`REAL:`, a concrete state field, exported artifact, router, or validator hook)
+from what is only planned (`PLANNED:`), which is either `none` or a named gap
+that is explicitly **NOT implemented**. A planned monitor is never counted as
+enforcement.
+
+| Req ID | Requirement | Design artifacts | Source files | Tests | Verification evidence (observed) | Runtime/audit monitor |
+| --- | --- | --- | --- | --- | --- | --- |
+| FR-DQG-001 | Deterministic Data Quality Gate | `adr/001-data-quality-gate.md`, `invariants.md` | `src/tradingagents/graph/data_quality_gate.py`; `src/tradingagents/evidence/{gate,multi_category_gate,models,validate,quality,adapter,policy}.py` | `test/offline/test_data_quality_gate_graph.py`; `test/offline/test_market_evidence_gate.py`; `test/offline/test_evidence_models.py`; `test/offline/test_market_data_validator_structured.py` | Stage-2 relevant suite: 442 passed (current tree, logbook 043). OpenCode suite: 420 passed (supplied). | REAL: `data_quality_gate` writes `data_quality_gate_decision` + `data_quality_evidence_records` to AgentState; exported `0_quality/gate_summary.md`. PLANNED: none. |
+| FR-DQG-002 | Fail-closed gate verdict precedence | `adr/001-data-quality-gate.md`, `invariants.md` | `src/tradingagents/evidence/gate.py`; `src/tradingagents/graph/data_quality_gate.py`; `src/tradingagents/graph/conditional_logic.py` | `test/offline/test_data_quality_gate_graph.py`; `test/offline/test_market_evidence_gate.py` | Stage-2 relevant suite: 442 passed (current tree, logbook 043). | REAL: `data_quality_error` field + `should_continue_after_data_gate` router; assertion in offline tests. PLANNED: alert on blocked rate. |
+| FR-DQG-003 | Deterministic gate identifiers and serialization | `adr/001-data-quality-gate.md`, `memory-design.md` | `src/tradingagents/evidence/{models,adapter}.py`; `src/tradingagents/graph/data_quality_gate.py` | `test/offline/test_evidence_models.py`; `test/offline/test_evidence_step2_regressions.py` | Stage-2 relevant suite: 442 passed (current tree, logbook 043). | REAL: deterministic run_id/IDs in exported `evidence_manifest.json`. PLANNED: none. |
+| FR-DQG-004 | Multi-category data-quality gate engine | `adr/001-data-quality-gate.md`, `adr/008-automatic-structured-evidence-ingestion.md`, `invariants.md` | `src/tradingagents/evidence/{multi_category_gate,gate,policy,ingest,vendor_adapters}.py`; `src/tradingagents/dataflows/evidence_capture.py`; `src/tradingagents/graph/{data_quality_gate,evidence_tool_node}.py` | `test/offline/test_stage2_multicategory_gate.py`; `test/offline/test_data_quality_gate_graph.py`; `test/offline/test_gate_debate_integration.py`; `test/offline/test_structured_evidence_ingestion.py`; `test/offline/test_policy_to_date_python310.py` | Stage-2 relevant suite: 442 passed (logbook 043); `test_stage2_multicategory_gate.py`: 26 passed. 2026-11-06 review finding 2 fix (logbook 065). **2026-11-11 Stage 1 (ADR-008, approved plan+tests ONLY, NOT human acceptance):** automatic structured optional-evidence ingestion from real vendor-origin records (fundamentals via SEC facts + default yfinance/Alpha Vantage statements; news via Yahoo/Alpha Vantage; sentiment via StockTwits/Reddit) through the real tool path and a compiled StateGraph (analyst -> wrapped ToolNode -> clear -> gate -> research -> report), with a durable capture flush at the tool-node boundary (survives `interrupt_after=["tools"]` + saver close + rebuild + `invoke(None)`), versioned attempt envelopes (distinct `started_at=None` attempts not collapsed), sanitized attempts/errors, manual-grade clamping (no self-asserted High), per-category validation, and lineage-based independence. `test/offline/test_structured_evidence_ingestion.py`: 53 passed; full strict-offline suite 1897 passed / 1 skipped / 1 deselected / 88 subtests / 0 socket attempts (logbook 079). **2026-11-12 Python 3.10 CI repair (approved plan+tests ONLY, NOT human acceptance):** `policy.to_date` normalizes a legitimate terminal uppercase `Z` on an extended date+time-shaped string (one separator char incl. `Z` + an at-least-HH time payload, HH-only through fractions) to `+00:00` so a pre-3.11 `fromisoformat` accepts real StockTwits `created_at` sentiment timestamps; date-only `Z`, repeated `ZZ`, `zZ`/`Zz`, `+00:00Z`, and malformed/date-only forms are NOT rewritten and raw parser behavior is retained (native 3.12 accepts raw `...zZ`, native 3.9 rejects it — interpreter-native, NOT universal rejection; lowercase `z`/repeated `ZZ` rejection holds); legacy non-`Z` numeric/compact `to_date` behavior preserved per interpreter (compact acceptance expanded in 3.11; observed 3.12 acceptance is historical baseline only) and adapter `_iso_date` numeric/bool rejection unchanged; offsets keep calendar-date semantics. Independent native 3.9.25/3.12.7 old/new-parser probes (NOT 3.10 proof) drove the guard fixes; **independent OpenCode technical verification COMPLETE (logbook 089): full 2406 passed / 0 sockets; focused 5-module subset 240 / 0; original-2 under pre-3.11 simulation 2 / 0; 22/22 native-3.9 checks; `ruff` clean; governance 43/43; frozen files unchanged)**; explicit human acceptance and actual remote 3.10 CI remain PENDING. `test/offline/test_policy_to_date_python310.py`: 39 passed; `test/offline/test_structured_evidence_ingestion.py`: 53 passed; builder focused/regression 191 passed; full strict-offline 2406 passed / 0 sockets (logbook 089). | REAL: `data_quality_group_statuses` exported in `gate_summary.md` + manifest; optional records + `data_quality_source_attempts` envelope written to state/manifest; durable `data_quality_ingested_evidence`/`data_quality_source_attempt_envelopes`/`data_quality_not_attempted_feeds` state channels. PLANNED: per-category dashboards. |
+| FR-DQG-005 | Shared deterministic redacted report artifacts | `adr/001-data-quality-gate.md`, `adr/002-dynamic-debate-termination.md`, `code-governance/verification-constraints.md` | `src/tradingagents/report_artifacts.py`; `src/tradingagents/reporting.py`; `src/tradingagents/graph/trading_graph.py`; `src/cli/main.py` | `test/offline/test_report_artifacts_stage2.py`; `test/offline/test_reporting.py`; `test/offline/test_report_artifacts_audit.py` | Stage-2 relevant suite: 442 passed (current tree); `test_report_artifacts_stage2.py`: 16 passed. 2026-11-06 review finding 3 fix: evidence_manifest exports each record's per-evidence validations by evidence_id AND the separate validation_results_by_evidence_id map; run_summary adds run_id/asset_type/snapshot_id (null when unavailable), quality_counts, and usage_provenance (debate calls separate from total-run calls; unmeasured tool/input-output counts explicit None). `test/offline/test_report_artifacts_audit.py`: 20 passed (was 12; second review adds legacy-embedded preservation, authoritative-map override, shuffle-invariant ordering, ambiguous-identity handling; logbook 061/063). | REAL: `0_quality/*`, `2_research/debate_trace.json`, `run_summary.json` are the audit artifacts themselves; `run_summary.usage_provenance` flags estimated vs measured; run_summary.json, 2_research/debate_trace.json AND the Markdown Run Summary all carry the same participation/skip/stop information and per-field provenance (ADR-007; test/offline/test_report_artifacts_audit.py). PLANNED: none. |
+| FR-DQG-006 | Authoritative blocked verdict at the output boundary | `adr/001-data-quality-gate.md`, `invariants.md` | `src/tradingagents/agents/utils/output_guard.py`; `src/tradingagents/agents/utils/rating.py`; `src/tradingagents/agents/managers/{research_manager,portfolio_manager}.py`; `src/tradingagents/agents/trader/trader.py`; `src/tradingagents/graph/signal_processing.py`; `src/tradingagents/agents/utils/memory.py` | `test/offline/test_output_guard.py`; `test/offline/test_research_manager_hold_contract.py`; `test/offline/test_structured_agents.py`; `test/offline/test_memory_log.py` | 2026-11-06 fix of review finding 1, extended by the operator review, the independent recheck findings 1+3, the operator recheck residual, and the operator executable-instruction maintenance. Recognition is a single shared linear scan (`rating.decision_header` / `_split_header`: NFKC-first, optional bullet/heading, arbitrary plain descriptor — no cap — required separator, single-word value) so fullwidth/NFKC labels and values, long decision-label descriptors (`My final ... recommendation rating: Buy`), repeated/trailing labels, Markdown wrapping and executable `FINAL TRANSACTION PROPOSAL: BUY because ...` markers are all pinned to `**<Label>**: Hold` with the explanation preserved as non-executable prose. On a blocked Trader output the fullwidth/long-form entry/stop/position-sizing fields are neutralised to `not applicable` while the rationale survives. Quoted alternatives/blockquotes and narrative mentions (`> ..., not a decision.` / `We rejected the earlier rating: Sell`) are preserved and no longer override the decision: `extract_rating` now takes the last *structural* header as authoritative before its looser within-line fallback, so the plain textual signal, the saved report decision and the memory body all agree with the structured Hold. The final signal boundary stays gate-aware (`SignalProcessor.process_signal(text, state)` -> Hold). `test/offline/test_output_guard.py`: 130 passed (logbook 067); focused affected suite 520 passed; strict offline suite 4 failed / 1661 passed (same known baselines; not all-green). 2026-11-06 fixes await explicit human review. | REAL: output guard pins decision fields; final signal + memory tag exported in saved report. PLANNED: none. |
+| FR-DDT-001 | Dynamic evidence-aware debate termination | `adr/002-dynamic-debate-termination.md`, `invariants.md` | `src/tradingagents/debate/{evaluator,evaluator_node,config,models}.py`; `src/tradingagents/graph/setup.py` | `test/offline/test_debate_evaluator.py`; `test/offline/test_debate_graph.py`; `test/offline/test_debate_turn.py` | Stage-2 relevant suite: 442 passed (current tree, logbook 043); OpenCode 420 passed (supplied). | REAL: `debate_termination_decision` (route/stop_reason/trace) written to AgentState and `debate_trace.json`. PLANNED: none. |
+| FR-DDT-002 | Valid-new-evidence manifest and citation allowlist | `adr/002-dynamic-debate-termination.md`, `adr/010-exact-claim-validation.md` | `src/tradingagents/debate/{evidence_manifest,turn,claims}.py`; `src/tradingagents/agents/researchers/{bull,bear}_researcher.py`; `src/tradingagents/evidence/origin.py` | `test/offline/test_debate_evidence_manifest.py`; `test/offline/test_debate_turn.py`; `test/offline/test_researchers_verdict_gate.py`; `test/offline/test_gate_debate_integration.py`; `test/offline/test_exact_claim_validation.py`; `test/offline/test_exact_claim_runtime.py` | Stage-2 relevant suite: 442 passed (current tree, logbook 043). 2026-11-06 review finding 2 fix: the manifest/allowlist now receives per-record-classified gate records, so a normal/Medium gate run exposes valid IDs and a cited+linked real ID counts as new; genuinely Low/Blocked/future IDs still never count (`test/offline/test_gate_debate_integration.py`: 9 passed, logbook 065). **2026-11-11 Stage 3 (ADR-010, approved plan+tests ONLY, NOT human acceptance):** a cited, eligible ID whose typed exact claim does not validate (wrong date/value/unit against the record's typed origin) is removed from the valid-new-evidence sets, so it cannot extend the debate; a correct typed exact claim counts normally, and the qualitative/no-claim path is unchanged. `test/offline/test_exact_claim_validation.py`: 60 passed; `test/offline/test_exact_claim_runtime.py`: 9 passed; full strict-offline 2044 passed / 0 sockets (logbook 081). **2026-11-12 two-defect repair (ADR-010 amendment):** a standalone typed `claim=...` line outside the `DEBATE_METADATA` marker (before/after/no-marker, incl. the no-stance FAILED branch) is recovered by a shared strict extractor into the SAME date/value/unit/origin validation; marker presence never hides outside claims (dedupe only by canonical identity); fenced (incl. unclosed) and quoted examples are never trusted; contradictory `role`/`date_role` aliases are unparseable; wrong/unknown/future/Low/foreign fields rejected/unverified, never verified; honest additive coverage is exported and survives a real SQLite resume; legacy no-typed path unchanged; frozen 20/7 records unchanged. `test/offline/test_standalone_claims.py`: 49 passed (logbook 085). | REAL: manifest `valid_ids` exported; allowlist applied in researcher path; evaluator prunes invalid-claimed IDs before new-evidence counting; claim validation summary exported in `debate_trace.json` (now incl. honest `coverage`). PLANNED: citation-coverage metric monitor. |
+| FR-DDT-003 | Budget-safe termination with summary reserve | `adr/002-dynamic-debate-termination.md`, `adr/009-durable-run-usage-ledger.md`, `runtime-policy-catalog.md` | `src/tradingagents/debate/{budget,config}.py`; `src/tradingagents/debate/{usage_ledger,usage_capture,researcher_accounting}.py`; `src/tradingagents/debate/evaluator.py`; `src/tradingagents/agents/researchers/{bull,bear}_researcher.py`; `src/tradingagents/graph/{setup,conditional_logic,trading_graph}.py`; `src/cli/main.py` | `test/offline/test_debate_budget.py`; `test/offline/test_debate_config.py`; `test/offline/test_debate_evaluator.py`; `test/offline/test_debate_precall_budget.py`; `test/offline/test_durable_usage_ledger.py`; `test/offline/test_whole_run_usage.py` | Stage-2 relevant suite: 442 passed (current tree, logbook 043). 2026-11-06 review finding 2 fix: conservative pre-call admission guard before every Bull/Bear so max_calls=1 never executes 2 debate calls; a refused call routes to the Research Manager with budget_exhausted for the incomplete round; enabled=False keeps the legacy baseline. `test/offline/test_debate_precall_budget.py`: 22 passed (was 14; second review requires remaining >= reserve + estimated next-call cost, exact token/time boundaries before Bull/Bear; logbook 060/063). **2026-11-11 Stage 2 (ADR-009, approved plan+tests ONLY, NOT human acceptance):** durable per-run reservation/settlement ledger (SQLite) written BEFORE the outbound call, settled after, reconciled idempotently on resume; a summary admission distinct from the optional-call guard (consumes the reserve without a second optional estimate, requires a remaining call slot, atomic across capture instances); `test/offline/test_durable_usage_ledger.py`: 33 passed; `test/offline/test_whole_run_usage.py`: 10 passed; full strict-offline 1940 passed (logbook 080). | REAL: `debate_usage` (calls/tokens/seconds/estimated) + `budget_exhausted` stop_reason in trace. REAL: `debate_usage` now records MEASURED elapsed time (injectable monotonic clock; invalid/backwards/non-finite aborts), provider-reported token provenance with explicit estimated/missing fallback, per-call conflict originals, logical-vs-transport call distinction, and a sanitized failure ledger (ADR-007). ADR-009 adds a DURABLE ledger (`usage_ledger.db`) with per-invocation reservation/settlement, `whole_run_usage` (all phases) in `run_summary.json`/markdown, and a fail-closed pre-call guard on unresolved spend. PLANNED: cross-process live concurrency beyond the offline barrier tests (offline-proven only). |
+
+| FR-DDT-004 | Backward-compatible termination config | `adr/002-dynamic-debate-termination.md` | `src/tradingagents/debate/config.py`; `src/tradingagents/graph/setup.py` | `test/offline/test_debate_config.py` | Conflict/debate/graph/Stage-2 relevant suite: 490 passed (current tree, logbook 046). | REAL: config validated before graph build (ValueError). PLANNED: none. |
+| FR-DDT-005 | Deterministic ConflictRecord runtime lifecycle | `adr/002-dynamic-debate-termination.md`, `adr/010-exact-claim-validation.md`, `invariants.md` | `src/tradingagents/debate/{conflicts,turn,models,evaluator_node,claims}.py`; `src/tradingagents/agents/managers/research_manager.py`; `src/tradingagents/evidence/origin.py` | `test/offline/test_debate_conflicts.py`; `test/offline/test_debate_turn.py`; `test/offline/test_debate_evaluator.py`; `test/offline/test_debate_graph.py`; `test/offline/test_exact_claim_runtime.py` | `test/offline/test_debate_conflicts.py`: 39 passed (logbook 046); conflict/debate/graph/Stage-2 relevant suite: 490 passed (logbook 046). **2026-11-11 Stage 3 (ADR-010):** a factual conflict asserted on an evidence ID whose typed exact claim did not validate is not created (and drops an open one on re-observation) — a valid-but-misused citation never supports/resolves a factual conflict; action/interpretive conflicts unaffected (`test/offline/test_exact_claim_runtime.py::TestConflictLifecycle`, logbook 081). | REAL: derived conflicts + `ConflictSummary` persisted to debate state; invalid-claimed IDs excluded from conflict evidence validation. PLANNED: none. |
+| NFR-DET-001 | Determinism | `invariants.md` | `src/tradingagents/evidence/{quality,gate}.py`; `src/tradingagents/debate/evaluator.py`; `src/tradingagents/debate/conflicts.py` | `test/offline/test_evidence_models.py`; `test/offline/test_debate_evaluator.py`; `test/offline/test_debate_conflicts.py`; `test/offline/test_ohlcv_cache_freshness.py`; `test/offline/test_governance_scaffold.py` | Conflict/debate/graph/Stage-2 relevant suite: 490 passed (current tree, logbook 046). **2026-11-11 repair**: the cache-freshness regression matrix proves freshness is deterministic across UTC / `Asia/Hong_Kong` / `America/New_York` (summer+winter/DST) by round-tripping the same local wall time; the governance validator rejects `schema_version` `"1.0"` on both the real-schema and the deterministic-subset paths (ADR-006, logbook 078). | REAL: none dedicated (determinism proven by offline tests only). PLANNED: repeat-run equality monitor. |
+| NFR-FC-001 | Fail closed | `invariants.md` | `src/tradingagents/evidence/gate.py`; `src/tradingagents/graph/data_quality_gate.py`; `src/tradingagents/debate/evaluator.py`; `src/tradingagents/debate/conflicts.py`; `src/tradingagents/agents/utils/output_guard.py`; `src/tradingagents/graph/signal_processing.py` | `test/offline/test_market_evidence_gate.py`; `test/offline/test_debate_evaluator.py`; `test/offline/test_debate_conflicts.py`; `test/offline/test_output_guard.py` | Conflict/debate/graph/Stage-2 relevant suite: 490 passed (logbook 046). Missing/malformed/inconsistent gate state fails closed at the output AND final-signal boundaries (`effective_gate_verdict`, `SignalProcessor.process_signal(text, state) -> Hold` on blocked; `test/offline/test_output_guard.py`, logbook 065). | REAL: `data_quality_error` + blocked route + Hold signal boundaries. PLANNED: blocked-escape alert (none). |
+| NFR-PIT-001 | Point-in-time integrity | `memory-design.md`, `invariants.md`, `adr/010-exact-claim-validation.md` | `src/tradingagents/evidence/{validate,origin}.py`; `src/tradingagents/dataflows/market_data_validator.py`; `src/tradingagents/debate/claims.py` | `test/offline/test_fundamentals_lookahead.py`; `test/offline/test_news_lookahead.py`; `test/offline/test_social_lookahead.py`; `test/offline/test_memory_pointintime.py`; `test/offline/test_exact_claim_validation.py` | Existing point-in-time tests pass within the offline suite; re-run is date-sensitive (see logbook). **2026-11-11 Stage 3 (ADR-010):** claim dates are validated against the matching typed date role only (target vs observation vs availability vs timestamp); a matched-but-future role value is a look-ahead rejection; an SEC filed date is not the fiscal end; a news publication date is not a figure's date; a date-only source cannot prove a timestamp. `test/offline/test_exact_claim_validation.py::TestCorrectWrongByRole/TestSecFiledNotFiscalEnd/TestNewsPublishedIsNotClaimDate/TestTimestampsAndGranularity` (logbook 081). **2026-11-12 (ADR-010 amendment):** standalone typed claims recovered from outside the marker flow through the SAME role/value/unit validator, so a future-dated or role-mismatched standalone claim is a fail-closed rejection (`test/offline/test_standalone_claims.py::TestFailClosedNegatives`). | REAL: as-of applied in `market_data_validator`/`validate`; observed_at on every exported record; typed origin date roles (`data_quality_origin_metadata`). PLANNED: none (claim-date semantic check now implemented for typed exact claims; free prose beyond the conservative parser stays unverified). |
+| NFR-AUD-001 | Auditability | `invariants.md`, `adr/010-exact-claim-validation.md` | `src/tradingagents/evidence/models.py`; `src/tradingagents/debate/{models,evaluator,conflicts,claims}.py`; `src/tradingagents/report_artifacts.py` | `test/offline/test_evidence_models.py`; `test/offline/test_debate_evaluator.py`; `test/offline/test_debate_conflicts.py`; `test/offline/test_report_artifacts_audit.py`; `test/offline/test_exact_claim_validation.py`; `test/offline/test_exact_claim_runtime.py` | Conflict/debate/graph/Stage-2 relevant suite: 490 passed (current tree, logbook 046). Per-evidence validation traceability and run-summary identity/provenance now exported (logbook 061). **2026-11-11 Stage 3 (ADR-010):** every typed exact-claim verdict (verified/rejected/unverified + reason + asserted date/value/unit + cited ids) is exported in `2_research/debate_trace.json` (`claim_validation`) and injected into the Research Manager prompt; the raw rejected fact is redacted from the trusted plan/trader/final decision without a global Hold (`test/offline/test_exact_claim_runtime.py::TestManagerAuditAndTrustedOutput`, logbook 081). **2026-11-12 (ADR-010/011 amendments):** standalone typed-claim coverage (`typed_lines_found`/`parsed`/`unparseable`) is exported (redacted) in `debate_trace.json` and a non-verified standalone typed line in a trusted plan/report is replaced by the unverified marker at `enforce_trusted_boundary`; the ADR-011 boundary fix keeps an ordinary price/date byte-for-byte unchanged (`test/offline/test_confidence_boundary.py::TestRealBoundaryPropagation`; `test/offline/test_standalone_claims.py::TestRealBoundariesAndResume`; logbook 085). | REAL: reason codes/policy_version/critical_evidence_ids/trace exported; exact-claim validation summary exported (verified/rejected/unverified) in debate_trace.json; debate participation truth (structured-only, legacy prose = unverified) + sanitized failure ledger + per-field usage provenance exported in run_summary/debate_trace/markdown (ADR-007; test/offline/test_debate_participation.py, test_report_artifacts_audit.py); live-confirmed by 2026-11-10 D2 (participation explicitly `data_quality_blocked`, no absent-opponent attribution in trusted report; logbook 074). PLANNED: none. |
+| NFR-BUD-001 | Budget safety | `adr/009-durable-run-usage-ledger.md`, `runtime-policy-catalog.md` | `src/tradingagents/debate/{budget,config}.py`; `src/tradingagents/debate/{usage_ledger,usage_capture,researcher_accounting}.py`; `src/tradingagents/agents/researchers/{bull,bear}_researcher.py`; `src/tradingagents/graph/{setup,conditional_logic,trading_graph}.py`; `src/cli/main.py` | `test/offline/test_debate_budget.py`; `test/offline/test_debate_precall_budget.py`; `test/offline/test_durable_usage_ledger.py`; `test/offline/test_whole_run_usage.py` | Stage-2 relevant suite: 442 passed (current tree, logbook 043). Pre-call guard prevents over-budget optional calls; summary reserve preserved; usage estimates honestly flagged (logbook 060). **2026-11-11 Stage 2 (ADR-009):** durable ledger fail-closed on unresolved/unknown spend; atomic admission (call+token+time+reserve) re-read inside a `BEGIN IMMEDIATE` txn across independent capture instances; summary reserve protected per attempt; `test/offline/test_durable_usage_ledger.py` 33 passed + `test/offline/test_whole_run_usage.py` 10 passed; full strict-offline 1940 passed / 0 sockets (logbook 080). | REAL: `debate_usage`/`run_summary.usage` (estimated flag). REAL: measured elapsed + provider token provenance now in `debate_usage` (ADR-007; test/offline/test_debate_budget.py, test_debate_researcher_timing.py); live-confirmed by 2026-11-10 D1 (measured + provider, logbook 074). ADR-009 adds a durable cross-resume ledger (reservation before call, settlement after, idempotent reconcile) and whole-run aggregation. PLANNED: live-provider concurrency/retry observation (hidden SDK retries remain `unknown`; offline-only proof). |
+
+| NFR-BC-001 | Backward compatibility | `runtime-policy-catalog.md`, `adr/010-exact-claim-validation.md`, `adr/011-deterministic-degraded-confidence-cap.md` | `src/tradingagents/debate/config.py`; `src/tradingagents/graph/setup.py`; `src/tradingagents/debate/{confidence_policy,claims,turn,models}.py` | `test/offline/test_debate_config.py`; `test/offline/test_debate_graph.py`; `test/offline/test_confidence_boundary.py`; `test/offline/test_standalone_claims.py` | Stage-2 relevant suite: 442 passed (current tree, logbook 043). **2026-11-12 two-defect repair (approved corrected plan+tests ONLY, NOT human acceptance):** the ADR-011 boundary fix keeps ordinary prices/dates byte-for-byte identical and the ADR-010 standalone recovery is additive — a legacy/qualitative turn with no standalone typed lines keeps the exact prior `claim_validation_summary` shape (no `coverage` key) and `DebateTurn` defaults (0/0); frozen EvidenceRecord(20)/SourceAttempt(7) unchanged. `test/offline/test_confidence_boundary.py` 51 + `test/offline/test_standalone_claims.py` 49 passed; full strict-offline 2290 passed / 0 sockets (logbook 085). | REAL: none dedicated. PLANNED: legacy-vs-enabled routing diff monitor. |
+| NFR-OFF-001 | Offline testability | `code-governance/verification-constraints.md` | `test/conftest.py`; `scripts/validate/strict_offline_harness.py` | `test/offline/test_data_quality_gate_graph.py`; `test/offline/test_debate_evaluator.py`; `test/offline/test_governance_scaffold.py`; `test/live/test_no_data_handling.py`; `test/offline/test_ohlcv_cache_freshness.py` | Count-and-fail harness records/asserts forbidden socket attempts (logbook 071). **2026-11-11 repair (DEBT-034/DEBT-001/DEBT-002)**: `test/live/test_no_data_handling.py` now mocks `stockstats_utils.vendor_reachable` (True → no-data `NoMarketDataError`; False → outage `VendorRateLimitError`) under `tmp_path`, and `test/offline/test_ohlcv_cache_freshness.py` uses the local wall-clock epoch with a UTC/HK/NY summer+winter matrix. Full strict-offline suite: **1844 passed, 1 skipped, 1 deselected, 22 warnings, 88 subtests, 0 forbidden socket attempts** (logbook 078). Zero-attempt now ACHIEVED offline; independently confirmed by OpenCode (focused 76 passed/0 attempts; full 1844 passed/0 attempts; TZ=UTC/HK/NY cache+no-data each 18 passed/0 attempts), logbook 078. Remote CI not re-run (push not authorized). | REAL: `@pytest.mark.integration` marker + offline conftest + count-and-fail harness. PLANNED: CI socket-deny job (see ci-gate-matrix, NOT implemented as a dedicated job). |
+| NFR-SEC-001 | Secret safety | `code-governance/verification-constraints.md` | `.env.example`; `AGENTS.md`; `.opencode/permissions.jsonc` | — | Deterministic secret scan of new files found no secrets (see `scripts/validate`). | REAL: validator `scan_secrets` (reports location only). PLANNED: pre-commit secret hook. |
+| NFR-CMP-001 | Deterministic offline baseline comparison | `adr/003-phase4a-offline-comparison.md`, `invariants.md` | `src/tradingagents/comparison/{runner,schemas,fixtures}.py`; `scripts/run_phase4a_comparison.py` | `test/offline/test_comparison_runner.py`; `test/offline/test_comparison_schemas.py` | Phase 4A comparison tests: 90 passed (current tree; correction round 73, logbook 054; narrow fail-closed correction 90, logbook 055). The actual stop reason is preserved (no_new_evidence / budget_exhausted / max_rounds_reached); a scripted run that exhausts its available rounds is recorded as `input_exhausted` and is never an early stop. Narrow fail-closed correction: `CaseResult.__post_init__` rejects a contradictory `strategy`/`early_stopped`/`stop_reason` combination (FIXED is never early-stopped; an early-stopped DYNAMIC result must carry a genuine `_DYNAMIC_STOP_REASONS` reason) so an inconsistent result can never reach the aggregate/report. | REAL: `evaluation-output/comparison_results.json` stop_reason per case. PLANNED: none. |
+| NFR-CMP-002 | Machine-readable measured-vs-estimated comparison metrics | `adr/003-phase4a-offline-comparison.md` | `src/tradingagents/comparison/{metric_formulas,schemas,runner,report}.py` | `test/offline/test_comparison_schemas.py`; `test/offline/test_comparison_runner.py` | `test/offline/test_comparison_schemas.py` + `test/offline/test_comparison_runner.py`: 90 passed (correction round 73, logbook 054; narrow fail-closed correction 90, logbook 055); evaluation-output reports `Total tool calls`, per-case `Tool calls`/`Source`, `Estimated (not measured) cases`, and the actual per-case + aggregate stop reasons. Narrow fail-closed correction: `early_stop_rate` / the early-stop label can never be produced for a contradictory `strategy`/`early_stopped`/`stop_reason` combination. | REAL: report `Source`/`Estimated` columns + `usage_provenance`. PLANNED: none. |
+| NFR-CMP-003 | Human traceability rubric and honest scripted-result labeling | `adr/003-phase4a-offline-comparison.md` | `src/tradingagents/comparison/{schemas,report,runner}.py` | `test/offline/test_comparison_schemas.py`; `test/offline/test_comparison_runner.py` | `evaluation-output/comparison_report.md` states offline/scripted scope, not a live-provider result; traceability reported as `pending`; usage `Source` distinguishes estimated/measured (logbook 049). Correction round: a SCORED result requires exactly four non-null scores in `TRACEABILITY_DIMENSIONS` order and rejects missing/extra/null/reordered sets; PENDING stays pending (logbook 054). | REAL: report `traceability: pending` + scripted-scope disclaimer. PLANNED: human-score gate (manual). |
+
+## TODO / gaps
+
+- `TODO (60536848-WANG-Yiwen): The 2026-11-06 independent-recheck fixes for
+  findings 1/2/3 (FR-DQG-004/006, FR-DDT-002; DEBT-016/017/018; RISK-016/017) are
+  technically verified offline and await explicit human review. No human approval
+  or traceability score has been recorded for them.`
+- `TODO (60536848-WANG-Yiwen): The 2026-11-06 operator executable-instruction
+  maintenance (FR-DQG-006; DEBT-020/RISK-019) is technically verified offline and
+  awaits explicit human review. It narrows the CLI-hardening gap and the numeric
+  degraded confidence ceiling / automatic optional adapters, which remain OPEN and
+  were not touched. No human approval or traceability score has been recorded.`
+- `TODO (60536848-WANG-Yiwen): The degraded-run numeric confidence ceiling
+  (DEBT-014) and automatic multi-category (fundamentals/news/sentiment) evidence
+  adapters (DEBT-015/RISK-015) remain explicitly OPEN; no numeric policy or
+  adapter was invented in this change.`
+
+- `TODO (60536848-WANG-Yiwen): Stage 2 (ADR-009 durable run-scoped usage ledger
+  and whole-run aggregation; DEBT-021/RISK-020 durable-accounting gap) is
+  implemented and offline-verified (test/offline/test_durable_usage_ledger.py 33 passed;
+  test/offline/test_whole_run_usage.py 10 passed; full strict-offline 1940 passed / 0
+  sockets; logbook 080) and awaits INDEPENDENT OpenCode review + explicit human
+  acceptance. All four repair items were approved in plan/test scope on 2026-11-11;
+  this is implementation approval, NOT final acceptance. (Stage 4 is now
+  implemented — see the Stage 4 entry below.)`
+
+- `TODO (60536848-WANG-Yiwen): Stage 3 (ADR-010 exact claim date/value/unit
+  validation; DEBT-022/RISK-020 claim-semantics gap) is implemented and
+  offline-verified (test/offline/test_exact_claim_validation.py 48 passed;
+  test/offline/test_exact_claim_runtime.py 9 passed; full strict-offline 2044 passed / 0
+  sockets; logbook 081) and awaits INDEPENDENT OpenCode review + explicit human
+  acceptance. Approved in plan/test scope on 2026-11-11 (implementation approval,
+  NOT final acceptance). Only typed exact claims and common inline exact prose are
+  deterministically validated; arbitrary natural-language semantics are NOT
+  claimed proven (an unparseable prose claim stays `unverified`).`
+
+- `TODO (60536848-WANG-Yiwen): Stage 4 (ADR-011 deterministic degraded-run
+  confidence cap 0.60; DEBT-014/RISK-014) is implemented and offline-verified
+  (test/offline/test_confidence_cap_policy.py + test/offline/test_confidence_cap_runtime.py +
+  test/offline/test_confidence_cap_cli.py = 110 passed / 0 sockets; full strict-offline
+  2154 passed / 1 skipped / 1 deselected / 22 warnings / 88 subtests / 0 sockets;
+  Ruff `All checks passed`; validate_requirements 43/43 PASS; `git diff --check`
+  clean; logbook 082) and the independent OpenCode offline verification is
+  **CONFIRMED** (same counts; HEAD 5ecea91 unchanged; frozen files unchanged);
+  explicit human acceptance remains pending. Approved in plan/test scope on
+  2026-11-11 (implementation approval, NOT final acceptance). The post-gate analyst-report / plan / debate+risk-history
+  text AND the persisted turn/stance numeric confidence are capped on a per-read
+  state COPY before every post-gate model prompt (Bull/Bear/Evaluator/RM/Trader/
+  risk×3/PM), so a legacy/direct-GraphSetup/SQLite resume cannot feed a raw 0.95
+  to the evaluator or any later prompt; the API and CLI resume paths additionally
+  run the SAME fail-closed resume sanitizer before any model/stream call. Typed
+  RM/Trader/PM schema confidence is capped on its EXACT raw value BEFORE the lossy
+  ``:.2f`` render (a raw 0.6000001/0.604/0.954321 is genuinely capped and its exact
+  raw recorded in the audit, never masked by the rounded rendered text). The cap
+  is an ENGINEERING ceiling, NOT a calibrated probability and NOT production
+  threshold tuning; `blocked` runs keep their non-numeric Hold discipline.`
+
+- `TODO (60536848-WANG-Yiwen): Two-defect repair (2026-11-12; ADR-010 + ADR-011
+  amendments; DEBT-039/DEBT-040, RISK-033/RISK-034) is implemented and
+  offline-verified: the degraded-confidence suffix grammar no longer corrupts an
+  ordinary price (`$204.38.` byte-identical; bare `204.38 confidence` still
+  quarantined; genuine forms still cap 0.60; CRLF soft-wrap binds; date/sign/path
+  fragments excluded) and the 8 out-of-marker Bear typed lines are recovered into
+  the same fail-closed date/value/unit/origin validation with honest coverage
+  (fenced incl. unclosed / quoted examples never trusted; alias contradictions
+  unparseable; unknown/future/wrong fields rejected). `test/offline/test_confidence_boundary.py`
+  51 + `test/offline/test_standalone_claims.py` 49 passed; full strict-offline 2290 passed
+  / 1 skipped / 1 deselected / 22 warnings / 88 subtests / 0 sockets; Ruff clean;
+  governance 43/43; `git diff --check` clean (logbook 085). Approved in corrected
+  plan+test scope on 2026-11-12 (implementation approval, NOT final acceptance).
+  **Independent OpenCode technical review is COMPLETE (logbook 086):** same 2290 / 0
+  sockets; independent OFFLINE replay of the actual prior-school Bear text recovers
+  all 8 claims as 1 verified (volume) / 5 rejected (unknown optional evidence) /
+  2 unverified (price currency/unit genuinely unknown) — honest, NOT all-8-verified;
+  real Trader/report/record_decision boundaries (real `_is_blocked_state`) confirmed.
+  Independent review + explicit human acceptance: review COMPLETE, **human
+  acceptance + any live retest remain pending**; preserved live evidence NOT
+  relabelled as post-fix live proof.`
+
+- `TODO (60536848-WANG-Yiwen): Verified-span repair (2026-11-12; ADR-010 addendum;
+  DEBT-041/RISK-035) is implemented and offline-verified: a CORRECT long-decimal
+  typed claim (`value=306127800.0000000000`, `unit=shares`, real volume ID+origin)
+  that strictly validates as verified is no longer re-redacted by the generic prose
+  scanner. Protection is OCCURRENCE-EXACT (tied to each verified ClaimRecord's own
+  `date=`/`value=` field offsets via `claims.extract_claim_span_occurrences`), keeps
+  the date+value pair together (no cross-pairing), and shares ONE whole-document
+  fence/Example exclusion walk with canonical and standalone detection (a fenced/
+  Example canonical claim gains no protection). Separate prose/tail assertions and
+  wrong/future/wrong-unit/currency/scale/unknown/Low/Blocked claims remain redacted;
+  an unparseable mixed line fails closed. Canonical + standalone forms covered,
+  including field-order/wrapper variants (date/value FIRST or LAST with
+  bullet/numeric-list or canonical whitespace/backticks) located at exact token
+  offsets and supported formats (uppercase keys, spaced keys, canonical backticks,
+  equivalent numeric forms). Blanking is PER-TOKEN (`_span_is_authorized`): a verified
+  date/value token is never erased and an unauthorized span is always blanked
+  regardless of heuristic pairing — duplicate identical `||` canonical subclaims are
+  preserved across exhaustive 720 field-order permutations, and mixed verified+wrong
+  siblings redact only the bad component.
+  `test/offline/test_verified_span_boundary.py` 77 passed (incl. REAL `write_report_tree`
+  and `record_decision`/`TradingMemoryLog` with the real `_is_blocked_state`);
+  focused relevant suite 716 passed; full strict-offline **2367 passed / 1 skipped /
+  1 deselected / 22 warnings / 88 subtests / 0 sockets**; Ruff clean; governance
+  43/43; `git diff --check` clean (logbook 087). Approved in plan+test scope on
+  2026-11-12 (implementation approval, NOT final acceptance). **Independent OpenCode
+  FINAL technical review is COMPLETE (logbook 088):** full 2367 / 0 sockets; focused
+  specified 8 modules 556 / 0 sockets (different subset from the 716 related suite;
+  not conflated); exhaustive 4320 format cases (720 orders × 6 formats) preserved;
+  saved-response replay 19 total checks incl. the 5 equivalent variants all true;
+  real report/memory preserve the correct long line while future/unknown-ID claims
+  are removed. Authority is PER VERIFIED TOKEN OCCURRENCE (not heuristic pair),
+  unprotected partner still checked, no whole-line bypass. Prior 26-call /
+  202,941-token school run remains historical bug evidence; **explicit human final
+  acceptance + any post-fix live retest pending**.`
+
+- `RESOLVED (60536848-WANG-Yiwen, 2026-10-21): Official student ID confirmed
+  (60536848, WANG Yiwen) and transcript filename finalized to
+  transcripts/60536848-WANG-Yiwen.md.`
+- `TODO (60536848-WANG-Yiwen): Verify the OpenCode `permissions.jsonc` schema
+  against the installed OpenCode version; record result in debt-register.`
+- `TODO (60536848-WANG-Yiwen): Decide whether to stabilize or document the
+  date-sensitive cache tests and the network-reachability-dependent baseline
+  test.`
+- `TODO (60536848-WANG-Yiwen): Phase 4A human traceability is pending a human
+  score against the documented rubric; every case is reported as "pending" until
+  then. Phase 4A results are deterministic offline scripted fixtures, not
+  live-provider measurements, and no production thresholds were tuned.
+  Correction round implemented (scored status requires exactly four non-null
+  traceability scores in TRACEABILITY_DIMENSIONS order; input exhaustion is not
+  a dynamic early stop; the actual stop reason is preserved in results,
+  JSON/aggregates, and Markdown) and verified by 90 focused comparison tests
+  passing (logbook 054/055). Narrow fail-closed correction: a `CaseResult` with
+  a contradictory `strategy`/`early_stopped`/`stop_reason` combination is
+  rejected at construction (FIXED is never early-stopped; an early-stopped
+  DYNAMIC result must carry a genuine `_DYNAMIC_STOP_REASONS` reason), so an
+  inconsistent result can never be aggregated or rendered. Human review decision
+  (logbook 056, 2026-10-23): **Phase 4A approved with limitations** — the full
+  offline suite is not completely green, human traceability scores remain
+  `pending`, and no production threshold tuning has been performed.`
+- `TODO (60536848-WANG-Yiwen): Defect-1 (ADR-010 amendment) — gate origin
+  metadata now survives ingestion persistence and real captured-origin conflicts
+  fail closed via the declared `data_quality_origin_conflicted_ids` channel. Files:
+  `src/tradingagents/graph/data_quality_gate.py`, `src/tradingagents/evidence/ingest.py`,
+  `src/tradingagents/evidence/origin.py`, `src/tradingagents/agents/utils/agent_states.py`,
+  `src/tradingagents/debate/evaluator_node.py`,
+  `src/tradingagents/agents/utils/output_guard.py`. Tests:
+  `test/offline/test_gate_origin_authority.py` (18 passed). FR-DQG-004, NFR-PIT-001,
+  NFR-AUD-001, INV-3, INV-4. Offline-verified only; the prior incomplete
+  2026-11-11 school-model live run is NOT relabelled as a fixed live proof.`
+- `TODO (60536848-WANG-Yiwen): Defect-2 (ADR-009 amendment) — structured-output
+  raw AIMessage usage retained (same single call, `include_raw=True` with a
+  binding-only fallback), settlement precedes parse/sanitize/render, and mixed
+  aggregates are labelled `mixed` (report-only, never a per-call source). Files:
+  `src/tradingagents/agents/utils/structured.py`, `src/tradingagents/debate/usage_capture.py`,
+  `src/tradingagents/debate/budget.py`, `src/tradingagents/report_artifacts.py`. Tests:
+  `test/offline/test_structured_raw_usage.py` (18 passed). NFR-BUD-001, NFR-AUD-001,
+  FR-DDT-003, NFR-BC-001, INV-7. Offline-verified only; NOT a live proof.`
+
+
+## WebUI extension
+
 # TradingAgents WebUI Trace Matrix
 
 Status: **Approved for documentation by the human owner on 2026-11-05.** Iterations 1, 2, and 3 are implemented. Execution on 2026-11-06 produced **147 passed** for the WebUI backend suite; full regression produced **1131 passed, 4 historical failures, 2 skipped, 88 subtests passed**; frontend Vitest produced **25 passed**; Chromium Playwright E2E produced **6 passed**. Firefox/WebKit were excluded by user instruction, and the real GraphRunner/live model path remains unrun. The `Evidence status` column remains conservative: passing local tests do not replace a human verification verdict. The module paths are the approved ownership paths from `architecture-blueprint.md` Section 7; see `docs/architecture/evaluation-logbook.md`.
@@ -99,3 +312,21 @@ Execution results are recorded in `evaluation-logbook.md`; the following nodes m
 ### Market-data error follow-up — 2026-11-06
 
 REQ-WEB-002/005 and INV-WEB-003/010 map to `test/offline/test_web_analysis_flow.py::test_real_market_tool_rate_limit_is_not_reported_as_llm_failure` and `::test_failure_categories_do_not_expose_exception_details`. A failed data request must remain a failed task with a truthful market-data explanation; these cases do not authorize fabricated data, a successful result, or implicit vendor fallback.
+
+## Release / WebUI merge compatibility — 2026-11-19
+
+| Scope | Source | Offline evidence | Status |
+| --- | --- | --- | --- |
+| Core ADR-008 structured evidence; REQ-WEB-002; INV-WEB-001 | `src/tradingagents_web/runtime/graph_runner.py` binds `use_collector` around the streamed graph, seeded from prior checkpoint state | `test/offline/test_web_analysis_flow.py::test_stream_runner_preserves_merged_core_contexts`; real graph/report test | Implemented for merge compatibility; final human merge review pending |
+| Core ADR-009 durable usage; FR-DDT-003; INV-6/7 | Same adapter resolves execution identity, opens/registers the existing ledger, binds usage capture and attaches whole-run usage | Same parameterized test checks real ledger binding and cleanup on complete/failure/cancel | Offline checks passed; no live-provider claim |
+| Core ADR-011 resume confidence; FR-DQG-006; INV-1 | Same adapter sanitizes prior checkpoint state before streaming and passes trusted final state to signal extraction | Same parameterized test rejects unsafe resume before any stream and forces Hold for a blocked state despite directional text | Offline checks passed; no core/CLI implementation changed beyond importing release |
+| Historical AI-log container compatibility | `test/ci_gates.py` reads a legacy list base or an entries-envelope base without exempting new path coverage | `test/offline/test_ci_gates.py::test_ai_log_imports_legacy_list_without_waiving_new_coverage` | Positive and negative cases passed |
+
+## Unified registry validation — 2026-11-19
+
+| Contract | Artifacts / enforcement | Offline evidence |
+| --- | --- | --- |
+| Preserve original core and WebUI requirements; NFR-SEC-001, INV-1/10 | `docs/req/requirements.yaml`, `docs/req/req-schema.json`; canonical 1.1 format, all 48 IDs, strict typed thresholds, explicit historical scope | `test/offline/test_governance_scaffold.py::TestUnifiedRegistryContracts`: unchanged WebUI entries, lossless core reconstruction, weakened/missing contracts rejected |
+| Reject duplicate identities, invalid dependencies and historical evidence upgrades | `scripts/validate/validate_requirements.py::validate_canonical_semantics`, also called from `test/ci_gates.py::validate_registry` | Existing positive/negative CI-gate tests plus unified-registry tests on real and forced fallback paths |
+| Parse the retained V1 policy without damaging glob/URL strings; NFR-SEC-001 | `scripts/validate/validate_requirements.py::parse_jsonc` | Quoted globs, URLs, escaped quotes and unterminated-comment regression |
+| Missing YAML support and duplicate fields fail closed; NFR-SEC-001, INV-1 | `load_registry_yaml` and the governance CLI | Duplicate YAML-field and missing-dependency regressions; neither path may report unchecked data as passing |

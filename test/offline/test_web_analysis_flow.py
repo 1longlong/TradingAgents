@@ -193,8 +193,10 @@ def test_resumed_run_is_running(tmp_path):
 
 def test_real_graph_runner_through_core_graph_to_report(tmp_path, monkeypatch):
     """Use real graph/state/memory/report code; replace only provider/data boundaries."""
+    import pandas as pd
     from langchain_core.language_models.fake_chat_models import FakeListChatModel
 
+    import tradingagents.dataflows.market_data_validator as validator
     import tradingagents.graph.trading_graph as graph_module
     from tradingagents.agents.utils.memory import TradingMemoryLog
 
@@ -213,6 +215,17 @@ def test_real_graph_runner_through_core_graph_to_report(tmp_path, monkeypatch):
         return SimpleNamespace(get_llm=lambda: model)
 
     monkeypatch.setattr(graph_module, "create_llm_client", client_factory)
+    # The merged core verifies market data independently of analyst prose.
+    # Replace that I/O boundary too; keep the real gate and its restrictions.
+    dates = pd.bdate_range("2025-10-01", "2026-10-30")
+    closes = [100 + i / 10 for i in range(len(dates))]
+    frame = pd.DataFrame({
+        "Date": dates, "Open": closes,
+        "High": [price + 1 for price in closes],
+        "Low": [price - 1 for price in closes],
+        "Close": closes, "Volume": [1_000_000] * len(dates),
+    })
+    monkeypatch.setattr(validator, "load_ohlcv", lambda *args, **kwargs: frame.copy())
     monkeypatch.setattr(
         graph_module,
         "resolve_instrument_identity",
@@ -382,3 +395,99 @@ def test_failure_categories_do_not_expose_exception_details(kind, category, retr
     assert payload.get("retryable") is retryable
     assert secret not in str(payload)
     assert "contacting a provider" not in payload["message"]
+
+
+@pytest.mark.parametrize("mode", ["complete", "stream_failure", "cancel", "resume_failure"])
+def test_stream_runner_preserves_merged_core_contexts(tmp_path, monkeypatch, mode):
+    """Core ADR-008/009/011 + INV-1/6/7, INV-WEB-001/010: no bypass on Web stream."""
+    import threading
+
+    from tradingagents.debate.usage_capture import get_active_capture
+    from tradingagents.evidence.ingest import get_active_collector
+    from tradingagents.graph.signal_processing import SignalProcessor
+    from tradingagents.graph.trading_graph import TradingAgentsGraph as CoreGraph
+    from tradingagents_web.runtime import graph_runner
+
+    trace = []
+    cancel = threading.Event()
+
+    class BoundariesGraph:
+        _usage_run_identity = CoreGraph._usage_run_identity
+        _open_usage_ledger = CoreGraph._open_usage_ledger
+        _attach_whole_run_usage = staticmethod(CoreGraph._attach_whole_run_usage)
+        process_signal = CoreGraph.process_signal
+
+        def __init__(self, **kwargs):
+            self.config = kwargs["config"]
+            self._resuming = mode == "resume_failure"
+            self.signal_processor = SignalProcessor()
+            self.propagator = SimpleNamespace(get_graph_args=lambda **kwargs: {})
+            self.graph = SimpleNamespace(stream=self.stream)
+
+        def begin_checkpoint(self, *args):
+            trace.append("begin_checkpoint")
+            return "checkpoint-thread"
+
+        def _read_checkpoint_state(self, args):
+            return {"run_id": "old-run", "data_quality_verdict": "degraded"}
+
+        def _sanitize_confidence_on_resume(self, args, prior):
+            trace.append("sanitize")
+            raise ValueError("resume sanitizer refused unsafe state")
+
+        def create_run_state(self, *args, **kwargs):
+            assert kwargs["run_id"]
+            assert kwargs["usage_ledger_path"]
+            return {"messages": []}
+
+        def checkpoint_input(self, state):
+            return state
+
+        def stream(self, state, **kwargs):
+            trace.append("stream")
+            assert get_active_collector() is not None
+            capture = get_active_capture()
+            assert capture is not None and capture.ledger is not None
+            if mode == "stream_failure":
+                raise RuntimeError("offline stream failure")
+            if mode == "cancel":
+                cancel.set()
+            yield {
+                "final_trade_decision": "**Rating**: Buy",
+                "data_quality_verdict": "blocked",
+                "data_quality_gate_decision": {"decision": "blocked"},
+            }
+
+        def record_decision(self, ticker, trade_date, state):
+            assert "whole_run_usage" in state
+            trace.append("decision")
+
+        def clear_checkpoint_on_success(self, *args):
+            trace.append("clear_checkpoint")
+
+        def end_checkpoint(self):
+            trace.append("end_checkpoint")
+
+    monkeypatch.setattr(graph_runner, "TradingAgentsGraph", BoundariesGraph)
+    events = []
+    graph_runner.GraphRunner().run({
+        "config": {"results_dir": str(tmp_path), "checkpoint_enabled": True},
+        "ticker": "NVDA", "trade_date": "2026-11-01", "analysts": ["market"],
+    }, events.append, cancel)
+    assert trace[-1] == "end_checkpoint"
+    assert get_active_capture() is None
+    assert get_active_collector() is None
+    terminals = [event for event in events if event["type"] in {"run.completed", "run.failed"}]
+    if mode == "complete":
+        assert terminals[-1]["type"] == "run.completed"
+        # A directional text header cannot override the trusted blocked state.
+        assert terminals[-1]["payload"]["signal"] == "Hold"
+        assert "decision" in trace and "clear_checkpoint" in trace
+    else:
+        assert "decision" not in trace and "clear_checkpoint" not in trace
+        if mode == "cancel":
+            assert terminals == []  # Coordinator owns the eventual cancelled event.
+        else:
+            assert terminals[-1]["type"] == "run.failed"
+        if mode == "resume_failure":
+            assert "sanitize" in trace and "stream" not in trace

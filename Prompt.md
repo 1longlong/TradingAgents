@@ -43,3 +43,13 @@ Submit the change list, verification commands and results, unresolved failures, 
 ## 5. Close the iteration
 
 Check that requirements, architecture, rules, tests, and process records have evolved together. Identify unfinished work and release blockers. Do not automatically commit, push, merge, or publish. Perform subsequent actions only when the current human has explicitly authorized them.
+
+
+## Imported core prompt lineage
+
+The release prompt versions `prompts/prompt_v1.2.yaml` and
+`prompts/prompt_v1.3.yaml` are retained as core governance history. Their
+plan/test approval, safety, offline verification and human-review intent remains
+applicable. Their former root-level source layout is superseded by this
+branch's already-established `src/` and `test/` paths. Do not treat historical
+phase approvals or a prompt version as authorization for new product work.

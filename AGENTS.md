@@ -7,8 +7,8 @@ Extend the existing TradingAgents system with a WebUI. Preserve analysis, backte
 - Baseline: `release`, TradingAgents v0.5.0, commit `2d17df8da1536c121e4d7395ac5a5dcec9e96d6f`.
 - Working branch: `feature/webui`, created from that baseline. Source and tests have moved to `src/`, `test/offline/`, and `test/live/`.
 - Existing stack and entry point: Python >=3.10, setuptools, LangGraph/LangChain, Typer/Rich; `tradingagents = cli.main:app`.
-- The WebUI framework, service layer, storage, event protocol, and module names have not been approved. There is no implemented web service or frontend application. The deleted demonstration is not a prerequisite or a requirements source.
-- `requirements.yaml`, the architecture blueprint, ADRs, and the invariant register remain placeholders. Creating governance documents and a schema does not approve a WebUI implementation.
+- The WebUI exists under `src/tradingagents_web/`. Preserve its server/runtime, API, frontend, CLI separation, and current public contracts. The untracked `demo/` is a standalone design prototype, not a production entry point.
+- Requirements and architecture records exist for both the release core and WebUI. Preserve their original IDs, status and approval scope. The unified registry uses the WebUI-based 1.1 format with all 48 original requirement IDs; historical evidence and original status are retained explicitly.
 
 Use the user's current direct instructions to determine scope, and preserve existing workspace changes. Honor explicit approval already given for the same scope without asking again. Do not infer approval for additional features, safety changes, or releases.
 
@@ -62,7 +62,7 @@ Approval records must identify the reviewer, time, scope, and plan/test version 
 | `test/offline/`, `test/live/` | Deterministic tests and real external-service tests |
 | `docs/`, `prompts/`, `transcripts/` | Requirements, architecture, governance and evidence; runtime prompt versions; authentic sessions |
 
-Define ownership paths for future web modules in the blueprint before adding them under `src/`. Do not introduce another core implementation. Preserve the argument and result semantics of `TradingAgentsGraph.propagate(...)`, `PortfolioContext`, `run_backtest(...)`, and `write_report_tree(...)`. The CLI stream path and Python API are not automatically equivalent; prove integration through contract tests.
+Keep WebUI ownership under `src/tradingagents_web/` and core ownership under `src/tradingagents/`. Define ownership in the blueprint before adding modules. Do not introduce another core implementation. Preserve the argument and result semantics of `TradingAgentsGraph.propagate(...)`, `PortfolioContext`, `run_backtest(...)`, and `write_report_tree(...)`. The CLI stream path and Python API are not automatically equivalent; prove integration through contract tests.
 
 Keep the core independent of UI and HTTP presentation layers. Follow structural constraints for dependency, state-ownership, and interface changes. New or modified modules and functions must reference actual ADRs, requirements, and relevant invariants. Fill missing design records before implementation rather than inventing identifiers.
 
@@ -91,7 +91,7 @@ Follow the three verification tiers and six blocking gates in `docs/code-governa
 
 Existing commands include `python -m ruff check .`, `python -m pytest -q test/offline`, `python -m pytest -q test/live`, `python -m pytest -q`, import smoke checks, and `tradingagents --help`. Live and full-suite execution require the necessary external-service authorization and cost conditions. Unrun checks are not passing checks.
 
-CI now defines schema/semantic checks, review and AI-log checks, lint/types/dependencies, architecture/security checks, full network-isolated regression, and clean-install checks. The aggregate required status is `blocking-gate`. The registry remains empty, runtime semantic evaluation is unconfigured, and historical baseline failures remain unresolved. Repository configuration is not evidence of passing GitHub runs or enabled branch protection.
+CI now defines schema/semantic checks, review and AI-log checks, lint/types/dependencies, architecture/security checks, full network-isolated regression, and clean-install checks. The aggregate required status is `blocking-gate`. Both local registry validators pass for the merged 1.1 format; runtime semantic evaluation is unconfigured, and historical failures remain historical until re-verified on the merged tree. Repository configuration is not evidence of passing GitHub runs or enabled branch protection.
 
 Record actual AI use, plan/test approvals, bugs, debt, and human review. Do not invent sessions, approval times, test results, or contributions. Update rules within one sprint of a requirements change; update before coding if current safety or correctness depends on it. Re-read critical rules and valid approvals after context compaction or recovery.
 
@@ -102,3 +102,15 @@ Use tools according to `mcp-tool-manifest.md` and effective host permissions. Op
 At iteration end, report actual changes, rationale, verification commands and results, and unfinished work. Do not automatically commit, push, merge, deploy, send messages, or schedule tasks. Perform only actions explicitly authorized by the human.
 
 Create an ignored `.venv` when local verification is needed, following the README setup commands. Activate it before launching OpenCode. Export sessions only after explicit identification, using `python -m test.ci_gates transcript --session SESSION_ID --output transcripts/STUDENT_ID-STUDENT_NAME.md`. The exporter preserves the complete native sanitized JSON inside Markdown, creates a new file, and never reconstructs or overwrites a session. Add authentic human intervention annotations separately.
+
+## 9. Release integration context
+
+The original WebUI baseline is `2d17df8`; this merge imports local `release`
+`79103c3`. Retain the established `src/` / `test/` layout. Core evidence and
+comparison packages, data-quality gate, dynamic debate, durable usage ledger,
+confidence caps and output guards are inherited release capabilities, not new
+WebUI business rules. The WebUI streaming path must bind the same evidence,
+usage and resume-sanitization contexts as the CLI/Python path. Core invariants
+and ADRs apply alongside WebUI invariants; use full ADR filenames when the
+numeric prefixes overlap. Existing source imports and commands remain stable.
+All project documentation, instructions and code comments are English.

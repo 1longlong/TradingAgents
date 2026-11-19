@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import time
+from contextlib import ExitStack
 
 from cli.stats_handler import StatsCallbackHandler
 from tradingagents.agents.utils.rating import is_review
+from tradingagents.debate.config import resolve_debate_termination_config
+from tradingagents.debate.usage_capture import UsageCapture, use_usage_capture
+from tradingagents.debate.usage_ledger import LedgerError, policy_signature
+from tradingagents.evidence.ingest import use_collector
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 from tradingagents_web.errors import run_failure
 
@@ -59,6 +64,7 @@ class GraphRunner:
         started = time.perf_counter()
         graph = None
         outcome = None
+        contexts = ExitStack()
         phase = "configuration"
         stats = LiveStats(emit, started)
         emit({"type": "run.preparing", "payload": {"phase": phase}})
@@ -73,7 +79,6 @@ class GraphRunner:
             )
             phase = "context"
             emit({"type": "run.phase", "payload": {"phase": phase}})
-            init_state = graph.create_run_state(ticker, trade_date, asset_type, portfolio)
             if cancel_event.is_set():
                 return
             args = graph.propagator.get_graph_args(callbacks=[stats])
@@ -82,6 +87,36 @@ class GraphRunner:
                 args.setdefault("config", {}).setdefault("configurable", {})["thread_id"] = (
                     thread_id
                 )
+            # Core ADR-008/009/011: the Web entry streams directly, just like
+            # the CLI. Bind the same evidence, usage and resume boundaries.
+            resuming = bool(getattr(graph, "_resuming", False))
+            prior_state = graph._read_checkpoint_state(args) if resuming else None
+            if prior_state is not None:
+                graph._sanitize_confidence_on_resume(args, prior_state)
+            run_id, ledger_path = graph._usage_run_identity(ticker, trade_date, prior_state)
+            init_state = graph.create_run_state(
+                ticker, trade_date, asset_type, portfolio,
+                run_id=run_id, usage_ledger_path=ledger_path,
+            )
+            ledger = graph._open_usage_ledger(ledger_path, strict_resume=resuming)
+            debate_config = resolve_debate_termination_config(graph.config)
+            if ledger is not None:
+                try:
+                    ledger.begin_run(
+                        run_id,
+                        policy_signature=policy_signature(debate_config=debate_config),
+                        require_existing=resuming,
+                    )
+                except LedgerError:
+                    # The core denies optional calls when durable accounting
+                    # is unreadable; never silently reset its spend to zero.
+                    ledger = None
+            capture = UsageCapture(run_id=run_id, ledger=ledger)
+            capture.debate_config = debate_config
+            if ledger_path and ledger is None:
+                capture.accounting_unreadable = True
+            contexts.enter_context(use_collector(ticker, str(trade_date), prior_state=prior_state))
+            contexts.enter_context(use_usage_capture(capture))
             emit(
                 {
                     "type": "run.resumed" if getattr(graph, "_resuming", False) else "run.started",
@@ -109,9 +144,10 @@ class GraphRunner:
             if cancel_event.is_set():
                 return
             phase = "decision"
+            graph._attach_whole_run_usage(final_state, capture, run_id)
             graph.record_decision(ticker, trade_date, final_state)
             graph.clear_checkpoint_on_success(ticker, trade_date, asset_type, portfolio)
-            signal = graph.process_signal(final_state.get("final_trade_decision", ""))
+            signal = graph.process_signal(final_state.get("final_trade_decision", ""), state=final_state)
             outcome = {
                 "type": "run.completed",
                 "payload": {
@@ -129,6 +165,10 @@ class GraphRunner:
                     graph.end_checkpoint()
                 except Exception as exc:
                     outcome = {"type": "run.failed", "payload": run_failure(exc, "checkpoint")}
+            try:
+                contexts.close()
+            except Exception as exc:
+                outcome = {"type": "run.failed", "payload": run_failure(exc, "context_cleanup")}
             # Publish a terminal event only after checkpoint cleanup has finished.
             if outcome is not None:
                 emit(outcome)

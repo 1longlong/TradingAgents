@@ -29,6 +29,8 @@ import json5
 import yaml
 from jsonschema import Draft202012Validator
 
+from scripts.validate.validate_requirements import validate_canonical_semantics
+
 try:
     import tomllib
 except ModuleNotFoundError:
@@ -129,6 +131,9 @@ def validate_registry(root: Path) -> dict:
 
     for node in graph:
         visit(node)
+    semantic_errors = validate_canonical_semantics(data)
+    if semantic_errors:
+        raise GateError("Requirements semantic validation failed: " + "; ".join(semantic_errors))
     return data
 
 
@@ -266,7 +271,12 @@ def check_ai_log(root: Path, base: str, head: str) -> None:
         previous = load_yaml(blob(root, base, path)) or {}
     except GateError:
         previous = {}
-    prior = {e.get("id") for e in previous.get("entries", [])}
+    # Release history used a top-level list; the WebUI uses an entries envelope.
+    # Read either base representation without exempting new candidate records.
+    prior_entries = previous.get("entries", []) if isinstance(previous, dict) else previous
+    if not isinstance(prior_entries, list):
+        raise GateError("Previous AI-use log must contain an entry list")
+    prior = {e.get("id") for e in prior_entries if isinstance(e, dict)}
     entries = current["entries"]
     identifiers = [e.get("id") for e in entries if isinstance(e, dict)]
     if len(identifiers) != len(entries) or len(identifiers) != len(set(identifiers)):

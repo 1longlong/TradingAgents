@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:tradingagents:requirements:1.0",
+  "$id": "urn:tradingagents:requirements:1.1",
   "title": "TradingAgents consolidated requirements registry",
-  "description": "Validate the JSON-compatible structure of docs/req/requirements.yaml, including product scope, baseline, requirement sources, MoSCoW tradeoffs, and executable acceptance contracts.",
+  "description": "Unified WebUI-based registry. Version 1.1 adds the release PRD, original core IDs, structured tradeoffs, typed acceptance thresholds and explicitly scoped historical evidence. Unknown fields, weakened invariant criteria and fabricated verification upgrades remain invalid.",
   "$comment": "Safely load YAML before Draft202012Validator validation. Never execute verification.command automatically. test/ci_gates.py additionally checks duplicate YAML keys, unique IDs, dependency references/cycles, explicit file references, and implemented evidence paths. Complete runtime traceability, actual measurement implementations, human approval, and approval chronology require their dedicated checks and review. uniqueItems only detects identical array items.",
   "type": "object",
   "additionalProperties": false,
@@ -13,7 +13,10 @@
   ],
   "properties": {
     "schema_version": {
-      "const": "1.0"
+      "enum": [
+        "1.0",
+        "1.1"
+      ]
     },
     "project": {
       "type": "object",
@@ -65,6 +68,25 @@
           },
           "minItems": 0,
           "uniqueItems": true
+        },
+        "branch": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "schema_version": {
+          "type": "string",
+          "pattern": "^v[0-9]+\\.[0-9]+$"
+        },
+        "deliverable_slide_sources": {
+          "$ref": "#/$defs/non_empty_string_list"
+        },
+        "canonical_source_trees": {
+          "$ref": "#/$defs/non_empty_string_list"
+        },
+        "integrated_release_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
         }
       }
     },
@@ -75,12 +97,60 @@
       "items": {
         "$ref": "#/$defs/requirement"
       }
+    },
+    "product": {
+      "$ref": "#/$defs/product"
+    },
+    "migration_notes": {
+      "$ref": "#/$defs/non_empty_string_list"
+    },
+    "source_baselines": {
+      "type": "array",
+      "minItems": 2,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "scope",
+          "commit",
+          "project_name",
+          "schema_version"
+        ],
+        "properties": {
+          "scope": {
+            "enum": [
+              "core",
+              "webui"
+            ]
+          },
+          "commit": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{40}$"
+          },
+          "project_name": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "schema_version": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "original_branch": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          }
+        }
+      }
     }
   },
   "$defs": {
     "requirementId": {
       "type": "string",
-      "pattern": "^REQ-[A-Z][A-Z0-9]*-?[0-9]{2,4}$"
+      "pattern": "^(?:REQ-[A-Z][A-Z0-9]*-?[0-9]{2,4}|FR-(?:DQG|DDT)-[0-9]{3}|NFR-[A-Z]+-[0-9]{3})$"
     },
     "source": {
       "type": "object",
@@ -163,6 +233,11 @@
           "minItems": 1,
           "uniqueItems": true,
           "description": "Expected or existing test nodes and evidence paths. Semantic checks and verification records establish their existence and results."
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
         }
       }
     },
@@ -230,6 +305,56 @@
         },
         "verification": {
           "$ref": "#/$defs/verification"
+        },
+        "threshold_type": {
+          "enum": [
+            "numeric",
+            "boolean",
+            "count"
+          ]
+        },
+        "measurement_unit": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        },
+        "applicability": {
+          "enum": [
+            "runtime",
+            "offline-test",
+            "governance",
+            "documentation",
+            "manual-review"
+          ]
+        },
+        "status": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "state",
+            "evidence",
+            "evidence_scope"
+          ],
+          "properties": {
+            "state": {
+              "enum": [
+                "verified",
+                "partially_verified",
+                "pending",
+                "not_applicable"
+              ]
+            },
+            "evidence": {
+              "type": "string",
+              "minLength": 1
+            },
+            "evidence_scope": {
+              "enum": [
+                "historical-release",
+                "current-iteration"
+              ]
+            }
+          }
         }
       },
       "allOf": [
@@ -289,6 +414,90 @@
               }
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "threshold_type": {
+                "const": "count"
+              }
+            },
+            "required": [
+              "threshold_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "threshold": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "comparison": {
+                "enum": [
+                  "eq",
+                  "ne",
+                  "lt",
+                  "lte",
+                  "gt",
+                  "gte"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "threshold_type": {
+                "const": "numeric"
+              }
+            },
+            "required": [
+              "threshold_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "threshold": {
+                "type": "number"
+              },
+              "comparison": {
+                "enum": [
+                  "eq",
+                  "ne",
+                  "lt",
+                  "lte",
+                  "gt",
+                  "gte"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "threshold_type": {
+                "const": "boolean"
+              }
+            },
+            "required": [
+              "threshold_type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "threshold": {
+                "type": "boolean"
+              },
+              "comparison": {
+                "enum": [
+                  "eq",
+                  "ne"
+                ]
+              }
+            }
+          }
         }
       ]
     },
@@ -308,7 +517,8 @@
       ],
       "properties": {
         "id": {
-          "$ref": "#/$defs/requirementId"
+          "type": "string",
+          "pattern": "^(?:REQ-[A-Z][A-Z0-9]*-?[0-9]{2,4}|FR-(?:DQG|DDT)-[0-9]{3}|NFR-[A-Z]+-[0-9]{3})$"
         },
         "type": {
           "enum": [
@@ -402,6 +612,97 @@
           "type": "string",
           "minLength": 1,
           "pattern": "\\S"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "category": {
+          "description": "Requirement category (additive; does not change the historical type values or IDs).",
+          "enum": [
+            "functional",
+            "invariant-zero-tolerance",
+            "quality",
+            "performance",
+            "cost",
+            "governance",
+            "security"
+          ]
+        },
+        "priority_rationale": {
+          "type": "string",
+          "minLength": 1
+        },
+        "tradeoff": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "decision",
+            "rejected_or_deferred",
+            "why"
+          ],
+          "properties": {
+            "decision": {
+              "type": "string",
+              "minLength": 1
+            },
+            "rejected_or_deferred": {
+              "type": "string",
+              "minLength": 1
+            },
+            "why": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "source_files": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "design_artifacts": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "tests": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 0
+        },
+        "verification_evidence": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1
+        },
+        "source_type": {
+          "enum": [
+            "Feature",
+            "NonFunctional"
+          ]
+        },
+        "source_status": {
+          "enum": [
+            "Implemented",
+            "Partially"
+          ]
+        },
+        "origin_detail": {
+          "enum": [
+            "course-clause",
+            "user-design",
+            "inherited-system",
+            "governance"
+          ]
         }
       },
       "allOf": [
@@ -457,8 +758,362 @@
               }
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "id": {
+                "pattern": "^(?:FR-(?:DQG|DDT)|NFR-[A-Z]+)-[0-9]{3}$"
+              }
+            },
+            "required": [
+              "id"
+            ]
+          },
+          "then": {
+            "required": [
+              "title",
+              "category",
+              "priority_rationale",
+              "tradeoff",
+              "source_files",
+              "design_artifacts",
+              "tests",
+              "verification_evidence",
+              "source_type",
+              "source_status",
+              "origin_detail"
+            ],
+            "properties": {
+              "fit_criteria": {
+                "items": {
+                  "required": [
+                    "threshold_type",
+                    "applicability",
+                    "status"
+                  ],
+                  "properties": {
+                    "verification": {
+                      "required": [
+                        "description"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "id": {
+                "pattern": "^(?:FR-(?:DQG|DDT)|NFR-[A-Z]+)-[0-9]{3}$"
+              },
+              "type": {
+                "const": "invariant"
+              }
+            },
+            "required": [
+              "id",
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "fit_criteria": {
+                "items": {
+                  "required": [
+                    "measurement_unit"
+                  ]
+                }
+              }
+            }
+          }
         }
       ]
+    },
+    "non_empty_string_list": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1
+    },
+    "product": {
+      "type": "object",
+      "description": "Consolidated PRD, with historical scope decisions separated from active scope. Historical results remain evidence for their recorded execution only.",
+      "additionalProperties": false,
+      "required": [
+        "stakeholders",
+        "problem_statement",
+        "goals",
+        "non_goals",
+        "scope",
+        "success_criteria",
+        "constraints",
+        "priorities",
+        "tradeoffs",
+        "measured_vs_targets",
+        "deferred_scope"
+      ],
+      "properties": {
+        "stakeholders": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "interest"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "interest": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "problem_statement": {
+          "type": "string",
+          "minLength": 1
+        },
+        "goals": {
+          "$ref": "#/$defs/non_empty_string_list"
+        },
+        "non_goals": {
+          "$ref": "#/$defs/non_empty_string_list"
+        },
+        "scope": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "in_scope",
+            "out_of_scope"
+          ],
+          "properties": {
+            "in_scope": {
+              "$ref": "#/$defs/non_empty_string_list"
+            },
+            "out_of_scope": {
+              "$ref": "#/$defs/non_empty_string_list"
+            }
+          }
+        },
+        "success_criteria": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "statement",
+              "classification"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^SUCCESS-[0-9]{3}$"
+              },
+              "statement": {
+                "type": "string",
+                "minLength": 1
+              },
+              "classification": {
+                "enum": [
+                  "measured",
+                  "target"
+                ]
+              }
+            }
+          }
+        },
+        "constraints": {
+          "$ref": "#/$defs/non_empty_string_list"
+        },
+        "priorities": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "requirement_id",
+              "priority",
+              "rationale"
+            ],
+            "properties": {
+              "requirement_id": {
+                "$ref": "#/$defs/requirementId"
+              },
+              "priority": {
+                "enum": [
+                  "must",
+                  "should",
+                  "could",
+                  "wont"
+                ]
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "tradeoffs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "requirement_id",
+              "decision",
+              "rejected_or_deferred",
+              "why"
+            ],
+            "properties": {
+              "requirement_id": {
+                "$ref": "#/$defs/requirementId"
+              },
+              "decision": {
+                "type": "string",
+                "minLength": 1
+              },
+              "rejected_or_deferred": {
+                "type": "string",
+                "minLength": 1
+              },
+              "why": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "measured_vs_targets": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "measured",
+            "targets",
+            "note"
+          ],
+          "properties": {
+            "measured": {
+              "$ref": "#/$defs/non_empty_string_list"
+            },
+            "targets": {
+              "$ref": "#/$defs/non_empty_string_list"
+            },
+            "note": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "deferred_scope": {
+          "type": "array",
+          "description": "Explicit 'Won't / deferred' scope. This represents the Won't classification WITHOUT adding a new priority enum value or new requirement IDs, so the historical Must/Should/Could set and all 22 IDs remain intact. Each item names an item, a status, and a rationale.",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "item",
+              "classification",
+              "rationale"
+            ],
+            "properties": {
+              "item": {
+                "type": "string",
+                "minLength": 1
+              },
+              "classification": {
+                "enum": [
+                  "won't (out of scope)",
+                  "deferred (blocked on authorization)"
+                ]
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        },
+        "historical_scope": {
+          "type": "array",
+          "description": "Original release scope decisions, preserved as historical context rather than current authorization or current implementation status.",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "item",
+              "classification",
+              "rationale"
+            ],
+            "properties": {
+              "item": {
+                "type": "string",
+                "minLength": 1
+              },
+              "classification": {
+                "enum": [
+                  "won't (out of scope)",
+                  "deferred (blocked on authorization)"
+                ]
+              },
+              "rationale": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "schema_version": {
+            "const": "1.1"
+          }
+        },
+        "required": [
+          "schema_version"
+        ]
+      },
+      "then": {
+        "required": [
+          "product",
+          "source_baselines",
+          "migration_notes"
+        ],
+        "properties": {
+          "project": {
+            "required": [
+              "branch",
+              "schema_version",
+              "deliverable_slide_sources",
+              "canonical_source_trees",
+              "integrated_release_commit"
+            ]
+          }
+        }
+      }
+    }
+  ]
 }
