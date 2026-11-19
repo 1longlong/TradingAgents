@@ -19,6 +19,9 @@ Date:   2026-11-19 (Asia/Shanghai)
 
 3. Targeted portability/isolation tests
    - tests/test_cand01_batch_16run_v3_infra.py: 13 passed (12 original + MANIFEST byte check)
+     The generator --check copy normalises only host fields (experiment_root,
+     results_dir, code_state.python_version); config_sha256, switches, cases and
+     manifest digests are still compared exactly.
    - tests/test_cli_prefs.py: 12 passed (12; also with a fake host prefs file)
    - tests/test_submission_compliance.py: 1 passed
 

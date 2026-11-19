@@ -275,6 +275,18 @@ def test_the_cli_check_mode_passes(tmp_path):
         spec_file.write_text(
             json.dumps(spec, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
+    # `code_state.json` records the interpreter that generated the specs. That
+    # is a host property (like the git head/branch the generator also marks
+    # volatile), not an experiment identity; normalise only this field so the
+    # check can run on every CI Python. Switches, hashes, cases and ordering
+    # stay byte-compared.
+    code_state_file = dest / "code_state.json"
+    code_state = json.loads(code_state_file.read_text(encoding="utf-8"))
+    code_state["python_version"] = sys.version.split()[0]
+    code_state_file.write_text(
+        json.dumps(code_state, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
     manifest = dest / "RUN_MANIFEST_TEMPLATE.csv"
     rows = _manifest_rows(manifest.read_text(encoding="utf-8"))
     for row in rows:
