@@ -1,0 +1,612 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cs5351.example/schemas/req-schema.json",
+  "title": "CS5351 retrospective requirements baseline",
+  "description": "JSON Schema (draft 2020-12) for docs/req/requirements.yaml. It validates the root document, the project metadata block, and every requirement and acceptance criterion. Conditional rules bind the identifier prefix to the requirement type and require implementation and test evidence for implemented requirements. The schema constrains structure and allowed values; it cannot by itself prove that a referenced path exists or that a number is true, so those checks are performed by the repository's local conformance check.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "project",
+    "requirements"
+  ],
+  "properties": {
+    "schema_version": {
+      "description": "Version of this requirements document format.",
+      "const": "1.0"
+    },
+    "project": {
+      "description": "Product, course, runtime and canonical experiment facts for the delivered study.",
+      "$ref": "#/$defs/product"
+    },
+    "requirements": {
+      "description": "Retrospective functional and non-functional requirements. At least sixteen are required by the course deliverable.",
+      "type": "array",
+      "minItems": 16,
+      "items": {
+        "$ref": "#/$defs/requirement"
+      }
+    }
+  },
+  "$defs": {
+    "commitish": {
+      "description": "A git commit abbreviation or full hash.",
+      "type": "string",
+      "pattern": "^[0-9a-f]{7,40}$"
+    },
+    "iso_date": {
+      "description": "An ISO 8601 calendar date.",
+      "type": "string",
+      "format": "date",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "tag": {
+      "description": "A git tag name.",
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._/-]*$"
+    },
+    "batch": {
+      "description": "Measured outcome of one real experiment batch, including attempts that did not become valid samples.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attempts",
+        "valid",
+        "env_failed",
+        "invalid",
+        "total_tokens"
+      ],
+      "properties": {
+        "attempts": {
+          "description": "Number of real attempts made, including failed and invalid attempts.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "run_ids": {
+          "description": "Number of distinct pre-registered Run IDs, when it differs from the attempt count.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "valid": {
+          "description": "Attempts that became valid measured samples.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "env_failed": {
+          "description": "Attempts that failed for an environment or infrastructure reason.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "invalid": {
+          "description": "Attempts that completed but were invalid as samples.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "total_tokens": {
+          "description": "Provider-reported total tokens consumed by every attempt in the batch.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "reattempted_run_ids": {
+          "description": "Run IDs that were attempted more than once.",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^R[0-9]{2}$"
+          }
+        }
+      }
+    },
+    "combined": {
+      "description": "Combined accounting across the V2 and V3 batches.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attempts",
+        "valid",
+        "total_tokens",
+        "valid_tokens",
+        "failed_tokens"
+      ],
+      "properties": {
+        "attempts": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "valid": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "total_tokens": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "valid_tokens": {
+          "description": "Tokens consumed by the valid samples only.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed_tokens": {
+          "description": "Tokens consumed by failed or invalid attempts.",
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "factorial": {
+      "description": "Exploratory V3 2x2 factorial summary. The schema records the design and estimates without implying statistical significance.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "balanced_blocks",
+        "balanced",
+        "n_per_cell",
+        "single_pass_effect_tokens_per_run",
+        "single_pass_effect_percent",
+        "batch_macro_effect_tokens_per_run",
+        "batch_macro_effect_excluding_env_degraded_r01",
+        "classification"
+      ],
+      "properties": {
+        "balanced_blocks": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "balanced": {
+          "type": "boolean"
+        },
+        "n_per_cell": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "single_pass_effect_tokens_per_run": {
+          "description": "Point estimate of the single-pass effect in tokens per run; negative means fewer tokens.",
+          "type": "number"
+        },
+        "single_pass_effect_percent": {
+          "description": "Point estimate of the single-pass effect as a percentage of the comparison arm.",
+          "type": "number"
+        },
+        "batch_macro_effect_tokens_per_run": {
+          "description": "Point estimate of the batch-macro effect in tokens per run; negative means fewer tokens.",
+          "type": "number"
+        },
+        "batch_macro_effect_excluding_env_degraded_r01": {
+          "description": "Batch-macro point estimate after excluding the environment-degraded R01 block value.",
+          "type": "number"
+        },
+        "classification": {
+          "description": "Evidential status of the factorial result.",
+          "enum": [
+            "exploratory",
+            "confirmatory",
+            "inconclusive",
+            "not_measured"
+          ]
+        }
+      }
+    },
+    "final_test_suite": {
+      "description": "Final full-suite and independent-audit result at the delivered commit.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "passed",
+        "failed_known",
+        "skipped",
+        "subtests",
+        "new_regression_tests",
+        "independent_audits_passed"
+      ],
+      "properties": {
+        "passed": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "failed_known": {
+          "description": "Failures known before the remediation and documented as environment or cross-worktree effects.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "skipped": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "subtests": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "new_regression_tests": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "independent_audits_passed": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "experiments": {
+      "description": "Canonical measured outcomes and lineage figures used throughout the requirements.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "v2",
+        "v3",
+        "combined",
+        "factorial_v3",
+        "final_test_suite"
+      ],
+      "properties": {
+        "v2": {
+          "$ref": "#/$defs/batch"
+        },
+        "v3": {
+          "$ref": "#/$defs/batch"
+        },
+        "combined": {
+          "$ref": "#/$defs/combined"
+        },
+        "factorial_v3": {
+          "$ref": "#/$defs/factorial"
+        },
+        "final_test_suite": {
+          "$ref": "#/$defs/final_test_suite"
+        }
+      }
+    },
+    "product": {
+      "description": "Project identity, runtime, point-in-time contract and canonical experiment facts. This is a retrospective product record, not a claim of pre-existing specification.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "description",
+        "course",
+        "institution",
+        "runtime",
+        "provider",
+        "trade_date",
+        "news_scope",
+        "macro_source",
+        "pit_enforced",
+        "baseline_kind",
+        "upstream_base_commit",
+        "upstream_base_date",
+        "branch_created",
+        "rc1_commit",
+        "rc1_date",
+        "rc1_tag",
+        "v2_freeze_commit",
+        "v2_freeze_date",
+        "v2_freeze_tag",
+        "v3_freeze_commit",
+        "v3_freeze_date",
+        "v3_freeze_tag",
+        "final_commit",
+        "final_date",
+        "final_tag",
+        "origin_branch",
+        "commits_rc1_to_final",
+        "merges_rc1_to_final",
+        "experiments"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "minLength": 40
+        },
+        "course": {
+          "type": "string",
+          "minLength": 1
+        },
+        "institution": {
+          "type": "string",
+          "minLength": 1
+        },
+        "runtime": {
+          "type": "string",
+          "minLength": 1
+        },
+        "provider": {
+          "enum": [
+            "openai_compatible",
+            "openai",
+            "anthropic",
+            "google",
+            "azure",
+            "bedrock",
+            "ollama"
+          ]
+        },
+        "trade_date": {
+          "$ref": "#/$defs/iso_date"
+        },
+        "news_scope": {
+          "type": "string",
+          "minLength": 1
+        },
+        "macro_source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pit_enforced": {
+          "type": "boolean"
+        },
+        "baseline_kind": {
+          "description": "This document is explicitly retrospective and must not be presented as a pre-existing specification.",
+          "const": "retrospective"
+        },
+        "upstream_base_commit": {
+          "$ref": "#/$defs/commitish"
+        },
+        "upstream_base_date": {
+          "$ref": "#/$defs/iso_date"
+        },
+        "branch_created": {
+          "$ref": "#/$defs/iso_date"
+        },
+        "rc1_commit": {
+          "$ref": "#/$defs/commitish"
+        },
+        "rc1_date": {
+          "$ref": "#/$defs/iso_date"
+        },
+        "rc1_tag": {
+          "$ref": "#/$defs/tag"
+        },
+        "v2_freeze_commit": {
+          "$ref": "#/$defs/commitish"
+        },
+        "v2_freeze_date": {
+          "$ref": "#/$defs/iso_date"
+        },
+        "v2_freeze_tag": {
+          "$ref": "#/$defs/tag"
+        },
+        "v3_freeze_commit": {
+          "$ref": "#/$defs/commitish"
+        },
+        "v3_freeze_date": {
+          "$ref": "#/$defs/iso_date"
+        },
+        "v3_freeze_tag": {
+          "$ref": "#/$defs/tag"
+        },
+        "final_commit": {
+          "$ref": "#/$defs/commitish"
+        },
+        "final_date": {
+          "$ref": "#/$defs/iso_date"
+        },
+        "final_tag": {
+          "$ref": "#/$defs/tag"
+        },
+        "origin_branch": {
+          "type": "string",
+          "minLength": 1
+        },
+        "commits_rc1_to_final": {
+          "description": "Number of commits between the rc1 tag and the final commit.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "merges_rc1_to_final": {
+          "description": "Number of merge commits between the rc1 tag and the final commit.",
+          "type": "integer",
+          "minimum": 0
+        },
+        "experiments": {
+          "$ref": "#/$defs/experiments"
+        }
+      }
+    },
+    "acceptance": {
+      "description": "One testable acceptance criterion, with an identifier and an optional pointer to the test or report that verifies it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "statement"
+      ],
+      "properties": {
+        "id": {
+          "description": "Criterion identifier, derived from the owning requirement identifier.",
+          "type": "string",
+          "pattern": "^AC-(FR|NFR)-[0-9]{3}-[0-9]{2}$"
+        },
+        "statement": {
+          "description": "A testable statement of observable behaviour.",
+          "type": "string",
+          "minLength": 20
+        },
+        "verification": {
+          "description": "Repository-relative test file or report that verifies the statement.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "requirement": {
+      "description": "A retrospective functional or non-functional requirement with testable acceptance criteria and verified implementation and test paths.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "title",
+        "type",
+        "priority",
+        "description",
+        "acceptance_criteria",
+        "implementation",
+        "tests",
+        "status",
+        "evidence"
+      ],
+      "properties": {
+        "id": {
+          "description": "Stable requirement identifier. FR-* is functional and NFR-* is non-functional.",
+          "type": "string",
+          "pattern": "^(FR|NFR)-[0-9]{3}$"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 120
+        },
+        "type": {
+          "enum": [
+            "functional",
+            "non-functional"
+          ]
+        },
+        "priority": {
+          "enum": [
+            "Must",
+            "Should",
+            "Could"
+          ]
+        },
+        "description": {
+          "type": "string",
+          "minLength": 80
+        },
+        "acceptance_criteria": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "$ref": "#/$defs/acceptance"
+          }
+        },
+        "implementation": {
+          "description": "Repository-relative implementation paths that exist in the delivered worktree.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "tests": {
+          "description": "Repository-relative test files that exist in the delivered worktree.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "status": {
+          "description": "Implementation status at the delivered commit.",
+          "enum": [
+            "implemented",
+            "partial",
+            "not_implemented"
+          ]
+        },
+        "evidence": {
+          "description": "Commit, tag, report or artifact supporting the requirement.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "functional"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "pattern": "^FR-[0-9]{3}$"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "non-functional"
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          "then": {
+            "properties": {
+              "id": {
+                "pattern": "^NFR-[0-9]{3}$"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "implemented"
+              }
+            },
+            "required": [
+              "status"
+            ]
+          },
+          "then": {
+            "properties": {
+              "implementation": {
+                "minItems": 1
+              },
+              "tests": {
+                "minItems": 1
+              },
+              "evidence": {
+                "minItems": 2
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "priority": {
+                "const": "Must"
+              }
+            },
+            "required": [
+              "priority"
+            ]
+          },
+          "then": {
+            "properties": {
+              "acceptance_criteria": {
+                "minItems": 3
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

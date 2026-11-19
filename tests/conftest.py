@@ -38,6 +38,21 @@ def _dummy_api_keys(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _dummy_backend_url(monkeypatch):
+    """Supply a placeholder endpoint when the host has no developer `.env`.
+
+    Several dry-run/measurement tests only need *a* base_url to build the
+    default experiment; they never contact it (the dry-run tests assert that no
+    runner is called). CI has no `.env`, so without this the suite would fail
+    for an environment reason, not a code defect.
+    """
+    monkeypatch.setenv(
+        "TRADINGAGENTS_LLM_BACKEND_URL",
+        os.environ.get("TRADINGAGENTS_LLM_BACKEND_URL") or "https://ci.invalid/v1",
+    )
+
+
+@pytest.fixture(autouse=True)
 def _isolate_config():
     """Reset the global dataflows config before and after each test.
 

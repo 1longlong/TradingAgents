@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import importlib.util
 import json
 import subprocess
@@ -37,8 +38,41 @@ def _specs():
 
 
 def _baseline_sha() -> str:
-    import hashlib
     return hashlib.sha256(BASELINE.read_bytes()).hexdigest()
+
+
+#: The only run-spec fields that embed the checkout root. The generator derives
+#: them from its own location (``_experiment_root``) and from ``--out``, so a
+#: clean clone legitimately writes different values for these two fields.
+#: Everything else -- switches, case, config_sha256, identity, ordering and the
+#: memory/budget blocks -- is frozen and must still compare exactly.
+_HOST_PATH_FIELDS = ("experiment_root", "results_dir")
+
+
+def _normalize_host_paths(spec: dict) -> dict:
+    """Make the two documented host-path fields checkout-independent.
+
+    This is deliberately narrow: it rewrites ``experiment_root`` to a marker and
+    strips the same prefix from ``results_dir`` only when that field actually
+    lives under it. Any other difference is left untouched so a genuine config,
+    switch or case change still fails the reproduction test.
+    """
+    import copy
+
+    normalized = copy.deepcopy(spec)
+    root = normalized.get("experiment_root")
+    results = normalized.get("results_dir")
+    if isinstance(root, str):
+        normalized["experiment_root"] = "<REPO_ROOT>"
+        if isinstance(results, str):
+            prefix = root.rstrip("/") + "/"
+            if results.startswith(prefix):
+                normalized["results_dir"] = "<REPO_ROOT>/" + results[len(prefix):]
+    return normalized
+
+
+def _manifest_rows(text: str) -> list[dict]:
+    return list(csv.DictReader(text.splitlines()))
 
 
 def test_16_specs_and_no_per_run_code_state():
@@ -125,8 +159,10 @@ def test_switches_match_the_frozen_matrix():
 
 
 def test_the_generator_reproduces_the_delivered_artifacts():
-    # Build *in memory* against the real out root: the specs embed host paths
-    # derived from it, so a temp dir would compare different bytes.
+    # Build in memory against the real out root. Specs embed two host paths
+    # (experiment_root, results_dir) derived from the checkout, so compare them
+    # after normalising only those documented fields; every other field,
+    # including config_sha256, is compared exactly.
     artifacts = gv3.build(BATCH, memory_sha256=_baseline_sha())
     drift = []
     for rel, content in artifacts.items():
@@ -135,10 +171,67 @@ def test_the_generator_reproduces_the_delivered_artifacts():
             drift.append(f"missing {rel}")
             continue
         if rel == "code_state.json":
-            continue  # volatile (timestamp)
+            continue  # volatile (timestamp, git state)
+        if rel.endswith("/spec.json"):
+            frozen = _normalize_host_paths(json.loads(path.read_text(encoding="utf-8")))
+            fresh = _normalize_host_paths(json.loads(content))
+            if frozen != fresh:
+                changed = sorted(
+                    key for key in set(frozen) | set(fresh)
+                    if frozen.get(key) != fresh.get(key)
+                )
+                drift.append(f"differs after host-path normalisation {rel}: {changed}")
+            continue
+        if rel == "RUN_MANIFEST_TEMPLATE.csv":
+            # spec_body_sha256 hashes experiment_root, so the value necessarily
+            # moves with the checkout. Verify each side's digest against the
+            # spec it names, then compare every other column exactly. The
+            # separate MANIFEST.sha256 test pins the frozen bytes themselves.
+            frozen_rows = _manifest_rows(path.read_text(encoding="utf-8"))
+            fresh_rows = _manifest_rows(content)
+            if [r["run_id"] for r in frozen_rows] != [r["run_id"] for r in fresh_rows]:
+                drift.append(f"differs in row identity/order {rel}")
+                continue
+            for frozen_row, fresh_row in zip(frozen_rows, fresh_rows, strict=True):
+                for row, tree in ((frozen_row, "frozen"), (fresh_row, "fresh")):
+                    spec_path = row["spec_path"]
+                    if tree == "frozen":
+                        spec = json.loads(
+                            (BATCH / spec_path).read_text(encoding="utf-8")
+                        )
+                    else:
+                        spec = json.loads(artifacts[spec_path])
+                    if gv3.spec_body_sha256(spec) != row["spec_body_sha256"]:
+                        drift.append(f"{tree} manifest digest does not match {spec_path}")
+                left = {k: v for k, v in frozen_row.items() if k != "spec_body_sha256"}
+                right = {k: v for k, v in fresh_row.items() if k != "spec_body_sha256"}
+                if left != right:
+                    drift.append(f"differs in non-digest columns {rel} {frozen_row['run_id']}")
+            continue
         if path.read_text(encoding="utf-8") != content:
             drift.append(f"differs {rel}")
     assert drift == []
+
+
+def test_the_frozen_batch_files_are_byte_identical_to_the_manifest():
+    """Frozen specs/manifests are pinned by SHA-256, independent of this host."""
+    manifest = BATCH / "MANIFEST.sha256"
+    assert manifest.is_file(), manifest
+    errors = []
+    entries = 0
+    for line in manifest.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        digest, rel = line.split(None, 1)
+        rel = rel.strip()
+        path = BATCH / rel
+        entries += 1
+        if not path.is_file():
+            errors.append(f"missing {rel}")
+        elif hashlib.sha256(path.read_bytes()).hexdigest() != digest:
+            errors.append(f"hash mismatch {rel}")
+    assert entries > 0
+    assert errors == []
 
 
 def test_a_tampered_memory_hash_is_refused_before_any_run(tmp_path):
@@ -161,10 +254,40 @@ def test_the_baseline_is_immutable_and_pending_free():
     assert _baseline_sha() == before
 
 
-def test_the_cli_check_mode_passes():
+def test_the_cli_check_mode_passes(tmp_path):
+    # ``--check`` legitimately fails on the delivered tree because the 16 specs
+    # embed the original checkout root. Run it on a copy whose only differences
+    # are those documented host-path fields (plus the manifest digests that
+    # derive from them), so a real config/switch/case drift still fails.
+    import shutil
+
+    dest = tmp_path / "batch"
+    shutil.copytree(BATCH, dest)
+    for spec_file in sorted((dest / "specs").glob("*/spec.json")):
+        spec = json.loads(spec_file.read_text(encoding="utf-8"))
+        case = spec["case"]
+        relative_results = (
+            Path("specs") / spec_file.parent.name / "runs" / "run_01"
+            / "attempt_01" / "runtime" / case["ticker"] / case["trade_date"]
+        )
+        spec["experiment_root"] = str(REPO_ROOT)
+        spec["results_dir"] = str(dest / relative_results)
+        spec_file.write_text(
+            json.dumps(spec, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+    manifest = dest / "RUN_MANIFEST_TEMPLATE.csv"
+    rows = _manifest_rows(manifest.read_text(encoding="utf-8"))
+    for row in rows:
+        spec = json.loads((dest / row["spec_path"]).read_text(encoding="utf-8"))
+        row["spec_body_sha256"] = gv3.spec_body_sha256(spec)
+    with manifest.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0]), lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(rows)
+
     result = subprocess.run(
-        [sys.executable, str(GENERATOR), "--out", str(BATCH),
-         "--memory-baseline", str(BASELINE), "--check"],
+        [sys.executable, str(GENERATOR), "--out", str(dest),
+         "--memory-baseline", str(dest / "memory/baseline_v3.md"), "--check"],
         capture_output=True, text=True, cwd=str(REPO_ROOT), timeout=300)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "artefacts reproduce" in result.stdout

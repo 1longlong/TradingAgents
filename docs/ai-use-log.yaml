@@ -1,0 +1,246 @@
+# AI-use log for the CS5351 TradingAgents submission.
+#
+# HUMAN REVIEW AND APPROVAL ARE PENDING FOR EVERY ENTRY. No signed approval,
+# advisor sign-off or student acknowledgement was found in the repository, so
+# every entry carries human_review: pending and
+# approval_status: PENDING_HUMAN_CONFIRMATION. These entries must not be read
+# as evidence that a human approved the AI-generated work.
+#
+# Attribution method: git author names visible in the commit history, plus the
+# AI-tool references in committed reports (for example the independent-audit
+# reports describe read-only Subagents, and several logs show an OpenCode
+# scratch worktree). No student identity is inferred or recorded. Where the
+# repository does not name the underlying tool, the entry says so instead of
+# guessing. Commits by the git author "t" are listed separately as unresolved
+# authorship because the repository does not establish whether that author is
+# human or automated.
+schema_version: "1.0"
+
+project: TradingAgents
+
+disclosure: >-
+  The delivered work includes AI-assisted engineering, auditing and experiment
+  operation. The table below records only activity that is evidenced by a git
+  commit or a committed report. Human review is pending throughout; the
+  approval status is therefore PENDING_HUMAN_CONFIRMATION, not approved.
+
+attribution_method:
+  - "Git author names and commit subjects/dates visible in the repository history."
+  - "Committed reports that describe Subagent audits, an OpenCode scratch worktree, or a DeepSeek Harness (dsh) run."
+  - "No approval record, reviewer signature, student name or advisor name was found, so none is recorded."
+
+entries:
+  - id: AIU-001
+    date: "2026-11-15"
+    tool_agent: "WTQ (git author identity; underlying tool and human/AI role not declared in the repository)"
+    phase: "V2 protocol and freeze engineering"
+    scope: >-
+      V2.1 protocol, switch matrix, config-hash manifest, release seal, freeze
+      record and the targeted regression matrices prepared before the paid V2
+      batch.
+    artifact:
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/CAND01_BATCH_2X2_PROTOCOL_V2.md
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/C3_PROTOCOL_FREEZE.md
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/CONFIG_HASH_MANIFEST.csv
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/MANIFEST.sha256
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/c3/code_freeze.txt
+    human_review: pending
+    approval_status: PENDING_HUMAN_CONFIRMATION
+    source:
+      - "git commits 5b1101c, f007357, eaba4f7, f556bef, 1bba51f (author WTQ; 2026-11-15)"
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/REMEDIATION.md
+
+  - id: AIU-002
+    date: "2026-11-15"
+    tool_agent: "WTQ (git author identity; underlying tool and human/AI role not declared in the repository)"
+    phase: "Pre-flight halt and defect classification"
+    scope: >-
+      A pre-flight audit halted the V2 campaign at zero paid calls, classified
+      the U-1 usage-verdict and U-2 budget-contract defects, documented a
+      self-tamper incident, and recorded remediation before re-freezing.
+    artifact:
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/C3_HALT_REPORT_20261115.md
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/REMEDIATION.md
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/EXECUTION_READINESS.md
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/INCIDENT_20261115B_self_tamper.md
+    human_review: pending
+    approval_status: PENDING_HUMAN_CONFIRMATION
+    source:
+      - "git commits 4c00aea, 1bba51f, f556bef, eaba4f7 (author WTQ; 2026-11-15)"
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/logs/mutation_final_freeze.txt
+
+  - id: AIU-003
+    date: "2026-11-16"
+    tool_agent: "DeepSeek Harness (dsh) batch runner (inferred from the dsh-agent freeze commit; reports do not name the runner)"
+    phase: "V2 real batch execution"
+    scope: >-
+      Executed the V2 2x2 batch: 7 attempts, 5 valid, 1 environment-failed and
+      1 invalid, consuming 1,463,791 provider-reported tokens. Failed attempts
+      were preserved as evidence rather than overwritten.
+    artifact:
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/CAND01_BATCH_2X2_PROTOCOL_V2.md
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/TEST_RESULTS.md
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/c3/code_freeze.txt
+    human_review: pending
+    approval_status: PENDING_HUMAN_CONFIRMATION
+    source:
+      - "git commit 15270b1 (author dsh-agent; 2026-11-16; tag c3-final-freeze)"
+      - "canonical batch record: V2 7 attempts / 5 valid / 1 env-failed / 1 invalid / 1,463,791 tokens"
+
+  - id: AIU-004
+    date: "2026-11-16"
+    tool_agent: "DeepSeek Harness (dsh) subagent (git author 'C3 Engine')"
+    phase: "V3 attribution and memory-isolation implementation"
+    scope: >-
+      Implemented system-component attribution for the pre-graph reflector,
+      per-run memory snapshot copies, telemetry schema 2, and fail-closed gates
+      for missing memory state and unattributed usage.
+    artifact:
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/CAND01_BATCH_2X2_PROTOCOL_V3.md
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/REMEDIATION.md
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/MEMORY_SNAPSHOT_PROVENANCE.md
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/REFLECTOR_ATTRIBUTION_AUDIT.md
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/MEMORY_ISOLATION_AUDIT.md
+    human_review: pending
+    approval_status: PENDING_HUMAN_CONFIRMATION
+    source:
+      - "git commits afa0fc6, 6e66dca, f19d6ed, c30700c (author C3 Engine; 2026-11-16)"
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/FINAL_ENGINEERING_REPORT_CN.md
+
+  - id: AIU-005
+    date: "2026-11-16"
+    tool_agent: "C3 Engine (AI agent; git author name) and independent read-only subagents"
+    phase: "V3 freeze certification and independent audits"
+    scope: >-
+      Rebuilt the V3 freeze record, release seal and manifest; ran three
+      independent read-only Subagent audits (A: product code and memory,
+      B: harness and protocol, C: usage, telemetry and security); recorded
+      PASS_WITH_FINDINGS and closed the findings before the V3 freeze.
+    artifact:
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/c3/code_freeze.txt
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/c3/RELEASE_SEAL.sha256
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/INDEPENDENT_AUDIT_A.md
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/INDEPENDENT_AUDIT_B.md
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/INDEPENDENT_AUDIT_C.md
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/FINAL_ENGINEERING_REPORT_CN.md
+    human_review: pending
+    approval_status: PENDING_HUMAN_CONFIRMATION
+    source:
+      - "git commits 18e712a, f3e1dfc, 73cc26a, e3b5cca, b5942ee (author C3 Engine; 2026-11-16)"
+      - "git tag c3-v3-final-freeze"
+
+  - id: AIU-006
+    date: "2026-11-16"
+    tool_agent: "DeepSeek Harness (dsh) batch runner (inferred from the dsh-agent freeze commit; reports do not name the runner)"
+    phase: "V3 real batch execution"
+    scope: >-
+      Executed the V3 2x2 batch: 18 attempts over 16 Run IDs, 15 valid,
+      1 environment-failed and 2 invalid, consuming 3,067,669 provider-reported
+      tokens. R02 and R12 were each attempted twice. The batch exposed the R12
+      fallback, DSML markup and tool-round defects that the final remediation
+      addressed.
+    artifact:
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/EXPERIMENT_PROTOCOL_V3.md
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/specs
+      - token_benchmarks/final_remediation_20261116/R12_FALLBACK_FIX.md
+      - token_benchmarks/final_remediation_20261116/DSML_MARKET_REPORT_FIX.md
+      - token_benchmarks/final_remediation_20261116/TOOL_ROUNDS_TELEMETRY_FIX.md
+    human_review: pending
+    approval_status: PENDING_HUMAN_CONFIRMATION
+    source:
+      - "git commit 50b2ca3 (author C3 Engine; 2026-11-16; tag cand01-v3-final-remediation)"
+      - "canonical batch record: V3 18 attempts / 16 Run IDs / 15 valid / 1 env-failed / 2 invalid / 3,067,669 tokens"
+
+  - id: AIU-007
+    date: "2026-11-16"
+    tool_agent: "C3 Engine (AI agent; git author name; tool not named in the repository)"
+    phase: "Final remediation of R12, DSML markup and tool rounds"
+    scope: >-
+      Fixed the single-pass free-text retry so it removes a dangling tool call
+      and keeps the system prompt; sanitized protocol markup at every report
+      exit; made run_data_tools record one tool round per non-empty batch; and
+      added 20 regression tests, a pre-fix detection probe and mutation
+      evidence.
+    artifact:
+      - token_benchmarks/final_remediation_20261116/FINAL_REMEDIATION_REPORT_CN.md
+      - token_benchmarks/final_remediation_20261116/R12_FALLBACK_FIX.md
+      - token_benchmarks/final_remediation_20261116/DSML_MARKET_REPORT_FIX.md
+      - token_benchmarks/final_remediation_20261116/TOOL_ROUNDS_TELEMETRY_FIX.md
+      - tests/test_final_remediation.py
+    human_review: pending
+    approval_status: PENDING_HUMAN_CONFIRMATION
+    source:
+      - "git commits e0ea1b0, 8536274, e9eed04, 51edd41, eaeebab (author C3 Engine; 2026-11-16)"
+
+  - id: AIU-008
+    date: "2026-11-16"
+    tool_agent: "C3 Engine (AI agent) with three independent read-only subagents"
+    phase: "Final independent audits and regression verification"
+    scope: >-
+      Audited the final remediation candidate for product logic (A), telemetry
+      and infrastructure (B), and regression/data safety (C). The final record
+      reports 2,227 passed, 4 known failed, 2 skipped and 319 subtests, with
+      20 new regression tests and no new failures; all three audits PASS.
+    artifact:
+      - token_benchmarks/final_remediation_20261116/INDEPENDENT_AUDIT.md
+      - token_benchmarks/final_remediation_20261116/TEST_RESULTS.md
+      - token_benchmarks/final_remediation_20261116/REGRESSION_AUDIT.md
+    human_review: pending
+    approval_status: PENDING_HUMAN_CONFIRMATION
+    source:
+      - "git commits eaeebab, 53938db (author C3 Engine; 2026-11-16)"
+      - "git tag cand01-v3-final-remediation"
+
+  - id: AIU-009
+    date: "2026-11-16"
+    tool_agent: "C3 Engine (AI agent; git author name; tool not named in the repository)"
+    phase: "Final release bookkeeping"
+    scope: >-
+      Recorded the final test numbers and audit record, aligned the
+      documentation with the aggregate markup counter, and added the final
+      release metadata ignore rules. This entry covers bookkeeping only; it
+      makes no new product-code claim.
+    artifact:
+      - token_benchmarks/final_remediation_20261116/INDEPENDENT_AUDIT.md
+      - token_benchmarks/final_remediation_20261116/TEST_RESULTS.md
+      - token_benchmarks/final_remediation_20261116/FINAL_REMEDIATION_REPORT_CN.md
+    human_review: pending
+    approval_status: PENDING_HUMAN_CONFIRMATION
+    source:
+      - "git commits 53938db, 50b2ca3 (author C3 Engine; 2026-11-16)"
+      - "git tag cand01-v3-final-remediation"
+
+  - id: AIU-010
+    date: "2026-11-15"
+    tool_agent: "OpenCode (inferred from the /tmp/opencode scratch-worktree paths; the report does not name the tool)"
+    phase: "V2 audit support and probe execution"
+    scope: >-
+      Read-only audit probes, credential checks and mutation verification for
+      the V2 candidate were executed from an OpenCode scratch worktree. The
+      report states that no repository file was permanently modified and all
+      temporary artefacts stayed under the scratch directory.
+    artifact:
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/logs/audit/AUDIT_C_REPORT.md
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/logs/audit/env_credential_check.py
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/logs/mutation_tests_final.txt
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/logs/full_suite_from_envfree_cwd.txt
+    human_review: pending
+    approval_status: PENDING_HUMAN_CONFIRMATION
+    source:
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/logs/audit/AUDIT_C_REPORT.md
+      - "report header: Repository /tmp/opencode/planC2_wt, baseline /tmp/opencode/rc1_baseline"
+
+unresolved_authorship:
+  - author: "t"
+    date: "2026-11-15"
+    commits:
+      - d7af7ea
+      - e1d018e
+    subjects:
+      - "t resign"
+      - "t tamper"
+    note: >-
+      These two commits are visible in git history but the repository does not
+      identify the tool, the person, or whether the author is human or
+      automated. They are therefore not counted as AI-use entries; they are
+      disclosed here so the log does not silently omit commits.

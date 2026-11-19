@@ -1,0 +1,108 @@
+{
+  // CS5351 project OpenCode permission policy (conservative, documented-only).
+  //
+  // SCOPE AND VERIFICATION STATUS — READ THIS FIRST:
+  //   * This path (.opencode/permissions.jsonc) is a project governance
+  //     artifact, not a file OpenCode is known to auto-load. OpenCode loads
+  //     opencode.json / opencode.jsonc, not permissions.jsonc, so this file is
+  //     DOCUMENTED_ONLY until the project deliberately wires it in.
+  //   * OpenCode 1.18.29 is installed (version from ~/.opencode/package.json;
+  //     `opencode --version` failed with EROFS opening its log, so runtime
+  //     loading is NOT_VERIFIED).
+  //   * Shape: a root `permission` object whose keys map to "allow" | "ask" |
+  //     "deny" or to a pattern -> action object. This matches the
+  //     PermissionConfig schema found in the installed binary, and avoids the
+  //     broken top-level allow/ask/deny arrays used by the earlier 0979fc1
+  //     artifact.
+  //   * Rule matching (which pattern wins, how shell strings are tokenized) was
+  //     not verified. Treat this file as defense in depth, never as a security
+  //     boundary. Human review and AGENTS.md remain authoritative.
+  //
+  // Default posture: everything asks; network, paid calls, force pushes,
+  // history rewrites, dependency installs, and destructive commands are denied.
+  "permission": {
+    "edit": "ask",
+    "webfetch": "deny",
+    "bash": {
+      "*": "ask",
+
+      // --- read-only repository inspection -------------------------------
+      "git status*": "allow",
+      "git log*": "allow",
+      "git show*": "allow",
+      "git diff*": "allow",
+      "git rev-parse*": "allow",
+      "git tag --list*": "allow",
+      "git ls-files*": "allow",
+      "sha256sum*": "allow",
+
+      // --- offline verification -----------------------------------------
+      "python -m pytest*": "allow",
+      ".venv/bin/python -m pytest*": "allow",
+      "python -m ruff*": "allow",
+      ".venv/bin/python -m ruff*": "allow",
+      "ruff check*": "allow",
+      "python -m compileall*": "allow",
+
+      // --- git writes: ask, never automatic -----------------------------
+      "git commit*": "ask",
+      "git push*": "ask",
+      "git tag*": "ask",
+
+      // --- forbidden git history operations ----------------------------
+      "git push --force*": "deny",
+      "git push -f*": "deny",
+      "git push --force-with-lease*": "deny",
+      "git reset --hard*": "deny",
+      "git rebase*": "deny",
+      "git filter-branch*": "deny",
+      "git reflog expire*": "deny",
+      "git gc --prune*": "deny",
+      "git tag -d*": "deny",
+      "git tag --delete*": "deny",
+      "git tag -f*": "deny",
+      "git tag --force*": "deny",
+      "git branch -D*": "deny",
+
+      // --- network egress ------------------------------------------------
+      "curl*": "deny",
+      "wget*": "deny",
+      "ssh*": "deny",
+      "scp*": "deny",
+      "nc*": "deny",
+      "ncat*": "deny",
+
+      // --- paid/live pipelines and dependency changes -------------------
+      "python scripts/token_benchmark.py run*": "deny",
+      ".venv/bin/python scripts/token_benchmark.py run*": "deny",
+      "bash scripts/run_token_benchmark.sh*": "deny",
+      "pip install*": "deny",
+      "python -m pip install*": "deny",
+      "uv*": "deny",
+      "poetry add*": "deny",
+      "docker compose up*": "deny",
+
+      // --- destructive operations ---------------------------------------
+      "rm -rf*": "deny",
+      "sudo*": "deny",
+      "chmod*": "deny",
+      "chown*": "deny",
+      "dd *": "deny",
+      "mkfs*": "deny",
+
+      // --- best-effort credential-file denial ---------------------------
+      // NOT_VERIFIED / INCOMPLETE: these match common command strings only.
+      // `cat .env` is covered, but `python -c "open('.env')"`, `base64 .env`,
+      // editors, and shell redirection can bypass any command-pattern rule.
+      // Do not rely on this for secret protection; AGENTS.md section 7 and
+      // human review are the actual control.
+      "cat .env*": "deny",
+      "head .env*": "deny",
+      "tail .env*": "deny",
+      "less .env*": "deny",
+      "more .env*": "deny",
+      "strings .env*": "deny",
+      "grep * .env*": "deny"
+    }
+  }
+}

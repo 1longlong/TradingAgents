@@ -1,0 +1,874 @@
+# Retrospective requirements baseline for the CS5351 TradingAgents submission.
+#
+# These requirements were written after the project was delivered, by reading
+# the committed code, tests, experiment records and audit reports. They are a
+# retrospective baseline: they do NOT claim that a requirements document or
+# these identifiers existed before the project, and they do not assert any
+# human approval that is not evidenced in the repository.
+#
+# Every implementation and test path below exists in this worktree. Numeric
+# claims are restricted to the canonical project facts recorded in the project
+# block and in docs/ai-use-log.yaml. Requirements are intentionally stated as
+# verifiable capabilities, not as claims of investment performance.
+schema_version: "1.0"
+
+project:
+  name: TradingAgents
+  description: >-
+    Multi-agent LLM equity-analysis system. Analysts cover market, news and
+    fundamentals; researchers debate bull and bear cases; a research manager,
+    trader, risk debaters and portfolio manager produce a single investment
+    decision for a ticker on a point-in-time trade date. The delivered study
+    measures token consumption and engineering correctness, not investment
+    returns.
+  course: CS5351
+  institution: CityU
+  runtime: CityU Foundry CS5351/DeepSeek-V4-Flash
+  provider: openai_compatible
+  trade_date: "2026-09-23"
+  news_scope: "Finnhub-only company news; GDELT disabled; global news CONFIG_DISABLED"
+  macro_source: FRED
+  pit_enforced: true
+  baseline_kind: retrospective
+  upstream_base_commit: 2d17df8
+  upstream_base_date: "2026-09-17"
+  branch_created: "2026-10-20"
+  rc1_commit: 9948bf8
+  rc1_date: "2026-11-12"
+  rc1_tag: rc1
+  v2_freeze_commit: 15270b1
+  v2_freeze_date: "2026-11-16"
+  v2_freeze_tag: c3-final-freeze
+  v3_freeze_commit: e3b5cca
+  v3_freeze_date: "2026-11-16"
+  v3_freeze_tag: c3-v3-final-freeze
+  final_commit: 50b2ca3
+  final_date: "2026-11-16"
+  final_tag: cand01-v3-final-remediation
+  origin_branch: origin/feature/token-observability
+  commits_rc1_to_final: 68
+  merges_rc1_to_final: 0
+  experiments:
+    v2:
+      attempts: 7
+      valid: 5
+      env_failed: 1
+      invalid: 1
+      total_tokens: 1463791
+    v3:
+      attempts: 18
+      run_ids: 16
+      valid: 15
+      env_failed: 1
+      invalid: 2
+      total_tokens: 3067669
+      reattempted_run_ids:
+        - R02
+        - R12
+    combined:
+      attempts: 25
+      valid: 20
+      total_tokens: 4531460
+      valid_tokens: 4112224
+      failed_tokens: 419236
+    factorial_v3:
+      balanced_blocks: 3
+      balanced: true
+      n_per_cell: 1
+      single_pass_effect_tokens_per_run: -19589
+      single_pass_effect_percent: -8.96
+      batch_macro_effect_tokens_per_run: -17702
+      batch_macro_effect_excluding_env_degraded_r01: -695
+      classification: exploratory
+    final_test_suite:
+      passed: 2227
+      failed_known: 4
+      skipped: 2
+      subtests: 319
+      new_regression_tests: 20
+      independent_audits_passed: 3
+
+requirements:
+  - id: FR-001
+    title: Multi-agent investment analysis
+    type: functional
+    priority: Must
+    description: >-
+      The system shall orchestrate a configured team of LLM agents for one
+      ticker and one trade date: market, news and fundamentals analysts, bull
+      and bear researchers, a research manager, a trader, risk-management
+      debaters and a portfolio manager. The run shall end in exactly one final
+      investment decision with a rating and a written rationale, while
+      preserving configurable research and risk debate rounds.
+    acceptance_criteria:
+      - id: AC-FR-001-01
+        statement: >-
+          Running the graph for a supported ticker produces a final state that
+          contains a non-empty final decision and the configured analyst
+          reports.
+        verification: tests/test_analyst_execution.py
+      - id: AC-FR-001-02
+        statement: >-
+          The bull and bear researchers debate the analyst evidence, and the
+          research manager and portfolio manager consume that debate rather
+          than bypassing it.
+        verification: tests/test_debate_opening.py
+      - id: AC-FR-001-03
+        statement: >-
+          One graph construction and one graph invocation are performed per
+          measured run; the run does not construct duplicate graphs or stats
+          handlers.
+        verification: tests/test_c3_regressions.py
+    implementation:
+      - tradingagents/graph/setup.py
+      - tradingagents/graph/trading_graph.py
+      - tradingagents/agents/analysts/market_analyst.py
+      - tradingagents/agents/analysts/news_analyst.py
+      - tradingagents/agents/analysts/fundamentals_analyst.py
+      - tradingagents/agents/researchers/bull_researcher.py
+      - tradingagents/agents/researchers/bear_researcher.py
+      - tradingagents/agents/managers/research_manager.py
+      - tradingagents/agents/managers/portfolio_manager.py
+      - tradingagents/agents/risk_mgmt/aggressive_debator.py
+    tests:
+      - tests/test_analyst_execution.py
+      - tests/test_debate_opening.py
+      - tests/test_reporting.py
+      - tests/test_structured_agents.py
+    status: implemented
+    evidence:
+      - README.md
+      - commit 50b2ca3
+      - tag cand01-v3-final-remediation
+
+  - id: FR-002
+    title: Market, news and fundamental data acquisition
+    type: functional
+    priority: Must
+    description: >-
+      The system shall acquire market data, company news, fundamental data and
+      macroeconomic series through a vendor-routing dataflow layer. Market
+      prices and indicators come from the configured market vendor, company
+      news from Finnhub, fundamentals from the configured fundamentals vendor,
+      and macro series from FRED. Vendor output shall be rendered as dated,
+      agent-readable reports rather than raw payloads.
+    acceptance_criteria:
+      - id: AC-FR-002-01
+        statement: >-
+          The default routing table resolves company news to Finnhub and macro
+          data to FRED, and the market, news, fundamentals and macro tool
+          entry points dispatch through the routing layer.
+        verification: tests/test_dataflows_config.py
+      - id: AC-FR-002-02
+        statement: >-
+          A valid FRED response is rendered as a dated markdown series and a
+          valid Finnhub response maps every documented article field.
+        verification: tests/test_fred.py
+      - id: AC-FR-002-03
+        statement: >-
+          A missing credential or an unavailable vendor produces a typed,
+          explicit failure instead of a silent empty success.
+        verification: tests/test_vendor_errors.py
+    implementation:
+      - tradingagents/dataflows/interface.py
+      - tradingagents/dataflows/config.py
+      - tradingagents/dataflows/y_finance.py
+      - tradingagents/dataflows/finnhub_news.py
+      - tradingagents/dataflows/fred.py
+      - tradingagents/dataflows/alpha_vantage_stock.py
+      - tradingagents/dataflows/alpha_vantage_fundamentals.py
+      - tradingagents/dataflows/alpha_vantage_indicator.py
+      - tradingagents/agents/utils/core_stock_tools.py
+      - tradingagents/agents/utils/fundamental_data_tools.py
+    tests:
+      - tests/test_dataflows_config.py
+      - tests/test_fred.py
+      - tests/test_finnhub_news.py
+      - tests/test_alpha_vantage_hardening.py
+      - tests/test_market_data_validator.py
+      - tests/test_vendor_errors.py
+    status: implemented
+    evidence:
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/CAND01_BATCH_2X2_PROTOCOL_V3.md
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/REMEDIATION.md
+
+  - id: FR-003
+    title: Structured analyst reports
+    type: functional
+    priority: Must
+    description: >-
+      The three tool-loop analysts shall be able to emit typed, schema-validated
+      reports (stance, evidence, levels, risks and interpretation) instead of
+      only free prose. When a provider cannot bind a schema, or the structured
+      switch is off, the system shall fall back to free text and still render a
+      non-empty analyst report with explicitly labelled missing fields.
+    acceptance_criteria:
+      - id: AC-FR-003-01
+        statement: >-
+          The structured binding helper returns a schema-bound runnable only
+          when the provider supports it, and returns no binding otherwise.
+        verification: tests/test_structured_analyst_output.py
+      - id: AC-FR-003-02
+        statement: >-
+          A valid structured object renders into a non-empty report whose
+          fields preserve the values supplied by the model.
+        verification: tests/test_structured_agents.py
+      - id: AC-FR-003-03
+        statement: >-
+          A field the model did not provide is rendered as explicitly
+          unavailable rather than invented.
+        verification: tests/test_structured_agents.py
+    implementation:
+      - tradingagents/agents/schemas.py
+      - tradingagents/agents/utils/structured.py
+      - tradingagents/agents/analysts/market_analyst.py
+      - tradingagents/agents/analysts/news_analyst.py
+      - tradingagents/agents/analysts/fundamentals_analyst.py
+    tests:
+      - tests/test_structured_analyst_output.py
+      - tests/test_structured_agents.py
+      - tests/test_structured_agent_prompts.py
+    status: implemented
+    evidence:
+      - token_benchmarks/final_remediation_20261116/DSML_MARKET_REPORT_FIX.md
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/FINAL_ENGINEERING_REPORT_CN.md
+
+  - id: FR-004
+    title: Agent and system-component usage attribution
+    type: functional
+    priority: Must
+    description: >-
+      Every provider usage event shall be attributed to either an agent or a
+      named system component. The pre-graph reflector, which calls the provider
+      outside every graph node, shall be recorded as the system component
+      pre_graph_reflector and never disguised as an analyst. An event with no
+      attribution scope shall be recorded as none and shall invalidate the
+      measured run.
+    acceptance_criteria:
+      - id: AC-FR-004-01
+        statement: >-
+          A reflector call is reported under system_components with
+          component_id pre_graph_reflector and contributes zero agent calls.
+        verification: tests/test_system_attribution.py
+      - id: AC-FR-004-02
+        statement: >-
+          Run totals close exactly over agents, system components and the
+          unattributed bucket, and an unattributed event forces
+          attribution_complete to false.
+        verification: tests/test_system_attribution.py
+      - id: AC-FR-004-03
+        statement: >-
+          Attribute scopes nest and restore correctly after success, exception
+          or cancellation, and an unscoped provider call is never silently
+          attributed to an agent.
+        verification: tests/test_system_attribution.py
+    implementation:
+      - tradingagents/observability.py
+      - tradingagents/graph/reflection.py
+      - tradingagents/graph/propagation.py
+    tests:
+      - tests/test_system_attribution.py
+      - tests/test_observability.py
+      - tests/test_c3_regressions.py
+    status: implemented
+    evidence:
+      - commit e3b5cca
+      - tag c3-v3-final-freeze
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/INDEPENDENT_AUDIT_A.md
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/INDEPENDENT_AUDIT_C.md
+
+  - id: FR-005
+    title: Single-pass structured finalization
+    type: functional
+    priority: Should
+    description: >-
+      When the CAND-01 single-pass switch is enabled, an analyst shall emit its
+      structured report on the call that would otherwise have written the prose
+      report, instead of writing prose and paying a second call to regenerate
+      the same analysis. The schema is bound beside the data tools, the tool
+      loop is preserved, and every failure path falls back to the RC1
+      behaviour without leaking protocol markup into the report.
+    acceptance_criteria:
+      - id: AC-FR-005-01
+        statement: >-
+          The targeted single-pass path makes no separate prose finalisation
+          call and returns the typed report from the same turn.
+        verification: tests/test_cand01_single_pass_finalization.py
+      - id: AC-FR-005-02
+        statement: >-
+          Every fallback (unsupported provider, prose answer, invalid stance,
+          exhausted round budget, failed tool round) still produces a non-empty
+          report and never a blank one.
+        verification: tests/test_cand01_single_pass_finalization.py
+      - id: AC-FR-005-03
+        statement: >-
+          A retry after an invalid schema call removes the dangling tool call,
+          keeps the analyst system prompt, and strips protocol markup before
+          the text can reach the report.
+        verification: tests/test_final_remediation.py
+    implementation:
+      - tradingagents/agents/utils/structured.py
+      - tradingagents/graph/setup.py
+      - tradingagents/default_config.py
+    tests:
+      - tests/test_cand01_single_pass_finalization.py
+      - tests/test_final_remediation.py
+      - tests/test_c3_regressions.py
+    status: implemented
+    evidence:
+      - token_benchmarks/final_remediation_20261116/FINAL_REMEDIATION_REPORT_CN.md
+      - token_benchmarks/final_remediation_20261116/R12_FALLBACK_FIX.md
+      - token_benchmarks/final_remediation_20261116/DSML_MARKET_REPORT_FIX.md
+      - commit e0ea1b0
+
+  - id: FR-006
+    title: Batch-macro switch
+    type: functional
+    priority: Should
+    description: >-
+      The system shall expose a batch_macro_enabled switch. When enabled, the
+      news analyst is given get_macro_indicators_batch, which retrieves several
+      FRED series in one tool round while preserving each series text exactly;
+      when disabled, only the single-series tool is available. The V3 factorial
+      measured a batch-macro point estimate of -17,702 tokens per run, but it
+      was not robust (excluding the environment-degraded R01 it was about -695),
+      and with n=1 per cell the result is exploratory only.
+    acceptance_criteria:
+      - id: AC-FR-006-01
+        statement: >-
+          The batch tool returns byte-identical per-series text to the
+          single-series tool, in request order, using the same PIT date and
+          look-back window.
+        verification: tests/test_macro_batch.py
+      - id: AC-FR-006-02
+        statement: >-
+          A malformed batch argument or a failure of one series never aborts
+          the run, and a total outage is labelled DATA_UNAVAILABLE rather than
+          presented as a successful batch.
+        verification: tests/test_macro_batch.py
+      - id: AC-FR-006-03
+        statement: >-
+          The graph consumes exactly the batch_macro value declared by the run
+          spec, so an arm cannot silently run with the other value.
+        verification: tests/test_switch_consumption.py
+    implementation:
+      - tradingagents/agents/utils/macro_data_tools.py
+      - tradingagents/dataflows/fred.py
+      - tradingagents/default_config.py
+      - tradingagents/graph/setup.py
+      - tradingagents/graph/switch_verification.py
+    tests:
+      - tests/test_macro_batch.py
+      - tests/test_switch_consumption.py
+      - tests/test_ablation_switches.py
+    status: implemented
+    evidence:
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/experiment.json
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/SWITCH_MATRIX.csv
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/CAND01_BATCH_2X2_PROTOCOL_V3.md
+
+  - id: FR-007
+    title: Point-in-time enforcement
+    type: functional
+    priority: Must
+    description: >-
+      All historical data access shall be bounded by the run's trade date so a
+      backtest cannot read information published after it. News publication
+      times are normalised to UTC and filtered against an exclusive end bound;
+      undated articles are excluded in historical mode; tool date arguments are
+      clamped to the trade date; and memory retrieval obeys the same cut-off.
+    acceptance_criteria:
+      - id: AC-FR-007-01
+        statement: >-
+          The news window excludes future-dated and undated articles in
+          backtest mode, keeps undated articles only in a live window, and
+          treats the upper bound as exclusive.
+        verification: tests/test_news_lookahead.py
+      - id: AC-FR-007-02
+        statement: >-
+          A future end date supplied to a data tool is clamped to the trade
+          date instead of being passed through to the vendor.
+        verification: tests/test_tool_date_enforcement.py
+      - id: AC-FR-007-03
+        statement: >-
+          PIT notices and withholding behaviour are deterministic across days,
+          preserve observed coverage, and fit the documented size budget.
+        verification: tests/test_pit_notice.py
+    implementation:
+      - tradingagents/dataflows/date_window.py
+      - tradingagents/agents/utils/core_stock_tools.py
+      - tradingagents/agents/utils/news_data_tools.py
+      - tradingagents/dataflows/finnhub_news.py
+      - tradingagents/agents/utils/memory.py
+    tests:
+      - tests/test_news_lookahead.py
+      - tests/test_fundamentals_lookahead.py
+      - tests/test_tool_date_enforcement.py
+      - tests/test_undated_tools_as_of.py
+      - tests/test_pit_notice.py
+      - tests/test_memory_pointintime.py
+    status: implemented
+    evidence:
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/EXPERIMENT_PROTOCOL_V3.md
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/CAND01_BATCH_2X2_PROTOCOL_V2.md
+
+  - id: FR-008
+    title: Finnhub-only news provenance
+    type: functional
+    priority: Must
+    description: >-
+      The delivered study shall use Finnhub as the sole company-news source.
+      GDELT shall be disabled and unreachable from the configured news route,
+      and global/macro news shall be explicitly disabled rather than borrowed
+      from another provider. A Finnhub outage shall be reported as a Finnhub
+      outage and shall not be rescued by contacting GDELT.
+    acceptance_criteria:
+      - id: AC-FR-008-01
+        statement: >-
+          The default configuration has no GDELT news route and the company
+          news entry point is the Finnhub-only function.
+        verification: tests/test_finnhub_only_scope.py
+      - id: AC-FR-008-02
+        statement: >-
+          A GDELT tripwire is never contacted by any news path, including when
+          Finnhub is down or when global news is requested.
+        verification: tests/test_finnhub_only_scope.py
+      - id: AC-FR-008-03
+        statement: >-
+          A single-provider report names only that provider, and a provider
+          failure states the configured provider rather than implying a
+          different source.
+        verification: tests/test_finnhub_only_scope.py
+    implementation:
+      - tradingagents/dataflows/finnhub_news.py
+      - tradingagents/dataflows/news_merge.py
+      - tradingagents/dataflows/interface.py
+      - tradingagents/default_config.py
+    tests:
+      - tests/test_finnhub_only_scope.py
+      - tests/test_finnhub_news.py
+      - tests/test_gdelt_news.py
+      - tests/test_news_dual_source.py
+    status: implemented
+    evidence:
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/logs/finnhub_only_execution_proof.txt
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/CAND01_BATCH_2X2_PROTOCOL_V3.md
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/RC1_COMPATIBILITY.md
+
+  - id: FR-009
+    title: Per-run memory isolation
+    type: functional
+    priority: Must
+    description: >-
+      Each measured run shall start from the same immutable memory snapshot and
+      write only to its own per-run copy, so one run's pending decision cannot
+      change the next run's prompt context, reflector call or token cost. The
+      snapshot hash shall be registered and hashed into the run config, the
+      copy must be inside the run's own attempt directory and must differ from
+      the snapshot, and a missing or changed memory state shall invalidate the
+      run.
+    acceptance_criteria:
+      - id: AC-FR-009-01
+        statement: >-
+          Every run copy is byte-identical to the registered baseline at start
+          and lives in its own attempt directory, distinct from every other
+          run's copy.
+        verification: tests/test_memory_isolation.py
+      - id: AC-FR-009-02
+        statement: >-
+          Writing a pending entry to one run's copy leaves the baseline and all
+          other run copies unchanged.
+        verification: tests/test_memory_isolation.py
+      - id: AC-FR-009-03
+        statement: >-
+          A missing memory_state.json, a modified baseline, a doctored
+          registration or a stripped spec is refused before any paid call.
+        verification: tests/test_memory_isolation.py
+    implementation:
+      - tradingagents/agents/utils/memory.py
+      - tradingagents/graph/propagation.py
+      - scripts/token_benchmark.py
+      - scripts/gen_cand01_batch_16run_specs_v3.py
+    tests:
+      - tests/test_memory_isolation.py
+      - tests/test_memory_pointintime.py
+      - tests/test_memory_log.py
+      - tests/test_cand01_batch_16run_v3_infra.py
+    status: implemented
+    evidence:
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/MEMORY_ISOLATION_AUDIT.md
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/MEMORY_SNAPSHOT_PROVENANCE.md
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/memory/baseline_v3.provenance.json
+      - commit afa0fc6
+
+  - id: FR-010
+    title: Typed error handling and fail-closed behavior
+    type: functional
+    priority: Must
+    description: >-
+      Vendor, parser and data-quality failures shall be classified with typed
+      exceptions and explicit statuses rather than being converted into empty
+      successful results. A failure that leaves usage, attribution, memory,
+      switches or the budget contract unverifiable shall void the run or refuse
+      it before spending, rather than treating the absence of evidence as
+      success.
+    acceptance_criteria:
+      - id: AC-FR-010-01
+        statement: >-
+          Authentication, throttling, timeout, malformed payload and
+          authoritative-empty responses map to distinct typed outcomes.
+        verification: tests/test_finnhub_news.py
+      - id: AC-FR-010-02
+        statement: >-
+          Missing, stale or malformed market data raises or is explicitly
+          labelled unavailable, never silently rendered as a valid price.
+        verification: tests/test_market_data_validator.py
+      - id: AC-FR-010-03
+        statement: >-
+          A refused run is recorded separately from a measured attempt and
+          consumes no attempt directory.
+        verification: tests/test_c3_regressions.py
+    implementation:
+      - tradingagents/dataflows/errors.py
+      - tradingagents/dataflows/news_status.py
+      - tradingagents/dataflows/market_data_validator.py
+      - tradingagents/dataflows/interface.py
+    tests:
+      - tests/test_vendor_errors.py
+      - tests/test_no_data_handling.py
+      - tests/test_news_error_classification.py
+      - tests/test_news_status_taxonomy.py
+      - tests/test_market_data_validator.py
+    status: implemented
+    evidence:
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/CAND01_BATCH_2X2_PROTOCOL_V2.md
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/TEST_RESULTS.md
+
+  - id: FR-011
+    title: Usage completeness verdict (U-1)
+    type: functional
+    priority: Must
+    description: >-
+      The measurement harness shall classify every telemetry payload as VALID,
+      MISSING, INCOMPLETE or MISMATCH, and only VALID may produce a measured
+      sample. The verdict must be consumed by validity, not merely computed. An
+      unknown token total is reported as null, never zero, and a replay that
+      disagrees with the recorded totals voids the run.
+    acceptance_criteria:
+      - id: AC-FR-011-01
+        statement: >-
+          Each of the four usage verdicts is reachable from a constructed
+          telemetry payload and is classified as documented.
+        verification: tests/test_c3_final_freeze.py
+      - id: AC-FR-011-02
+        statement: >-
+          A MISSING, INCOMPLETE or MISMATCH payload cannot yield a valid run,
+          and a payload whose replay disagrees with its totals is voided.
+        verification: tests/test_c3_final_freeze.py
+      - id: AC-FR-011-03
+        statement: >-
+          An unknown total is published as null and never as zero; an
+          unattributed event or a tampered completeness flag fails closed.
+        verification: tests/test_c3_final_freeze.py
+    implementation:
+      - scripts/token_benchmark.py
+      - tradingagents/observability.py
+    tests:
+      - tests/test_c3_final_freeze.py
+      - tests/test_c3_regressions.py
+      - tests/test_token_benchmark.py
+      - tests/test_budget_guard.py
+    status: implemented
+    evidence:
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/C3_HALT_REPORT_20261115.md
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/CAND01_BATCH_2X2_PROTOCOL_V2.md
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/logs/mutation_final_freeze.txt
+      - commit 15270b1
+
+  - id: FR-012
+    title: Budget contract semantics (U-2)
+    type: functional
+    priority: Must
+    description: >-
+      A null token cap shall mean unlimited only when the registration
+      explicitly declares budget_mode uncapped_authorized. A missing protocol
+      file, a malformed budget block, a missing or invalid mode and a
+      non-integer cap shall each be distinct refusals; none may default to an
+      uncapped run. Under unknown spend, spend shall not be reported as zero.
+    acceptance_criteria:
+      - id: AC-FR-012-01
+        statement: >-
+          uncapped_authorized with a null cap never blocks and is reported as
+          uncapped rather than as an unknown or zero budget.
+        verification: tests/test_budget_guard.py
+      - id: AC-FR-012-02
+        statement: >-
+          A null cap without an explicit mode, an unreadable budget file and a
+          non-integer cap each raise a distinct refusal instead of defaulting.
+        verification: tests/test_c3_final_freeze.py
+      - id: AC-FR-012-03
+        statement: >-
+          Unknown spend is reported as unknown and is not converted to zero,
+          while reserved tokens count toward a real cap.
+        verification: tests/test_budget_guard.py
+    implementation:
+      - scripts/token_benchmark.py
+      - tradingagents/budget_guard.py
+      - scripts/gen_cand01_batch_16run_specs_v3.py
+    tests:
+      - tests/test_budget_guard.py
+      - tests/test_c3_final_freeze.py
+      - tests/test_token_benchmark.py
+    status: implemented
+    evidence:
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/BUDGET_GUARD_DESIGN.md
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/EXECUTION_READINESS.md
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/c3/code_freeze.txt
+
+  - id: FR-013
+    title: Final decision synthesis and risk debate
+    type: functional
+    priority: Must
+    description: >-
+      The research manager, trader and risk-management team shall synthesize
+      the analyst and researcher evidence into one final rating with a written
+      rationale. The optimistic, conservative and neutral risk views shall be
+      debated for the configured number of rounds, and the portfolio manager
+      shall be the single component that emits the final decision.
+    acceptance_criteria:
+      - id: AC-FR-013-01
+        statement: >-
+          The debate opens with the configured number of research rounds and
+          the risk team receives the trader plan before the final decision.
+        verification: tests/test_debate_opening.py
+      - id: AC-FR-013-02
+        statement: >-
+          The research manager and trader render structured proposals that
+          preserve the model's rating and levels.
+        verification: tests/test_structured_agents.py
+      - id: AC-FR-013-03
+        statement: >-
+          The final decision is included in the generated report and is not
+          replaced by an intermediate analyst rating.
+        verification: tests/test_reporting.py
+    implementation:
+      - tradingagents/agents/managers/research_manager.py
+      - tradingagents/agents/managers/portfolio_manager.py
+      - tradingagents/agents/trader/trader.py
+      - tradingagents/agents/risk_mgmt/aggressive_debator.py
+      - tradingagents/graph/setup.py
+    tests:
+      - tests/test_debate_opening.py
+      - tests/test_structured_agents.py
+      - tests/test_reporting.py
+    status: implemented
+    evidence:
+      - README.md
+      - commit 50b2ca3
+      - tag cand01-v3-final-remediation
+
+  - id: NFR-001
+    title: Token observability and measured accounting
+    type: non-functional
+    priority: Must
+    description: >-
+      Every provider call shall be observable at the event level with separate
+      input, output, cached and reasoning token counts, the provider's raw usage
+      blob, call order and attribution. The harness shall account for retries,
+      preserve failed attempts, reject negative counts, avoid double counting a
+      duplicate callback delivery, and report run totals that equal the sum of
+      per-call events. Two real batches were measured: V2 used 7 attempts
+      (5 valid, 1 environment-failed, 1 invalid) for 1,463,791 tokens; V3 used
+      18 attempts over 16 Run IDs (15 valid, 1 environment-failed, 2 invalid)
+      for 3,067,669 tokens. Combined: 25 attempts, 20 valid, 4,531,460 tokens
+      (4,112,224 valid, 419,236 failed).
+    acceptance_criteria:
+      - id: AC-NFR-001-01
+        statement: >-
+          Each LLM event records input, output, cached and reasoning token
+          counts separately, with an absent field left null rather than zero.
+        verification: tests/test_observability.py
+      - id: AC-NFR-001-02
+        statement: >-
+          A run's totals equal the sum of its own LLM events, and a duplicate
+          on_llm_end delivery for the same run id is counted once.
+        verification: tests/test_observability.py
+      - id: AC-NFR-001-03
+        statement: >-
+          The benchmark harness preserves failed attempts, validates
+          input+output equals total per run, and refuses to publish an average
+          over fewer valid runs than requested.
+        verification: tests/test_token_benchmark.py
+    implementation:
+      - tradingagents/observability.py
+      - scripts/token_benchmark.py
+      - scripts/run_token_benchmark.sh
+    tests:
+      - tests/test_observability.py
+      - tests/test_token_benchmark.py
+      - tests/test_run_token_benchmark_sh.py
+      - tests/test_graph_tool_observability.py
+    status: implemented
+    evidence:
+      - token_benchmarks/README.md
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/TEST_RESULTS.md
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/TEST_RESULTS.md
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/logs/mutation_final_freeze.txt
+
+  - id: NFR-002
+    title: Experiment reproducibility and freeze
+    type: non-functional
+    priority: Must
+    description: >-
+      A measured experiment shall be reproducible from a frozen tree. The
+      freeze record, annotated tag, HEAD, tree fingerprint, release seal,
+      per-file manifest and all 16 run config hashes shall bind to the same
+      commit; specs shall regenerate deterministically; and a run whose tree or
+      spec drifts from the registration shall be refused before any paid call.
+      The lineage is upstream base 2d17df8 (2026-09-17), branch created
+      2026-10-20, rc1 9948bf8 (2026-11-12, tag rc1), V2 freeze 15270b1 (tag
+      c3-final-freeze), V3 freeze e3b5cca (tag c3-v3-final-freeze), and final
+      50b2ca3 (tag cand01-v3-final-remediation, pushed to
+      origin/feature/token-observability), with 68 commits from rc1 to final
+      and 0 merges.
+    acceptance_criteria:
+      - id: AC-NFR-002-01
+        statement: >-
+          HEAD, the freeze record and the annotated tag must name the same
+          commit, and the working-tree fingerprint must match the registered
+          value or the verifier fails.
+        verification: tests/test_c3_final_freeze.py
+      - id: AC-NFR-002-02
+        statement: >-
+          Every manifest entry and release-seal digest verifies, and all 16 V3
+          config hashes match the registered specs.
+        verification: tests/test_cand01_batch_16run_v3_infra.py
+      - id: AC-NFR-002-03
+        statement: >-
+          Every registered V3 spec verifies against its registration hash, and
+          a spec or registration that drifts is refused before a paid call.
+        verification: tests/test_c3_regressions.py
+      - id: AC-NFR-002-04
+        statement: >-
+          The V3 generator --check reproduces the delivered artefacts in its
+          generating checkout; the two path-sensitive V3 infra tests that fail
+          in a differently rooted worktree are documented known failures, not a
+          green reproducibility claim.
+        verification: token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/RUN_READINESS.md
+    implementation:
+      - scripts/c3_finalize_freeze.py
+      - scripts/c3_verify_final_freeze.py
+      - scripts/c3_build_manifest.py
+      - scripts/c3_preflight_gate.py
+      - scripts/gen_cand01_batch_16run_specs_v3.py
+    tests:
+      - tests/test_c3_final_freeze.py
+      - tests/test_c3_regressions.py
+      - tests/test_cand01_batch_16run_v3_infra.py
+      - tests/test_switch_consumption.py
+    status: implemented
+    evidence:
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/c3/code_freeze.txt
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/MANIFEST.sha256
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/c3/RELEASE_SEAL.sha256
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/c3/code_freeze.txt
+      - token_benchmarks/final_remediation_20261116/REGRESSION_AUDIT.md
+
+  - id: NFR-003
+    title: API credential protection
+    type: non-functional
+    priority: Must
+    description: >-
+      Provider and data-vendor credentials shall never be printed, logged,
+      committed or written into an experiment artefact. The benchmark wrapper
+      shall parse its secrets file as plain KEY=VALUE data without sourcing it,
+      map only the two CityU Foundry variables, honour an explicitly exported
+      variable first, and keep the secret out of argv. A saved key file shall be
+      readable only by its owner.
+    acceptance_criteria:
+      - id: AC-NFR-003-01
+        statement: >-
+          Every selectable LLM provider resolves to a documented environment
+          variable and Ollama requires no key.
+        verification: tests/test_api_key_env.py
+      - id: AC-NFR-003-02
+        statement: >-
+          A saved key file is written with owner-only permissions, and an
+          unknown provider never triggers an interactive key prompt.
+        verification: tests/test_api_key_env.py
+      - id: AC-NFR-003-03
+        statement: >-
+          The benchmark wrapper reads only the named secrets file, never
+          sources it, passes it as data, and prints no secret value.
+        verification: tests/test_run_token_benchmark_sh.py
+    implementation:
+      - tradingagents/llm_clients/api_key_env.py
+      - cli/utils.py
+      - scripts/run_token_benchmark.sh
+      - .env.example
+    tests:
+      - tests/test_api_key_env.py
+      - tests/test_google_api_key.py
+      - tests/test_cli_env_skip.py
+      - tests/test_env_overrides.py
+    status: implemented
+    evidence:
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/c3/env_credential_audit.txt
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/logs/credential_state.txt
+      - token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/logs/audit/AUDIT_C_REPORT.md
+      - token_benchmarks/README.md
+
+  - id: NFR-004
+    title: Test and audit verification
+    type: non-functional
+    priority: Must
+    description: >-
+      The delivered code shall be verified by an executable test suite,
+      targeted regression suites, defect-detection probes and independent
+      audits. The recorded suite at the published commit `50b2ca3` reported
+      2,227 passed, 4 known failed, 2 skipped and 319 subtests; the four
+      failures were the two V3 absolute-path infra tests and two
+      host-coupled CLI-prefs tests. On the course-deliverable branch the
+      portability/isolation fixes make the suite hermetic: a .env-free run
+      reports 2,233 passed, 0 failed, 2 skipped and 319 subtests. 20 new
+      regression tests live in tests/test_final_remediation.py; three
+      independent audits concluded PASS. No failure is removed by weakening
+      assertions.
+    acceptance_criteria:
+      - id: AC-NFR-004-01
+        statement: >-
+          The final remediation suite contains 20 tests and all of them pass.
+        verification: tests/test_final_remediation.py
+      - id: AC-NFR-004-02
+        statement: >-
+          The recorded full suite at 50b2ca3 is 2,227 passed, 4 known failed,
+          2 skipped and 319 subtests; on the submission branch the hermetic
+          (no host .env) result is 2,233 passed, 0 failed, 2 skipped and 319
+          subtests, with zero new product failures.
+        verification: token_benchmarks/final_remediation_20261116/TEST_RESULTS.md
+      - id: AC-NFR-004-03
+        statement: >-
+          Three independent audits record PASS for product logic, telemetry
+          and infrastructure, and regression/data safety, with no unresolved
+          High or Critical finding.
+        verification: token_benchmarks/final_remediation_20261116/INDEPENDENT_AUDIT.md
+    implementation:
+      - tests/test_final_remediation.py
+      - tests/test_c3_final_freeze.py
+      - tests/test_c3_regressions.py
+      - tests/test_audit_a_regressions.py
+      - tests/test_audit_b_regressions.py
+      - tests/test_audit_c_regressions.py
+    tests:
+      - tests/test_final_remediation.py
+      - tests/test_c3_final_freeze.py
+      - tests/test_c3_regressions.py
+      - tests/test_audit_a_regressions.py
+      - tests/test_audit_b_regressions.py
+      - tests/test_audit_c_regressions.py
+    status: implemented
+    evidence:
+      - token_benchmarks/final_remediation_20261116/TEST_RESULTS.md
+      - token_benchmarks/final_remediation_20261116/INDEPENDENT_AUDIT.md
+      - token_benchmarks/final_remediation_20261116/REGRESSION_AUDIT.md
+      - commit 53938db
