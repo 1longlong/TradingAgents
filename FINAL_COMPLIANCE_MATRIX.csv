@@ -1,0 +1,35 @@
+Required path,Status,Evidence,Human action
+README.md,Pass,course-oriented rewrite; upstream attribution; n=1 caveat,—
+AGENTS.md,Pass,"roles, authority, R1-R14 with enforcement status",—
+architecture-blueprint.md,Pass,14 sections; upstream vs branch boundary stated,—
+Prompt.md,Pass,static startup prompt; marked as newly established,—
+Report.md,Pass (reflection pending),15 sections; 4 HUMAN_REFLECTION_REQUIRED markers,Student writes personal reflection (A2)
+docs/req/requirements.yaml,Pass,"17 requirements, 52 AC, unique IDs, real paths",—
+docs/req/req-schema.json,Pass,draft-2020-12; real-schema validation PASS,—
+docs/architecture/adr/001-*.md,Pass,"6 retrospective ADRs, no fake dates",—
+docs/architecture/invariants.md,Pass,INV-1..14 with enforcers and tests,—
+docs/architecture/trace-matrix.md,Pass,17 requirement rows; paths/tests verified,—
+docs/architecture/memory-design.md,Pass,"V2 pollution, Reflector, V3 snapshots, 18/18 evidence",—
+docs/architecture/option-ledger.md,Pass,10 options incl. rejected/deferred,—
+docs/architecture/permission-model.md,Pass,"4 mechanisms, honest enforcement status",—
+docs/architecture/evaluation-logbook.md,Pass,real commands/results incl. known failures,—
+docs/architecture/risk-list.md,Pass,RISK-001..014 with evidence,—
+docs/architecture/evaluation-table.md,Pass,"V2/V3 cells, factorial, sensitivity, n=1 caveat",—
+docs/architecture/runtime-policy-catalog.md,Pass,policies with ENFORCED/PARTIAL status,—
+docs/code-governance/structural-constraints.md,Pass,real layout; SC rows with status,—
+docs/code-governance/verification-constraints.md,Pass,VC-01..VC-11 with observed outputs,—
+docs/code-governance/mcp-tool-manifest.md,Pass,honest: no MCP servers used,—
+docs/ai-use-log.yaml,Pass (approvals pending),real git-derived entries; all pending,Student reviews/approves (A3)
+docs/review-memo.md,Pass (sign-off pending),REC-01..08; AI authorship separated,Student signs reviewed records (A4)
+docs/debt-register.md,Pass,DEBT-001..010 verified against code,Owner confirmation (A6)
+docs/bug-diary.md,Pass,BUG-001..016 incl. A-02/B-01/B-15,—
+.opencode/permissions.jsonc,Pass,JSONC; permission object; loading NOT_VERIFIED (stated),—
+.opencode/rules.md,Pass,12 rules consistent with AGENTS.md,—
+.agent/rules.md,Pass,project covenant consistent,—
+.github/workflows/ci.yml,Pass (local CI-equivalent),4 jobs; no masking; scoped ruff; validator; hermetic suite,GitHub run + branch protection NOT_VERIFIED
+prompts/prompt_v1.0.yaml,Pass,archival export of runtime system prompt,—
+prompts/prompt_v1.1.yaml,Pass,v1.1 delta = single-pass instruction; archival,—
+src/,Pass (instructor confirmation),README pointer to tradingagents/+cli/; no move,Ask instructor (B1)
+test/offline/,Pass (instructor confirmation),README pointer to tests/ offline subset,Ask instructor (B1)
+test/live/,Pass (instructor confirmation),README: marker+skipif; never in CI,Ask instructor (B1)
+transcripts/<student-id>-<student-name>.md,PENDING_HUMAN_CONFIRMATION,policy + template only; no fabricated transcript,Student writes real annotated transcript (A1)

@@ -74,7 +74,7 @@ NVDA C0 run is removed. The interaction is also driven by NVDA/XOM; AAPL is
 | Arm | Observed behaviour | Reliability / quality signal |
 | --- | --- | --- |
 | B | Highest balanced mean; no batch tool; two-call path. All four PM ratings were `Underweight` (NVDA, AAPL, JPM, XOM). | No provider failure; no raw-markup report in the B block. |
-| AB | Batch macro collapses 7–13 macro calls to one, but the larger batch payload is re-sent; V3 AB is 186,378 on NVDA and 198,615 / 204,421 / 234,020 on AAPL / JPM / XOM. All four PM ratings were `Hold`. | No provider failure in V3. The 339,738 NVDA/AB outlier belongs to V2 (long news loop: 8 `get_news`, 10 tool rounds), not to V3; do not mix the batches. |
+| AB | Batch macro collapses 7–9 single-series calls (up to 13 total on mixed runs) to one, but the larger batch payload is re-sent; V3 AB is 186,378 on NVDA and 198,615 / 204,421 / 234,020 on AAPL / JPM / XOM. All four PM ratings were `Hold`. | No provider failure in V3. The 339,738 NVDA/AB outlier belongs to V2 (long news loop: 8 `get_news`, 10 tool rounds), not to V3; do not mix the batches. |
 | C0 | Single-pass is cheaper than B on average; output falls proportionally more than input (the duplicate prose turn is removed). Ratings mix `Underweight`, `Overweight`, `Hold`, `Hold`. | 5 market fallbacks, all in single-pass arms; R01 (NVDA) is environment-degraded; C0's higher character count is a format artefact (fallback prose), not more analysis. |
 | CC | Cheapest balanced mean; lowest output mean; both switches active. Ratings `Hold`, `Hold`, `Underweight`; JPM/CC not measured. | R12 failed twice with provider 400; R07 (AAPL) and R14 (XOM) had raw DSML markup in `market_report` (1,922 and 346 chars). Cheapest on tokens, weakest on reliability. |
 

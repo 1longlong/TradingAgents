@@ -148,7 +148,7 @@ checkout or **Supplied** from the recorded evidence, and the evidence path.
 
 | Field | Value |
 | --- | --- |
-| Commit | `50b2ca3` plus concurrent, uncommitted submission-packaging/test-path edits |
+| Commit | `50b2ca3` plus concurrent, the submission branch's test-isolation changes |
 | Command/source | `TZ=UTC .venv/bin/python -m pytest -q` from the submission worktree |
 | Result | `2,233 passed, 0 failed, 2 skipped, 319 subtests` (2,235 collected). Re-verified after the D7 portability/isolation patch from a .env-free working directory (cwd outside the repository): same result, exit 0. This is the submission-branch measurement, not a `50b2ca3` re-measurement. The published commit keeps its recorded 2,227/4 result (LOG-011); the four failures are fixed by test isolation only, with the strict spec/manifest assertions intact. |
 | Status | Re-run |

@@ -26,7 +26,7 @@ observed, not artefacts a reader can re-run from the submitted tree.
 
 | ID | Option | Expected goal | Implementation | Data / design | Result | Decision |
 | --- | --- | --- | --- | --- | --- | --- |
-| OPT-01 | Batch macro tool | Collapse 7–13 single-series FRED calls per news run into one call; fewer round trips and fewer macro tokens | `get_macro_indicators_batch` in `tradingagents/agents/utils/macro_data_tools.py`; `batch_macro_enabled`; news analyst binds the batch tool | V3 2x2, arms AB/CC; FRED; 15 valid runs | Calls fall to 1 per news run (vs 7–13), but the token effect is not robust: mean batch effect −17,702; −695 when R01 is excluded; per block −51,716 / +1,612 / −3,002 | `DEFERRED` |
+| OPT-01 | Batch macro tool | Collapse 7–9 single-series FRED calls per news run into one call (a mixed AB run can total up to 13 macro calls); fewer round trips and fewer macro tokens | `get_macro_indicators_batch` in `tradingagents/agents/utils/macro_data_tools.py`; `batch_macro_enabled`; news analyst binds the batch tool | V3 2x2, arms AB/CC; FRED; 15 valid runs | Calls fall to 1 per news run (vs 7–9 single-series; up to 13 total on mixed runs), but the token effect is not robust: mean batch effect −17,702; −695 when R01 is excluded; per block −51,716 / +1,612 / −3,002 | `DEFERRED` |
 | OPT-02 | Single-pass finalisation (CAND-01) | Remove the prose-then-structured rewrite; save output tokens | `finalize_single_pass` in `tradingagents/agents/utils/structured.py`; `single_pass_finalization_enabled` AND `structured_analyst_output_enabled` | V3 arms C0/CC; 15 valid runs | Mean single-pass effect −19,589 tokens; per block −8,907 / −16,390 / −33,472; the output reduction is proportionally larger (about 25% vs 5.7% of its base); 5 market fallbacks all occur in single-pass arms | `ADOPTED` (conditional) |
 | OPT-03 | Both switches on (CC) | Combine the two savings; cheapest arm | Both `batch_macro=true` and `single_pass=true` | V3 R03/R07/R14/R12 | Valid CC mean 181,443 tokens (lowest), but R12 failed twice and 2 of 3 valid CC runs had raw markup in `market_report` (1,922 / 346 chars) | `REJECTED` |
 | OPT-04 | Second news vendor (GDELT) | Resilience to a Finnhub outage; wider news coverage | `gdelt_news.py` remains registered as an opt-in route; `get_news` defaults to `finnhub`; `get_global_news` returns `CONFIG_DISABLED` | V2/V3 Finnhub-only; 15/15 V3 runs non-empty; 0 GDELT calls | V1 had GDELT called twice per run; V2 removed it and added a tripwire. Single-vendor scope is a property of the measurement, not a claim that Finnhub is sufficient | `REJECTED` for this study |
@@ -43,7 +43,7 @@ observed, not artefacts a reader can re-run from the submitted tree.
 
 ### OPT-01 — batch macro: fewer calls, not a token saving
 
-The mechanism is real: the news analyst's macro tool calls drop from 7–13
+The mechanism is real: the news analyst's macro tool calls drop from 7–9 single-series (up to 13 total on mixed runs)
 single-series calls to one batch call, and the V3 quality review records that
 directly **(local)**. The cost claim is not real enough to lean on:
 

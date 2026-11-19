@@ -80,7 +80,7 @@ the model's feet, and makes the measured unit (a model-chosen tool call) ambiguo
 
 ### Positive
 
-- Macro tool calls drop from 7–9 single-series calls to 1–1.2 batch calls in the ON
+- Macro tool calls drop from 7–9 single-series calls (up to 13 total on a mixed AB run) to 1–1.2 batch calls in the ON
   arms, which is a real reduction in round trips and tool-call overhead.
 - The batch text is byte-identical per series to the single-series call, so the
   model's evidence does not change; the harness can compare arms without a data

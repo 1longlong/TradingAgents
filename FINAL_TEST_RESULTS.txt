@@ -1,0 +1,59 @@
+FINAL TEST RESULTS (CS5351 submission branch)
+==============================================
+Branch: fix/cs5351-final-submission
+Base:   50b2ca332a660531837d7c12e108141862651d97 (published)
+Date:   2026-11-19 (Asia/Shanghai)
+
+1. Full offline suite (submission worktree)
+   Command: TZ=UTC PYTHONPATH=. .venv/bin/python -m pytest -q
+   Result:  2233 passed, 2 skipped, 26 warnings, 319 subtests passed in 22.5s
+   Failed:  0
+   Skips:   langchain_aws not installed; DEEPSEEK_API_KEY absent (live test)
+
+2. Hermetic check (clean verification worktree, cwd outside the repo, no .env)
+   Command: cd /home/sky/cs5351 && TZ=UTC PYTHONPATH=<clean worktree> \
+            env -u TRADINGAGENTS_LLM_BACKEND_URL python -m pytest <clean>/tests -q
+   Result:  2233 passed, 2 skipped, 26 warnings, 319 subtests passed
+   Failed:  0
+   (CONFTEST supplies a placeholder backend URL; dry-run tests never contact it.)
+
+3. Targeted portability/isolation tests
+   - tests/test_cand01_batch_16run_v3_infra.py: 13 passed (12 original + MANIFEST byte check)
+   - tests/test_cli_prefs.py: 12 passed (12; also with a fake host prefs file)
+   - tests/test_submission_compliance.py: 1 passed
+
+4. Course compliance validator
+   Command: PYTHONPATH=. .venv/bin/python scripts/validate/validate_submission.py
+   Result:  PASS: submission compliance; required artifacts 34/34 present and non-empty
+   Warnings: (a) no real student-annotated transcript (PENDING_HUMAN_CONFIRMATION);
+             (b) jsonschema not installed locally -> deterministic manual fallback
+                 (CI installs jsonschema>=4 and enforces the real draft-2020-12 schema).
+   Real-schema check (offline, jsonschema 4.x present):
+             PASS: submission compliance (schema validation path exercised)
+
+5. Lint (CI scope = files this submission adds/changes)
+   Command: ruff check scripts/validate tests/test_submission_compliance.py \
+            tests/test_cand01_batch_16run_v3_infra.py tests/test_cli_prefs.py
+   Result:  All checks passed!
+   Whole-repo baseline: 233 findings at ruff 0.17.1 (40 product, 88 tests,
+   105 evidence scripts) -- pre-existing, NOT introduced here, tracked as DEBT-010;
+   the whole-repo lint is not a blocking gate in this submission.
+
+6. Frozen experiment integrity (unchanged files)
+   Command: cd token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3 && sha256sum -c MANIFEST.sha256
+   Result:  55/55 OK
+   No frozen spec, MANIFEST, tag or experiment data was modified in this branch.
+
+7. Historical record at the published commit 50b2ca3 (for comparison, unchanged)
+   Recorded suite: 2,227 passed / 4 known failed (2 V3 absolute-path infra,
+   2 cli_prefs host-coupled) / 2 skipped / 319 subtests.
+   The submission branch fixes the portability/isolation causes without weakening
+   assertions (strict config_sha256, switches, case identity, MANIFEST bytes).
+
+8. Paid / live calls
+   0 paid LLM calls; 0 Finnhub/FRED/CityU requests; no TradingAgents pipeline run.
+
+9. GitHub Actions
+   Not executed in this local-only round (no push). The workflow is valid YAML and
+   runs the same commands; the local CI-equivalent results above are the evidence.
+   Branch protection / required checks: NOT_VERIFIED (cannot be checked locally).
