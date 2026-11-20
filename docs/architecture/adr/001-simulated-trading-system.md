@@ -20,7 +20,7 @@ reset persisted state without modifying the frozen graph.
    `SizingPolicy` computes quantity; `src/safety/rules.py` and
    `SafetyEngine` decide APPROVED, PENDING_APPROVAL, REJECTED, or NO_ACTION.
    LLM quantities and prices are discarded.
-3. **Module-private provenance token for INV-02.** `SafetyEngine` owns a
+3. **Module-private provenance token for INV-TRD-002.** `SafetyEngine` owns a
    module-private `_ProvenanceToken` instance and issues an
    `_AuthorizedExecution` carrying it. `SimulatedExecutor.execute()` verifies
    the exact token object and raises `ExecutionNotAuthorizedError` otherwise.

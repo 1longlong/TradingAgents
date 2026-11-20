@@ -5,10 +5,15 @@ Covers two systematic fixes:
     raise NoMarketDataError instead of returning an empty frame.
   - route_to_vendor must convert NoMarketDataError into a single explicit
     "NO_DATA_AVAILABLE" sentinel after all vendors are exhausted.
+
+Traceability: NFR-OFF-001 (offline; vendor reachability is mocked so no real
+network probe is made). The empty-download paths distinguish a genuine
+"no data" case (vendor reachable) from an outage (vendor unreachable); both are
+driven through the real ``raise_for_empty`` logic with ``vendor_reachable``
+mocked, so no socket attempt is made and the outage-vs-no-data distinction in
+production is preserved.
 """
 
-import os
-import unittest
 from unittest import mock
 
 import pandas as pd
@@ -16,38 +21,80 @@ import pytest
 
 from tradingagents.dataflows import interface, stockstats_utils
 from tradingagents.dataflows.config import set_config
+from tradingagents.dataflows.errors import VendorRateLimitError
 from tradingagents.dataflows.symbol_utils import NoMarketDataError
 
 
+@pytest.fixture()
+def empty_frame():
+    return pd.DataFrame()
+
+
+@pytest.fixture()
+def cache_dir(tmp_path):
+    set_config({"data_cache_dir": str(tmp_path)})
+    return tmp_path
+
+
 @pytest.mark.unit
-class TestLoadOhlcvNoPoison(unittest.TestCase):
-    def setUp(self):
-        self._tmp = os.path.join(os.path.dirname(__file__), "_tmp_cache")
-        os.makedirs(self._tmp, exist_ok=True)
-        set_config({"data_cache_dir": self._tmp})
+class TestLoadOhlcvNoPoison:
+    """Historical regression node retained: an empty download must never be
+    cached and must be retried on the next call.
 
-    def tearDown(self):
-        for f in os.listdir(self._tmp):
-            os.remove(os.path.join(self._tmp, f))
-        os.rmdir(self._tmp)
+    The class/method identifier ``TestLoadOhlcvNoPoison::test_empty_download_raises_and_does_not_cache``
+    is preserved (it was the original regression node), now implemented as a
+    regular pytest method with a per-test ``tmp_path`` cache dir (no shared
+    ``tests/_tmp_cache``) and a mocked ``stockstats_utils.vendor_reachable`` so
+    no real network probe is made. Both the genuine no-data case
+    (reachable=True -> ``NoMarketDataError``) and the outage case
+    (reachable=False -> ``VendorRateLimitError``) are exercised, so the
+    outage-vs-no-data distinction in production is preserved (NFR-OFF-001).
+    """
 
-    def test_empty_download_raises_and_does_not_cache(self):
-        empty = pd.DataFrame()
-        with mock.patch.object(stockstats_utils.yf, "download", return_value=empty), \
-                self.assertRaises(NoMarketDataError):
+    @pytest.mark.parametrize(
+        "reachable, expected",
+        [(True, NoMarketDataError), (False, VendorRateLimitError)],
+    )
+    def test_empty_download_raises_and_does_not_cache(
+        self, tmp_path, empty_frame, reachable, expected
+    ):
+        set_config({"data_cache_dir": str(tmp_path)})
+
+        # First call: empty download, reachability mocked -> the correct error.
+        with mock.patch.object(stockstats_utils.yf, "download", return_value=empty_frame), \
+                mock.patch.object(stockstats_utils, "vendor_reachable", return_value=reachable), \
+                pytest.raises(expected):
             stockstats_utils.load_ohlcv("FAKE", "2026-01-01")
         # Nothing should have been written to the cache.
-        self.assertEqual(os.listdir(self._tmp), [])
+        assert list(tmp_path.iterdir()) == [], "an empty download must never be cached"
 
         # A second call must re-attempt the fetch (no poisoned cache served).
-        with mock.patch.object(stockstats_utils.yf, "download", return_value=empty) as dl2:
-            with self.assertRaises(NoMarketDataError):
-                stockstats_utils.load_ohlcv("FAKE", "2026-01-01")
-            self.assertTrue(dl2.called)
+        with mock.patch.object(stockstats_utils.yf, "download", return_value=empty_frame) as dl2, \
+                mock.patch.object(stockstats_utils, "vendor_reachable", return_value=reachable), \
+                pytest.raises(expected):
+            stockstats_utils.load_ohlcv("FAKE", "2026-01-01")
+        assert dl2.called
+        assert list(tmp_path.iterdir()) == [], "an empty download must never be cached"
 
 
 @pytest.mark.unit
-class TestRouteToVendorSentinel(unittest.TestCase):
+def test_empty_download_makes_no_real_network_probe(cache_dir, empty_frame):
+    """The reachability probe is mocked, so no real socket attempt is made.
+
+    Guards NFR-OFF-001: an unmocked ``vendor_reachable`` would probe Yahoo
+    (and, under strict socket denial, raise ``VendorRateLimitError`` instead of
+    the intended ``NoMarketDataError``). Asserting the mock is called proves the
+    no-data path uses the injected reachability answer rather than the network.
+    """
+    probe = mock.patch.object(stockstats_utils, "vendor_reachable", return_value=True)
+    with mock.patch.object(stockstats_utils.yf, "download", return_value=empty_frame), probe as reach:
+        with pytest.raises(NoMarketDataError):
+            stockstats_utils.load_ohlcv("FAKE", "2026-01-01")
+        assert reach.called, "empty-download path must consult the mocked reachability"
+
+
+@pytest.mark.unit
+class TestRouteToVendorSentinel:
     def test_no_data_from_all_vendors_returns_sentinel(self):
         def raises_no_data(symbol, *a, **k):
             raise NoMarketDataError(symbol, "GC=F", "no rows")
@@ -59,10 +106,10 @@ class TestRouteToVendorSentinel(unittest.TestCase):
             result = interface.route_to_vendor(
                 "get_stock_data", "XAUUSD+", "2026-01-01", "2026-01-10"
             )
-        self.assertIn("NO_DATA_AVAILABLE", result)
-        self.assertIn("XAUUSD+", result)
-        self.assertIn("GC=F", result)
-        self.assertIn("Do not estimate", result)
+        assert "NO_DATA_AVAILABLE" in result
+        assert "XAUUSD+" in result
+        assert "GC=F" in result
+        assert "Do not estimate" in result
 
     def test_unconfigured_fallback_does_not_mask_no_data(self):
         # When the primary vendor reports no data and the fallback is simply
@@ -81,8 +128,4 @@ class TestRouteToVendorSentinel(unittest.TestCase):
             result = interface.route_to_vendor(
                 "get_stock_data", "FAKE", "2026-01-01", "2026-01-10"
             )
-        self.assertIn("NO_DATA_AVAILABLE", result)
-
-
-if __name__ == "__main__":
-    unittest.main()
+        assert "NO_DATA_AVAILABLE" in result

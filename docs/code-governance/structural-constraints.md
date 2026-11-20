@@ -1,81 +1,83 @@
 # Structural Constraints
 
-Status: Implemented (Step 14).
+These constraints govern the structure of the CS5351 feature code. They keep the
+module layout consistent with the rest of `tradingagents/` and preserve the
+upstream conventions.
 
-## Module Layout
+## Source tree (authoritative, do not relocate or duplicate)
 
-```text
-src/safety/
-  __init__.py      public rule exports
-  rules.py         SR-01..SR-10 hard rules, AP-01/AP-02 policies
-  engine.py        evaluate/approve/execute state machine, provenance issuer
+- Canonical main-system source trees: `tradingagents/` and `cli/`.
+- Canonical tests: `tests/`.
+- The approved simulated-trading subsystem is an independent source tree under
+  `src/trading/` and `src/safety/`; its tests live under `tests/trading/`.
+  This exception is explicitly approved and must not be read as a general
+  invitation to duplicate or relocate the main-system trees.
+- The old `test/offline/` and `test/live/` directories are pointer READMEs only;
+  they contain no test code.
 
-src/trading/
-  __init__.py      public model/clock exports
-  models.py        enums, frozen dataclasses, errors, FeeModel, SafetyConfig
-  clock.py         Clock protocol, SystemClock, SimulationClock
-  audit.py         append-only JSONL audit, hash chain, .head anchor
-  portfolio.py     cash, positions, cost basis, PnL, BANKRUPT state
-  persistence.py   atomic StateStore, BacktestCursor
-  executor.py      SimulatedExecutor, execution auditing
-  approval.py      HumanApprovalGate
-  pipeline.py      graph adapter, SizingPolicy, TradingPipeline
-  backtest.py      calendar, decision/quote providers, BacktestRunner
-  runtime.py       RuntimeConfig, TradingRuntime, build_runtime
-  cli.py           standalone inspect/reset CLI
-```
+## New package boundaries
 
-Each architectural element maps to exactly one module. Tests live under
-`test/offline/` (deterministic) or `test/live/` (opt-in network/LLM).
+- `tradingagents/evidence/` — the deterministic Data Quality Gate core. It is
+  pure and LLM-free; no module in it calls a network or an LLM.
+- `tradingagents/debate/` — the dynamic debate-termination package. The
+  `evaluator.py` is pure; the LangGraph node factory is the only module that
+  reads/writes `AgentState`.
+- `src/trading/` — the independent simulated-trading subsystem: models, clocks,
+  audit, portfolio, persistence, executor, approval gate, pipeline, backtest,
+  runtime, and standalone CLI.
+- `src/safety/` — deterministic safety rules and the sole safety-engine gateway.
+  No module outside `src/safety/engine.py` may import the executor.
 
-## Dependency Direction
+## Cross-package rules
 
-```text
-models            -> (no internal dependency)
-clock             -> (no internal dependency)
-audit             -> models, clock
-portfolio         -> models, clock
-persistence       -> models, clock, audit, portfolio
-executor          -> models, clock, audit, portfolio
-rules             -> models
-engine            -> models, clock, rules, audit, portfolio, executor
-approval          -> models, clock, audit
-pipeline          -> models, clock, safety.engine, approval, portfolio,
-                     tradingagents.agents.utils.rating (read-only)
-backtest          -> models, clock, safety.engine, persistence, pipeline,
-                     portfolio, tradingagents.portfolio (read-only)
-runtime           -> models, clock, safety.engine, approval, audit,
-                     persistence, pipeline, portfolio
-cli               -> models, clock, runtime
-```
+- `tradingagents/graph/data_quality_gate.py` orchestrates the evidence package
+  and writes only JSON-safe dicts/lists/strings into `AgentState` (never frozen
+  dataclasses).
+- `tradingagents/debate/evaluator_node.py` wraps the pure evaluator and reads
+  the gate manifest / turn state off `AgentState`.
+- Router path maps (`DEBATE_PATH_MAP`, `DEBATE_EVALUATOR_PATH_MAP`) must be
+  complete so a fall-through return can never hit a missing edge (#1088).
 
-Rules for new code:
+## Test tree
 
-1. `models` and `clock` must not import higher-level trading modules.
-2. Only `src/safety/engine.py` may import or call `src/trading/executor.py`.
-3. `pipeline`, `backtest`, `runtime`, and `cli` must not import the executor.
-4. `rules.py` must not perform I/O; it receives a `RuleContext`.
-5. No module under `src/trading/` or `src/safety/` may import a network client,
-   broker SDK, or `tradingagents.dataflows`. The only permitted `tradingagents`
-   imports are read-only adapters (`agents.utils.rating`, `portfolio`, and, in
-   opt-in live tests only, dataflows for historical quotes).
-6. No direct `datetime.now()`/`time.time()` call may appear outside
-   `src/trading/clock.py`. All components receive a clock/callable.
-7. Audit writes go through `AuditLog`; no module may edit or delete an existing
-   audit entry. The `.head` file is metadata, not an event stream.
-8. `StateStore` is the only persistence boundary. It may restore a portfolio
-   into an existing instance so the engine/executor keep the same live object;
-   business logic must not mutate another portfolio's private state.
+- All tests live under `tests/`.
+- Main-system test modules are named per the module they exercise
+  (e.g. `tests/test_debate_evaluator.py`, `tests/test_data_quality_gate_graph.py`).
+- Simulated-trading tests live under `tests/trading/`; the live smoke test is
+  under `tests/trading/live/` and is opt-in via `RUN_LIVE_TRADING_TESTS=1`.
+- Vendor/live tests are marked `@pytest.mark.integration`.
 
-## Executable Enforcement
+## Naming conventions
 
-`test/offline/test_structure.py` parses every Python file under `src/trading/`
-and `src/safety/` with `ast` and asserts:
+- Modules, classes, and functions follow the repository's existing snake_case /
+  PascalCase conventions.
+- Reason codes and rule IDs are stable UPPER_SNAKE strings (e.g.
+  `blocked_critical_failure`, `gate_blocked`, `continue_for_new_evidence`).
 
-- `trading.executor` is imported only by `src/safety/engine.py`;
-- no direct wall-clock call occurs outside `clock.py`;
-- no banned network/broker import appears.
+## Serialization
 
-`test/offline/test_invariants.py` and `test/offline/test_negative.py` verify the
-runtime consequences of these boundaries, including forged authorization and
-audit tampering.
+- Evidence/decision dataclasses implement `to_dict`/`from_dict` with fixed,
+  deterministic field ordering.
+- `Decimal` serializes to a fixed-precision string; enums serialize to stable
+  `.value`.
+
+## Per-module / per-function trace and ADR rule
+
+- **Every new or changed module or public function MUST be traceable to a
+  requirement ID and an invariant** (or an explicit ADR), recorded in
+  `docs/architecture/trace-matrix.md` in the same change. A function with no
+  traceable requirement/invariant is out of scope.
+- A module that enforces a safety property MUST name that invariant in its
+  docstring (e.g. "enforces INV-1").
+- **Safety-critical changes** to a module that enforces fail-closed, determinism,
+  budget, permission, or prompt behavior require an **ADR + explicit human
+  approval** before merge.
+
+## Prohibited
+
+- No new top-level package that duplicates an existing one.
+- No unapproved `src/` or `test/` code tree; only the approved `src/trading/`, `src/safety/`, and `tests/trading/` paths are exceptions.
+- No LLM/network call inside `evidence` or `debate` pure modules.
+- No import of a private package across the gate/debate boundary without a
+  documented reason.
+- No untraced module/function (see the trace rule above).

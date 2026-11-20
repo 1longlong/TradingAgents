@@ -4,10 +4,10 @@
   "paths": {
     "read": [
       "AGENTS.md", "Prompt.md", "baseline.md", "architecture-blueprint.md",
-      "docs/**", "src/**", "test/**"
+      "docs/**", "src/**", "tests/**"
     ],
     "write": [
-      "src/trading/**", "src/safety/**", "test/offline/**", "test/live/**", "docs/ai-use-log.yaml"
+      "src/trading/**", "src/safety/**", "tests/trading/**", "docs/ai-use-log.yaml"
     ],
     "readonly": ["docs/**"],
     "frozen": [

@@ -58,6 +58,37 @@ def _coerce_optional_float(value):
         return None
 
 
+def _coerce_optional_confidence(value):
+    """Normalise an optional numeric confidence to a float in ``[0, 1]`` or ``None``.
+
+    ADR-011: a placeholder ("N/A", "high") or a percentage ("95%") is not a valid
+    0–1 confidence and becomes ``None`` (never a fabricated number). A ``bool`` /
+    non-finite / out-of-range value is likewise ``None`` so pydantic never accepts
+    an invalid confidence. A valid numeric string ("0.62") parses to a float.
+    """
+    import math
+
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, str):
+        text = value.strip()
+        if text.lower() in _NULLISH_FLOAT or text.endswith("%"):
+            return None
+        try:
+            number = float(text.replace(",", "").strip())
+        except ValueError:
+            return None
+    elif isinstance(value, (int, float)):
+        number = float(value)
+    else:
+        return None
+    if not math.isfinite(number) or not (0.0 <= number <= 1.0):
+        return None
+    return number
+
+
 # ---------------------------------------------------------------------------
 # Shared rating types
 # ---------------------------------------------------------------------------
@@ -125,17 +156,50 @@ class ResearchPlan(BaseModel):
             "portfolio manager apply the actual position."
         ),
     )
+    # ADR-011: optional numeric confidence in [0, 1]. Additive/optional; a legacy
+    # model that omits it produces exactly the pre-Stage-4 markdown. A degraded
+    # run's effective value is capped by the central confidence policy; this field
+    # is never rendered verbatim if it exceeds the cap.
+    confidence: float | None = Field(
+        default=None,
+        description=(
+            "Optional numeric confidence in the recommendation, between 0.0 and "
+            "1.0 (e.g. 0.62). Omit it rather than guessing a percentage."
+        ),
+    )
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def _validate_confidence(cls, v):
+        return _coerce_optional_confidence(v)
+
+
+_CONFIDENCE_LINE_LABEL = "Confidence"
+
+
+def _render_confidence_line(confidence: float | None) -> list[str]:
+    """Render the optional ``**Confidence**`` line (empty when no numeric value).
+
+    Only a valid numeric confidence produces a line, so a legacy model that
+    omitted it keeps the exact pre-Stage-4 markdown shape (NFR-BC-001). The caller
+    passes the EFFECTIVE (already capped) value.
+    """
+    if confidence is None:
+        return []
+    return ["", f"**{_CONFIDENCE_LINE_LABEL}**: {confidence:.2f}"]
 
 
 def render_research_plan(plan: ResearchPlan) -> str:
     """Render a ResearchPlan to markdown for storage and the trader's prompt context."""
-    return "\n".join([
+    parts = [
         f"**Recommendation**: {plan.recommendation.value}",
         "",
         f"**Rationale**: {plan.rationale}",
         "",
         f"**Strategic Actions**: {plan.strategic_actions}",
-    ])
+    ]
+    parts.extend(_render_confidence_line(plan.confidence))
+    return "\n".join(parts)
 
 
 # ---------------------------------------------------------------------------
@@ -181,11 +245,25 @@ class TraderProposal(BaseModel):
         default=None,
         description="Optional sizing guidance, e.g. '5% of portfolio'.",
     )
+    # ADR-011: optional numeric confidence in [0, 1]; additive/optional so a
+    # legacy model omitting it stays byte-compatible. Capped by the central policy.
+    confidence: float | None = Field(
+        default=None,
+        description=(
+            "Optional numeric confidence in the action, between 0.0 and 1.0. "
+            "Omit it rather than guessing."
+        ),
+    )
 
     @field_validator("entry_price", "stop_loss", mode="before")
     @classmethod
     def _nullish_float_to_none(cls, v):
         return _coerce_optional_float(v)
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def _validate_confidence(cls, v):
+        return _coerce_optional_confidence(v)
 
 
 def render_trader_proposal(proposal: TraderProposal) -> str:
@@ -210,6 +288,9 @@ def render_trader_proposal(proposal: TraderProposal) -> str:
         "",
         f"FINAL TRANSACTION PROPOSAL: **{proposal.action.value.upper()}**",
     ])
+    # Optional numeric confidence (effective/capped value passed by the caller).
+    # Appended AFTER the compatibility marker so the marker's tail is unchanged.
+    parts.extend(_render_confidence_line(proposal.confidence))
     return "\n".join(parts)
 
 
@@ -258,11 +339,25 @@ class PortfolioDecision(BaseModel):
         default=None,
         description="Optional recommended holding period, e.g. '3-6 months'.",
     )
+    # ADR-011: optional numeric confidence in [0, 1]; additive/optional so a
+    # legacy model omitting it stays byte-compatible. Capped by the central policy.
+    confidence: float | None = Field(
+        default=None,
+        description=(
+            "Optional numeric confidence in the rating, between 0.0 and 1.0. "
+            "Omit it rather than guessing."
+        ),
+    )
 
     @field_validator("price_target", mode="before")
     @classmethod
     def _nullish_float_to_none(cls, v):
         return _coerce_optional_float(v)
+
+    @field_validator("confidence", mode="before")
+    @classmethod
+    def _validate_confidence(cls, v):
+        return _coerce_optional_confidence(v)
 
 
 def render_pm_decision(decision: PortfolioDecision) -> str:
@@ -285,6 +380,10 @@ def render_pm_decision(decision: PortfolioDecision) -> str:
     target = decision.price_target if decision.price_target is not None else "not provided"
     parts.extend(["", f"**Price Target**: {target}"])
     parts.extend(["", f"**Time Horizon**: {decision.time_horizon or 'not provided'}"])
+    # ADR-011: optional numeric confidence renders as an additive line ONLY when
+    # the model supplied one; a legacy/absent value leaves the output unchanged
+    # (NFR-BC-001). The value is the EFFECTIVE (already capped) value.
+    parts.extend(_render_confidence_line(decision.confidence))
     return "\n".join(parts)
 
 

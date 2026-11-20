@@ -9,6 +9,7 @@ from dateutil.relativedelta import relativedelta
 from .config import get_config
 from .date_window import coverage_gap, in_window
 from .errors import NoMarketDataError
+from .evidence_capture import capture_news_articles
 from .stockstats_utils import yf_retry
 from .symbol_utils import normalize_symbol
 
@@ -93,6 +94,7 @@ def get_news_yfinance(
 
         news_str = ""
         filtered_count = 0
+        in_window_articles = []
 
         for article in news:
             data = _extract_article_data(article)
@@ -101,6 +103,7 @@ def get_news_yfinance(
             if not in_window(data["pub_date"], start_dt, end_dt):
                 continue
 
+            in_window_articles.append(data)
             news_str += f"### {data['title']} (source: {data['publisher']})\n"
             if data["summary"]:
                 news_str += f"{data['summary']}\n"
@@ -108,6 +111,24 @@ def get_news_yfinance(
                 news_str += f"Link: {data['link']}\n"
             news_str += "\n"
             filtered_count += 1
+
+        # Capture the windowed original article objects as typed evidence BEFORE
+        # the prose is returned. A no-op outside an active run; never changes the
+        # returned string. (ADR-008; news category.)
+        capture_news_articles(
+            ticker,
+            [
+                {
+                    "title": a["title"],
+                    "publisher": a["publisher"],
+                    "url": a["link"],
+                    "published": a["pub_date"],
+                }
+                for a in in_window_articles
+            ],
+            source_name="yfinance_news",
+            tool="get_news",
+        )
 
         if filtered_count == 0:
             gap = coverage_gap(
@@ -185,6 +206,23 @@ def get_global_news_yfinance(
             if data["link"]:
                 news_str += f"Link: {data['link']}\n"
             news_str += "\n"
+
+        # Capture the windowed original article objects as typed evidence before
+        # the prose is returned (no-op outside an active run; string unchanged).
+        capture_news_articles(
+            "GLOBAL",
+            [
+                {
+                    "title": a["title"],
+                    "publisher": a["publisher"],
+                    "url": a["link"],
+                    "published": a["pub_date"],
+                }
+                for a in in_window_news[:limit]
+            ],
+            source_name="yfinance_global_news",
+            tool="get_global_news",
+        )
 
         # Nothing fell inside the window -> say so rather than return an
         # empty-bodied report (#993).

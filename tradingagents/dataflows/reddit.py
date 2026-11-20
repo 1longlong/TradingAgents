@@ -30,6 +30,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from .date_window import coverage_gap, in_window
+from .evidence_capture import capture_reddit_posts, capture_sentiment_source_failure
 from .symbol_utils import crypto_base
 
 logger = logging.getLogger(__name__)
@@ -257,10 +258,14 @@ def fetch_reddit_posts(
     label = ", ".join(f"r/{s}" for s in subreddits)
     fetched = _fetch_subreddit_rss(ticker, "+".join(subreddits), _FEED_PAGE, timeout)
     if fetched is None:
+        capture_sentiment_source_failure(ticker, "reddit", "reddit", error_type="fetch_failed")
         return f"<Reddit unavailable: fetch failed ({label}); this is not an absence of discussion>"
 
     window = bool(start_date and end_date)
     posts = _within_window(fetched, start_date, end_date)
+    # Capture the windowed original post objects as source-native (unlabeled)
+    # sentiment evidence before grouping into prose. No-op outside a run.
+    capture_reddit_posts(ticker, posts)
     if not posts:
         gap = window and coverage_gap(
             _coverage_dates(fetched), start_date, end_date,
