@@ -53,3 +53,19 @@ plan/test approval, safety, offline verification and human-review intent remains
 applicable. Their former root-level source layout is superseded by this
 branch's already-established `src/` and `test/` paths. Do not treat historical
 phase approvals or a prompt version as authorization for new product work.
+
+## Imported simulated-trading subsystem
+
+Release `24adf97` adds the existing independent subsystem in `src/trading/` and
+`src/safety/`. Preserve its deterministic safety gateway, engine-issued execution
+authorization, approval gate, injected clocks, portfolio and append-only audit
+contracts. Only `src/safety/engine.py` may import the simulated executor.
+Safety-module changes still require a human-approved plan/tests and an ADR;
+the V1 path ACL asks for approval for `src/safety/**` writes. This merge neither
+approves unrelated safety changes nor connects trading execution to the WebUI.
+Real broker execution and unattended live trading remain out of scope.
+
+The merged layout uses `test/offline/trading/` and `test/live/trading/` for the
+imported tests. These replace release's `tests/trading/` references; there is no
+duplicate root test tree. Preserve `FR-TRD-*`, `INV-TRD-*`, `NFR-TRD-*` alongside
+existing core/WebUI IDs and retain historical evidence as historical.

@@ -226,3 +226,26 @@ was collected. Do not conflate them.
 - Documentation/governance changes must still parse (JSON/JSONC/YAML) and pass
   `git diff --check`. They do not require the offline Python test suite unless
   they touch Python/behavior.
+
+## Simulated trading subsystem verification
+
+The independent subsystem is verified with the canonical `test/offline/trading/` tree:
+
+```bash
+pytest test/offline/trading -q
+```
+
+The live 3-day smoke test is opt-in and must never run in the default suite:
+
+```bash
+RUN_LIVE_TRADING_TESTS=1 pytest test/live/trading -q -s
+```
+
+The unified requirements registry is validated with:
+
+```bash
+python scripts/validate/validate_requirements.py
+```
+
+Trading tests must remain deterministic and offline by default; the live fixture
+sets the yfinance proxy only while the opt-in test executes and restores it after.

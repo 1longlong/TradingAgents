@@ -430,3 +430,26 @@ Fallback: Stop with a clear error, or run API-only with an explicit warning.
 ## Verification status
 
 Iterations 1, 2, and 3 are implemented; Iteration 1 received a human implementation review **APPROVE** on 2026-11-06. The WebUI backend suite executes **147 passed**, frontend Vitest **25 passed**, Chromium Playwright E2E **6 passed**, and the full regression is **1131 passed, 4 historical failures, 2 skipped, 88 subtests passed**. This covers the backend/security/path/history/run-control/backtest/announcement invariants exercised by the suite. Firefox/WebKit were excluded by user instruction, and the real GraphRunner/live model path remains unrun. Requirements statuses remain `draft`; the approval is for Iteration-1 implementation, not a separate requirements-verification verdict. The execution record is in `docs/architecture/evaluation-logbook.md`.
+
+## Simulated trading subsystem invariants (TRD)
+
+### INV-TRD-001 — No execution without an APPROVED evaluation
+
+- **Source requirements:** FR-TRD-001, INV-TRD-001.
+- **Enforcer:** `src/safety/engine.py` (`execute()` requires `APPROVED`), `src/trading/pipeline.py`.
+- **Verification:** `test/offline/trading/test_invariants.py`, `test/offline/trading/test_negative.py`, `test/offline/trading/test_executor.py`.
+- **Fallback:** reject before executor; no portfolio mutation.
+
+### INV-TRD-002 — Rule engine is the only executor entry point
+
+- **Source requirements:** FR-TRD-001, INV-TRD-002.
+- **Enforcer:** `src/safety/engine.py` issues a module-private provenance token; `src/trading/executor.py` verifies it.
+- **Verification:** `test/offline/trading/test_structure.py` (AST import boundary), `test/offline/trading/test_invariants.py`, `test/offline/trading/test_executor.py`, `test/offline/trading/test_negative.py`.
+- **Fallback:** `ExecutionNotAuthorizedError` before any fill.
+
+### INV-TRD-003 — Audit log is append-only
+
+- **Source requirements:** FR-TRD-004, INV-TRD-003.
+- **Enforcer:** `src/trading/audit.py` (hash chain + `.head` truncation anchor).
+- **Verification:** `test/offline/trading/test_audit.py`, `test/offline/trading/test_invariants.py`, `test/offline/trading/test_negative.py`.
+- **Fallback:** `AuditIntegrityError`; modification, truncation, and deletion are detected.

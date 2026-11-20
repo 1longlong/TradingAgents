@@ -114,3 +114,10 @@ The selected stack is recorded in ADR-001 through ADR-007. Dependency approval i
 - `[governance-approved]` for `pyproject.toml` and CI changes.
 - `[safety-approved]` for the new entry point.
 - `[test-plan-approved]` for the concrete test plan.
+
+## 2026-11-13 update — independent simulated-trading subsystem
+
+| Option ID | Alternative | Rejected because | Decision |
+| --- | --- | --- | --- |
+| DOC-ALT-3 | Keep all trading code only in `tradingagents/` or leave the subsystem as a separate unmerged branch | The approved subsystem has a different safety/clock/audit boundary and its tests need canonical collection | Approved independent subsystem: `src/trading/`, `src/safety/`, and `test/offline/trading/`. |
+| DOC-ALT-4 | Duplicate the simulated-trading tests in both `test/` and `tests/` | Two test trees drift and the canonical suite cannot identify the authoritative copy | Use `test/offline/trading/` and opt-in `test/live/trading/` only. |

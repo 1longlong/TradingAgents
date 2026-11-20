@@ -1838,3 +1838,54 @@ preserve their local contents without adding them to the index. The change does
 not alter product behavior or require another product test run. Existing test
 results and blockers above retain their actual scope. No push, deployment or
 independent/final implementation acceptance is authorized by this Git operation.
+
+
+## Release synchronization and conflict resolution — 2026-11-20
+
+The user explicitly requested the local commit, remote release pull and merge
+into `feature/webui`, then authorized resolving understandable conflicts and
+confirmed continuing. The feature snapshot was committed as `b896308`; local
+`release` fast-forwarded from `79103c3` to `24adf97`. This record describes merge
+resolution, not independent implementation review or new acceptance of business
+or safety changes.
+
+Resolution decisions:
+
+- Preserve both implementations: existing core/CLI/WebUI source is unchanged
+  from `b896308`; imported `src/trading/` and `src/safety/` are byte-identical to
+  `24adf97`. The new subsystem remains standalone, with no new WebUI execution
+  endpoint or real broker path.
+- Retain the canonical source/test layout. Incoming `tests/trading/` moves into
+  `test/offline/trading/`; its opt-in live smoke moves to `test/live/trading/`.
+  Adjust root/path constants and documentation only. Add package markers for
+  offline/live tests to avoid shadowing the production `trading` package and
+  colliding with existing test module names.
+- Keep the existing schema 1.1 registry and validator protections. Preserve the
+  original 48 entries without any object changes and import the ten TRD entries
+  with original IDs, statements, tradeoffs, thresholds, status and historical
+  evidence. Retain zero-tolerance invariants and the 100% rejection threshold;
+  historical evidence is not promoted to current verification. Both validation
+  paths reject weakened TRD invariants and evidence upgrades.
+- Retain working V1 OpenCode permissions and the feature CI blocking gates,
+  rather than replacing them with release's incompatible configuration format.
+  Add the safety-module approval ask guard and explicit baseline-document read;
+  preserve secret restrictions and plan/test/ADR gates. Merge subsystem rules,
+  invariants, trace rows and distinct historical AI-use entries without claiming
+  a new human approval.
+- Keep `.agents/` and `demo/` ignored and untracked. Neither is deleted or
+  incorporated into the merge.
+
+Validation on the merged tree: socket-isolated offline suite **2896 passed,
+1 optional AWS dependency skip, 88 subtests passed**; imported subsystem tests
+contribute 244 cases. Frontend lint/typecheck and **37 unit tests** pass; schema,
+permissions, the standalone registry validator, source/test/script lint and diff
+whitespace checks pass. The original 48 entries and imported source byte parity
+were checked explicitly. Browser tests were not rerun for this Git merge; WebUI
+source is unchanged from its previously browser-verified snapshot. No live tests
+or providers were run. Existing local demo structure/type-check limitations
+remain as previously recorded; no gate was weakened to conceal them.
+
+Initial merge checks exposed registry priority casing, a missing schema scope,
+test-package shadowing and a trace-tag matcher limited to the old namespaces.
+Those integration issues were corrected without changing business algorithms or
+removing assertions. Final human feature acceptance remains pending.

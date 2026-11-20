@@ -41,3 +41,14 @@ dynamic debate termination, runnable offline:
 The full `test/offline/` directory also contains the upstream offline suite covering
 dataflows, LLM-clients, CLI, point-in-time/look-ahead, and reporting. These are
 indexed by the upstream suite and are not listed exhaustively here.
+
+## Simulated-trading tests
+
+The imported deterministic subsystem tests live in `test/offline/trading/` and
+are included in the full offline command above. Run them independently with:
+
+```bash
+python -m pytest -q test/offline/trading --disable-socket --allow-unix-socket
+```
+
+The opt-in provider smoke test is separate under `test/live/trading/`.

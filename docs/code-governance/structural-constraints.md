@@ -132,3 +132,15 @@ remain stable.
 - No import of a private package across the gate/debate boundary without a
   documented reason.
 - No untraced module/function (see the trace rule above).
+
+## Imported simulated-trading boundaries
+
+- `src/trading/` owns simulated models, clocks, audit, portfolio, persistence,
+  executor, approval, pipeline, backtest, runtime and standalone inspection CLI.
+- `src/safety/` owns deterministic rules and the sole safety engine gateway.
+  Only `src/safety/engine.py` may import `trading.executor`; preserve that AST-
+  checked boundary. New safety edits require explicit human approval and an ADR.
+- Offline subsystem tests live in `test/offline/trading/`; the separately
+  authorized live smoke test lives in `test/live/trading/`. Do not duplicate
+  them under a root `tests/` tree or relocate the existing core/WebUI suites.
+- Importing the subsystem adds no broker capability or WebUI execution route.

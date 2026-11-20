@@ -761,3 +761,40 @@ uses the existing core manifest helper, never a saved folder's timestamp.
 Cross-artifact identity/verdict disagreement is visible and suppresses eligible
 IDs in this presentation; it does not rewrite a core decision. A run-ID query
 uses the coordinator's lifecycle status so unfinished audits can be refreshed.
+
+## Simulated trading subsystem
+
+The simulated trading subsystem is a separate, deterministic layer invoked after
+the graph produces `final_trade_decision`.
+
+```text
+Graph final_state
+  -> decision_from_final_state()   direction only; LLM quantities/prices ignored
+  -> SizingPolicy                  deterministic quantity, hard cap, 6dp
+  -> SafetyEngine                  SR-01..SR-10, then AP-01/AP-02
+  -> HumanApprovalGate             only for PENDING_APPROVAL
+  -> SimulatedExecutor             engine-issued provenance authorization only
+  -> Portfolio + AuditLog          atomic fill and append-only evidence
+```
+
+Key boundaries:
+
+- `src/trading/` contains the simulated portfolio, clocks, audit, persistence,
+  executor, approval gate, pipeline, backtest, runtime, and standalone CLI.
+- `src/safety/` contains the deterministic rules and the sole engine gateway.
+- `src/trading/backtest.py` provides a weekday calendar, mock/real decision
+  providers, mock/historical quote providers, and a resumable `BacktestRunner`.
+- `src/trading/runtime.py` is the composition root; `src/trading/cli.py` only
+  inspects or resets persisted state.
+- The subsystem has no real broker path. `test/live/trading/` validates a
+  three-day opt-in run against the real graph and historical quotes while
+  keeping execution simulated.
+- Trading requirement IDs are `FR-TRD-*`, `INV-TRD-*`, and `NFR-TRD-*`.
+
+
+The subsystem is imported as a standalone capability. This merge adds no WebUI
+execution endpoint, changes no advisory analysis semantics, and does not import
+the release branch's incompatible ACL schema. Test paths follow the existing
+merged `test/offline/` and `test/live/` layout. Historical subsystem approvals and
+results retain their original scope; merged-tree verification is recorded in
+the review memo and evaluation logbook.

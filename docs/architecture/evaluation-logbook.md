@@ -2909,3 +2909,21 @@ No core/CLI, dependency, prompt, permission, demo, Git or deployment change.
 - No live provider run, human rubric scoring, Firefox/WebKit, remote CI,
   branch-protection result, independent review or final human acceptance is
   claimed. Estimates and missing historical telemetry remain explicit.
+
+
+## Release 24adf97 integration — 2026-11-20
+
+Local feature snapshot: `b896308`. The authorized merge retains the existing
+WebUI/core/CLI and imports the standalone simulated-trading/safety subsystem.
+Canonical offline/live paths replace incoming root tests; a 58-ID registry
+preserves original 48 entries and all ten imported contracts. Historical claims
+remain historical. See the review memo for conflict decisions and initial fixes.
+
+- Full socket-isolated offline regression: **2896 passed, 1 skipped,
+  88 subtests passed** (optional `langchain_aws` skip).
+- Frontend lint/typecheck and Vitest: **37 passed**; UI source unchanged.
+- Registry schema, permissions, standalone registry CLI, source/test/script lint,
+  source parity and diff whitespace checks pass.
+- No live provider, browser rerun, new business implementation, remote CI run or
+  independent/final human acceptance is claimed. The intentional local `demo`
+  structure blocker and previously recorded type-check issue are not waived.

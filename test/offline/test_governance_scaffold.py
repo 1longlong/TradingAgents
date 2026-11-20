@@ -480,7 +480,7 @@ class TestRequiredArtifactPresence:
             yaml.safe_load(path.read_text(encoding="utf-8"))  # must not raise
 
 
-_TAG_RE = re.compile(r"(?:FR-(?:DQG|DDT)-\d{3}|NFR-[A-Z]+-\d{3}|INV-\d+)")
+_TAG_RE = re.compile(r"(?:FR-(?:DQG|DDT|TRD)-\d{3}|NFR-[A-Z]+-\d{3}|INV-TRD-\d{3}|INV-\d+)")
 
 
 def _declared_traceability_tags(text):
@@ -537,9 +537,10 @@ class TestMappedTestTraceability:
             f"FR-DDT-{n:03}" for n in range(1, 6)
         } | {f"NFR-{name}-001" for name in ("DET", "FC", "PIT", "AUD", "BUD", "BC", "OFF", "SEC")}
         core |= {f"NFR-CMP-{n:03}" for n in range(1, 4)}
-        assert {rid for rid in identifiers if not rid.startswith("REQ-WEB-")} == core
-        assert len(identifiers) == 48
-        assert len(identifiers - core) == 26
+        trading = {f"FR-TRD-{n:03}" for n in range(1, 7)} | {f"INV-TRD-{n:03}" for n in range(1, 4)} | {"NFR-TRD-001"}
+        assert {rid for rid in identifiers if not rid.startswith("REQ-WEB-")} == core | trading
+        assert len(identifiers) == 58
+        assert len(identifiers - core - trading) == 26
 
     def test_invariants_register_ids_resolve(self):
         # INV-11/12 stay unmapped, INV-14 stays proposed: assert honest status
@@ -895,7 +896,7 @@ class TestPermissionProposalConsistency:
 
 @pytest.mark.unit
 class TestUnifiedRegistryContracts:
-    """Approved merge contract: all 48 original requirements, no evidence upgrade."""
+    """Approved merge contract: original 48 plus ten imported trading requirements, no evidence upgrade."""
 
     def test_webui_entries_are_unchanged(self):
         import hashlib
@@ -906,8 +907,34 @@ class TestUnifiedRegistryContracts:
         assert digest == "81df24e4f42a2cca59cea01cd194f28bea282a3d44d65d90ae5457ac6251a12b"
         assert {r["status"] for r in entries} == {"draft"}
 
+    def test_imported_trading_thresholds_and_evidence_scope_are_preserved(self):
+        # INV-TRD-001/002/003 and NFR-TRD-001 retain the release safety contracts.
+        entries = {r["id"]: r for r in load_real_requirements()["requirements"] if "-TRD-" in r["id"]}
+        assert len(entries) == 10
+        for row in entries.values():
+            assert row["status"] == "implemented" and row["source_status"] == "Implemented"
+            assert row["fit_criteria"][0]["status"]["evidence_scope"] == "historical-release"
+            assert row["fit_criteria"][0]["verification"]["mode"] == "offline"
+        for rid in ("INV-TRD-001", "INV-TRD-002", "INV-TRD-003"):
+            fit = entries[rid]["fit_criteria"][0]
+            assert (entries[rid]["type"], fit["comparison"], fit["threshold"], fit["unit"]) == ("invariant", "eq", 0, "violations")
+        fit = entries["NFR-TRD-001"]["fit_criteria"][0]
+        assert (fit["comparison"], fit["threshold_type"], fit["threshold"], fit["unit"]) == ("gte", "numeric", 100, "%")
+
+    @pytest.mark.parametrize("mutation", ["relax_invariant", "promote_historical_evidence"])
+    def test_imported_trading_contract_cannot_relax_or_upgrade(self, mutation):
+        # The new namespace must obey both existing validation paths, not bypass them.
+        data = load_real_requirements()
+        row = next(r for r in data["requirements"] if r["id"] == "INV-TRD-001")
+        if mutation == "relax_invariant":
+            row["fit_criteria"][0]["threshold"] = 1
+        else:
+            row["status"] = "verified"
+        assert validate_requirements.validate_requirements(data, load_real_schema())
+        assert validate_requirements.validate_against_schema(data, load_real_schema())
+
     def test_core_acceptance_evidence_is_explicitly_historical(self):
-        entries = [r for r in load_real_requirements()["requirements"] if not r["id"].startswith("REQ-")]
+        entries = [r for r in load_real_requirements()["requirements"] if not r["id"].startswith("REQ-") and "-TRD-" not in r["id"]]
         assert len(entries) == 22
         for row in entries:
             assert row["status"] == "implemented"
@@ -958,7 +985,7 @@ class TestUnifiedRegistryContracts:
         rows = []
         operators = {"eq": "==", "ne": "!=", "lt": "<", "lte": "<=", "gt": ">", "gte": ">="}
         for entry in load_real_requirements()["requirements"]:
-            if entry["id"].startswith("REQ-"):
+            if entry["id"].startswith("REQ-") or "-TRD-" in entry["id"]:
                 continue
             fit = entry["fit_criteria"][0]
             verification = fit["verification"]

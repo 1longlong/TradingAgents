@@ -362,3 +362,30 @@ requirements or claiming final human acceptance.
 | REQ-WEB-008/009/010/013, NFR-CMP-001; INV-WEB-011/012/014 | Frontend `api/auditClient.ts`, `pages/AuditPage.tsx` (including overview projection), `ComparisonPage.tsx`, `OverviewPage.tsx`, `HistoryDetailPage.tsx`, `LiveRunPage.tsx`, `components/HistoryTable.tsx`, API types and route registration | `tests/audit-comparison.test.tsx`, `e2e/audit-comparison.spec.ts`: unknown telemetry, evidence filter/detail, disagreement, available-only preview/download, actual replay, G not early stop, mismatched pairing/export refusal; previous frontend suites |
 
 All backend module paths above are relative to `src/tradingagents_web/`.
+
+## Simulated trading subsystem (TRD) trace rows
+
+| Requirement | Enforcing module(s) | Primary tests |
+|---|---|---|
+| **FR-TRD-001** — deterministic safety gate | `src/safety/rules.py`, `src/safety/engine.py`, `src/trading/pipeline.py` | `test/offline/trading/test_rules.py`, `test/offline/trading/test_engine.py`, `test/offline/trading/test_negative.py`, `test/offline/trading/test_pipeline.py` |
+| **FR-TRD-002** — simulated executor | `src/trading/executor.py`, `src/trading/portfolio.py` | `test/offline/trading/test_executor.py`, `test/offline/trading/test_portfolio.py`, `test/offline/trading/test_pipeline.py` |
+| **FR-TRD-003** — portfolio ledger | `src/trading/portfolio.py`, `src/trading/models.py` | `test/offline/trading/test_portfolio.py`, `test/offline/trading/test_models.py` |
+| **FR-TRD-004** — append-only audit | `src/trading/audit.py`, `src/safety/engine.py`, `src/trading/executor.py`, `src/trading/approval.py` | `test/offline/trading/test_audit.py`, `test/offline/trading/test_approval.py`, `test/offline/trading/test_engine.py`, `test/offline/trading/test_invariants.py` |
+| **FR-TRD-005** — walk-forward simulation | `src/trading/clock.py`, `src/trading/backtest.py`, `src/trading/persistence.py` | `test/offline/trading/test_clock.py`, `test/offline/trading/test_providers.py`, `test/offline/trading/test_backtest.py` |
+| **FR-TRD-006** — persistence/reset/bankruptcy | `src/trading/portfolio.py`, `src/trading/persistence.py`, `src/trading/runtime.py`, `src/trading/cli.py` | `test/offline/trading/test_persistence.py`, `test/offline/trading/test_bankruptcy.py`, `test/offline/trading/test_runtime.py`, `test/offline/trading/test_cli_reset.py` |
+| **INV-TRD-001** — no execution without approval | `src/safety/engine.py`, `src/trading/pipeline.py` | `test/offline/trading/test_invariants.py`, `test/offline/trading/test_negative.py` |
+| **INV-TRD-002** — engine-only executor entry | `src/safety/engine.py`, `src/trading/executor.py` | `test/offline/trading/test_structure.py`, `test/offline/trading/test_invariants.py`, `test/offline/trading/test_executor.py` |
+| **INV-TRD-003** — append-only audit | `src/trading/audit.py` | `test/offline/trading/test_audit.py`, `test/offline/trading/test_invariants.py`, `test/offline/trading/test_negative.py` |
+| **NFR-TRD-001** — 100% hard-rule rejection | `src/safety/rules.py`, `src/safety/engine.py` | `test/offline/trading/test_rules.py`, `test/offline/trading/test_engine.py` |
+
+
+## Release merge compatibility — 2026-11-20
+
+| Scope | Enforcement / adaptation | Verification |
+| --- | --- | --- |
+| Existing core/WebUI plus imported FR-TRD/INV-TRD/NFR-TRD contracts; INV-WEB-001 | Schema 1.1 and `scripts/validate/validate_requirements.py` recognize all 58 original IDs; retain typed thresholds, source provenance and historical evidence scope | `test/offline/test_governance_scaffold.py`: original core recovery hash, unchanged WebUI hash, complete ID set, TRD thresholds and negative weakening/evidence-upgrade cases |
+| INV-TRD-001/002/003 and NFR-TRD-001 | Imported implementation stays unchanged; `test/offline/trading/` root constants and test-package markers adapt only canonical collection | All 244 imported offline tests including AST gateway checks and requirement-to-function traceability; full combined offline regression |
+| Permission/CI/layout compatibility | Retain V1 permissions and feature blocking gates, add safety ask guard; preserve native source layout and ignore local skills/design reference | Schema/permissions/registry validation, lint, exact source/requirement parity inspection; explicit local demo blocker retained |
+
+Merge authorization comes from the current user conversation; it is not a new
+product implementation or final acceptance decision.

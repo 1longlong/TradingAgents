@@ -8,7 +8,7 @@ Extend the existing TradingAgents system with a WebUI. Preserve analysis, backte
 - Working branch: `feature/webui`, created from that baseline. Source and tests have moved to `src/`, `test/offline/`, and `test/live/`.
 - Existing stack and entry point: Python >=3.10, setuptools, LangGraph/LangChain, Typer/Rich; `tradingagents = cli.main:app`.
 - The WebUI exists under `src/tradingagents_web/`. Preserve its server/runtime, API, frontend, CLI separation, and current public contracts. The untracked `demo/` is a standalone design prototype, not a production entry point.
-- Requirements and architecture records exist for both the release core and WebUI. Preserve their original IDs, status and approval scope. The unified registry uses the WebUI-based 1.1 format with all 48 original requirement IDs; historical evidence and original status are retained explicitly.
+- Requirements and architecture records exist for both the release core and WebUI. Preserve their original IDs, status and approval scope. The unified registry uses the WebUI-based 1.1 format with all 48 original core/WebUI requirement IDs plus 10 imported simulated-trading IDs; historical evidence and original status are retained explicitly.
 
 Use the user's current direct instructions to determine scope, and preserve existing workspace changes. Honor explicit approval already given for the same scope without asking again. Do not infer approval for additional features, safety changes, or releases.
 
@@ -114,3 +114,19 @@ usage and resume-sanitization contexts as the CLI/Python path. Core invariants
 and ADRs apply alongside WebUI invariants; use full ADR filenames when the
 numeric prefixes overlap. Existing source imports and commands remain stable.
 All project documentation, instructions and code comments are English.
+
+## Imported simulated-trading subsystem
+
+Release `24adf97` adds the existing independent subsystem in `src/trading/` and
+`src/safety/`. Preserve its deterministic safety gateway, engine-issued execution
+authorization, approval gate, injected clocks, portfolio and append-only audit
+contracts. Only `src/safety/engine.py` may import the simulated executor.
+Safety-module changes still require a human-approved plan/tests and an ADR;
+the V1 path ACL asks for approval for `src/safety/**` writes. This merge neither
+approves unrelated safety changes nor connects trading execution to the WebUI.
+Real broker execution and unattended live trading remain out of scope.
+
+The merged layout uses `test/offline/trading/` and `test/live/trading/` for the
+imported tests. These replace release's `tests/trading/` references; there is no
+duplicate root test tree. Preserve `FR-TRD-*`, `INV-TRD-*`, `NFR-TRD-*` alongside
+existing core/WebUI IDs and retain historical evidence as historical.

@@ -295,7 +295,7 @@ def validate_requirement_references(requirements: object) -> list[str]:
 
 # Canonical 1.1 contract support. This is shared with the second CI entry point.
 # Registry commands are treated as text and never executed by validation.
-_CANONICAL_ID = re.compile(r"^(?:REQ-[A-Z][A-Z0-9]*-?[0-9]{2,4}|FR-(?:DQG|DDT)-[0-9]{3}|NFR-[A-Z]+-[0-9]{3})$")
+_CANONICAL_ID = re.compile(r"^(?:REQ-[A-Z][A-Z0-9]*-?[0-9]{2,4}|FR-(?:DQG|DDT|TRD)-[0-9]{3}|INV-TRD-[0-9]{3}|NFR-[A-Z]+-[0-9]{3})$")
 
 
 def is_canonical_registry(data: object) -> bool:
@@ -616,7 +616,7 @@ def validate_requirements(requirements: object, schema: object) -> list[str]:
         rid = req.get("id")
         if not _is_nonempty_str(rid):
             errors.append(f"{prefix}.id is missing")
-        if not re.match(r"^(FR-(DQG|DDT)|NFR-[A-Z]+)-[0-9]{3}$", str(rid)):
+        if not re.match(r"^(FR-(DQG|DDT|TRD)|INV-TRD|NFR-[A-Z]+)-[0-9]{3}$", str(rid)):
             errors.append(f"{prefix}.id {rid!r} does not match the stable ID pattern")
         for key in ("title", "description"):
             if not _is_nonempty_str(req.get(key)):

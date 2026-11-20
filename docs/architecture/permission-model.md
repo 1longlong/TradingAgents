@@ -278,3 +278,18 @@ in the shipped file.
 - These are **static package/type metadata and a binary version string**; none of
   them proves the binary uses this exact SDK at runtime or loads the shipped
   `.opencode/permissions.jsonc`. Load/enforcement remains **UNVERIFIED**.
+
+## Simulated trading subsystem permissions
+
+The independent subsystem remains deny-by-default and path-scoped:
+
+| Path | Access | Rule |
+| --- | --- | --- |
+| `src/trading/**` | write | subsystem source |
+| `src/safety/**` | ask in the retained V1 ACL | human-approved plan/tests and ADR required |
+| `src/tradingagents/**`, `src/cli/**` | protected/read-only by subsystem work | do not modify |
+| `test/offline/trading/**`, `test/live/trading/**` | approved test scope only | offline regression and separately authorized live smoke |
+| real broker APIs | denied | simulated execution only |
+
+The safety engine is the only module allowed to call the executor. A plain
+`ExecutionAuthorization` without the engine token is rejected.

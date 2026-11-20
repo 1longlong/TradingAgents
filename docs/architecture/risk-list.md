@@ -97,3 +97,11 @@ Status: **Approved for documentation by the human owner on 2026-11-05.** No risk
 - Any change to the key, path, Host/Origin/CSRF, or rendering boundary.
 - Any proposal to add concurrency, persistence, authentication, execution, or network exposure.
 - Any claim of passing latency, packaging, browser, or security evaluation without a recorded result.
+
+## 2026-11-13 merge update — simulated-trading subsystem
+
+The simulated-trading subsystem is now an approved independent source tree
+(`src/trading/`, `src/safety/`) with tests under `test/offline/trading/`. The subsystem
+is deterministic/offline by default, and the only live test is opt-in with a
+fixture-scoped yfinance proxy and provider credentials. It does not place real
+orders.
