@@ -30,5 +30,11 @@ ADRs are the authoritative decision records.
 
 | Option ID | Alternative | Rejected because | Decision |
 | --- | --- | --- | --- |
-| DOC-ALT-1 | Duplicate source into `src/` to match the slide | Duplicates code, risk of drift, out of scope. | Map the slide layout onto `tradingagents/` + `cli/` via `src/README.md` and `test/*/README.md`. |
+| DOC-ALT-1 | Duplicate the main-system source into `src/` to match the slide | Duplicates code, risk of drift, out of scope. | Main system stays in `tradingagents/` + `cli/`; the approved simulated-trading subsystem is the explicit `src/trading/` + `src/safety/` exception. |
 | DOC-ALT-2 | Claim a green full suite | False; known date-sensitive and network-reachability failures remain. | Record exact observed outcomes and note failures (`evaluation-logbook.md`, `risk-list.md`). |
+## 2026-11-13 update — independent simulated-trading subsystem
+
+| Option ID | Alternative | Rejected because | Decision |
+| --- | --- | --- | --- |
+| DOC-ALT-3 | Keep all trading code only in `tradingagents/` or leave the subsystem as a separate unmerged branch | The approved subsystem has a different safety/clock/audit boundary and its tests need canonical collection | Approved independent subsystem: `src/trading/`, `src/safety/`, and `tests/trading/`. |
+| DOC-ALT-4 | Duplicate the simulated-trading tests in both `test/` and `tests/` | Two test trees drift and the canonical suite cannot identify the authoritative copy | Use `tests/trading/` only. |

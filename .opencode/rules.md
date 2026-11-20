@@ -72,3 +72,14 @@ in-scope Phase 4A maintenance may proceed without further authorization. Phase
 4B (live-provider benchmarking), production threshold tuning, and unrequested
 features remain prohibited without separate explicit human authorization. Do
 not add unrequested features or duplicate/relocate source trees.
+
+## 13. Simulated trading subsystem
+
+- `src/trading/**` and `src/safety/**` are the approved independent subsystem
+  source trees.
+- `tests/trading/**` is the canonical test tree for that subsystem.
+- Do not import the executor from outside `src/safety/engine.py`; the engine is
+  the only execution gateway.
+- Writing `src/safety/**` requires explicit human approval and an architecture
+  decision.
+- The subsystem must never call a real broker or place a real order.

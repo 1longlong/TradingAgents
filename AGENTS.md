@@ -106,3 +106,17 @@ read before making any change, per the static startup prompt
   authorization.
 - Do **not** revert approved work, add features not requested, duplicate or
   relocate source trees, or invent team decisions/approvals.
+
+## 13. Simulated trading subsystem
+
+- The simulated trading subsystem is an approved independent subsystem:
+  `src/trading/**` and `src/safety/**` are its source trees.
+- Its tests are canonical under `tests/trading/**`; the old `test/offline` and
+  `test/live` code trees were migrated there.
+- The subsystem is invoked after graph output. The frozen `tradingagents/**` and
+  `cli/main.py` trees must not be modified by subsystem work.
+- `src/safety/**` writes still require `human_approval` and an
+  `architecture_decision`; the safety engine remains the only executor gateway.
+- Trading requirement IDs use `FR-TRD-*`, `INV-TRD-*`, and `NFR-TRD-*` in the
+  unified requirements registry.
+- Real broker execution and unattended live trading remain out of scope.

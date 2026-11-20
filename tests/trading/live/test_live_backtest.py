@@ -1,0 +1,134 @@
+"""Opt-in 3-day live backtest smoke test.
+
+Configure the API through the repository's normal mechanism:
+- provider: TRADINGAGENTS_LLM_PROVIDER (or inferred from the available key)
+- models: TRADINGAGENTS_DEEP_THINK_LLM / TRADINGAGENTS_QUICK_THINK_LLM
+- key: the provider-specific variable, e.g. OPENAI_API_KEY or DEEPSEEK_API_KEY
+- opt in: RUN_LIVE_TRADING_TESTS=1
+"""
+
+from __future__ import annotations
+
+import csv
+import io
+import os
+from copy import deepcopy
+from datetime import date
+from decimal import Decimal
+
+import pytest
+
+from trading.backtest import (
+    BacktestResult,
+    BacktestRunner,
+    HistoricalQuoteProvider,
+    RealDecisionProvider,
+    WeekdayCalendar,
+)
+from trading.clock import SimulationClock
+from trading.models import EventType, SafetyConfig
+from trading.runtime import DEFAULT_INITIAL_CASH, RuntimeConfig, build_runtime
+
+RUN_LIVE = os.environ.get("RUN_LIVE_TRADING_TESTS") == "1"
+
+pytestmark = [
+    pytest.mark.integration,
+    pytest.mark.skipif(
+        not RUN_LIVE,
+        reason="set RUN_LIVE_TRADING_TESTS=1 to run live trading tests",
+    ),
+]
+
+SYMBOL = "NVDA"
+START_DATE = date(2024, 1, 8)
+END_DATE = date(2024, 1, 10)
+RUN_ID = "live-smoke-20240108-20240110"
+
+
+def _fetch_close(symbol: str, day: date):
+    """Fetch exactly one historical close through the read-only dataflow."""
+    from tradingagents.dataflows.y_finance import get_YFin_data_online
+
+    text = get_YFin_data_online(symbol, day.isoformat(), day.isoformat())
+    rows_text = "\n".join(
+        line for line in text.splitlines() if line.strip() and not line.startswith("#")
+    )
+    rows = list(csv.DictReader(io.StringIO(rows_text)))
+    if not rows:
+        return None
+    close = rows[-1].get("Close")
+    if close is None or not str(close).strip():
+        return None
+    return Decimal(str(close).strip())
+
+
+def _graph_factory(tmp_path, config):
+    from tradingagents.graph.trading_graph import TradingAgentsGraph
+
+    def factory():
+        run_config = deepcopy(config)
+        run_config.update(
+            {
+                "results_dir": str(tmp_path / "results"),
+                "data_cache_dir": str(tmp_path / "cache"),
+                "memory_log_path": str(tmp_path / "trading_memory.md"),
+                "checkpoint_enabled": False,
+            }
+        )
+        return TradingAgentsGraph(
+            selected_analysts=["market"],
+            config=run_config,
+        )
+
+    return factory
+
+
+@pytest.mark.integration
+def test_live_three_day_backtest_smoke(tmp_path, live_config):
+    """Run three real simulated days through the actual graph and data feed."""
+    safety = SafetyConfig(
+        soft_max_order_notional=Decimal("10000"),
+        hard_max_order_notional=Decimal("10000"),
+        max_position_fraction=Decimal("1.0"),
+    )
+    clock = SimulationClock(START_DATE)
+    runtime = build_runtime(
+        RuntimeConfig(
+            state_path=tmp_path / "state.json",
+            audit_path=tmp_path / "audit.jsonl",
+            initial_cash=DEFAULT_INITIAL_CASH,
+            safety=safety,
+        ),
+        clock,
+    )
+    runner = BacktestRunner(
+        pipeline=runtime.pipeline,
+        engine=runtime.engine,
+        state_store=runtime.store,
+        decision_provider=RealDecisionProvider(
+            _graph_factory(tmp_path, live_config),
+        ),
+        quote_provider=HistoricalQuoteProvider(_fetch_close),
+        calendar=WeekdayCalendar(),
+        clock=clock,
+        portfolio=runtime.portfolio,
+        symbol=SYMBOL,
+        start_date=START_DATE,
+        end_date=END_DATE,
+        run_id=RUN_ID,
+        initial_cash=DEFAULT_INITIAL_CASH,
+    )
+
+    result = runner.run()
+
+    assert isinstance(result, BacktestResult)
+    assert result.days_processed == 3
+    assert result.days_skipped == 0
+    assert result.final_equity > 0
+    runtime.audit.verify_integrity()
+    events = runtime.audit.read_all()
+    assert any(event.event_type is EventType.DECISION_RECEIVED for event in events)
+    assert not any("broker" in str(event.payload).lower() for event in events)
+    _, cursor = runtime.store.load()
+    assert cursor is not None
+    assert cursor.last_completed_date == END_DATE

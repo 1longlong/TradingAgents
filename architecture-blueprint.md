@@ -9,9 +9,14 @@ and traceability lives in `docs/architecture/trace-matrix.md`.
 ## Repository context
 
 - This is a downstream fork of the upstream `TradingAgents` framework (v0.5.0).
-- Canonical source trees are `tradingagents/` and `cli/`. Tests live in `tests/`.
-  There is **no** `src/` and **no** `test/` tree; the README pointers under
-  `src/` and `test/` map the authoritative slide layout onto the real trees.
+- Canonical main-system source trees are `tradingagents/` and `cli/`; canonical
+  tests are under `tests/`.
+- The approved independent simulated-trading subsystem lives in
+  `src/trading/` and `src/safety/`; its canonical tests live under
+  `tests/trading/`. It is invoked after graph output and does not modify the
+  frozen main-system trees.
+- The old `test/offline/` and `test/live/` directories are pointer READMEs only;
+  their code and tests were migrated into `tests/trading/`.
 - The upstream product guide is preserved in `README.md`; the CS5351 overlay is
   a clearly separated appended section.
 
@@ -194,6 +199,35 @@ It is **PROPOSED only**: no runtime assembly/compaction code exists, none is
 enforced, and INV-14 is marked unverified. The existing `max_tokens` /
 `reserved_summary_tokens` govern model *output*, not the context window.
 
+## Simulated trading subsystem
+
+The simulated trading subsystem is a separate, deterministic layer invoked after
+the graph produces `final_trade_decision`.
+
+```text
+Graph final_state
+  -> decision_from_final_state()   direction only; LLM quantities/prices ignored
+  -> SizingPolicy                  deterministic quantity, hard cap, 6dp
+  -> SafetyEngine                  SR-01..SR-10, then AP-01/AP-02
+  -> HumanApprovalGate             only for PENDING_APPROVAL
+  -> SimulatedExecutor             engine-issued provenance authorization only
+  -> Portfolio + AuditLog          atomic fill and append-only evidence
+```
+
+Key boundaries:
+
+- `src/trading/` contains the simulated portfolio, clocks, audit, persistence,
+  executor, approval gate, pipeline, backtest, runtime, and standalone CLI.
+- `src/safety/` contains the deterministic rules and the sole engine gateway.
+- `src/trading/backtest.py` provides a weekday calendar, mock/real decision
+  providers, mock/historical quote providers, and a resumable `BacktestRunner`.
+- `src/trading/runtime.py` is the composition root; `src/trading/cli.py` only
+  inspects or resets persisted state.
+- The subsystem has no real broker path. `tests/trading/live/` validates a
+  three-day opt-in run against the real graph and historical quotes while
+  keeping execution simulated.
+- Trading requirement IDs are `FR-TRD-*`, `INV-TRD-*`, and `NFR-TRD-*`.
+
 ## Out of scope
 
 - **Phase 4B** (live-provider benchmarking) is not started and is not designed
@@ -202,7 +236,8 @@ enforced, and INV-14 is marked unverified. The existing `max_tokens` /
   separate explicit human authorization.
 - No new data vendors, no new LLM providers, no UI/feature work beyond the two
   requested improvements and the approved Phase 4A offline comparison.
-- No relocation or duplication of source trees.
+- No relocation or duplication of the main-system source trees.
+- No real broker execution or unattended live-trading loop.
 
 ## Open / uncertain items
 

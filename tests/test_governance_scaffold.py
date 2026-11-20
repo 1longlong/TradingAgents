@@ -147,13 +147,15 @@ class TestStableIdPattern:
     def test_accepts_exact_required_forms(self):
         # Exact requested forms: FR-DQG-NNN, FR-DDT-NNN, NFR-CATEGORY-NNN.
         for rid in ("FR-DQG-001", "FR-DQG-002", "FR-DDT-001", "FR-DDT-004",
-                    "NFR-DET-001", "NFR-FC-001", "NFR-OFF-001"):
+                    "NFR-DET-001", "NFR-FC-001", "NFR-OFF-001",
+                    "FR-TRD-001", "INV-TRD-001", "NFR-TRD-001"):
             assert re.fullmatch(ID_PATTERN, rid), rid
 
     def test_rejects_malformed_ids(self):
         # No extra segment, no digits, wrong category form, lowercase, etc.
         for rid in ("FR-DQG", "FR-DQG-1", "FR-DQG-001-002", "FR-DT-001",
-                    "FR-XYZ-001", "NFR-DET", "nfr-det-001", "NFR-DET-001-002"):
+                    "FR-XYZ-001", "NFR-DET", "nfr-det-001", "NFR-DET-001-002",
+                    "FR-TRD", "INV-TRD", "NFR-TRD", "fr-trd-001"):
             assert not re.fullmatch(ID_PATTERN, rid), rid
 
 
@@ -411,7 +413,7 @@ class TestDuplicateIdSemanticValidation:
         assert any("duplicate" in e for e in dup), dup
 
     def test_real_registry_passes_both_paths(self):
-        # The actual 22-ID registry must remain valid (no duplicates) on both the
+        # The actual 32-ID registry must remain valid (no duplicates) on both the
         # semantic check and the real-schema dispatcher.
         assert (
             validate_requirements.validate_against_schema(
@@ -480,7 +482,7 @@ class TestRequiredArtifactPresence:
             yaml.safe_load(path.read_text(encoding="utf-8"))  # must not raise
 
 
-_TAG_RE = re.compile(r"(?:FR-(?:DQG|DDT)-\d{3}|NFR-[A-Z]+-\d{3}|INV-\d+)")
+_TAG_RE = re.compile(r"(?:FR-(?:DQG|DDT|TRD)-\d{3}|NFR-[A-Z]+-\d{3}|INV-(?:TRD-\d{3}|\d+))")
 
 
 def _declared_traceability_tags(text):
@@ -523,15 +525,15 @@ def _invariant_ids():
 class TestMappedTestTraceability:
     """Governance regression (2026-11-10): the mapped test files are traceable.
 
-    The 29 test files referenced by the 22 requirement entries must carry an
+    The mapped test files referenced by the 32 requirement entries must carry an
     accurate, resolvable requirement/invariant tag; a tag is only valid if it
     names a real registry or invariant ID. This pins traceability mechanically
     without inventing acceptance, metrics, or new IDs.
     """
 
-    def test_registry_keeps_exactly_22_ids(self):
-        # The repair batch must not invent or drop requirement IDs.
-        assert len(_registry_ids(load_real_requirements())) == 22
+    def test_registry_keeps_expected_32_ids(self):
+        # Release's 22 requirements plus the 10 simulated-trading requirements.
+        assert len(_registry_ids(load_real_requirements())) == 32
 
     def test_invariants_register_ids_resolve(self):
         # INV-11/12 stay unmapped, INV-14 stays proposed: assert honest status

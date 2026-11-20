@@ -1,13 +1,12 @@
 # CS5351 project requirements (machine-readable PRD + requirement registry).
 # Validated against docs/req/req-schema.json by scripts/validate/validate_requirements.py.
 # Stable IDs are reused in docs/architecture/trace-matrix.md. Do not reuse or
-# reassign IDs out of band. The schema is backward compatible with the original
-# v1.0 registry: all 22 IDs, the Feature/NonFunctional `type` values, the
-# Must/Should/Could priorities, and the schema_version / ID patterns are
-# preserved. This revision ADDS (a) a product/PRD block (stakeholders, problem,
-# goals/non-goals, scope, success, constraints, priorities, tradeoffs) and
-# (b) a per-requirement structured `fit_criterion`, `priority_rationale`,
-# `tradeoff`, and `origin`. Measured results are kept distinct from targets.
+# reassign IDs out of band. This registry keeps the original 22 IDs and adds
+# the ten simulated-trading IDs (FR-TRD-001..006, INV-TRD-001..003,
+# NFR-TRD-001), for 32 total. The Feature/NonFunctional `type` values,
+# Must/Should/Could priorities, product/PRD block, and per-requirement
+# structured `fit_criterion`, `priority_rationale`, `tradeoff`, and `origin`
+# remain in force. Measured results are kept distinct from targets.
 #
 # NOTE: Numeric thresholds below are either (i) the existing configured budget
 # assertions already enforced in code/tests, or (ii) measurable ZERO-TOLERANCE
@@ -28,16 +27,18 @@
 # verification assertions and therefore does NOT prove runtime semantics.
 
 project:
-  name: "TradingAgents downstream fork — deterministic Data Quality Gate and dynamic debate termination"
-  branch: "feature/data-quality-debate-control"
+  name: "TradingAgents downstream fork — deterministic Data Quality Gate, dynamic debate termination, and simulated trading"
+  branch: "feature/trading-system"
   deliverable_slide_sources:
-    - "src/"
-    - "test/offline/"
-    - "test/live/"
+    - "src/trading/"
+    - "src/safety/"
+    - "tests/trading/"
   canonical_source_trees:
     - "tradingagents/"
     - "cli/"
-  schema_version: "v1.1"
+    - "src/trading/"
+    - "src/safety/"
+  schema_version: "v1.2"
 
 product:
   stakeholders:
@@ -64,21 +65,25 @@ product:
     - "Keep all new logic pure, deterministic, and offline-testable (no network/LLM)."
     - "Preserve legacy fixed-round behavior when the new feature is disabled."
     - "Make every decision auditable (reason codes, policy version, evidence IDs, trace)."
+    - "Provide a deterministic, simulated trading subsystem with explicit safety and persistence boundaries."
   non_goals:
     - "Improving first-party forecasting accuracy or alpha claims."
     - "Live-provider benchmarking or production threshold tuning (Phase 4B)."
     - "Adding new data vendors, LLM providers, or UI features."
     - "Relocating or duplicating the inherited source tree."
+    - "Real broker execution or an unattended live-trading loop."
   scope:
     in_scope:
       - "Deterministic Data Quality Gate (FR-DQG-001..006)."
       - "Dynamic debate termination + conflict lifecycle (FR-DDT-001..005)."
       - "Non-functional guarantees (NFR-DET/FC/PIT/AUD/BUD/BC/OFF/SEC-001)."
       - "Phase 4A deterministic offline baseline comparison (NFR-CMP-001..003)."
+      - "Simulated trading subsystem: deterministic rules, simulated execution, audit, persistence, and walk-forward backtesting (FR-TRD-001..006, INV-TRD-001..003, NFR-TRD-001)."
     out_of_scope:
       - "Phase 4B live-provider benchmarking (requires separate human authorization)."
       - "Production threshold tuning (requires separate human authorization)."
       - "Unrequested features, new vendors/providers, source-tree relocation."
+      - "Real broker integration, real order submission, or unattended live trading."
   success_criteria:
     - id: SUCCESS-001
       statement: "A blocked gate never yields a directional final signal (Hold enforced downstream)."
@@ -173,6 +178,36 @@ product:
     - requirement_id: NFR-CMP-003
       priority: Should
       rationale: "Honest labeling/traceability is important for integrity but is a presentation-layer property."
+    - requirement_id: FR-TRD-001
+      priority: Must
+      rationale: "Deterministic safety gate for every advisory decision is a Must because it protects a core deterministic or safety property."
+    - requirement_id: FR-TRD-002
+      priority: Must
+      rationale: "Simulated executor with atomic cash and position updates is a Must because it protects a core deterministic or safety property."
+    - requirement_id: FR-TRD-003
+      priority: Must
+      rationale: "Portfolio state with cost basis and PnL is a Must because it protects a core deterministic or safety property."
+    - requirement_id: FR-TRD-004
+      priority: Must
+      rationale: "Append-only tamper-evident audit log is a Must because it protects a core deterministic or safety property."
+    - requirement_id: FR-TRD-005
+      priority: Must
+      rationale: "Walk-forward simulation with an injected clock is a Must because it protects a core deterministic or safety property."
+    - requirement_id: FR-TRD-006
+      priority: Must
+      rationale: "Portfolio persistence, reset, and bankruptcy protection is a Must because it protects a core deterministic or safety property."
+    - requirement_id: INV-TRD-001
+      priority: Must
+      rationale: "No execution without an APPROVED evaluation is a Must because it protects a core deterministic or safety property."
+    - requirement_id: INV-TRD-002
+      priority: Must
+      rationale: "Rule engine is the only executor entry point is a Must because it protects a core deterministic or safety property."
+    - requirement_id: INV-TRD-003
+      priority: Must
+      rationale: "Audit log is append-only is a Must because it protects a core deterministic or safety property."
+    - requirement_id: NFR-TRD-001
+      priority: Must
+      rationale: "100% rejection of hard safety-rule violations is a Must because it protects a core deterministic or safety property."
   tradeoffs:
     - requirement_id: FR-DQG-001
       decision: "Deterministic LLM-free gate."
@@ -226,6 +261,46 @@ product:
       decision: "Unscored traceability stays pending (None); never fabricate a score."
       rejected_or_deferred: "Auto-estimate a traceability score."
       why: "Only a human may enter rubric scores; an AI-estimated score would be fabricated."
+    - requirement_id: FR-TRD-001
+      decision: "Deterministic rule engine before execution."
+      rejected_or_deferred: "Direct LLM-to-executor path."
+      why: "The chosen deterministic boundary is offline-verifiable and fail-closed; the alternative would weaken safety or reproducibility."
+    - requirement_id: FR-TRD-002
+      decision: "Atomic simulated fills."
+      rejected_or_deferred: "Direct portfolio mutation from callers."
+      why: "The chosen deterministic boundary is offline-verifiable and fail-closed; the alternative would weaken safety or reproducibility."
+    - requirement_id: FR-TRD-003
+      decision: "Long-only simulated ledger with Decimal accounting."
+      rejected_or_deferred: "Floating-point or broker-managed balances."
+      why: "The chosen deterministic boundary is offline-verifiable and fail-closed; the alternative would weaken safety or reproducibility."
+    - requirement_id: FR-TRD-004
+      decision: "Append-only hash-chained JSONL."
+      rejected_or_deferred: "Mutable event tables or in-memory logs."
+      why: "The chosen deterministic boundary is offline-verifiable and fail-closed; the alternative would weaken safety or reproducibility."
+    - requirement_id: FR-TRD-005
+      decision: "Injected SimulationClock and date-only quote provider."
+      rejected_or_deferred: "Wall-clock time or future-bar look-ahead."
+      why: "The chosen deterministic boundary is offline-verifiable and fail-closed; the alternative would weaken safety or reproducibility."
+    - requirement_id: FR-TRD-006
+      decision: "Atomic JSON state and sticky BANKRUPT."
+      rejected_or_deferred: "Ephemeral state or silent reset on corruption."
+      why: "The chosen deterministic boundary is offline-verifiable and fail-closed; the alternative would weaken safety or reproducibility."
+    - requirement_id: INV-TRD-001
+      decision: "Engine-only execution gate."
+      rejected_or_deferred: "Pipeline or adapter directly calling the executor."
+      why: "The chosen deterministic boundary is offline-verifiable and fail-closed; the alternative would weaken safety or reproducibility."
+    - requirement_id: INV-TRD-002
+      decision: "Module-private provenance token and engine-only import boundary."
+      rejected_or_deferred: "Public executor calls or unsigned authorizations."
+      why: "The chosen deterministic boundary is offline-verifiable and fail-closed; the alternative would weaken safety or reproducibility."
+    - requirement_id: INV-TRD-003
+      decision: "Hash chain plus .head truncation anchor."
+      rejected_or_deferred: "Mutable log storage."
+      why: "The chosen deterministic boundary is offline-verifiable and fail-closed; the alternative would weaken safety or reproducibility."
+    - requirement_id: NFR-TRD-001
+      decision: "Parameterized fail-closed hard-rule matrix."
+      rejected_or_deferred: "Sampling or best-effort safety checks."
+      why: "The chosen deterministic boundary is offline-verifiable and fail-closed; the alternative would weaken safety or reproducibility."
   measured_vs_targets:
     measured:
       - "Blocked-gate final signal is Hold (offline regression, tests/test_output_guard.py)."
@@ -1437,3 +1512,401 @@ requirements:
       - "tests/test_comparison_schemas.py + tests/test_comparison_runner.py: 90 passed incl. fail-closed strategy/early_stopped/stop_reason consistency (narrow correction, logbook 055)."
       - "Human review decision: Phase 4A approved with limitations (WANG Yiwen 60536848, 2026-10-23; logbook 056; docs/review-memo.md); human traceability scores remain pending, not entered."
     owner: 60536848-WANG-Yiwen
+
+  - id: FR-TRD-001
+    type: Feature
+    category: functional
+    title: Deterministic safety gate for every advisory decision
+    description: Every advisory LLM trading decision passes through the deterministic safety engine before simulated execution; hard-rule violations are rejected and audited.
+    priority: Must
+    priority_rationale: Deterministic safety gate for every advisory decision protects a core deterministic or safety property.
+    tradeoff:
+      decision: Use the deterministic, offline-verifiable implementation for Deterministic safety gate for every advisory decision.
+      rejected_or_deferred: A non-deterministic, unauditable, or bypassable alternative.
+      why: The deterministic boundary keeps the subsystem reproducible and fail-closed.
+    origin: user-design
+    fit_criterion:
+      metric: Hard-rule violations not rejected
+      operator: ==
+      threshold_type: count
+      threshold: 0
+      unit: violations
+      verification:
+        method: Run the listed offline tests; a failing assertion is a criterion violation.
+        command: pytest tests/trading -q
+        references: &id001
+        - tests/trading/test_rules.py
+        - tests/trading/test_engine.py
+        - tests/trading/test_negative.py
+        - tests/trading/test_pipeline.py
+      applicability: offline-test
+      status:
+        state: verified
+        evidence: 244 offline subsystem tests pass, including the listed files.
+    status: Implemented
+    source_files:
+    - src/trading/pipeline.py
+    - src/safety/rules.py
+    - src/safety/engine.py
+    design_artifacts: &id002
+    - architecture-blueprint.md
+    - docs/architecture/adr/001-simulated-trading-system.md
+    - docs/architecture/invariants.md
+    - docs/architecture/trace-matrix.md
+    tests: *id001
+    verification_evidence:
+    - 244 offline subsystem tests pass; listed test files are the relevant evidence.
+    owner: Duan
+  - id: FR-TRD-002
+    type: Feature
+    category: functional
+    title: Simulated executor with atomic cash and position updates
+    description: The simulated executor applies only approved decisions and updates cash and positions atomically.
+    priority: Must
+    priority_rationale: Simulated executor with atomic cash and position updates protects a core deterministic or safety property.
+    tradeoff:
+      decision: Use the deterministic, offline-verifiable implementation for Simulated executor with atomic cash and position updates.
+      rejected_or_deferred: A non-deterministic, unauditable, or bypassable alternative.
+      why: The deterministic boundary keeps the subsystem reproducible and fail-closed.
+    origin: user-design
+    fit_criterion:
+      metric: Approved fills with incorrect cash or position results
+      operator: ==
+      threshold_type: count
+      threshold: 0
+      unit: incorrect fills
+      verification:
+        method: Run the listed offline tests; a failing assertion is a criterion violation.
+        command: pytest tests/trading -q
+        references: &id003
+        - tests/trading/test_executor.py
+        - tests/trading/test_portfolio.py
+        - tests/trading/test_pipeline.py
+      applicability: offline-test
+      status:
+        state: verified
+        evidence: 244 offline subsystem tests pass, including the listed files.
+    status: Implemented
+    source_files:
+    - src/trading/executor.py
+    - src/trading/portfolio.py
+    - src/trading/pipeline.py
+    design_artifacts: *id002
+    tests: *id003
+    verification_evidence:
+    - 244 offline subsystem tests pass; listed test files are the relevant evidence.
+    owner: Duan
+  - id: FR-TRD-003
+    type: Feature
+    category: functional
+    title: Portfolio state with cost basis and PnL
+    description: The portfolio maintains cash, positions, fee-inclusive average cost, realized PnL, and unrealized PnL in Decimal arithmetic.
+    priority: Must
+    priority_rationale: Portfolio state with cost basis and PnL protects a core deterministic or safety property.
+    tradeoff:
+      decision: Use the deterministic, offline-verifiable implementation for Portfolio state with cost basis and PnL.
+      rejected_or_deferred: A non-deterministic, unauditable, or bypassable alternative.
+      why: The deterministic boundary keeps the subsystem reproducible and fail-closed.
+    origin: user-design
+    fit_criterion:
+      metric: Portfolio cost or PnL values that disagree with expected Decimal results
+      operator: ==
+      threshold_type: count
+      threshold: 0
+      unit: mismatches
+      verification:
+        method: Run the listed offline tests; a failing assertion is a criterion violation.
+        command: pytest tests/trading -q
+        references: &id004
+        - tests/trading/test_portfolio.py
+        - tests/trading/test_models.py
+      applicability: offline-test
+      status:
+        state: verified
+        evidence: 244 offline subsystem tests pass, including the listed files.
+    status: Implemented
+    source_files:
+    - src/trading/portfolio.py
+    - src/trading/models.py
+    design_artifacts: *id002
+    tests: *id004
+    verification_evidence:
+    - 244 offline subsystem tests pass; listed test files are the relevant evidence.
+    owner: Duan
+  - id: FR-TRD-004
+    type: Feature
+    category: functional
+    title: Append-only tamper-evident audit log
+    description: Every decision, rule evaluation, execution, and human approval is written to an append-only hash-chained JSONL log with a truncation anchor.
+    priority: Must
+    priority_rationale: Append-only tamper-evident audit log protects a core deterministic or safety property.
+    tradeoff:
+      decision: Use the deterministic, offline-verifiable implementation for Append-only tamper-evident audit log.
+      rejected_or_deferred: A non-deterministic, unauditable, or bypassable alternative.
+      why: The deterministic boundary keeps the subsystem reproducible and fail-closed.
+    origin: user-design
+    fit_criterion:
+      metric: Undetected audit modification, deletion, or truncation
+      operator: ==
+      threshold_type: count
+      threshold: 0
+      unit: undetected tampering
+      verification:
+        method: Run the listed offline tests; a failing assertion is a criterion violation.
+        command: pytest tests/trading -q
+        references: &id005
+        - tests/trading/test_audit.py
+        - tests/trading/test_approval.py
+        - tests/trading/test_engine.py
+        - tests/trading/test_invariants.py
+      applicability: offline-test
+      status:
+        state: verified
+        evidence: 244 offline subsystem tests pass, including the listed files.
+    status: Implemented
+    source_files:
+    - src/trading/audit.py
+    - src/safety/engine.py
+    - src/trading/executor.py
+    - src/trading/approval.py
+    design_artifacts: *id002
+    tests: *id005
+    verification_evidence:
+    - 244 offline subsystem tests pass; listed test files are the relevant evidence.
+    owner: Duan
+  - id: FR-TRD-005
+    type: Feature
+    category: functional
+    title: Walk-forward simulation with an injected clock
+    description: The subsystem iterates historical dates through a calendar and providers, uses SimulationClock for freshness, resumes from persisted progress, and ignores wall-clock time.
+    priority: Must
+    priority_rationale: Walk-forward simulation with an injected clock protects a core deterministic or safety property.
+    tradeoff:
+      decision: Use the deterministic, offline-verifiable implementation for Walk-forward simulation with an injected clock.
+      rejected_or_deferred: A non-deterministic, unauditable, or bypassable alternative.
+      why: The deterministic boundary keeps the subsystem reproducible and fail-closed.
+    origin: user-design
+    fit_criterion:
+      metric: Runs that depend on wall time, look ahead, or fail to resume
+      operator: ==
+      threshold_type: count
+      threshold: 0
+      unit: failures
+      verification:
+        method: Run the listed offline tests; a failing assertion is a criterion violation.
+        command: pytest tests/trading -q
+        references: &id006
+        - tests/trading/test_clock.py
+        - tests/trading/test_providers.py
+        - tests/trading/test_backtest.py
+      applicability: offline-test
+      status:
+        state: verified
+        evidence: 244 offline subsystem tests pass, including the listed files.
+    status: Implemented
+    source_files:
+    - src/trading/clock.py
+    - src/trading/backtest.py
+    - src/trading/persistence.py
+    - src/trading/runtime.py
+    design_artifacts: *id002
+    tests: *id006
+    verification_evidence:
+    - 244 offline subsystem tests pass; listed test files are the relevant evidence.
+    owner: Duan
+  - id: FR-TRD-006
+    type: Feature
+    category: functional
+    title: Portfolio persistence, reset, and bankruptcy protection
+    description: Portfolio state persists across sessions, resets to initial cash on explicit request, and enters a sticky BANKRUPT state at or below zero equity.
+    priority: Must
+    priority_rationale: Portfolio persistence, reset, and bankruptcy protection protects a core deterministic or safety property.
+    tradeoff:
+      decision: Use the deterministic, offline-verifiable implementation for Portfolio persistence, reset, and bankruptcy protection.
+      rejected_or_deferred: A non-deterministic, unauditable, or bypassable alternative.
+      why: The deterministic boundary keeps the subsystem reproducible and fail-closed.
+    origin: user-design
+    fit_criterion:
+      metric: Persistence, reset, or BANKRUPT contract failures
+      operator: ==
+      threshold_type: count
+      threshold: 0
+      unit: failures
+      verification:
+        method: Run the listed offline tests; a failing assertion is a criterion violation.
+        command: pytest tests/trading -q
+        references: &id007
+        - tests/trading/test_persistence.py
+        - tests/trading/test_bankruptcy.py
+        - tests/trading/test_runtime.py
+        - tests/trading/test_cli_reset.py
+        - tests/trading/test_backtest.py
+      applicability: offline-test
+      status:
+        state: verified
+        evidence: 244 offline subsystem tests pass, including the listed files.
+    status: Implemented
+    source_files:
+    - src/trading/portfolio.py
+    - src/trading/persistence.py
+    - src/trading/runtime.py
+    - src/trading/cli.py
+    - src/safety/engine.py
+    design_artifacts: *id002
+    tests: *id007
+    verification_evidence:
+    - 244 offline subsystem tests pass; listed test files are the relevant evidence.
+    owner: Duan
+  - id: INV-TRD-001
+    type: NonFunctional
+    category: invariant-zero-tolerance
+    title: No execution without an APPROVED evaluation
+    description: The number of executor calls without an APPROVED evaluation is exactly zero.
+    priority: Must
+    priority_rationale: No execution without an APPROVED evaluation protects a core deterministic or safety property.
+    tradeoff:
+      decision: Use the deterministic, offline-verifiable implementation for No execution without an APPROVED evaluation.
+      rejected_or_deferred: A non-deterministic, unauditable, or bypassable alternative.
+      why: The deterministic boundary keeps the subsystem reproducible and fail-closed.
+    origin: user-design
+    fit_criterion:
+      metric: Executions resulting from non-APPROVED evaluations
+      operator: ==
+      threshold_type: count
+      threshold: 0
+      unit: executions
+      verification:
+        method: Run the listed offline tests; a failing assertion is a criterion violation.
+        command: pytest tests/trading -q
+        references: &id008
+        - tests/trading/test_invariants.py
+        - tests/trading/test_negative.py
+        - tests/trading/test_executor.py
+      applicability: offline-test
+      status:
+        state: verified
+        evidence: 244 offline subsystem tests pass, including the listed files.
+    status: Implemented
+    source_files:
+    - src/safety/engine.py
+    - src/trading/pipeline.py
+    - src/trading/executor.py
+    - src/trading/backtest.py
+    design_artifacts: *id002
+    tests: *id008
+    verification_evidence:
+    - 244 offline subsystem tests pass; listed test files are the relevant evidence.
+    owner: Duan
+  - id: INV-TRD-002
+    type: NonFunctional
+    category: invariant-zero-tolerance
+    title: Rule engine is the only executor entry point
+    description: Only the safety engine may create an executable authorization and call the simulated executor; forged or tokenless authorizations are rejected.
+    priority: Must
+    priority_rationale: Rule engine is the only executor entry point protects a core deterministic or safety property.
+    tradeoff:
+      decision: Use the deterministic, offline-verifiable implementation for Rule engine is the only executor entry point.
+      rejected_or_deferred: A non-deterministic, unauditable, or bypassable alternative.
+      why: The deterministic boundary keeps the subsystem reproducible and fail-closed.
+    origin: user-design
+    fit_criterion:
+      metric: Direct executor imports/calls or accepted forged authorizations
+      operator: ==
+      threshold_type: count
+      threshold: 0
+      unit: violations
+      verification:
+        method: Run the listed offline tests; a failing assertion is a criterion violation.
+        command: pytest tests/trading -q
+        references: &id009
+        - tests/trading/test_structure.py
+        - tests/trading/test_invariants.py
+        - tests/trading/test_executor.py
+        - tests/trading/test_negative.py
+      applicability: offline-test
+      status:
+        state: verified
+        evidence: 244 offline subsystem tests pass, including the listed files.
+    status: Implemented
+    source_files:
+    - src/safety/engine.py
+    - src/trading/executor.py
+    design_artifacts: *id002
+    tests: *id009
+    verification_evidence:
+    - 244 offline subsystem tests pass; listed test files are the relevant evidence.
+    owner: Duan
+  - id: INV-TRD-003
+    type: NonFunctional
+    category: invariant-zero-tolerance
+    title: Audit log is append-only
+    description: Existing audit entries cannot be modified, deleted, or silently truncated without AuditIntegrityError.
+    priority: Must
+    priority_rationale: Audit log is append-only protects a core deterministic or safety property.
+    tradeoff:
+      decision: Use the deterministic, offline-verifiable implementation for Audit log is append-only.
+      rejected_or_deferred: A non-deterministic, unauditable, or bypassable alternative.
+      why: The deterministic boundary keeps the subsystem reproducible and fail-closed.
+    origin: user-design
+    fit_criterion:
+      metric: Undetected audit tampering
+      operator: ==
+      threshold_type: count
+      threshold: 0
+      unit: undetected tampering
+      verification:
+        method: Run the listed offline tests; a failing assertion is a criterion violation.
+        command: pytest tests/trading -q
+        references: &id010
+        - tests/trading/test_audit.py
+        - tests/trading/test_invariants.py
+        - tests/trading/test_negative.py
+      applicability: offline-test
+      status:
+        state: verified
+        evidence: 244 offline subsystem tests pass, including the listed files.
+    status: Implemented
+    source_files:
+    - src/trading/audit.py
+    design_artifacts: *id002
+    tests: *id010
+    verification_evidence:
+    - 244 offline subsystem tests pass; listed test files are the relevant evidence.
+    owner: Duan
+  - id: NFR-TRD-001
+    type: NonFunctional
+    category: security
+    title: 100% rejection of hard safety-rule violations
+    description: The safety engine rejects 100% of decisions that violate any hard safety rule.
+    priority: Must
+    priority_rationale: 100% rejection of hard safety-rule violations protects a core deterministic or safety property.
+    tradeoff:
+      decision: Use the deterministic, offline-verifiable implementation for 100% rejection of hard safety-rule violations.
+      rejected_or_deferred: A non-deterministic, unauditable, or bypassable alternative.
+      why: The deterministic boundary keeps the subsystem reproducible and fail-closed.
+    origin: user-design
+    fit_criterion:
+      metric: Hard-rule violation rejection rate
+      operator: '>='
+      threshold_type: numeric
+      threshold: 100
+      unit: '%'
+      verification:
+        method: Run the listed offline tests; a failing assertion is a criterion violation.
+        command: pytest tests/trading -q
+        references: &id011
+        - tests/trading/test_rules.py
+        - tests/trading/test_engine.py
+      applicability: offline-test
+      status:
+        state: verified
+        evidence: 244 offline subsystem tests pass, including the listed files.
+    status: Implemented
+    source_files:
+    - src/safety/rules.py
+    - src/safety/engine.py
+    design_artifacts: *id002
+    tests: *id011
+    verification_evidence:
+    - 244 offline subsystem tests pass; listed test files are the relevant evidence.
+    owner: Duan

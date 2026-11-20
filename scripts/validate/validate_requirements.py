@@ -365,7 +365,7 @@ def validate_requirements(requirements: object, schema: object) -> list[str]:
         rid = req.get("id")
         if not _is_nonempty_str(rid):
             errors.append(f"{prefix}.id is missing")
-        if not re.match(r"^(FR-(DQG|DDT)|NFR-[A-Z]+)-[0-9]{3}$", str(rid)):
+        if not re.match(r"^(FR-(DQG|DDT|TRD)|INV-TRD|NFR-[A-Z]+)-[0-9]{3}$", str(rid)):
             errors.append(f"{prefix}.id {rid!r} does not match the stable ID pattern")
         for key in ("title", "description"):
             if not _is_nonempty_str(req.get(key)):

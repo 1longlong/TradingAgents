@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://localhost/req-schema.json",
   "title": "CS5351 project requirements schema",
-  "description": "Validation schema for docs/req/requirements.yaml. Enforced by scripts/validate/validate_requirements.py, which uses the real draft-2020-12 JSON Schema (jsonschema.Draft202012Validator) when jsonschema is installed (as in CI); the deterministic subset validator is only a clearly-reported local fallback when jsonschema is unavailable (the subset fallback does NOT enforce the per-requirement fit_criterion/priority_rationale/tradeoff rules below — those are enforced only by the real schema; see docs/code-governance/ci-gate-matrix.md). LEGACY-COMPATIBLE: all 22 pre-existing IDs, the Feature/NonFunctional `type` values, the Must/Should/Could `priority` values, the `schema_version` pattern, and the stable ID pattern are preserved. This schema ADDS a product/PRD block and per-requirement machine-checkable fields.",
+  "description": "Validation schema for docs/req/requirements.yaml. Enforced by scripts/validate/validate_requirements.py, which uses the real draft-2020-12 JSON Schema (jsonschema.Draft202012Validator) when jsonschema is installed (as in CI); the deterministic subset validator is only a clearly-reported local fallback when jsonschema is unavailable (the subset fallback does NOT enforce the per-requirement fit_criterion/priority_rationale/tradeoff rules below — those are enforced only by the real schema; see docs/code-governance/ci-gate-matrix.md). LEGACY-COMPATIBLE: the 22 pre-existing IDs and their Feature/NonFunctional `type` values, Must/Should/Could priorities, `schema_version` pattern, and stable ID pattern are preserved. This revision adds FR-TRD-###, INV-TRD-###, and NFR-TRD-001 for the simulated trading subsystem, plus the product/PRD block and per-requirement machine-checkable fields.",
   "type": "object",
   "additionalProperties": false,
   "required": ["project", "product", "requirements"],
@@ -98,7 +98,7 @@
             "additionalProperties": false,
             "required": ["requirement_id", "priority", "rationale"],
             "properties": {
-              "requirement_id": { "type": "string", "pattern": "^(FR-(DQG|DDT)|NFR-[A-Z]+)-[0-9]{3}$" },
+              "requirement_id": { "type": "string", "pattern": "^(FR-(DQG|DDT|TRD)|INV-TRD|NFR-[A-Z]+)-[0-9]{3}$" },
               "priority": { "enum": ["Must", "Should", "Could"] },
               "rationale": { "type": "string", "minLength": 1 }
             }
@@ -112,7 +112,7 @@
             "additionalProperties": false,
             "required": ["requirement_id", "decision", "rejected_or_deferred", "why"],
             "properties": {
-              "requirement_id": { "type": "string", "pattern": "^(FR-(DQG|DDT)|NFR-[A-Z]+)-[0-9]{3}$" },
+              "requirement_id": { "type": "string", "pattern": "^(FR-(DQG|DDT|TRD)|INV-TRD|NFR-[A-Z]+)-[0-9]{3}$" },
               "decision": { "type": "string", "minLength": 1 },
               "rejected_or_deferred": { "type": "string", "minLength": 1 },
               "why": { "type": "string", "minLength": 1 }
@@ -131,7 +131,7 @@
         },
         "deferred_scope": {
           "type": "array",
-          "description": "Explicit 'Won't / deferred' scope. This represents the Won't classification WITHOUT adding a new priority enum value or new requirement IDs, so the historical Must/Should/Could set and all 22 IDs remain intact. Each item names an item, a status, and a rationale.",
+          "description": "Explicit 'Won't / deferred' scope. This represents the Won't classification WITHOUT adding a new priority enum value or new requirement IDs, so the historical Must/Should/Could set and the 22 original IDs remain intact. Each item names an item, a status, and a rationale.",
           "minItems": 1,
           "items": {
             "type": "object",
@@ -228,7 +228,7 @@
         "design_artifacts", "tests", "verification_evidence"
       ],
       "properties": {
-        "id": { "type": "string", "pattern": "^(FR-(DQG|DDT)|NFR-[A-Z]+)-[0-9]{3}$" },
+        "id": { "type": "string", "pattern": "^(FR-(DQG|DDT|TRD)|INV-TRD|NFR-[A-Z]+)-[0-9]{3}$" },
         "type": { "enum": ["Feature", "NonFunctional"] },
         "category": {
           "description": "Requirement category (additive; does not change the historical type values or IDs).",

@@ -460,3 +460,124 @@
   scope: "The human explicitly requested committing and pushing the verified Python 3.10 date-parser compatibility repair to feature/data-quality-debate-control, updating existing PR #2. Only the six reviewed source/test/documentation files are included. No merge, dependency/CI change, new feature, or product live call."
   outcome: "Tested source/test hashes and frozen-file hashes rechecked unchanged; git diff --check clean. Independent offline verification remains 2406 passed, 1 skipped, 1 deselected, zero forbidden socket attempts. Actual new remote Python 3.10 CI remains pending until this publication runs; no remote-green or final human feature-acceptance claim. Commit identity and push outcome are recorded in the external publication receipt and user handoff."
   human_review: "Publication explicitly authorized by WANG Yiwen; final feature acceptance not inferred."
+
+- id: AUL-054
+  date: '2026-10-20'
+  tool: OpenCode
+  phase: implementation
+  scope: 'Created the trading subsystem skeleton: shared models, typed errors, deterministic Decimal handling, safety configuration, fee model, SystemClock, SimulationClock, and offline test harness.'
+  outcome: 'Created the trading subsystem skeleton: shared models, typed errors, deterministic Decimal handling, safety configuration, fee model, SystemClock, SimulationClock, and offline test harness.; Verification: passed; Review status: approved'
+  human_review: approved
+- id: AUL-055
+  date: '2026-10-20'
+  tool: OpenCode
+  phase: implementation
+  scope: Implemented the append-only hash-chained JSONL audit log with canonical payload serialisation, an exclusive-append file lock, frozen events, and a .head anchor that detects deletion of the final entry.
+  outcome: 'Implemented the append-only hash-chained JSONL audit log with canonical payload serialisation, an exclusive-append file lock, frozen events, and a .head anchor that detects deletion of the final entry.; Verification: passed; Review status: approved'
+  human_review: approved
+- id: AUL-056
+  date: '2026-10-20'
+  tool: OpenCode
+  phase: implementation
+  scope: 'Implemented the simulated portfolio ledger: long-only Decimal cash and positions, fee-inclusive average cost, realized and unrealized PnL, mark-to-market snapshots, PortfolioContext seeding/rendering, duplicate fill protection, and sticky BANKRUPT state on equity <= 0.'
+  outcome: 'Implemented the simulated portfolio ledger: long-only Decimal cash and positions, fee-inclusive average cost, realized and unrealized PnL, mark-to-market snapshots, PortfolioContext seeding/rendering, duplicate fill protection, and sticky BANKRUPT state on equity <= 0.; Verification: passed; Review status: approved'
+  human_review: approved
+- id: AUL-057
+  date: '2026-10-20'
+  tool: OpenCode
+  phase: implementation
+  scope: Implemented the deterministic hard safety catalogue SR-01 through SR-10 and soft approval policies AP-01 and AP-02. SR-03 is simulation-clock aware, SR-09 rejects with exact reason BANKRUPT, and rule/policy wrappers fail closed on unexpected evaluation errors.
+  outcome: 'Implemented the deterministic hard safety catalogue SR-01 through SR-10 and soft approval policies AP-01 and AP-02. SR-03 is simulation-clock aware, SR-09 rejects with exact reason BANKRUPT, and rule/policy wrappers fail closed on unexpected evaluation errors.; Verification: passed; Review status: approved'
+  human_review: approved
+- id: AUL-058
+  date: '2026-10-20'
+  tool: OpenCode
+  phase: implementation
+  scope: Implemented the deterministic simulated executor. It validates ExecutionAuthorization and the order envelope, rejects stale, bankrupt, replayed, and malformed executions before mutation, writes EXECUTION_STARTED before applying the fill, writes ORDER_EXECUTED after, and records INVARIANT_VIOLATION if the post-mutation audit write fails.
+  outcome: 'Implemented the deterministic simulated executor. It validates ExecutionAuthorization and the order envelope, rejects stale, bankrupt, replayed, and malformed executions before mutation, writes EXECUTION_STARTED before applying the fill, writes ORDER_EXECUTED after, and records INVARIANT_VIOLATION if the post-mutation audit write fails.; Verification: passed; Review status: approved'
+  human_review: approved
+- id: AUL-059
+  date: '2026-10-20'
+  tool: OpenCode
+  phase: implementation
+  scope: 'Implemented SafetyEngine orchestration: evaluate/approve/reject/no-action state machine, full SR-01..SR-10 then AP-01/AP-02 evaluation, one-shot human approval transitions, APPROVED-only execution, stale-version guard, required audit events, and INV-02 provenance enforcement through a module-private token carried by an engine-issued authorization.'
+  outcome: 'Implemented SafetyEngine orchestration: evaluate/approve/reject/no-action state machine, full SR-01..SR-10 then AP-01/AP-02 evaluation, one-shot human approval transitions, APPROVED-only execution, stale-version guard, required audit events, and INV-02 provenance enforcement through a module-private token carried by an engine-issued authorization.; Verification: passed; Review status: approved'
+  human_review: approved
+- id: AUL-060
+  date: '2026-10-20'
+  tool: OpenCode
+  phase: implementation
+  scope: 'Implemented HumanApprovalGate: TTL-bound ApprovalRequest creation for PENDING_APPROVAL evaluations, one-shot approve/deny decisions, expiry and request/decision binding checks, HUMAN_APPROVAL_REQUESTED and HUMAN_APPROVAL audit events, and compatibility with SafetyEngine.apply_approval().'
+  outcome: 'Implemented HumanApprovalGate: TTL-bound ApprovalRequest creation for PENDING_APPROVAL evaluations, one-shot approve/deny decisions, expiry and request/decision binding checks, HUMAN_APPROVAL_REQUESTED and HUMAN_APPROVAL audit events, and compatibility with SafetyEngine.apply_approval().; Verification: passed; Review status: approved'
+  human_review: approved
+- id: AUL-061
+  date: '2026-10-20'
+  tool: OpenCode
+  phase: implementation
+  scope: Implemented the graph adapter, deterministic SizingPolicy, and TradingPipeline. Ratings map to advisory direction only; LLM quantities and prices are discarded. Sizing uses 5% of total equity by default, caps at SafetyConfig.hard_max_order_notional, and floors to six decimal places. The pipeline routes APPROVED to execution, PENDING_APPROVAL to HumanApprovalGate without execution, and leaves REJECTED/NO_ACTION inert.
+  outcome: 'Implemented the graph adapter, deterministic SizingPolicy, and TradingPipeline. Ratings map to advisory direction only; LLM quantities and prices are discarded. Sizing uses 5% of total equity by default, caps at SafetyConfig.hard_max_order_notional, and floors to six decimal places. The pipeline routes APPROVED to execution, PENDING_APPROVAL to HumanApprovalGate without execution, and leaves REJECTED/NO_ACTION inert.; Verification: passed; Review status: approved'
+  human_review: approved
+- id: AUL-062
+  date: '2026-10-20'
+  tool: OpenCode
+  phase: implementation
+  scope: 'Implemented the walk-forward calendar and provider layer: WeekdayCalendar with optional holidays, SimulationDay, DecisionProvider/QuoteProvider protocols, deterministic MockDecisionProvider and MockQuoteProvider, lazy-factory RealDecisionProvider using the Step 8 adapter, and HistoricalQuoteProvider backed by an injected date-only close function.'
+  outcome: 'Implemented the walk-forward calendar and provider layer: WeekdayCalendar with optional holidays, SimulationDay, DecisionProvider/QuoteProvider protocols, deterministic MockDecisionProvider and MockQuoteProvider, lazy-factory RealDecisionProvider using the Step 8 adapter, and HistoricalQuoteProvider backed by an injected date-only close function.; Verification: passed; Review status: approved'
+  human_review: approved
+- id: AUL-063
+  date: '2026-10-20'
+  tool: OpenCode
+  phase: implementation
+  scope: Implemented atomic JSON StateStore persistence and the resumable BacktestRunner. StateStore persists cash, positions, realized PnL, fees, marks, replay ids, bankruptcy, and a BacktestCursor; it loads fresh on a missing file, fails closed on corruption, and resets through an appended STATE_RESET audit event. BacktestRunner walks the calendar, marks to each quote, skips missing quotes, runs the pipeline, handles pending approvals via an optional handler, persists a cursor after every day, resumes after the last completed date, and reports summary statistics.
+  outcome: 'Implemented atomic JSON StateStore persistence and the resumable BacktestRunner. StateStore persists cash, positions, realized PnL, fees, marks, replay ids, bankruptcy, and a BacktestCursor; it loads fresh on a missing file, fails closed on corruption, and resets through an appended STATE_RESET audit event. BacktestRunner walks the calendar, marks to each quote, skips missing quotes, runs the pipeline, handles pending approvals via an optional handler, persists a cursor after every day, resumes after the last completed date, and reports summary statistics.; Verification: passed; Review status: approved'
+  human_review: approved
+- id: AUL-064
+  date: '2026-10-20'
+  tool: OpenCode
+  phase: implementation
+  scope: Implemented RuntimeConfig/TradingRuntime/build_runtime startup composition and a standalone argparse CLI. The runtime wires AuditLog, StateStore, Portfolio, SafetyEngine, HumanApprovalGate, and TradingPipeline, loading persisted state or resetting through the audited StateStore path. The CLI supports --state, --audit, --initial-cash, and --reset, prints cash/equity/bankruptcy, and never trades.
+  outcome: 'Implemented RuntimeConfig/TradingRuntime/build_runtime startup composition and a standalone argparse CLI. The runtime wires AuditLog, StateStore, Portfolio, SafetyEngine, HumanApprovalGate, and TradingPipeline, loading persisted state or resetting through the audited StateStore path. The CLI supports --state, --audit, --initial-cash, and --reset, prints cash/equity/bankruptcy, and never trades.; Verification: passed; Review status: approved'
+  human_review: approved
+- id: AUL-065
+  date: '2026-10-20'
+  tool: OpenCode
+  phase: implementation
+  scope: Added the ultimate negative, invariant, structural, and traceability suites. AST checks enforce the executor import boundary, absence of wall-clock calls outside clock.py, and absence of network/broker imports. Invariant tests prove zero execution without APPROVED, forged-token rejection with no state mutation, and audit tamper detection. Traceability dynamically maps every requirements.yaml ID to a test function reference.
+  outcome: 'Added the ultimate negative, invariant, structural, and traceability suites. AST checks enforce the executor import boundary, absence of wall-clock calls outside clock.py, and absence of network/broker imports. Invariant tests prove zero execution without APPROVED, forged-token rejection with no state mutation, and audit tamper detection. Traceability dynamically maps every requirements.yaml ID to a test function reference.; Verification: passed; Review status: approved'
+  human_review: approved
+- id: AUL-066
+  date: '2026-10-20'
+  tool: OpenCode
+  phase: implementation
+  scope: 'Added opt-in live-test support: test/live/conftest.py gates the suite on RUN_LIVE_TRADING_TESTS=1, loads the repository .env, and adds src to the offline path. The live smoke test wires RealDecisionProvider over the actual TradingAgentsGraph, HistoricalQuoteProvider over a read-only date-specific close fetch, a 3-day WeekdayCalendar window, and the simulated runtime; it asserts run completion, audit integrity, and a persisted cursor.'
+  outcome: 'Added opt-in live-test support: test/live/conftest.py gates the suite on RUN_LIVE_TRADING_TESTS=1, loads the repository .env, and adds src to the offline path. The live smoke test wires RealDecisionProvider over the actual TradingAgentsGraph, HistoricalQuoteProvider over a read-only date-specific close fetch, a 3-day WeekdayCalendar window, and the simulated runtime; it asserts run completion, audit integrity, and a persisted cursor.; Verification: passed; Review status: approved'
+  human_review: approved
+- id: AUL-067
+  date: '2026-10-20'
+  tool: OpenCode
+  phase: verification
+  scope: Fixed live-test environment loading and WSL proxy handling. The live conftest now loads the repository .env before test imports, infers TRADINGAGENTS_LLM_PROVIDER from the first available provider key when the env var is absent, and sets deepseek-chat defaults for the DeepSeek fallback. The live test also loads .env itself and configures yfinance's process-local proxy to http://127.0.0.1:7897 (overrideable via TRADINGAGENTS_LIVE_PROXY). Neither setting is loaded by offline tests or core business logic.
+  outcome: 'Fixed live-test environment loading and WSL proxy handling. The live conftest now loads the repository .env before test imports, infers TRADINGAGENTS_LLM_PROVIDER from the first available provider key when the env var is absent, and sets deepseek-chat defaults for the DeepSeek fallback. The live test also loads .env itself and configures yfinance''s process-local proxy to http://127.0.0.1:7897 (overrideable via TRADINGAGENTS_LIVE_PROXY). Neither setting is loaded by offline tests or core business logic.; Verification: passed; Review status: approved'
+  human_review: approved
+- id: AUL-068
+  date: '2026-10-20'
+  tool: OpenCode
+  phase: contract
+  scope: 'Replaced the five architecture/governance stubs with implemented documentation: end-to-end blueprint and authority boundary, accepted ADR-001 covering simulated execution/provenance token/clocks/atomic persistence, permission model mirroring permissions.jsonc, full requirement trace matrix, and module/dependency structural constraints.'
+  outcome: 'Replaced the five architecture/governance stubs with implemented documentation: end-to-end blueprint and authority boundary, accepted ADR-001 covering simulated execution/provenance token/clocks/atomic persistence, permission model mirroring permissions.jsonc, full requirement trace matrix, and module/dependency structural constraints.; Verification: passed; Review status: approved'
+  human_review: approved
+- id: AUL-069
+  date: '2026-10-20'
+  tool: OpenCode
+  phase: verification
+  scope: Final verification and PR preparation. Re-ran the offline suite, the complete suite under UTC, and lint; validated the AI-use log; confirmed the 100-day mock backtest and 3-day live smoke evidence; and prepared the PR summary in the response without creating a new document file.
+  outcome: 'Final verification and PR preparation. Re-ran the offline suite, the complete suite under UTC, and lint; validated the AI-use log; confirmed the 100-day mock backtest and 3-day live smoke evidence; and prepared the PR summary in the response without creating a new document file.; Verification: passed; Review status: approved'
+  human_review: approved
+
+- id: AUL-070
+  date: '2026-11-13'
+  tool: OpenCode
+  phase: verification
+  scope: 'Merge release into feature/trading-system: unified 32-ID registry with FR-TRD/INV-TRD/NFR-TRD, independent simulated-trading source in src/trading + src/safety, tests migrated to tests/trading, path-based permissions with src/safety approval guard, and fixture-isolated live test.'
+  outcome: Conflict resolution completed. Full suite 2650 passed, 3 skipped; live 3-day test 1 passed; validate_requirements PASS; ruff clean.
+  human_review: requested

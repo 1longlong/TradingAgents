@@ -193,3 +193,18 @@ enforcement.
   `tradingagents/debate/budget.py`, `tradingagents/report_artifacts.py`. Tests:
   `tests/test_structured_raw_usage.py` (18 passed). NFR-BUD-001, NFR-AUD-001,
   FR-DDT-003, NFR-BC-001, INV-7. Offline-verified only; NOT a live proof.`
+
+## Simulated trading subsystem (TRD) trace rows
+
+| Requirement | Enforcing module(s) | Primary tests |
+|---|---|---|
+| **FR-TRD-001** — deterministic safety gate | `src/safety/rules.py`, `src/safety/engine.py`, `src/trading/pipeline.py` | `tests/trading/test_rules.py`, `tests/trading/test_engine.py`, `tests/trading/test_negative.py`, `tests/trading/test_pipeline.py` |
+| **FR-TRD-002** — simulated executor | `src/trading/executor.py`, `src/trading/portfolio.py` | `tests/trading/test_executor.py`, `tests/trading/test_portfolio.py`, `tests/trading/test_pipeline.py` |
+| **FR-TRD-003** — portfolio ledger | `src/trading/portfolio.py`, `src/trading/models.py` | `tests/trading/test_portfolio.py`, `tests/trading/test_models.py` |
+| **FR-TRD-004** — append-only audit | `src/trading/audit.py`, `src/safety/engine.py`, `src/trading/executor.py`, `src/trading/approval.py` | `tests/trading/test_audit.py`, `tests/trading/test_approval.py`, `tests/trading/test_engine.py`, `tests/trading/test_invariants.py` |
+| **FR-TRD-005** — walk-forward simulation | `src/trading/clock.py`, `src/trading/backtest.py`, `src/trading/persistence.py` | `tests/trading/test_clock.py`, `tests/trading/test_providers.py`, `tests/trading/test_backtest.py` |
+| **FR-TRD-006** — persistence/reset/bankruptcy | `src/trading/portfolio.py`, `src/trading/persistence.py`, `src/trading/runtime.py`, `src/trading/cli.py` | `tests/trading/test_persistence.py`, `tests/trading/test_bankruptcy.py`, `tests/trading/test_runtime.py`, `tests/trading/test_cli_reset.py` |
+| **INV-TRD-001** — no execution without approval | `src/safety/engine.py`, `src/trading/pipeline.py` | `tests/trading/test_invariants.py`, `tests/trading/test_negative.py` |
+| **INV-TRD-002** — engine-only executor entry | `src/safety/engine.py`, `src/trading/executor.py` | `tests/trading/test_structure.py`, `tests/trading/test_invariants.py`, `tests/trading/test_executor.py` |
+| **INV-TRD-003** — append-only audit | `src/trading/audit.py` | `tests/trading/test_audit.py`, `tests/trading/test_invariants.py`, `tests/trading/test_negative.py` |
+| **NFR-TRD-001** — 100% hard-rule rejection | `src/safety/rules.py`, `src/safety/engine.py` | `tests/trading/test_rules.py`, `tests/trading/test_engine.py` |

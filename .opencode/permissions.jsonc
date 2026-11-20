@@ -1,38 +1,26 @@
 {
-  // CS5351 project OpenCode permissions.
-  // NOTE (uncertainty): the exact schema for permissions.jsonc could not be
-  // fully verified against the installed OpenCode version in this environment.
-  // This is the minimal documented form; it uses only widely-supported keys.
-  // See docs/debt-register.md (DEBT-004) and docs/architecture/risk-list.md.
-  //
-  // Rules are DENY by default; explicit allow/ask entries are the only things
-  // that permit an action. No network or paid-API permission is granted here.
-
-  "allow": [
-    "read",
-    "edit",
-    "bash:pytest",
-    "bash:ruff"
+  "version": "1.0",
+  "default": { "read": false, "write": false },
+  "paths": {
+    "read": [
+      "AGENTS.md", "Prompt.md", "baseline.md", "architecture-blueprint.md",
+      "docs/**", "src/**", "tests/**"
+    ],
+    "write": [
+      "src/trading/**", "src/safety/**", "tests/trading/**", "docs/ai-use-log.yaml"
+    ],
+    "readonly": ["docs/**"],
+    "frozen": [
+      "tradingagents/agents/**", "tradingagents/graph/**", "tradingagents/dataflows/**",
+      "tradingagents/llm_clients/**", ".opencode/rules.md", ".agent/rules.md"
+    ]
+  },
+  "guards": [
+    {
+      "id": "safety-write-requires-approval",
+      "when": "write to src/safety/**",
+      "require": ["human_approval", "architecture_decision"]
+    }
   ],
-  "ask": [
-    "bash:git commit",
-    "bash:git push"
-  ],
-  "deny": [
-    "bash:git push:force",
-    "bash:git rebase",
-    "bash:git checkout origin/*",
-    "bash:git branch -D",
-    // Block any command that fetches external data or calls a paid LLM.
-    "bash:curl",
-    "bash:wget",
-    "bash:*openai*",
-    "bash:*anthropic*",
-    "bash:*google*",
-    // Block reading environment/secret files.
-    "read:.env",
-    "read:.env.enterprise",
-    "read:*.pem",
-    "read:*.key"
-  ]
+  "enforcement": { "ci": true, "block_on_violation": true }
 }

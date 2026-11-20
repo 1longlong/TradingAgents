@@ -255,3 +255,26 @@ exhaustive or live-vendor blocked proof.
   the human approval cannot be proven fresh.
 - **Enforcement gap / status:** **Unverified / not implemented** — no runtime
   context-assembly or compaction code exists in this repository.
+
+## Simulated trading subsystem invariants (TRD)
+
+### INV-TRD-001 — No execution without an APPROVED evaluation
+
+- **Source requirements:** FR-TRD-001, INV-TRD-001.
+- **Enforcer:** `src/safety/engine.py` (`execute()` requires `APPROVED`), `src/trading/pipeline.py`.
+- **Verification:** `tests/trading/test_invariants.py`, `tests/trading/test_negative.py`, `tests/trading/test_executor.py`.
+- **Fallback:** reject before executor; no portfolio mutation.
+
+### INV-TRD-002 — Rule engine is the only executor entry point
+
+- **Source requirements:** FR-TRD-001, INV-TRD-002.
+- **Enforcer:** `src/safety/engine.py` issues a module-private provenance token; `src/trading/executor.py` verifies it.
+- **Verification:** `tests/trading/test_structure.py` (AST import boundary), `tests/trading/test_invariants.py`, `tests/trading/test_executor.py`, `tests/trading/test_negative.py`.
+- **Fallback:** `ExecutionNotAuthorizedError` before any fill.
+
+### INV-TRD-003 — Audit log is append-only
+
+- **Source requirements:** FR-TRD-004, INV-TRD-003.
+- **Enforcer:** `src/trading/audit.py` (hash chain + `.head` truncation anchor).
+- **Verification:** `tests/trading/test_audit.py`, `tests/trading/test_invariants.py`, `tests/trading/test_negative.py`.
+- **Fallback:** `AuditIntegrityError`; modification, truncation, and deletion are detected.

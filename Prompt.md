@@ -66,6 +66,15 @@ authoritative for any implementation work.**
     explicit human authorization. Do not add unrequested features, or
     duplicate/relocate source trees.
 
+## Simulated trading subsystem
+
+The simulated trading subsystem is an approved independent subsystem under
+`src/trading/` and `src/safety/`. Its canonical tests live under `tests/trading/`.
+It consumes graph output through a one-way adapter and must not modify the
+frozen `tradingagents/` or `cli/main.py` trees. `src/safety/**` changes require
+explicit human approval and an architecture decision. Real broker execution and
+unattended live trading remain out of scope.
+
 ## Versioning and immutability
 
 - The prompt is intentionally **immutable in intent**: any change to a binding

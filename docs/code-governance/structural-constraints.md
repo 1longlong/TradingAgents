@@ -6,17 +6,14 @@ upstream conventions.
 
 ## Source tree (authoritative, do not relocate or duplicate)
 
-- Canonical source trees: `tradingagents/` and `cli/`. Canonical tests: `tests/`.
-- There is **no `src/` or `test/` code tree**. The `src/README.md` and
-  `test/{offline,live}/README.md` **pointer README directories already exist** in
-  the repository; they only map the authoritative project slide layout onto the
-  real trees and explicitly state they are not code directories. They must not
-  grow into duplicated source or test trees.
-- The course slide layout (`src/`, `test/offline/`, `test/live/`) is an
-  **upstream-layout exception that still requires human (instructor) confirmation
-  before any real code is placed there**; until confirmed, the canonical
-  `tradingagents/` + `tests/` trees remain authoritative (see
-  `docs/req/requirements.yaml` `deferred_scope`).
+- Canonical main-system source trees: `tradingagents/` and `cli/`.
+- Canonical tests: `tests/`.
+- The approved simulated-trading subsystem is an independent source tree under
+  `src/trading/` and `src/safety/`; its tests live under `tests/trading/`.
+  This exception is explicitly approved and must not be read as a general
+  invitation to duplicate or relocate the main-system trees.
+- The old `test/offline/` and `test/live/` directories are pointer READMEs only;
+  they contain no test code.
 
 ## New package boundaries
 
@@ -25,6 +22,11 @@ upstream conventions.
 - `tradingagents/debate/` — the dynamic debate-termination package. The
   `evaluator.py` is pure; the LangGraph node factory is the only module that
   reads/writes `AgentState`.
+- `src/trading/` — the independent simulated-trading subsystem: models, clocks,
+  audit, portfolio, persistence, executor, approval gate, pipeline, backtest,
+  runtime, and standalone CLI.
+- `src/safety/` — deterministic safety rules and the sole safety-engine gateway.
+  No module outside `src/safety/engine.py` may import the executor.
 
 ## Cross-package rules
 
@@ -39,8 +41,10 @@ upstream conventions.
 ## Test tree
 
 - All tests live under `tests/`.
-- Test modules for the feature work are named per the module they exercise
+- Main-system test modules are named per the module they exercise
   (e.g. `tests/test_debate_evaluator.py`, `tests/test_data_quality_gate_graph.py`).
+- Simulated-trading tests live under `tests/trading/`; the live smoke test is
+  under `tests/trading/live/` and is opt-in via `RUN_LIVE_TRADING_TESTS=1`.
 - Vendor/live tests are marked `@pytest.mark.integration`.
 
 ## Naming conventions
@@ -72,7 +76,7 @@ upstream conventions.
 ## Prohibited
 
 - No new top-level package that duplicates an existing one.
-- No `src/` or `test/` code tree.
+- No unapproved `src/` or `test/` code tree; only the approved `src/trading/`, `src/safety/`, and `tests/trading/` paths are exceptions.
 - No LLM/network call inside `evidence` or `debate` pure modules.
 - No import of a private package across the gate/debate boundary without a
   documented reason.

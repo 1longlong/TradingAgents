@@ -307,9 +307,10 @@ a category with no genuine instance is marked so — no debt is invented.
 | **guardrail debt** | Permissions not path-scoped / not probe-verified; plan-first + CI gates not enforced. DEBT-004/027. | Observed |
 | **human/cognitive debt** | Traceability scores pending; no approved perf thresholds; team deliverables pending. DEBT-011/014/028. | Observed (pending human) |
 
-## Source/test folder mapping (upstream-layout exception)
+## Source/test folder mapping
 
-`src/`, `test/offline/`, `test/live/` are README pointers; real source is
-`tradingagents/` + `cli/`, tests are in `tests/`. This mapping **remains an
-upstream-layout exception pending instructor agreement** — it is **not**
-automatic compliance, and no code is relocated/duplicated to fake the tree.
+The approved simulated-trading subsystem uses `src/trading/` and `src/safety/`
+as source and `tests/trading/` as its canonical tests. Main-system source
+remains `tradingagents/` + `cli/`, and all tests are under `tests/`. This is an
+explicitly approved independent-subsystem exception, not a relocation or
+duplication of the main-system trees.
