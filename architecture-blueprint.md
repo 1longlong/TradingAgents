@@ -155,7 +155,7 @@ change governance on its own.
 | Actor | Authority | Boundary |
 | --- | --- | --- |
 | Human (WANG Yiwen, 60536848) | Ultimate: scope, safety, git, network, approvals | Owns `.opencode/rules.md` (human-only) and every phase/review decision |
-| Coding agent (OpenCode/Codex) | Read/analyze/implement within the active authorized scope | May suggest; must stop and ask on any denied action |
+| Coding agent (OpenCode) | Read/analyze/implement within the active authorized scope | May suggest; must stop and ask on any denied action |
 | Runtime graph (gate/evaluator/agents) | Emits a verdict/recommendation within deterministic rules | Cannot override a blocked verdict downstream (FR-DQG-006) |
 
 Advice is never promoted to authority by an AI: human decisions cannot be
@@ -226,7 +226,7 @@ identity risk is resolved (RISK-004 / DEBT-005). Remaining open items include:
 the OpenCode `permissions.jsonc` schema/enforcement against the installed
 OpenCode version (RISK-006 / DEBT-004); the degraded confidence ceiling
 (DEBT-014 — now implemented as ADR-011 Stage 4, 0.60 engineering ceiling,
-offline-verified, awaiting independent Codex review + human acceptance);
+offline-verified, awaiting independent OpenCode review + human acceptance);
 automatic optional adapters (DEBT-015 / RISK-015); and the live-run
 budget-accounting basis and claim-date semantics found on 2026-11-06 (DEBT-021 /
 DEBT-022 / RISK-020 / RISK-021). This is **not** claimed to be the "only
@@ -724,3 +724,40 @@ Before product implementation:
 ## 16. Traceability
 
 The requirement-to-module-to-test mapping is in `docs/architecture/trace-matrix.md`. Invariants are in `docs/architecture/invariants.md`. Decisions are in `docs/architecture/adr/001-choice.md` through `007-run-controls.md`. Permissions, memory, runtime policies, risks, options, and evaluation records are in the corresponding documents under `docs/architecture/`.
+
+### W9 Audit and offline comparison read projections
+
+The user requested the missing WebUI interfaces on 2026-11-20 (scope version
+`web-projections-20261120-v1` in the review memo). Existing report/identity,
+redaction, path, advisory-output and core-isolation invariants remain binding.
+
+| Ownership | Contract |
+| --- | --- |
+| `src/tradingagents_web/artifacts/audit.py` | Read only the four canonical audit families under an indexed analysis root; bounded regular-file reads, no symlink traversal, sanitized JSON/text and explicit per-family availability |
+| `src/tradingagents_web/api/audit.py` | `GET /api/history/{artifact_id}/audit`, `GET /api/runs/{run_id}/audit`, `GET /api/history/{artifact_id}/audit/artifacts/{kind}` with optional download disposition; no browser-supplied path |
+| `src/tradingagents_web/api/comparisons.py` | `GET /api/comparisons`, `GET /api/comparisons/{case_id}`, `GET /api/comparisons/{case_id}/download`; controlled existing cases only, optional existing dynamic case identity, core pairing and serialization |
+| Existing Web run writer/coordinator | Preserve canonical core audit outputs next to the corresponding Web artifact and record allowlisted effective presentation metadata; no second core writer or computation |
+| Existing frontend ownership | Audit/comparison views consume projections; server artifacts and pure core replay remain authoritative |
+
+Audit JSON has a versioned projection envelope, canonical family keys,
+complete/partial/absent artifact availability, nullable data and per-family
+issues. Missing/invalid data is not a normal gate, zero cost or empty successful
+report. Downloads use the same safe reader and redaction as previews. The total
+response budget uses existing Web settings. Unknown IDs/families return 404;
+oversized artifacts return 413; malformed JSON is surfaced as invalid.
+
+Comparisons are deterministic scripted offline replays, not live benchmarks or
+financial backtests. D/E/F are representative cases; G is a separate input-
+exhaustion regression. Both actual identities pass the existing core pairing
+check before a report/download is returned. Identity mismatch returns 422 without
+savings/score output. No HTTP operation modifies human rubric scores or runs a
+provider. Replaying does not consume the active analysis slot or write memory.
+
+Run-local JSON copies may additionally carry `web_context` with existing origin
+metadata, source-attempt descriptors and conflict lifecycle identifiers. Fields
+are allowlisted; raw arguments, prompts and claim prose are excluded. The core
+saved report tree and its serializer remain unchanged. Audit cutoff eligibility
+uses the existing core manifest helper, never a saved folder's timestamp.
+Cross-artifact identity/verdict disagreement is visible and suppresses eligible
+IDs in this presentation; it does not rewrite a core decision. A run-ID query
+uses the coordinator's lifecycle status so unfinished audits can be refreshed.

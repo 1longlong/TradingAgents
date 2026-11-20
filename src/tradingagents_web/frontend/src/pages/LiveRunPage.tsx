@@ -3,10 +3,19 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
 
-import { cancelRun, getRun, runEventsUrl } from "../api/runClient";
-import { LanguageSwitch } from "../components/LanguageSwitch";
+import { downloadUrl, getHistoryDetail } from "../api/client";
+import { ResearchCard, Pipeline, ReportDocument } from "../components/Research";
+import { Modal } from "../components/Modal";
+import {
+  cancelRun,
+  getRun,
+  runEventsUrl,
+  type RunSnapshot,
+} from "../api/runClient";
+import { Icon } from "../components/Icon";
 import { Markdown } from "../components/Markdown";
 import { createRunStore, type RunEvent } from "../stores/runStore";
+import { sectionLabel } from "../utils/workspace";
 
 const TERMINAL = new Set(["completed", "failed", "cancelled"]);
 
@@ -32,6 +41,7 @@ export function LiveRunPage() {
           unknown
         >;
         if (stopped) return;
+        setSnapshot(snapshot as unknown as RunSnapshot);
         store.getState().applySnapshot(snapshot);
         if (TERMINAL.has(String(snapshot.status))) return;
         store.getState().setConnection("connecting");
@@ -81,6 +91,8 @@ export function LiveRunPage() {
       }
     }
 
+    store.getState().reset();
+    setSnapshot(null);
     void connect();
     return () => {
       stopped = true;
@@ -100,140 +112,326 @@ export function LiveRunPage() {
     }
   }
 
+  const [filter, setFilter] = useState("all");
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const [snapshot, setSnapshot] = useState<RunSnapshot | null>(null);
   const status = state.status;
-  const canCancel = !TERMINAL.has(status);
-
+  const running = !TERMINAL.has(status);
+  const record = {
+    ticker: snapshot?.ticker ?? "Research",
+    date: snapshot?.trade_date,
+    status,
+    rating: state.signal,
+    review: state.review,
+    sections: state.sections,
+    analysts: snapshot?.analysts,
+    metadata: {
+      research_depth: snapshot?.research_depth,
+      llm_provider: snapshot?.llm_provider,
+      output_language: snapshot?.output_language,
+    },
+  };
+  const [complete, setComplete] = useState(false);
+  useEffect(() => {
+    let mounted = true;
+    setComplete(false);
+    if (state.artifactId)
+      void getHistoryDetail(state.artifactId)
+        .then((detail) => {
+          if (mounted)
+            setComplete(
+              Boolean(
+                detail.artifacts?.some((item) => item.kind === "complete"),
+              ),
+            );
+        })
+        .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, [state.artifactId]);
+  const events = state.messages.filter(
+    (message) =>
+      filter === "all" ||
+      (filter === "tool_call"
+        ? message.type === "Tool"
+        : message.type !== "Tool"),
+  );
   return (
-    <main className="mx-auto max-w-6xl px-6 py-10">
-      <header className="mb-8 flex items-start justify-between gap-4">
+    <>
+      <section className="page-header">
         <div>
-          <Link
-            className="text-sm text-cyan-300 hover:text-cyan-200"
-            to="/history"
-          >
-            ← {t("nav.history")}
-          </Link>
-          <h1 className="mt-3 text-3xl font-semibold text-slate-100">
-            {t("live.title")}
-          </h1>
-          <p className="mt-2 font-mono text-xs text-slate-400">
-            {t("live.runId")}: {runId} · {t("live.status")}: {status} ·{" "}
-            {t("live.connection")}: {state.connection}
+          <p className="eyebrow">
+            {running ? "ACTIVE RESEARCH" : "RESEARCH / " + record.ticker}
+          </p>
+          <h1>{record.ticker} analysis</h1>
+          <p className="page-description">
+            A collective review of {record.ticker}.
           </p>
         </div>
-        <LanguageSwitch />
-      </header>
-
-      {state.review ? (
-        <p className="mb-5 rounded-md border border-amber-500/50 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-          {t("live.review")}
-        </p>
-      ) : null}
-      {state.error ? (
-        <p role="alert" className="mb-5 text-sm text-red-300">
-          {state.error}
-        </p>
-      ) : null}
-      {state.warnings.map((warning) => (
-        <p key={warning} className="mb-3 text-amber-300">
-          {warning}
-        </p>
-      ))}
-      {state.signal ? (
-        <p className="mb-4 text-lg text-slate-100">
-          {t("history.rating")}: {state.signal}
-        </p>
-      ) : null}
-      <p className="mb-4 text-sm text-slate-400">
-        {t(`live.phases.${state.phase}`, { defaultValue: state.phase })}
-      </p>
-      {Object.keys(state.agents).length > 0 ? (
-        <ul className="mb-4 flex flex-wrap gap-3 text-sm text-slate-300">
-          {Object.entries(state.agents).map(([agent, status]) => (
-            <li key={agent}>
-              {agent}: {status}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {Object.keys(state.stats).length > 0 ? (
-        <p className="mb-4 text-sm text-slate-300">
-          {t("live.stats")}:{" "}
-          {Object.entries(state.stats)
-            .map(([key, value]) => `${key}: ${value}`)
-            .join(" · ")}
-        </p>
-      ) : null}
-      {state.artifactId ? (
-        <Link
-          className="mb-5 block text-cyan-300"
-          to={`/history/${state.artifactId}`}
-        >
-          {t("report.complete")}
-        </Link>
-      ) : null}
-      {actionError ? (
-        <p className="mb-5 text-sm text-red-300">{actionError}</p>
-      ) : null}
-
-      <div className="mb-6 flex flex-wrap gap-3">
-        <button
-          type="button"
-          className="rounded-md border border-red-500/60 px-3 py-1.5 text-sm text-red-200 hover:bg-red-500/10 disabled:opacity-40"
-          disabled={!canCancel}
-          onClick={() => void handleCancel()}
-        >
-          {status === "cancelling" ? t("live.cancelling") : t("live.cancel")}
-        </button>
-        <Link
-          className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
-          to="/history"
-        >
-          {t("nav.history")}
-        </Link>
-      </div>
-
-      <section className="grid gap-6 lg:grid-cols-2">
-        <div className="rounded-lg border border-slate-800 p-5">
-          <h2 className="mb-3 text-sm uppercase tracking-wide text-cyan-300">
-            {t("live.messages")}
-          </h2>
-          {state.messages.length === 0 ? (
-            <p className="text-sm text-slate-400">{t("live.waiting")}</p>
+        <div className="page-header-actions">
+          {running ? (
+            <button
+              className="button"
+              disabled={status === "cancelling"}
+              onClick={() => setConfirmCancel(true)}
+            >
+              <Icon name="stop" />
+              {status === "cancelling" ? "Stopping…" : "Cancel analysis"}
+            </button>
           ) : (
-            <ul className="max-h-[28rem] space-y-2 overflow-auto text-sm">
-              {state.messages.map((message) => (
-                <li key={message.id} className="border-b border-slate-800 pb-2">
-                  <span className="font-mono text-xs text-slate-500">
-                    {message.timestamp ?? ""} {message.type ?? ""}
-                  </span>
-                  <p className="mt-1 text-slate-300">{message.content}</p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div className="rounded-lg border border-slate-800 p-5">
-          <h2 className="mb-3 text-sm uppercase tracking-wide text-cyan-300">
-            {t("live.progress")}
-          </h2>
-          {Object.keys(state.sections).length === 0 ? (
-            <p className="text-sm text-slate-400">{t("live.waiting")}</p>
-          ) : (
-            <div className="max-h-[28rem] space-y-4 overflow-auto">
-              {Object.entries(state.sections).map(([section, content]) => (
-                <article key={section}>
-                  <h3 className="mb-2 font-mono text-xs text-slate-400">
-                    {section}
-                  </h3>
-                  <Markdown>{content}</Markdown>
-                </article>
-              ))}
-            </div>
+            <>
+              <Link className="button ghost" to="/history">
+                <Icon name="clock" />
+                History
+              </Link>
+              <Link className="button ghost" to={`/audit?run_id=${runId}`}>
+                <Icon name="shield" />
+                Research audit
+              </Link>
+              {complete ? (
+                <a
+                  className="button"
+                  href={downloadUrl(state.artifactId!, "complete")}
+                >
+                  <Icon name="download" />
+                  Export report
+                </a>
+              ) : null}
+            </>
           )}
         </div>
       </section>
-    </main>
+      {state.error ? (
+        <div className="report-state-banner warning" role="alert">
+          <Icon name="warning" />
+          <div>
+            <strong>Analysis could not finish</strong>
+            <p>{state.error}</p>
+            <Link
+              className="text-button"
+              to="/new"
+              state={{
+                setup: {
+                  ticker: record.ticker,
+                  date: record.date,
+                  asset: snapshot?.asset_type,
+                  provider: snapshot?.llm_provider,
+                  analysts: snapshot?.analysts,
+                  depth: snapshot?.research_depth,
+                  quick: snapshot?.quick_think_llm,
+                  deep: snapshot?.deep_think_llm,
+                },
+              }}
+            >
+              Review setup
+              <Icon name="arrow" />
+            </Link>
+          </div>
+        </div>
+      ) : null}
+      {state.review ? (
+        <div className="report-state-banner warning">
+          <Icon name="warning" />
+          <div>
+            <strong>A human perspective is needed</strong>
+            <p>
+              The result is flagged as REVIEW. It has not been converted to Hold
+              or treated as a position.
+            </p>
+          </div>
+        </div>
+      ) : null}
+      {status === "cancelled" ? (
+        <div className="report-state-banner warning">
+          <Icon name="pause" />
+          <div>
+            <strong>Stopped before a final decision</strong>
+            <p>
+              Any sections and enabled checkpoint already written are retained;
+              no final decision is recorded. Recovery requires matching inputs,
+              including portfolio context.
+            </p>
+          </div>
+        </div>
+      ) : null}
+      {state.warnings.map((warning) => (
+        <div className="report-state-banner warning" key={warning}>
+          <Icon name="warning" />
+          <div>
+            <strong>Analysis completed; report needs attention</strong>
+            <p>{warning}</p>
+          </div>
+        </div>
+      ))}
+      {actionError ? (
+        <p className="field-error" role="alert">
+          {actionError}
+        </p>
+      ) : null}
+      {running ? (
+        <>
+          <section className="research-grid">
+            <ResearchCard
+              record={record}
+              href={`/runs/${runId}`}
+              running
+              onCancel={() => setConfirmCancel(true)}
+            />
+            <Pipeline
+              record={record}
+              agents={state.agents}
+              wallTimes={snapshot?.wall_times}
+            />
+          </section>
+          <div className="report-state-banner">
+            <Icon name="activity" />
+            <div>
+              <strong>Research continues in the background</strong>
+              <p>
+                You can return to the overview without cancelling this run. The
+                workspace accepts one active analysis or backtest at a time.
+                Stage counts describe completed work, not a time estimate.
+              </p>
+            </div>
+          </div>
+        </>
+      ) : null}
+      {running ? (
+        <section className="panel audit-card run-activity">
+          <div className="audit-section-head">
+            <div>
+              <p className="eyebrow">RUN ACTIVITY</p>
+              <h2>Follow the work as it happens.</h2>
+              <p>
+                Status: {status} · Connection: {state.connection} ·{" "}
+                {t(`live.phases.${state.phase}`, { defaultValue: state.phase })}
+              </p>
+            </div>
+            <label className="audit-scenario">
+              <span className="sr-only">Filter activity</span>
+              <select
+                value={filter}
+                onChange={(event) => setFilter(event.target.value)}
+              >
+                <option value="all">All events</option>
+                <option value="message">Messages</option>
+                <option value="tool_call">Tool calls</option>
+              </select>
+            </label>
+          </div>
+          <div className="activity-stats">
+            {[
+              ["Model calls", state.stats.llm_calls],
+              ["Tool calls", state.stats.tool_calls],
+              ["Input tokens", state.stats.tokens_in],
+              ["Output tokens", state.stats.tokens_out],
+              [
+                "Report stages",
+                state.stats.reports_completed == null
+                  ? undefined
+                  : `${state.stats.reports_completed} / ${state.stats.reports_total ?? "—"}`,
+              ],
+              [
+                "Elapsed",
+                state.stats.elapsed == null
+                  ? undefined
+                  : `${state.stats.elapsed.toFixed(1)}s`,
+              ],
+            ].map(([key, value]) => (
+              <div key={key}>
+                <small>{key}</small>
+                <strong>
+                  {value == null
+                    ? "—"
+                    : typeof value === "number"
+                      ? value.toLocaleString()
+                      : value}
+                </strong>
+              </div>
+            ))}
+          </div>
+          <div className="activity-events">
+            {events.length ? (
+              events.map((message) => (
+                <article key={message.id}>
+                  <span>
+                    <Icon name={message.type === "Tool" ? "sliders" : "file"} />
+                  </span>
+                  <div>
+                    <strong>
+                      {message.type === "Tool"
+                        ? "Tool call"
+                        : (message.type ?? "Message")}
+                    </strong>
+                    <p>{message.content}</p>
+                    <small>{message.timestamp}</small>
+                  </div>
+                  <span className="audit-badge">
+                    {message.type === "Tool" ? "Tool" : "Message"}
+                  </span>
+                </article>
+              ))
+            ) : (
+              <div className="empty-state">
+                <strong>
+                  {filter === "all"
+                    ? "Waiting for activity"
+                    : "No events of this type yet."}
+                </strong>
+                <p>Recorded activity will appear here as the run progresses.</p>
+              </div>
+            )}
+          </div>
+        </section>
+      ) : null}
+      {running ? (
+        Object.keys(state.sections).length ? (
+          <article className="panel document-panel">
+            <p className="eyebrow">AVAILABLE SECTIONS · LIVE REPORT</p>
+            {Object.entries(state.sections).map(([key, content]) => (
+              <section
+                className="document-section"
+                id={`live-section-${key}`}
+                key={key}
+              >
+                <p className="report-kicker">
+                  <Icon name="file" />
+                  {sectionLabel(key).toUpperCase()}
+                </p>
+                <Markdown>{content}</Markdown>
+              </section>
+            ))}
+          </article>
+        ) : null
+      ) : (
+        <ReportDocument record={record} prefix="live-section" />
+      )}
+      <Modal
+        open={confirmCancel}
+        title="Stop this analysis?"
+        onClose={() => setConfirmCancel(false)}
+      >
+        <p>
+          A provider call already in flight may finish first. The active slot
+          remains occupied until the worker exits. Available sections and
+          enabled checkpoints are retained.
+        </p>
+        <div className="modal-actions">
+          <button className="button" onClick={() => setConfirmCancel(false)}>
+            Keep researching
+          </button>
+          <button
+            className="button danger"
+            onClick={() => {
+              setConfirmCancel(false);
+              void handleCancel();
+            }}
+          >
+            Stop analysis
+          </button>
+        </div>
+      </Modal>
+    </>
   );
 }

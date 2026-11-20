@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from hashlib import sha256
 from pathlib import Path
@@ -34,6 +34,7 @@ class Artifact:
     review: bool
     updated_at: float
     title: str
+    metadata: dict = field(default_factory=dict)
 
     def to_item(self) -> dict:
         return {
@@ -46,7 +47,35 @@ class Artifact:
             "review": self.review,
             "updated_at": datetime.fromtimestamp(self.updated_at, tz=timezone.utc).isoformat(),
             "title": self.title,
+            **({"metadata": self.metadata} if self.metadata else {}),
         }
+
+
+def _presentation_metadata(value) -> dict:
+    """REQ-WEB-013: old runs remain empty; never infer or expose arbitrary config."""
+    if not isinstance(value, dict):
+        return {}
+    result = {}
+    for key in (
+        "llm_provider",
+        "quick_think_llm",
+        "deep_think_llm",
+        "output_language",
+        "asset_type",
+    ):
+        if isinstance(value.get(key), str) and len(value[key]) <= 256:
+            result[key] = value[key]
+    if isinstance(value.get("research_depth"), int) and not isinstance(
+        value["research_depth"], bool
+    ):
+        result["research_depth"] = value["research_depth"]
+    analysts = value.get("analysts")
+    if isinstance(analysts, list) and all(
+        isinstance(item, str) and item in {"market", "social", "news", "fundamentals"}
+        for item in analysts
+    ):
+        result["analysts"] = analysts
+    return result
 
 
 def _digest(path: Path, root: Path, prefix: str = "") -> str:
@@ -182,6 +211,7 @@ class ArtifactIndex:
                         review=review,
                         updated_at=_mtime(directory),
                         title=f"{ticker} {date}",
+                        metadata=_presentation_metadata(data.get("metadata")),
                     )
                 )
             except (OSError, ValueError):

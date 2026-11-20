@@ -54,3 +54,28 @@ The repository has no approved web framework or event transport. The user approv
 4. **WebSocket** — bidirectional framing and lifecycle complexity with no confirmed need.
 5. **Long polling** — higher overhead and less immediate updates.
 6. **A separate Node server** — adds a second runtime and deployment surface; the SPA is served by FastAPI instead.
+
+## Addendum — existing-core audit/comparison projections, 2026-11-20
+
+Scope follows the current user's request to fill the previously identified WebUI
+interface gaps (`web-projections-20261120-v1`). This retains FastAPI, same-origin
+loopback controls and the core/presentation dependency boundary; no dependency
+or transport change is selected. Final implementation acceptance remains pending.
+
+Add synchronous GET projections for bounded canonical audit families and the
+existing pure scripted comparison runner, as specified under W9 in the blueprint.
+File reads resolve an opaque indexed artifact ID into a fixed filename allowlist,
+check the configured result boundary, and use no-follow regular-file descriptor
+reads. Responses redact exact server secrets, credential-looking strings,
+absolute filesystem locations and noncanonical path mappings. No user-supplied
+path, executable input, arbitrary case upload or provider call is accepted.
+
+The comparison catalog is fixed by the existing core fixture factories. The
+service uses core replay, identity pairing and `to_dict()` rather than copying
+formulas. A different dynamic catalog case exercises real identity rejection;
+it cannot be turned into a successful comparison by the frontend. GET replay
+is stateless, bounded and network-free, so it neither needs a mutation endpoint
+nor weakens the existing CSRF protected-route set.
+
+References: REQ-WEB-008/009/010/013/023/024/027, NFR-AUD-001,
+NFR-CMP-001/002/003, INV-WEB-001/003/004/005/011/012/014 and INV-9/10.

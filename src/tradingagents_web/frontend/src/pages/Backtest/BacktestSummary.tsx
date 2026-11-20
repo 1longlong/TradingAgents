@@ -1,93 +1,128 @@
+// REQ-WEB-011, ADR-003: score displays use recorded counts and null semantics.
 import { useTranslation } from "react-i18next";
-
 import type { BacktestSummaryData } from "../../api/backtestClient";
-
-function percent(value: number | null): string {
-  if (value === null || value === undefined) return "n/a";
-  return `${Math.round(value * 100)}%`;
-}
-
-function alpha(value: number): string {
-  const formatted = (value * 100).toFixed(2);
-  return `${value >= 0 ? "+" : ""}${formatted}%`;
-}
-
-export function BacktestSummary({ summary }: { summary: BacktestSummaryData }) {
-  const { t } = useTranslation();
-  const byRating = summary.by_rating ?? {};
-
+import { Rating } from "../../components/Research";
+export function BacktestSummary({
+  summary,
+  description,
+}: {
+  summary: BacktestSummaryData;
+  description?: string;
+}) {
+  const { t } = useTranslation(),
+    scores = Object.entries(summary.by_rating ?? {}),
+    scale = Math.max(
+      0.025,
+      ...scores
+        .filter(([, score]) => score.count > 0)
+        .map(([, score]) => Math.abs(score.mean_alpha)),
+    );
+  const alpha = (value: number) =>
+    `${value >= 0 ? "+" : ""}${(value * 100).toFixed(2)}%`;
   return (
-    <section className="space-y-5 rounded-lg border border-slate-800 p-5">
-      <div className="grid grid-cols-2 gap-3 text-sm text-slate-200 sm:grid-cols-4">
-        <p>
-          {t("backtest.resolved")}: {summary.resolved}
-        </p>
-        <p>
-          {t("backtest.pending")}: {summary.pending}
-        </p>
-        <p>
-          {t("backtest.unscored")}: {summary.unscored}
-        </p>
-        <p>
-          {t("backtest.holding")}: {summary.holding}
-        </p>
+    <>
+      <div className="summary-metrics">
+        {[
+          [t("backtest.resolved"), summary.resolved],
+          [t("backtest.pending"), summary.pending],
+          [t("backtest.unscored"), summary.unscored],
+        ].map(([label, value]) => (
+          <div className="panel summary-metric" key={label}>
+            <small>{label}</small>
+            <strong>
+              {String(value).padStart(
+                label === t("backtest.resolved") ? 1 : 2,
+                "0",
+              )}
+            </strong>
+          </div>
+        ))}
       </div>
-
-      <div className="overflow-hidden rounded-md border border-slate-800">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-slate-900 text-xs uppercase tracking-wide text-slate-400">
+      {description ? <p className="inline-note">{description}</p> : null}
+      <section className="panel chart-panel">
+        <div className="chart-heading">
+          <div>
+            <p className="eyebrow">THE CONVICTION CHECK</p>
+            <h2>What followed each assessment?</h2>
+            <p>
+              {t("backtest.holding")}: {summary.holding || "Not recorded"}
+            </p>
+          </div>
+          <span className="chart-legend">Mean alpha</span>
+        </div>
+        <div
+          className="rating-bars"
+          role="img"
+          aria-label="Recorded mean alpha by rating; exact values follow in the table"
+        >
+          {scores.map(([rating, score]) => (
+            <div className="rating-bar" key={rating}>
+              <span>{rating}</span>
+              <div className="bar-track">
+                <div
+                  className={`bar-fill ${score.mean_alpha < 0 ? "negative" : ""}`}
+                  style={{
+                    width: `${score.count ? (Math.abs(score.mean_alpha) / scale) * 100 : 0}%`,
+                  }}
+                />
+              </div>
+              <b>{score.count ? alpha(score.mean_alpha) : "—"}</b>
+            </div>
+          ))}
+        </div>
+        <table>
+          <caption className="sr-only">Recorded backtest results</caption>
+          <thead>
             <tr>
-              <th className="px-3 py-2">{t("backtest.rating")}</th>
-              <th className="px-3 py-2">{t("backtest.count")}</th>
-              <th className="px-3 py-2">{t("backtest.hitRate")}</th>
-              <th className="px-3 py-2">{t("backtest.meanAlpha")}</th>
+              <th>{t("backtest.rating")}</th>
+              <th>{t("backtest.count")}</th>
+              <th>{t("backtest.hitRate")}</th>
+              <th>{t("backtest.meanAlpha")}</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800">
-            {Object.entries(byRating).map(([rating, score]) => (
+          <tbody>
+            {scores.map(([rating, score]) => (
               <tr key={rating}>
-                <td className="px-3 py-2 font-mono text-slate-200">{rating}</td>
-                <td className="px-3 py-2 text-slate-300">{score.count}</td>
-                <td className="px-3 py-2 text-slate-300">{percent(score.hit_rate)}</td>
-                <td className="px-3 py-2 text-slate-300">{alpha(score.mean_alpha)}</td>
+                <td>
+                  <Rating value={rating} />
+                </td>
+                <td>{score.count}</td>
+                <td>
+                  {!score.count
+                    ? "—"
+                    : rating === "Hold" || score.hit_rate == null
+                      ? "No direction claimed"
+                      : `${Math.round(score.hit_rate * 100)}%`}
+                </td>
+                <td>{score.count ? alpha(score.mean_alpha) : "—"}</td>
               </tr>
             ))}
           </tbody>
         </table>
-      </div>
-
-      {summary.failures?.length ? (
-        <div>
-          <h3 className="text-sm font-medium text-amber-200">
-            {t("backtest.failures")}
-          </h3>
-          <ul className="mt-2 space-y-1 text-sm text-slate-300">
-            {summary.failures.map(([ticker, date, reason], index) => (
-              <li key={`${ticker}-${date}-${index}`}>
-                <span className="font-mono text-slate-200">
-                  {ticker} {date}
-                </span>
-                : {reason}
+        <p className="inline-note">
+          Mean alpha is relative to the configured benchmark over the recorded
+          holding window. Hold has no directional hit rate. Zero-count groups
+          have no score. A historical result is not a promise of future returns.
+        </p>
+      </section>
+      {summary.failures?.length || summary.settlement_failures?.length ? (
+        <section className="panel chart-panel">
+          <p className="eyebrow">FAILURES</p>
+          <h2>Unfinished cells stay visible</h2>
+          <ul className="gap-list">
+            {summary.failures?.map(([ticker, date, reason], index) => (
+              <li key={`cell-${index}`}>
+                {ticker} {date}: {reason}
+              </li>
+            ))}
+            {summary.settlement_failures?.map(([ticker, reason], index) => (
+              <li key={`settlement-${index}`}>
+                {ticker} settlement: {reason}
               </li>
             ))}
           </ul>
-        </div>
+        </section>
       ) : null}
-
-      {summary.settlement_failures?.length ? (
-        <div>
-          <h3 className="text-sm font-medium text-amber-200">
-            {t("backtest.settlementFailures")}
-          </h3>
-          <ul className="mt-2 space-y-1 text-sm text-slate-300">
-            {summary.settlement_failures.map(([ticker, reason], index) => (
-              <li key={`${ticker}-${index}`}>
-                <span className="font-mono text-slate-200">{ticker}</span>: {reason}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-    </section>
+    </>
   );
 }

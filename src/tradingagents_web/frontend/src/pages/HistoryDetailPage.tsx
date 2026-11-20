@@ -1,104 +1,266 @@
+// REQ-WEB-008/009, ADR-003, INV-WEB-014: recorded sections and available downloads only.
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
-import { useTranslation } from "react-i18next";
 
 import { downloadUrl, getHistoryDetail } from "../api/client";
-import { LanguageSwitch } from "../components/LanguageSwitch";
-import { Markdown } from "../components/Markdown";
+import { Icon } from "../components/Icon";
+import { ReportDocument } from "../components/Research";
+import { formatDate, ratingClass } from "../utils/workspace";
 
 export function HistoryDetailPage() {
-  const { t } = useTranslation();
   const { artifactId = "" } = useParams();
   const detail = useQuery({
-    queryKey: ["history", artifactId],
+    queryKey: ["history", "detail", artifactId],
     queryFn: () => getHistoryDetail(artifactId),
     enabled: Boolean(artifactId),
   });
 
-  return (
-    <main className="mx-auto max-w-6xl px-6 py-10">
-      <header className="mb-8 flex items-start justify-between gap-4">
-        <div>
-          <Link className="text-sm text-cyan-300 hover:text-cyan-200" to="/history">
-            ← {t("detail.back")}
-          </Link>
-          <h1 className="mt-3 text-3xl font-semibold text-slate-100">
-            {detail.data?.ticker ?? t("detail.title")}
-          </h1>
-          {detail.data ? (
-            <p className="mt-2 text-sm text-slate-400">
-              {detail.data.date ?? "—"} · {detail.data.source} · {detail.data.status}
+  if (detail.isLoading) {
+    return <div className="panel empty-state">Loading report...</div>;
+  }
+  if (detail.isError || !detail.data) {
+    return (
+      <>
+        <section className="page-header">
+          <div>
+            <p className="eyebrow">RESEARCH LIBRARY</p>
+            <h1>Report unavailable</h1>
+            <p className="page-description">
+              This artifact is no longer available.
             </p>
+          </div>
+          <Link className="button" to="/history">
+            Back to history
+          </Link>
+        </section>
+        <div className="panel empty-state">
+          <Icon name="file" />
+          <strong>Artifact not found</strong>
+          <p>
+            {detail.error instanceof Error
+              ? detail.error.message
+              : "Request failed."}
+          </p>
+        </div>
+      </>
+    );
+  }
+
+  const data = detail.data;
+  const artifacts = data.artifacts ?? [];
+  const complete = artifacts.some((item) => item.kind === "complete");
+  const archive = artifacts.some((item) => item.kind === "archive");
+  const log = artifacts.some((item) => item.kind === "log");
+  const isBacktest = data.source === "backtest";
+  const isDecision = data.source === "decision";
+
+  return (
+    <>
+      <section className="page-header">
+        <div>
+          <p className="eyebrow">RESEARCH / {data.ticker}</p>
+          <h1>{data.ticker} analysis</h1>
+          <p className="page-description">
+            A collective review of {data.ticker}.
+          </p>
+        </div>
+        <div className="page-header-actions">
+          <Link className="button ghost" to="/history">
+            <Icon name="clock" />
+            History
+          </Link>
+          <Link
+            className="button ghost"
+            to={`/audit?artifact_id=${data.artifact_id}`}
+          >
+            <Icon name="shield" />
+            Research audit
+          </Link>
+          {complete ? (
+            <a
+              className="button"
+              href={downloadUrl(data.artifact_id, "complete")}
+            >
+              <Icon name="download" />
+              Export report
+            </a>
+          ) : null}
+          {archive ? (
+            <a
+              className="button"
+              href={downloadUrl(data.artifact_id, "archive")}
+            >
+              <Icon name="download" />
+              Archive
+            </a>
+          ) : null}
+          {log ? (
+            <a className="button" href={downloadUrl(data.artifact_id, "log")}>
+              <Icon name="download" />
+              Decision log
+            </a>
           ) : null}
         </div>
-        <LanguageSwitch />
-      </header>
+      </section>
 
-      {detail.isLoading ? <p className="text-slate-400">{t("history.loading")}</p> : null}
-      {detail.isError ? <p className="text-red-300">{t("detail.missing")}</p> : null}
-
-      {detail.data ? (
-        <section className="space-y-6">
-          <div className="flex flex-wrap gap-3">
-            {detail.data.artifacts?.some((item) => item.kind === "complete") ? (
-              <a
-                className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
-                href={downloadUrl(detail.data.artifact_id, "complete")}
-              >
-                {t("detail.complete")}
-              </a>
-            ) : null}
-            {detail.data.artifacts?.some((item) => item.kind === "archive") ? (
-              <a
-                className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
-                href={downloadUrl(detail.data.artifact_id, "archive")}
-              >
-                {t("detail.archive")}
-              </a>
-            ) : null}
+      {data.review || data.rating === "REVIEW" ? (
+        <div className="report-state-banner warning">
+          <Icon name="warning" />
+          <div>
+            <strong>A human perspective is needed</strong>
+            <p>
+              The result is flagged as REVIEW. It has not been converted to Hold
+              or treated as a position.
+            </p>
           </div>
-
-          {detail.data.sections
-            ? Object.entries(detail.data.sections).map(([section, content]) => (
-                <article key={section} className="rounded-lg border border-slate-800 p-5">
-                  <h2 className="mb-3 font-mono text-xs uppercase tracking-wide text-cyan-300">
-                    {section}
-                  </h2>
-                  <Markdown>{content}</Markdown>
-                </article>
-              ))
-            : null}
-
-          {detail.data.summary ? (
-            <article className="rounded-lg border border-slate-800 p-5">
-              <h2 className="mb-3 text-sm uppercase tracking-wide text-cyan-300">
-                {t("detail.title")}
-              </h2>
-              <pre className="overflow-auto text-xs text-slate-300">
-                {JSON.stringify(detail.data.summary, null, 2)}
-              </pre>
-            </article>
-          ) : null}
-
-          {detail.data.entries ? (
-            <article className="rounded-lg border border-slate-800 p-5">
-              <h2 className="mb-3 text-sm uppercase tracking-wide text-cyan-300">
-                {t("detail.title")}
-              </h2>
-              <ul className="space-y-3 text-sm text-slate-300">
-                {detail.data.entries.map((entry, index) => (
-                  <li key={index} className="border-b border-slate-800 pb-3">
-                    <span className="font-mono text-slate-200">
-                      {String(entry.ticker ?? "")} {String(entry.date ?? "")}
-                    </span>
-                    <span className="ml-3 text-slate-400">{String(entry.rating ?? "")}</span>
-                  </li>
-                ))}
-              </ul>
-            </article>
-          ) : null}
-        </section>
+        </div>
       ) : null}
-    </main>
+
+      {data.status === "partial" ? (
+        <div className="report-state-banner">
+          <Icon name="file" />
+          <div>
+            <strong>Partial saved report</strong>
+            <p>
+              Only available sections are listed. No final assessment or
+              complete-report download is assumed.
+            </p>
+          </div>
+        </div>
+      ) : null}
+      {data.status === "cancelled" ? (
+        <div className="report-state-banner warning">
+          <Icon name="pause" />
+          <div>
+            <strong>Stopped before a final decision</strong>
+            <p>
+              Available sections are retained; no final decision is recorded.
+            </p>
+          </div>
+        </div>
+      ) : null}
+      {isBacktest ? (
+        <BacktestArtifact summary={data.summary ?? {}} />
+      ) : isDecision ? (
+        <DecisionEntries entries={data.entries ?? []} />
+      ) : (
+        <ReportDocument record={{ ...data, metadata: data.metadata }} />
+      )}
+    </>
+  );
+}
+
+function BacktestArtifact({ summary }: { summary: Record<string, unknown> }) {
+  const byRating = (summary.by_rating ?? {}) as Record<
+    string,
+    { count: number; hit_rate: number | null; mean_alpha: number }
+  >;
+  const failures = (summary.failures ?? []) as Array<[string, string, string]>;
+  const settlement = (summary.settlement_failures ?? []) as Array<
+    [string, string]
+  >;
+  return (
+    <div className="panel chart-panel">
+      <div className="chart-heading">
+        <div>
+          <p className="eyebrow">BACKTEST RESULT</p>
+          <h2>Recorded summary</h2>
+          <p>
+            Resolved {String(summary.resolved ?? "—")} · Pending{" "}
+            {String(summary.pending ?? "—")} · Unscored{" "}
+            {String(summary.unscored ?? "—")} · Holding{" "}
+            {String(summary.holding ?? "—")}
+          </p>
+        </div>
+      </div>
+      <div className="rating-bars">
+        {Object.entries(byRating).map(([rating, score]) => (
+          <div className="rating-bar" key={rating}>
+            <span>{rating}</span>
+            <div className="bar-track">
+              <div
+                className={`bar-fill ${score.mean_alpha < 0 ? "negative" : ""}`}
+                style={{
+                  width: `${Math.min(100, Math.abs(score.mean_alpha) * 100)}%`,
+                }}
+              />
+            </div>
+            <b>{`${score.mean_alpha >= 0 ? "+" : ""}${(score.mean_alpha * 100).toFixed(2)}%`}</b>
+          </div>
+        ))}
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Assessment</th>
+            <th>Decisions</th>
+            <th>Hit rate</th>
+            <th>Mean alpha</th>
+          </tr>
+        </thead>
+        <tbody>
+          {Object.entries(byRating).map(([rating, score]) => (
+            <tr key={rating}>
+              <td>{rating}</td>
+              <td>{score.count}</td>
+              <td>
+                {score.hit_rate == null
+                  ? "No direction claimed"
+                  : `${Math.round(score.hit_rate * 100)}%`}
+              </td>
+              <td>{`${score.mean_alpha >= 0 ? "+" : ""}${(score.mean_alpha * 100).toFixed(2)}%`}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {failures.length ? (
+        <p className="inline-note">
+          Cell failures: {failures.length}. Settlement failures:{" "}
+          {settlement.length}.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function DecisionEntries({
+  entries,
+}: {
+  entries: Array<Record<string, unknown>>;
+}) {
+  if (!entries.length) {
+    return (
+      <div className="panel empty-state">
+        <Icon name="book" />
+        <strong>No decision entries</strong>
+        <p>The decision log is empty.</p>
+      </div>
+    );
+  }
+  return (
+    <section className="journal-list">
+      {entries.map((entry, index) => {
+        const rating = String(entry.rating ?? "—");
+        return (
+          <article
+            className="panel journal-entry"
+            key={`${entry.ticker}-${entry.date}-${index}`}
+          >
+            <span className="company-logo">
+              {String(entry.ticker ?? "?").slice(0, 1)}
+            </span>
+            <div>
+              <h2>{String(entry.ticker ?? "")}</h2>
+              <p>{String(entry.decision ?? "").slice(0, 260)}</p>
+              <span className="eyebrow">
+                {formatDate(String(entry.date ?? ""))} ·{" "}
+                {entry.pending ? "PENDING OUTCOME" : "RESOLVED"}
+              </span>
+            </div>
+            <span className={ratingClass(rating)}>{rating}</span>
+          </article>
+        );
+      })}
+    </section>
   );
 }

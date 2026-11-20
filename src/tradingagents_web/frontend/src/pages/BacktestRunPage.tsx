@@ -1,16 +1,14 @@
 import { useQuery } from "@tanstack/react-query";
-import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
 
 import { downloadUrl } from "../api/client";
 import { getBacktest } from "../api/backtestClient";
-import { LanguageSwitch } from "../components/LanguageSwitch";
-import { BacktestSummary } from "./Backtest/BacktestSummary";
+import { Icon } from "../components/Icon";
+import { formatDate, ratingClass } from "../utils/workspace";
 
 const TERMINAL = new Set(["completed", "failed"]);
 
 export function BacktestRunPage() {
-  const { t } = useTranslation();
   const { runId = "" } = useParams();
   const query = useQuery({
     queryKey: ["backtest", runId],
@@ -19,58 +17,165 @@ export function BacktestRunPage() {
     refetchInterval: (current) =>
       current.state.data && TERMINAL.has(current.state.data.status) ? false : 1000,
   });
-
   const snapshot = query.data;
+  const summary = snapshot?.summary;
+  const byRating = summary?.by_rating ?? {};
+  const failures = summary?.failures ?? [];
+  const settlement = summary?.settlement_failures ?? [];
 
   return (
-    <main className="mx-auto max-w-4xl px-6 py-10">
-      <header className="mb-8 flex items-start justify-between gap-4">
+    <>
+      <section className="page-header">
         <div>
-          <Link className="text-sm text-cyan-300 hover:text-cyan-200" to="/backtest">
-            ← {t("backtest.title")}
-          </Link>
-          <h1 className="mt-3 text-3xl font-semibold text-slate-100">
-            {t("backtest.title")}
-          </h1>
-          <p className="mt-2 font-mono text-xs text-slate-400">
-            {t("live.runId")}: {runId}
-            {snapshot ? ` · ${t("live.status")}: ${snapshot.status}` : null}
+          <p className="eyebrow">BACKTEST / {snapshot?.status?.toUpperCase() ?? "LOADING"}</p>
+          <h1>{snapshot?.tickers?.join(", ") ?? runId}</h1>
+          <p className="page-description">
+            Run ID: {runId} · {formatDate(snapshot?.start)} – {formatDate(snapshot?.end)}
           </p>
         </div>
-        <LanguageSwitch />
-      </header>
+        <div className="page-header-actions">
+          <Link className="button ghost" to="/backtest">
+            <Icon name="sliders" />
+            Backtesting
+          </Link>
+          {summary?.log_artifact_id ? (
+            <a className="button" href={downloadUrl(summary.log_artifact_id, "log")}>
+              <Icon name="download" />
+              Download log
+            </a>
+          ) : null}
+        </div>
+      </section>
 
       {query.isLoading ? (
-        <p className="text-slate-400">{t("backtest.running")}</p>
+        <div className="panel empty-state">Loading backtest...</div>
       ) : query.isError ? (
-        <p className="text-red-300">{t("detail.missing")}</p>
+        <div className="panel empty-state">
+          <Icon name="warning" />
+          <strong>Backtest unavailable</strong>
+          <p>{query.error instanceof Error ? query.error.message : "Request failed."}</p>
+        </div>
       ) : null}
 
       {snapshot?.status === "running" || snapshot?.status === "starting" ? (
-        <section className="mb-6 rounded-md border border-slate-700 px-4 py-3 text-sm text-slate-300">
-          <p>{t("backtest.running")}</p>
-          <p className="mt-1 text-slate-400">{t("backtest.noCancel")}</p>
-        </section>
+        <div className="report-state-banner">
+          <Icon name="activity" />
+          <div>
+            <strong>Sweep in progress</strong>
+            <p>
+              Expected cells: {snapshot.expected_cells ?? "—"}. The sweep runs to
+              completion; cancellation is not available.
+            </p>
+          </div>
+        </div>
       ) : null}
 
       {snapshot?.error ? (
-        <p className="mb-6 rounded-md border border-red-500/50 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-          {String(snapshot.error.message ?? t("live.failed"))}
-        </p>
-      ) : null}
-
-      {snapshot?.summary ? <BacktestSummary summary={snapshot.summary} /> : null}
-
-      {snapshot?.summary?.log_artifact_id ? (
-        <div className="mt-6">
-          <a
-            className="rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
-            href={downloadUrl(snapshot.summary.log_artifact_id, "log")}
-          >
-            {t("backtest.log")}
-          </a>
+        <div className="report-state-banner warning">
+          <Icon name="warning" />
+          <div>
+            <strong>Backtest failed</strong>
+            <p>{String(snapshot.error.message ?? "Check the server log.")}</p>
+          </div>
         </div>
       ) : null}
-    </main>
+
+      {summary ? (
+        <>
+          <div className="summary-metrics">
+            <div className="panel summary-metric">
+              <small>Resolved decisions</small>
+              <strong>{summary.resolved}</strong>
+            </div>
+            <div className="panel summary-metric">
+              <small>Pending outcomes</small>
+              <strong>{summary.pending}</strong>
+            </div>
+            <div className="panel summary-metric">
+              <small>Unscored decisions</small>
+              <strong>{summary.unscored}</strong>
+            </div>
+          </div>
+
+          <section className="panel chart-panel">
+            <div className="chart-heading">
+              <div>
+                <p className="eyebrow">THE CONVICTION CHECK</p>
+                <h2>What followed each assessment?</h2>
+                <p>
+                  Cells run {snapshot?.cells_run ?? "—"} · Skipped{" "}
+                  {snapshot?.skipped ?? "—"} · Holding {summary.holding || "—"}
+                </p>
+              </div>
+              <span className="chart-legend">Mean alpha</span>
+            </div>
+            <div className="rating-bars">
+              {Object.entries(byRating).map(([rating, score]) => (
+                <div className="rating-bar" key={rating}>
+                  <span>{rating}</span>
+                  <div className="bar-track">
+                    <div
+                      className={`bar-fill ${score.mean_alpha < 0 ? "negative" : ""}`}
+                      style={{ width: `${Math.min(100, Math.abs(score.mean_alpha) * 100)}%` }}
+                    />
+                  </div>
+                  <b>{`${score.mean_alpha >= 0 ? "+" : ""}${(score.mean_alpha * 100).toFixed(2)}%`}</b>
+                </div>
+              ))}
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Assessment</th>
+                  <th>Decisions</th>
+                  <th>Hit rate</th>
+                  <th>Mean alpha</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(byRating).map(([rating, score]) => (
+                  <tr key={rating}>
+                    <td>
+                      <span className={ratingClass(rating)}>{rating}</span>
+                    </td>
+                    <td>{score.count}</td>
+                    <td>
+                      {score.hit_rate == null
+                        ? "No direction claimed"
+                        : `${Math.round(score.hit_rate * 100)}%`}
+                    </td>
+                    <td>{`${score.mean_alpha >= 0 ? "+" : ""}${(score.mean_alpha * 100).toFixed(2)}%`}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="inline-note">
+              Hold has no directional hit rate. Zero-count groups have no score.
+              Mean alpha is relative to the configured benchmark over the
+              recorded holding window.
+            </p>
+          </section>
+
+          {failures.length || settlement.length ? (
+            <section className="panel chart-panel">
+              <p className="eyebrow">FAILURES</p>
+              <h2>Unfinished cells stay visible</h2>
+              <ul className="gap-list">
+                {failures.map(([ticker, date, reason], index) => (
+                  <li key={`cell-${index}`}>
+                    {ticker} {date}: {reason}
+                  </li>
+                ))}
+                {settlement.map(([ticker, reason], index) => (
+                  <li key={`settle-${index}`}>
+                    {ticker} settlement: {reason}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+        </>
+      ) : null}
+    </>
   );
 }

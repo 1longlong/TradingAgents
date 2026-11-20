@@ -330,3 +330,35 @@ REQ-WEB-002/005 and INV-WEB-003/010 map to `test/offline/test_web_analysis_flow.
 | Reject duplicate identities, invalid dependencies and historical evidence upgrades | `scripts/validate/validate_requirements.py::validate_canonical_semantics`, also called from `test/ci_gates.py::validate_registry` | Existing positive/negative CI-gate tests plus unified-registry tests on real and forced fallback paths |
 | Parse the retained V1 policy without damaging glob/URL strings; NFR-SEC-001 | `scripts/validate/validate_requirements.py::parse_jsonc` | Quoted globs, URLs, escaped quotes and unterminated-comment regression |
 | Missing YAML support and duplicate fields fail closed; NFR-SEC-001, INV-1 | `load_registry_yaml` and the governance CLI | Duplicate YAML-field and missing-dependency regressions; neither path may report unchecked data as passing |
+
+## Workspace visual-parity follow-up — 2026-11-20
+
+These rows describe frontend presentation over existing contracts. They do not
+upgrade requirement status or approve new HTTP projections. Paths below are
+relative to `src/tradingagents_web/frontend/`; ADR-003 is the frontend-stack ADR.
+
+| Requirement / invariant | Implementation | Verification |
+| --- | --- | --- |
+| REQ-WEB-001/003/004/013; INV-WEB-006/014 | `src/pages/NewAnalysisPage.tsx`, `src/app/App.tsx`, `src/api/runClient.ts`: three-step sheet, explicit assets, configured models/locks/thinking, private drafts and server portfolio validation | `tests/analysis-flow.test.tsx`; `e2e/visual-parity.spec.ts` sheet geometry, invalid input/endpoint, crypto and privacy cases |
+| REQ-WEB-002/005/006/007; INV-WEB-009/010/014 | `src/pages/LiveRunPage.tsx`, `src/components/Research.tsx`, `src/api/runClient.ts`: recorded progress/events, confirmation, cancellation, active conflicts and terminal report | `e2e/run.spec.ts`; existing store tests and backend run/event suites |
+| REQ-WEB-008/009/010; INV-WEB-011/014 | `src/api/client.ts`, `src/components/HistoryTable.tsx`, `src/pages/OverviewPage.tsx`, `src/pages/HistoryPage.tsx`, `src/pages/HistoryDetailPage.tsx`, `src/utils/workspace.ts`: all-page history, reference tables, actual sections and downloads | `tests/history-parity.test.ts`; `e2e/visual-parity.spec.ts` missing complete artifact, archive and Markdown downloads |
+| REQ-WEB-010; INV-WEB-011/012 | `src/pages/JournalPage.tsx`, `src/components/Modal.tsx`: independent decision/outcome/reflection dialog with sanitized content | `e2e/visual-parity.spec.ts` journal detail; existing Markdown sanitization suite |
+| REQ-WEB-006/011/012/013; INV-WEB-014 | `src/pages/BacktestPage.tsx`, `src/pages/Backtest/BacktestSummary.tsx`, `src/api/backtestClient.ts`, `src/app/AppShell.tsx`, `src/components/Announcements.tsx`: actual summary/null scores, conflict, notes and idle-only clear confirmation | `tests/backtest-summary.test.tsx`; backtest/announcement E2E; settings negative confirmation case |
+| REQ-WEB-021; INV-WEB-014 | `src/styles/index.css`, reference `src/styles/workspace.css`, `src/components/Research.tsx`, `src/components/HistoryTable.tsx`: shared geometry/themes without conflicting preflight | `e2e/visual-parity.spec.ts` 0.75px geometry and both-theme responsive checks |
+| REQ-WEB-027; INV-WEB-001/014 | `src/pages/GapPage.tsx`: audit/comparison lack an approved read projection; no mock results or new routes | `e2e/visual-parity.spec.ts` unavailable surfaces; unchanged backend/API scope |
+
+
+## Existing-core HTTP projections — 2026-11-20
+
+Scope: `web-projections-20261120-v1`; ADR-002/003. These implementation records
+supersede the earlier audit/comparison interface-gap status without upgrading
+requirements or claiming final human acceptance.
+
+| Requirement / invariant | Modules and functions | Verification |
+| --- | --- | --- |
+| REQ-WEB-008/009/024, NFR-AUD-001; INV-WEB-003/004/005/011/012 | `artifacts/audit.py`: public-data redaction, no-follow canonical reads, strict JSON parsing, bounded bundles/downloads and identity/cutoff projection; `api/audit.py`: indexed history/run views and family previews/downloads | `test/offline/test_web_audit.py`: complete/legacy/partial/invalid/oversized/UTF-8/nonfinite/duplicate data, symlink escapes, opaque IDs, credentials/URL/path redaction, inconsistent identity/verdict and saved-date rejection |
+| REQ-WEB-002/009/010/013; INV-WEB-001/003/011/014 | `runtime/artifacts_writer.py`: run-local core audit copies, allowlisted lifecycle/origin context and effective configuration; `runtime/coordinator.py`, `api/runs.py`: writer association and language snapshot; `artifacts/index.py`, `readers.py`, `api/history.py`: optional safe presentation metadata | Same audit suite: real completed fake-run association, unavailable active-run families, actual runtime lifecycle, metadata/context privacy; previous run/history/security suites |
+| NFR-CMP-001/002/003; INV-9, INV-WEB-001/014 | `api/comparisons.py`: fixed core factories, catalog, core replay/pairing, bounded JSON projection/download; `app.py`: router registration | `test/offline/test_web_comparisons.py`: exact D/E/F/G outcomes, pending rubric, unknown/mismatched identities, bounded output and no writes/active slot use |
+| REQ-WEB-008/009/010/013, NFR-CMP-001; INV-WEB-011/012/014 | Frontend `api/auditClient.ts`, `pages/AuditPage.tsx` (including overview projection), `ComparisonPage.tsx`, `OverviewPage.tsx`, `HistoryDetailPage.tsx`, `LiveRunPage.tsx`, `components/HistoryTable.tsx`, API types and route registration | `tests/audit-comparison.test.tsx`, `e2e/audit-comparison.spec.ts`: unknown telemetry, evidence filter/detail, disagreement, available-only preview/download, actual replay, G not early stop, mismatched pairing/export refusal; previous frontend suites |
+
+All backend module paths above are relative to `src/tradingagents_web/`.

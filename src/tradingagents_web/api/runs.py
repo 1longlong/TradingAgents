@@ -108,6 +108,7 @@ def _validated_payload(request: Request, req: RunRequest) -> dict:
         "quick_think_llm": config["quick_think_llm"],
         "deep_think_llm": config["deep_think_llm"],
         "checkpoint_enabled": config["checkpoint_enabled"],
+        "output_language": config["output_language"],
         "portfolio": portfolio,
         "portfolio_fingerprint": fingerprint,
         "config": config,

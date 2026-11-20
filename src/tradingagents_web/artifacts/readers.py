@@ -31,8 +31,7 @@ def _run_artifacts(path: Path) -> list[dict]:
     reports = path / "reports"
     if reports.is_dir():
         artifacts.extend(
-            {"kind": "section", "section": file.stem}
-            for file in sorted(reports.glob("*.md"))
+            {"kind": "section", "section": file.stem} for file in sorted(reports.glob("*.md"))
         )
     if (path / "complete_report.md").is_file():
         artifacts.append({"kind": "complete"})
@@ -70,6 +69,7 @@ def _saved_artifacts(path: Path) -> list[dict]:
 
 def _metadata(artifact: Artifact) -> dict:
     return {
+        **artifact.metadata,
         "ticker": artifact.ticker,
         "date": artifact.date,
         "source": artifact.source,
@@ -139,9 +139,7 @@ def backtest_detail(artifact: Artifact) -> dict:
 
 
 def decision_detail(artifact: Artifact) -> dict:
-    entries = TradingMemoryLog(
-        {"memory_log_path": str(artifact.path)}
-    ).load_entries()
+    entries = TradingMemoryLog({"memory_log_path": str(artifact.path)}).load_entries()
     return {
         "artifact_id": artifact.artifact_id,
         "source": artifact.source,

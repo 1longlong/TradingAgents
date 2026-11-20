@@ -1683,3 +1683,158 @@ No choice has been recorded as approved; the files remain unmerged.
   fresh logbook entry for its exact command and environment.
 - No real provider API, live benchmark, new dependency, push or remote CI run is
   claimed. `.agents/` and `demo/` remain local/untracked and outside the merge.
+
+## Demo-based workspace UI replication — 2026-11-20
+
+- User instruction: use `demo/` as the visual and interaction baseline, copy its layout/colour/type/spacing into `src/tradingagents_web/frontend/`, keep `demo/` unchanged, connect only real backend capabilities, and do not modify backend APIs, `src/tradingagents/`, or `src/cli/` without approval.
+- Implemented a production React shell matching the demo: persistent sidebar, topbar search/announcements/settings, paper/dark themes, responsive mobile navigation, keyboard shortcuts, and the demo's warm-paper/pine-green visual language.
+- Rebuilt Overview, Analysis history, Report detail, Backtest, Live Run, New Analysis, Decision journal, and announcement surfaces against existing APIs. Removed the demo preview-state selector and all sample report/backtest/progress fixtures from the production path.
+- Added `src/styles/workspace.css` copied from `demo/styles.css`; no redesign of colours, type, spacing, or component shapes.
+- Real data connections: `/api/history`, `/api/history/{id}`, `/api/backtests`, `/api/runs`, `/api/runs/{id}`, `/api/runs/{id}/events`, `/api/config`, `/api/config/models`, `/api/portfolio/validate`, `/api/checkpoints/clear`, and `/api/announcements`.
+- Removed fixture-only company names/sectors and invented audit/comparison data. Available history metadata renders `Not recorded` when the backend does not supply it.
+- Research audit and Policy comparison remain explicit interface-gap pages. The core capabilities exist but no WebUI read projection is exposed; the pages list the minimum required endpoints and do not render sample audit/comparison data.
+- Frontend file-upload control reads portfolio JSON locally and fills the existing validation/submit path; no server-path upload capability was added.
+- E2E fake server now sets a dummy `OPENAI_API_KEY` so its fixture secret is exercised by the real response-redaction layer instead of appearing in a screenshot.
+- Verification:
+  - WebUI backend suite: **165 passed**.
+  - Frontend Vitest: **30 passed (9 files)**.
+  - Chromium Playwright E2E: **6 passed**.
+  - Offline regression: **2624 passed, 1 skipped, 88 subtests passed**.
+  - `npm run typecheck`, `npm run lint`, `npm run build`: **PASS**; `npm audit`: **0 vulnerabilities**.
+  - `ci_gates schema`: **PASS**. `ci_gates structure`: **BLOCKED** by the untracked `demo/` directory (`Unexpected obsolete source directory: demo`), which the user instructed to keep unchanged.
+  - `mypy src/tradingagents_web`: **1 pre-existing error** in `runtime/graph_runner.py` (`UsageCapture` has no attribute `debate_config`); not introduced by this UI change and not repaired in scope.
+  - Full suite including live tests: **1 failed** (`test_deepseek_live.py` attempted a network call while sockets were disabled). Reported as a live/network execution condition, not a UI regression.
+- Deviations from the demo: the 8-step analysis panel preserves the existing tested CLI-parity flow instead of the demo's 3-step sample sheet; audit/comparison use explicit gap pages; fixture-only company metadata and sample charts are not fabricated.
+- No backend route, core module, CLI module, dependency, commit, push, merge, or deployment change was made.
+
+## Workspace visual-parity correction — 2026-11-20
+
+- Scope source: the current user's direct instruction to inspect the integrated
+  frontend against `demo/` and correct supported visual/interaction differences.
+  This continues the preceding UI migration, not a new backend feature or final
+  human acceptance. Existing user changes are retained.
+- Plan and verification scope: frontend components, routes, styles, API clients,
+  frontend tests, and these process/trace records. Compare matching viewport
+  geometry and screenshots; exercise real local APIs through temporary fake
+  runners; retain negative input, missing-artifact and privacy checks. No new
+  dependency, backend route, core/CLI behavior, deployment or commit.
+- Replaced the eight-step standalone form with the reference three-step modal
+  sheet over the existing workspace. Added explicit stock/crypto selection,
+  supported endpoint/thinking inputs, environment locks, local portfolio file
+  selection, server validation, safe drafts and active-task handling.
+- Matched the brand mark, header, reference table columns/filters, report cards,
+  team markers, pipeline, running activity filter/counters, completed report,
+  backtest form/results, decision/outcome/reflection dialog and settings flows.
+  Tailwind theme/utilities remain; its conflicting preflight is excluded.
+- History pagination is fully consumed before totals/filter/sort. A combined
+  report is a fallback instead of a duplicate of individual sections. Missing
+  ratings/counters stay absent; downloads depend on actual artifact availability.
+  Read-only history metadata not exposed by the API remains `Not recorded`.
+- The reference's sample content, simulated timings, preview switches and mock
+  audit/comparison results are not production features. Audit/comparison remain
+  unavailable because the current WebUI lacks their projections; no new routes
+  were added. Existing translation catalogs are retained; the reference
+  presentation and newly introduced text are English.
+- Fresh verification: frontend **33 passed**, Chromium **10 passed**, lint,
+  typecheck and production build **PASS**. The browser checks include desktop
+  shell/sheet geometry within **0.75 CSS px**, all three steps, API completion and
+  cancellation, backtests, downloads, journal dialogs, settings, privacy, both
+  themes at 375/768/1024/1512px, landscape and reduced motion.
+- Full network-isolated offline suite: **2624 passed, 1 skipped, 88 subtests**,
+  52 warnings, 17.04 s. Optional `langchain_aws` is absent. Schema and permissions
+  gates pass. Structure remains blocked by the intentionally retained `demo/`;
+  no directory was deleted and no governance rule was weakened.
+- Initial frontend tests failed on the old step selectors and duplicated chart
+  labels. Initial browser runs also exposed obsolete selectors, animation during
+  geometry measurement and selection of newly created records instead of the
+  fixed missing-report fixture. These failures were corrected with explicit
+  reference interactions, table-scoped assertions, reduced motion and stable
+  fixture selection. Final checks above are actual reruns, not waived failures.
+- Port 8000 was already occupied. Tests used an independently created temporary
+  fixture server on 127.0.0.1:8008 and a temporary test configuration; the existing
+  service was not stopped or reused. An approval-service connection interruption
+  was retried through the same review mechanism. No real provider was called.
+- The production build retains its bundle-size advisory. Real API calls,
+  Firefox/WebKit, remote CI and final human acceptance are not claimed.
+
+- Follow-up formatting and `git diff --check` pass. A broad scan still flags four
+  untouched frontend files (listed in the logbook); unrelated formatting was
+  left intact. The temporary fixture server has been stopped. Existing port-8000
+  and prototype services were not stopped.
+
+## Missing WebUI projections — scope and contract, 2026-11-20
+
+The current user explicitly requested completing the backend interfaces missing
+from the preceding UI integration. This authorizes the previously identified
+read projections and their necessary frontend integration. It does not authorize
+core/CLI changes, strategy tuning, arbitrary uploads, paid calls, deployment or
+Git actions. This record is the implementation/test scope, not final human
+acceptance or a fabricated independent test-review decision.
+
+Plan version: `web-projections-20261120-v1`.
+
+- Add bounded read-only audit endpoints for indexed analysis artifacts and live
+  Web run identities, and allowlisted JSON/Markdown artifact preview/download.
+  Return complete/partial/absent availability independently of usage completeness.
+  Missing historical data remains absent; invalid JSON is explicitly invalid.
+- Retain the four core audit families next to new Web run artifacts, using the
+  existing shared report writer. Expose only safe effective run metadata, never
+  endpoint credentials, portfolios, filesystem paths or checkpoint fingerprints.
+- Add a catalog, per-case comparison and JSON download over the existing pure
+  comparison runner and its controlled D/E/F fixtures plus G regression. Pairing
+  uses actual core identities; selecting a different existing dynamic case must
+  fail pairing. No client scripts, arbitrary result upload, model/data call,
+  permanent report write or production budget tuning is introduced.
+- Replace the audit/comparison unavailable pages with the unchanged demo layout
+  bound to these APIs. The replay control refetches an actual deterministic
+  server replay. Estimated data stays labelled; human rubric scores stay pending.
+- Allowed implementation: `src/tradingagents_web/api/`, `artifacts/`, existing
+  run writer/coordinator, application router registration, and frontend clients,
+  pages/components/types; tests under `test/offline/` and frontend test folders.
+  Maintain existing blueprint/ADR/trace/process records. No new dependencies.
+- Prior verification strategy: core-writer fixtures and socket-isolated tests
+  for real artifact shape, partial/legacy/invalid/oversized data, symlink/path
+  escapes, secret/path redaction, stable run-local artifact association, safe
+  metadata, unchanged core/CLI; exact D/E/F/G runner outcomes, mismatch refusal,
+  invalid IDs and read-only replay/download; frontend negative states, filtering,
+  provenance, budget/usage separation, previews/downloads and browser flows.
+  Run previous frontend and complete offline suites without weakening assertions.
+
+
+### Implementation evidence — `web-projections-20261120-v1`
+
+Added the planned audit and comparison routes and replaced the two unavailable
+pages with production API bindings in the reference layout. History/live report
+links select the correct audit identity. Overview can display a recorded audit
+summary. New run records preserve effective analyst/provider/model/depth/language
+metadata; legacy records remain unspecified. The four run-local artifact copies
+retain only structured origin/source-attempt/conflict descriptors in an optional
+`web_context`, with explicit field allowlists and redaction. No core serializer,
+algorithm, CLI, dependency or demo file changed.
+
+Audit availability is separate from usage completeness. Invalid or contradictory
+artifacts do not become successful empty audits. A saved folder date is never
+used as an invented historical analysis cutoff. Run-ID audit responses retain
+the coordinator's actual lifecycle for refresh. Comparison pairing delegates
+to the real core identity check; G remains input exhaustion rather than an early
+stop. Exports contain actual deterministic results, with human scores pending.
+
+Verification: 2649 offline tests passed, 1 optional-dependency skip and 88
+subtests passed; frontend 37 passed; Chromium 12 passed. Source/test/script lint,
+frontend lint/typecheck/build, schema/permissions validators and diff whitespace
+checks passed. See the evaluation logbook for initial corrections, the existing
+mypy error, retained-demo structure blocker, local skill-script lint failures
+and build-size advisory. No live-service or final human acceptance claim.
+The temporary browser server uses isolated fixtures with environment credentials
+excluded; existing port-8000 and demo services are outside this verification.
+
+## Local commit and release synchronization authorization — 2026-11-20
+
+The current user explicitly requested a local commit of the existing workspace,
+excluding `.agents/` and `demo/` from version control, followed by pulling remote
+`release` into local `release` and merging local `release` into `feature/webui`.
+Both excluded directories were untracked before staging; root ignore entries
+preserve their local contents without adding them to the index. The change does
+not alter product behavior or require another product test run. Existing test
+results and blockers above retain their actual scope. No push, deployment or
+independent/final implementation acceptance is authorized by this Git operation.

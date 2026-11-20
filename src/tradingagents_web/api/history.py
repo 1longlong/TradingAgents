@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import Response
 
+from tradingagents_web.artifacts.audit import public_data
 from tradingagents_web.artifacts.downloads import (
     ArtifactUnavailable,
     FileTooLarge,
@@ -72,7 +73,7 @@ def list_history(
     next_cursor = str(offset + limit) if offset + limit < len(items) else None
     secrets = _secrets()
     return {
-        "items": [redact_obj(item.to_item(), secrets) for item in page],
+        "items": [_public_metadata(redact_obj(item.to_item(), secrets)) for item in page],
         "next_cursor": next_cursor,
     }
 
@@ -84,7 +85,7 @@ def history_detail(request: Request, artifact_id: str) -> Any:
     artifact = _index(request).find(artifact_id)
     if artifact is None:
         return error_response(404, "not_found", "artifact not found")
-    return redact_obj(detail(artifact), _secrets())
+    return _public_metadata(redact_obj(detail(artifact), _secrets()))
 
 
 @router.get("/history/{artifact_id}/download")
@@ -158,3 +159,9 @@ def history_download(
 def _filename(artifact, suffix: str) -> str:
     base = f"{artifact.ticker}_{artifact.date or 'run'}_{suffix}"
     return _SAFE_FILENAME_RE.sub("_", base)
+
+
+def _public_metadata(payload: dict) -> dict:
+    if "metadata" in payload:
+        payload["metadata"] = public_data(payload["metadata"])
+    return payload

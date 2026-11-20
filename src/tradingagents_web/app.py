@@ -12,8 +12,10 @@ from fastapi.staticfiles import StaticFiles
 from tradingagents_web import __version__
 from tradingagents_web.api import (
     announcements,
+    audit,
     backtests,
     checkpoints,
+    comparisons,
     config,
     health,
     history,
@@ -56,19 +58,13 @@ def create_app(settings: WebSettings, runner_factory=None) -> FastAPI:
         if not host_allowed(request.headers.get("host")):
             return _secured(error_response(400, "validation", "invalid host"))
 
-        if request.method in {"POST", "PUT", "PATCH", "DELETE"} and csrf_path(
-            request.url.path
-        ):
+        if request.method in {"POST", "PUT", "PATCH", "DELETE"} and csrf_path(request.url.path):
             token = request.headers.get("x-csrf-token")
             if not token or token != app.state.csrf_token:
-                return _secured(
-                    error_response(403, "security", "missing or invalid CSRF token")
-                )
+                return _secured(error_response(403, "security", "missing or invalid CSRF token"))
             origin = request.headers.get("origin")
             if origin and not origin_allowed(origin):
-                return _secured(
-                    error_response(403, "security", "cross-origin request rejected")
-                )
+                return _secured(error_response(403, "security", "cross-origin request rejected"))
 
         response = await call_next(request)
         return _secured(response)
@@ -83,6 +79,8 @@ def create_app(settings: WebSettings, runner_factory=None) -> FastAPI:
         announcements.router,
         health.router,
         history.router,
+        audit.router,
+        comparisons.router,
     ):
         app.include_router(router)
 
@@ -98,9 +96,7 @@ def create_app(settings: WebSettings, runner_factory=None) -> FastAPI:
             if full_path == "api" or full_path.startswith("api/"):
                 return error_response(404, "not_found", "not found")
             candidate = static_dir / full_path
-            if candidate.is_file() and candidate.resolve().is_relative_to(
-                static_dir.resolve()
-            ):
+            if candidate.is_file() and candidate.resolve().is_relative_to(static_dir.resolve()):
                 return FileResponse(candidate)
             return FileResponse(index)
 

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { I18nextProvider } from "react-i18next";
 import { describe, expect, it } from "vitest";
@@ -59,9 +59,10 @@ describe("BacktestSummary", () => {
     expect(screen.getByText(/pending/i)).toBeInTheDocument();
     expect(screen.getByText(/unscored/i)).toBeInTheDocument();
     expect(screen.getByText(/5 trading days/i)).toBeInTheDocument();
-    expect(screen.getByText(/Buy/)).toBeInTheDocument();
+    const table = within(screen.getByRole("table"));
+    expect(table.getByText(/Buy/)).toBeInTheDocument();
     expect(screen.getByText(/100%/)).toBeInTheDocument();
-    expect(screen.getByText(/1\.23%/)).toBeInTheDocument();
+    expect(table.getByText(/1\.23%/)).toBeInTheDocument();
     expect(screen.getByText(/vendor unavailable/i)).toBeInTheDocument();
     expect(screen.getByText(/settlement unavailable/i)).toBeInTheDocument();
   });

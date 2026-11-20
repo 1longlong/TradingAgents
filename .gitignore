@@ -236,3 +236,7 @@ src/tradingagents_web/frontend/test-results/
 
 # Derived offline comparison output.
 evaluation-output/
+
+# Local skills and standalone design references are not versioned.
+/.agents/
+/demo/

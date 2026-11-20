@@ -6,15 +6,17 @@ with a deterministic fake. No model/data provider is called.
 
 from __future__ import annotations
 
+import os
 import tempfile
 import time
 from pathlib import Path
 
 import uvicorn
 
-from test.offline.web_fixture_app import build_fixture_tree
+from test.offline.web_fixture_app import SECRET, build_fixture_tree
 from tradingagents.agents.utils.memory import TradingMemoryLog
 from tradingagents.backtest import BacktestResult
+from tradingagents.report_artifacts import write_report_artifacts
 from tradingagents_web.app import create_app
 from tradingagents_web.settings import WebSettings
 
@@ -134,6 +136,43 @@ class E2ERunner:
 def create_e2e_app():
     root = Path(tempfile.mkdtemp(prefix="tradingagents-e2e-"))
     tree = build_fixture_tree(root)
+    # Structured audit fixture through the real core serializer, never provider calls.
+    write_report_artifacts(
+        {
+            "trade_date": "2026-11-01",
+            "data_quality_verdict": "degraded",
+            "data_quality_gate_decision": {
+                "decision": "degraded",
+                "policy_version": "1.0",
+                "human_readable_reason": "Optional coverage is insufficient.",
+            },
+            "data_quality_evidence_records": [
+                {
+                    "evidence_id": "e2e-price",
+                    "category": "market",
+                    "metric_name": "close",
+                    "observed_at": "2026-11-01",
+                    "quality_status": "Medium",
+                    "source_name": "yfinance",
+                    "value_raw": "100",
+                    "unit_normalized": "USD",
+                },
+                {
+                    "evidence_id": "e2e-future",
+                    "category": "news",
+                    "metric_name": "headline",
+                    "observed_at": "2026-11-02",
+                    "quality_status": "Low",
+                    "source_name": "fixture",
+                },
+            ],
+        },
+        "AAPL",
+        tree.saved_dir,
+    )
+    # The fixture embeds a dummy credential; make it visible to the server's
+    # redaction layer exactly as a real provider key would be.
+    os.environ["OPENAI_API_KEY"] = SECRET
 
     import cli.prefs as prefs_module
 

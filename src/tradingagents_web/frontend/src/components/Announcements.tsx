@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import { getAnnouncements } from "../api/backtestClient";
+import { Icon } from "./Icon";
 
 type AnnouncementsProps = {
   announcements: string[];
@@ -27,36 +28,34 @@ export function Announcements({
 
   return (
     <>
-      <section
-        role="status"
-        className="mb-6 rounded-md border border-cyan-500/40 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-100"
-      >
-        <h2 className="mb-1 font-medium">{t("announcements.title")}</h2>
-        <ul className="space-y-1">
+      <div className="report-state-banner" role="status">
+        <Icon name="bell" />
+        <div>
+          <strong>{t("announcements.title")}</strong>
           {announcements.map((announcement, index) => (
-            <li key={index}>{announcement}</li>
+            <p key={index}>{announcement}</p>
           ))}
-        </ul>
-      </section>
+        </div>
+      </div>
 
       <Dialog.Root open={open} onOpenChange={setOpen}>
         <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 bg-slate-950/80" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 w-[min(32rem,90vw)] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-slate-700 bg-slate-900 p-6 text-slate-100 shadow-xl">
-            <Dialog.Title className="text-lg font-semibold text-slate-100">
+          <Dialog.Overlay className="dialog-overlay" />
+          <Dialog.Content className="dialog-card">
+            <Dialog.Title className="dialog-title">
               {t("announcements.title")}
             </Dialog.Title>
-            <Dialog.Description className="mt-3 space-y-2 text-sm text-slate-300">
+            <Dialog.Description className="dialog-description">
               {announcements.map((announcement, index) => (
                 <span key={index} className="block">
                   {announcement}
                 </span>
               ))}
             </Dialog.Description>
-            <div className="mt-6 flex justify-end">
+            <div className="modal-actions">
               <button
                 type="button"
-                className="rounded-md bg-cyan-400 px-3 py-1.5 text-sm font-medium text-slate-950"
+                className="button primary"
                 onClick={() => {
                   setOpen(false);
                   onAcknowledge?.();
@@ -80,7 +79,7 @@ export function AnnouncementsGate() {
     retry: false,
   });
   const data = query.data;
-  if (!data) return null;
+  if (!data || !data.require_attention || acknowledged) return null;
   return (
     <Announcements
       announcements={data.announcements}

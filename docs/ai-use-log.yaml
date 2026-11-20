@@ -2890,3 +2890,155 @@ entries:
   - Both schema entry points pass; optional real-service tests are not authorized or claimed. Final command/results
     are recorded in evaluation-logbook and review-memo.
   - The requested local merge authorizes its merge commit; no push or remote review is performed.
+- id: AI-20261120-UI-001
+  date: '2026-11-20'
+  tool: OpenCode
+  model: deepseek-flash (DeepSeek V4.1 Flash 1017)
+  purpose: >-
+    Replicate the demo workspace visual and interaction baseline in the
+    production WebUI, connect the existing frontend to real history, run,
+    backtest, config, checkpoint and announcement APIs, and remove sample data
+    and preview-state controls from the production path.
+  source: Current user conversation; user instructed demo-based replication without backend changes
+  human_review: implementation check requested in conversation; review pending
+  paths:
+  - src/tradingagents_web/frontend/src/styles/workspace.css
+  - src/tradingagents_web/frontend/src/styles/index.css
+  - src/tradingagents_web/frontend/src/app/App.tsx
+  - src/tradingagents_web/frontend/src/app/AppShell.tsx
+  - src/tradingagents_web/frontend/src/components/Announcements.tsx
+  - src/tradingagents_web/frontend/src/components/Icon.tsx
+  - src/tradingagents_web/frontend/src/components/Modal.tsx
+  - src/tradingagents_web/frontend/src/pages/OverviewPage.tsx
+  - src/tradingagents_web/frontend/src/pages/HistoryPage.tsx
+  - src/tradingagents_web/frontend/src/pages/HistoryDetailPage.tsx
+  - src/tradingagents_web/frontend/src/pages/BacktestPage.tsx
+  - src/tradingagents_web/frontend/src/pages/BacktestRunPage.tsx
+  - src/tradingagents_web/frontend/src/pages/NewAnalysisPage.tsx
+  - src/tradingagents_web/frontend/src/pages/LiveRunPage.tsx
+  - src/tradingagents_web/frontend/src/pages/JournalPage.tsx
+  - src/tradingagents_web/frontend/src/pages/GapPage.tsx
+  - src/tradingagents_web/frontend/src/utils/workspace.ts
+  - src/tradingagents_web/frontend/src/api/runClient.ts
+  - test/offline/web_e2e_server.py
+  - docs/review-memo.md
+  - docs/ai-use-log.yaml
+  - docs/architecture/evaluation-logbook.md
+  notes:
+  - demo/ was treated as read-only and was not modified.
+  - No backend route, core module, CLI module, dependency, commit, push, merge, or deployment change was made.
+  - Research audit and Policy comparison are explicit interface-gap pages because no WebUI read projection exists.
+  - WebUI backend suite 165 passed; frontend Vitest 30 passed; Chromium E2E 6 passed; offline regression 2624 passed, 1 skipped, 88 subtests.
+  - ci_gates structure is blocked by the untracked demo directory; mypy reports one pre-existing graph_runner error.
+- id: AI-20261120-UI-002
+  date: '2026-11-20'
+  tool: Local workspace agent
+  purpose: >-
+    Inspect the integrated production frontend against the unchanged demo and
+    correct supported visual and interaction differences while preserving real
+    backend contracts and existing workspace changes.
+  source: Current user conversation; explicit request to inspect and correct frontend parity
+  human_review: Corrective implementation requested by the user; final human review pending
+  paths:
+  - src/tradingagents_web/frontend/src/app/App.tsx
+  - src/tradingagents_web/frontend/src/app/AppShell.tsx
+  - src/tradingagents_web/frontend/src/api/client.ts
+  - src/tradingagents_web/frontend/src/api/runClient.ts
+  - src/tradingagents_web/frontend/src/api/backtestClient.ts
+  - src/tradingagents_web/frontend/src/components/Announcements.tsx
+  - src/tradingagents_web/frontend/src/components/Modal.tsx
+  - src/tradingagents_web/frontend/src/components/Research.tsx
+  - src/tradingagents_web/frontend/src/components/HistoryTable.tsx
+  - src/tradingagents_web/frontend/src/pages/NewAnalysisPage.tsx
+  - src/tradingagents_web/frontend/src/pages/OverviewPage.tsx
+  - src/tradingagents_web/frontend/src/pages/HistoryPage.tsx
+  - src/tradingagents_web/frontend/src/pages/HistoryDetailPage.tsx
+  - src/tradingagents_web/frontend/src/pages/LiveRunPage.tsx
+  - src/tradingagents_web/frontend/src/pages/BacktestPage.tsx
+  - src/tradingagents_web/frontend/src/pages/Backtest/BacktestSummary.tsx
+  - src/tradingagents_web/frontend/src/pages/JournalPage.tsx
+  - src/tradingagents_web/frontend/src/pages/GapPage.tsx
+  - src/tradingagents_web/frontend/src/utils/workspace.ts
+  - src/tradingagents_web/frontend/src/styles/index.css
+  - src/tradingagents_web/frontend/src/i18n/en.json
+  - src/tradingagents_web/frontend/tests/analysis-flow.test.tsx
+  - src/tradingagents_web/frontend/tests/backtest-summary.test.tsx
+  - src/tradingagents_web/frontend/tests/history-parity.test.ts
+  - src/tradingagents_web/frontend/e2e/run.spec.ts
+  - src/tradingagents_web/frontend/e2e/backtest.spec.ts
+  - src/tradingagents_web/frontend/e2e/announcements.spec.ts
+  - src/tradingagents_web/frontend/e2e/visual-parity.spec.ts
+  - docs/review-memo.md
+  - docs/architecture/evaluation-logbook.md
+  - docs/architecture/trace-matrix.md
+  - docs/ai-use-log.yaml
+  notes:
+  - No sub-agent, backend route, core/CLI, dependency, prototype, commit, push or deployment change.
+  - Tests use temporary fixture data and fake local runners; real provider verification is not claimed.
+  - Initial failures and final reruns are recorded in the review memo and evaluation logbook.
+  - Audit/comparison remain unavailable through the current WebUI API; no sample production results are fabricated.
+- id: AI-20261120-API-001
+  date: '2026-11-20'
+  tool: Local workspace agent
+  purpose: >-
+    Complete the previously identified WebUI audit and offline comparison
+    interfaces by projecting existing core reports and deterministic replay,
+    and bind the corresponding production pages to actual same-origin APIs.
+  source: Current user conversation; explicit request to complete missing backend interfaces
+  human_review: Implementation requested by the user; final human acceptance and independent review pending
+  paths:
+  - architecture-blueprint.md
+  - docs/architecture/adr/002-backend-framework-and-transport.md
+  - src/tradingagents_web/app.py
+  - src/tradingagents_web/api/audit.py
+  - src/tradingagents_web/api/comparisons.py
+  - src/tradingagents_web/api/history.py
+  - src/tradingagents_web/api/runs.py
+  - src/tradingagents_web/artifacts/audit.py
+  - src/tradingagents_web/artifacts/index.py
+  - src/tradingagents_web/artifacts/readers.py
+  - src/tradingagents_web/runtime/artifacts_writer.py
+  - src/tradingagents_web/runtime/coordinator.py
+  - src/tradingagents_web/frontend/src/api/auditClient.ts
+  - src/tradingagents_web/frontend/src/api/client.ts
+  - src/tradingagents_web/frontend/src/api/runClient.ts
+  - src/tradingagents_web/frontend/src/app/App.tsx
+  - src/tradingagents_web/frontend/src/components/HistoryTable.tsx
+  - src/tradingagents_web/frontend/src/pages/AuditPage.tsx
+  - src/tradingagents_web/frontend/src/pages/ComparisonPage.tsx
+  - src/tradingagents_web/frontend/src/pages/OverviewPage.tsx
+  - src/tradingagents_web/frontend/src/pages/HistoryDetailPage.tsx
+  - src/tradingagents_web/frontend/src/pages/LiveRunPage.tsx
+  - src/tradingagents_web/frontend/tests/audit-comparison.test.tsx
+  - src/tradingagents_web/frontend/e2e/audit-comparison.spec.ts
+  - test/offline/test_web_audit.py
+  - test/offline/test_web_comparisons.py
+  - test/offline/web_e2e_server.py
+  - docs/review-memo.md
+  - docs/architecture/evaluation-logbook.md
+  - docs/architecture/trace-matrix.md
+  - docs/ai-use-log.yaml
+  notes:
+  - Scope and test contract recorded as web-projections-20261120-v1 before implementation.
+  - Core and CLI source, dependencies, runtime prompts, human rules and demo files remain unchanged.
+  - No sub-agent, live provider call, human score, commit, push, merge or deployment.
+  - Audit/comparison no longer use interface-gap placeholders; absent legacy data remains unknown.
+  - Offline regression 2649 passed, 1 optional-dependency skip, 88 subtests; frontend 37 passed; Chromium 12 passed.
+  - Existing structure/mypy/local-skill lint blockers and initial verification corrections are recorded in the logbook.
+- id: AI-20261120-GIT-001
+  date: '2026-11-20'
+  tool: Local workspace agent
+  purpose: >-
+    Exclude local skills and design references from tracking, prepare the current
+    WebUI work for the requested local commit, and synchronize release into the
+    feature branch using the user's explicit Git authorization.
+  source: Current user conversation; explicit local commit, release pull and feature merge request
+  human_review: User authorized these Git operations; no new implementation acceptance claimed
+  paths:
+  - .gitignore
+  - docs/review-memo.md
+  - docs/ai-use-log.yaml
+  notes:
+  - The .agents and demo directories were untracked before staging and remain local.
+  - No product behavior, tests, dependencies or human-owned permissions changed for commit preparation.
+  - This authorization covers local commit, pull into release and merge into feature/webui; no push or deployment.

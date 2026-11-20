@@ -71,6 +71,7 @@ class RunRecord:
                 "analysts": request.get("analysts", []),
                 "research_depth": request.get("research_depth"),
                 "llm_provider": request.get("llm_provider"),
+                "output_language": request.get("output_language"),
                 "quick_think_llm": request.get("quick_think_llm"),
                 "deep_think_llm": request.get("deep_think_llm"),
                 "checkpoint_enabled": self.checkpoint_enabled,
@@ -228,6 +229,7 @@ class RunCoordinator:
                 str(record.request["ticker"]),
                 str(record.request["trade_date"]),
                 record.run_id,
+                metadata=record.request,
             )
             record.artifact_id = record.writer.artifact_id
             phase = "execution"

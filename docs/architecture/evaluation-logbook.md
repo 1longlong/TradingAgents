@@ -177,6 +177,17 @@ Classification:
 - Test-version delta: only `test/offline/web_e2e_server.py` changed to add fake backtest/announcement providers; no assertion changed.
 - Not run: real backtest model/data calls, real announcement network calls, Firefox/WebKit, clean install, full mypy/Bandit/pip-audit.
 
+## 2026-11-20 — Demo-based workspace UI
+
+- Copied the demo visual system into `frontend/src/styles/workspace.css` and rebuilt the production React shell, overview, history, report, backtest, live run, new analysis, journal, settings, search and announcements surfaces.
+- Connected the production UI to existing history, run, SSE, backtest, config, portfolio, checkpoint and announcement APIs. Removed preview-state controls and sample report/backtest/progress fixtures from the production path.
+- Research audit and Policy comparison remain explicit interface-gap pages; no fixture audit/comparison data is rendered.
+- WebUI backend suite: **165 passed**; frontend Vitest: **30 passed (9 files)**; Chromium E2E: **6 passed**.
+- Offline regression: **2624 passed, 1 skipped, 88 subtests passed**.
+- Frontend typecheck/lint/build: **PASS**; `npm audit`: **0 vulnerabilities**.
+- `ci_gates schema`: **PASS**; `ci_gates structure`: **BLOCKED** by the untracked `demo/` directory. `mypy src/tradingagents_web`: **1 pre-existing graph_runner error**. A live DeepSeek test failed only because sockets were disabled.
+- No backend route, core module, CLI module, dependency, commit, push, merge, or deployment change was made.
+
 ## Decisions and open items
 
 Resolved for documentation: framework, transport, frontend stack, UI library, package path, history source, key handling, cancellation policy, downloads, preferences.
@@ -2831,3 +2842,70 @@ Status: local offline verification **Pass**. This is not final human feature
 acceptance. Live APIs, production benchmarks, dependency/advisory services,
 remote CI/branch protection and push are not run or claimed. The requested local
 merge commit records this integration; local `.agents/` and `demo/` are excluded.
+
+## UI-PARITY-20261120 — Reference layout and integrated frontend correction
+
+Fresh local verification of the frontend follow-up; source/backend/CLI business
+code and the reference prototype are unchanged by this follow-up.
+
+| Check | Actual result |
+| --- | --- |
+| `npm run test` | 33 passed, 10 files |
+| `npm run lint`; `npm run typecheck` | Pass |
+| `npm run build` | Pass; existing large-chunk advisory retained |
+| `npm run e2e -- --config=/tmp/webui-parity.playwright.config.cjs` | 10 Chromium tests passed, 13.4 s; independent loopback fixture server on port 8008 |
+| Reference geometry | Desktop brand/topbar/page header/stats; all three drawer steps, header/steps/footer within 0.75 CSS px; screenshots inspected |
+| Interaction/responsive checks | API completion/reload/cancellation, backtest, download availability, archive/Markdown downloads, journal details, settings confirmation, negative inputs/private drafts; both themes, four widths, landscape and reduced motion |
+| Complete offline regression | 2624 passed, 1 skipped, 88 subtests passed, 52 warnings, 17.04 s |
+| `python -m test.ci_gates schema`; `permissions` | Pass |
+| `python -m test.ci_gates structure` | Blocked: retained local `demo/` is classified as obsolete by the existing gate |
+
+Python and fixture-server children used a credential-free environment with dotenv
+loading disabled. Offline pytest used `--disable-socket --allow-unix-socket
+-p no:cacheprovider --tb=short`; optional AWS-provider coverage skipped because
+`langchain_aws` is not installed. Browser requests used temporary fixtures and
+fake runners. Port 8000 was occupied, so its existing service was left alone.
+Temporary browser artifacts/configuration are outside the repository.
+
+Initial test failures and their resolution are preserved in the corresponding
+review memo. No backend feature/API, dependency, live-provider execution, remote
+CI, branch protection, commit or human acceptance is inferred from these checks.
+
+The final follow-up-only formatting check passes. A broader formatting scan also
+reported existing findings in untouched `components/Icon.tsx`,
+`pages/Backtest/validation.ts`, `pages/BacktestRunPage.tsx` and
+`pages/NewAnalysis/validation.ts`; these unrelated files were not reformatted.
+The AI-use YAML envelope and unique IDs validate in the project environment.
+The temporary port-8008 fixture server was stopped after the final browser run.
+
+
+## Missing-interface implementation — 2026-11-20
+
+Scope `web-projections-20261120-v1`: canonical report-audit read projections,
+run-local artifact association/effective metadata and controlled existing-core
+offline comparison replay/download, with corresponding production UI bindings.
+No core/CLI, dependency, prompt, permission, demo, Git or deployment change.
+
+- Structural: `ruff check src test scripts`, frontend lint/typecheck/build,
+  schema/permissions validators and `git diff --check` pass. The build retains
+  its bundle-size advisory (approximately 697 kB JavaScript before gzip).
+- Regression and offline behavior: complete socket-isolated offline suite
+  **2649 passed, 1 skipped, 88 subtests passed**; skip is optional
+  `langchain_aws`. New audit/comparison backend cases total **25**. Frontend
+  Vitest **37 passed**. Chromium E2E **12 passed**, including real same-origin
+  audit downloads and deterministic D/E/F/G comparison API replay.
+- Desktop/mobile screenshots were inspected; all four populated audit tabs and
+  the comparison page fit a 390-pixel viewport without document overflow.
+- Initial verification exposed an incomplete jsdom native-dialog test harness,
+  two import-order issues and new type-narrowing errors. The harness and new
+  code were corrected; final focused checks pass. Browser modal behavior is
+  covered by Chromium rather than claimed from the jsdom shim.
+- Existing blockers: `mypy src/tradingagents_web` retains one pre-existing
+  `graph_runner.py:115` missing `UsageCapture.debate_config` attribute;
+  `ci_gates structure` refuses the intentionally retained `demo/` reference.
+  Broad `ruff check .` also includes 197 errors in pre-existing untracked local
+  skill scripts under `.agents/`; product/source/test/script lint passes. No
+  unrelated files or exclusions were changed to conceal those failures.
+- No live provider run, human rubric scoring, Firefox/WebKit, remote CI,
+  branch-protection result, independent review or final human acceptance is
+  claimed. Estimates and missing historical telemetry remain explicit.

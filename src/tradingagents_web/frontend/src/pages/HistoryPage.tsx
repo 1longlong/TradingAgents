@@ -1,92 +1,79 @@
+// REQ-WEB-010, ADR-003: full-list filtering retains the demo table contract.
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { useTranslation } from "react-i18next";
-
-import { getHistory } from "../api/client";
-import { AnnouncementsGate } from "../components/Announcements";
-import { LanguageSwitch } from "../components/LanguageSwitch";
-
+import { getAllHistory } from "../api/client";
+import { Icon } from "../components/Icon";
+import {
+  HistoryFilters,
+  HistoryTable,
+  filterAnalyses,
+} from "../components/HistoryTable";
 export function HistoryPage() {
-  const { t } = useTranslation();
   const history = useQuery({
-    queryKey: ["history"],
-    queryFn: () => getHistory({ limit: 50 }),
+    queryKey: ["history", "workspace"],
+    queryFn: getAllHistory,
   });
-
+  const [search, setSearch] = useState(""),
+    [status, setStatus] = useState("all"),
+    [descending, setDescending] = useState(true);
+  const items = filterAnalyses(
+    history.data?.items ?? [],
+    search,
+    status,
+    descending,
+  );
   return (
-    <main className="mx-auto max-w-6xl px-6 py-10">
-      <header className="mb-8 flex items-start justify-between gap-4">
+    <>
+      <section className="page-header">
         <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-cyan-300">
-            {t("app.title")}
+          <p className="eyebrow">THE RESEARCH LIBRARY</p>
+          <h1>Analysis history</h1>
+          <p className="page-description">
+            Every question leaves a paper trail. Revisit the research.
           </p>
-          <h1 className="mt-2 text-3xl font-semibold text-slate-100">
-            {t("history.title")}
-          </h1>
-          <p className="mt-2 text-sm text-slate-400">{t("app.subtitle")}</p>
-          <Link
-            className="mt-4 inline-block rounded-md bg-cyan-400 px-3 py-1.5 text-sm font-medium text-slate-950"
-            to="/new"
-          >
-            {t("nav.newAnalysis")}
-          </Link>
-          <Link
-            className="mt-4 ml-2 inline-block rounded-md border border-slate-700 px-3 py-1.5 text-sm text-slate-200 hover:bg-slate-800"
-            to="/backtest"
-          >
-            {t("nav.backtest")}
+        </div>
+        <div className="page-header-actions">
+          <Link className="button primary" to="/new">
+            <Icon name="plus" />
+            New analysis
           </Link>
         </div>
-        <LanguageSwitch />
-      </header>
-
-      <AnnouncementsGate />
-
+      </section>
+      <div className="section-heading">
+        <h2>
+          All research{" "}
+          <span className="count">
+            {filterAnalyses(history.data?.items ?? [], "", "all").length}
+          </span>
+        </h2>
+        <HistoryFilters
+          search={search}
+          status={status}
+          onSearch={setSearch}
+          onStatus={setStatus}
+          onClear={() => {
+            setSearch("");
+            setStatus("all");
+            setDescending(true);
+          }}
+        />
+      </div>
       {history.isLoading ? (
-        <p className="text-slate-400">{t("history.loading")}</p>
+        <div className="panel empty-state">Loading history...</div>
       ) : history.isError ? (
-        <p className="text-red-300">{t("history.error")}</p>
-      ) : history.data && history.data.items.length > 0 ? (
-        <div className="overflow-hidden rounded-lg border border-slate-800">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-slate-900 text-xs uppercase tracking-wide text-slate-400">
-              <tr>
-                <th className="px-4 py-3">{t("history.ticker")}</th>
-                <th className="px-4 py-3">{t("history.date")}</th>
-                <th className="px-4 py-3">{t("history.source")}</th>
-                <th className="px-4 py-3">{t("history.status")}</th>
-                <th className="px-4 py-3">{t("history.rating")}</th>
-                <th className="px-4 py-3">{t("history.actions")}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800">
-              {history.data.items.map((item) => (
-                <tr key={item.artifact_id} className="hover:bg-slate-900/60">
-                  <td className="px-4 py-3 font-mono text-slate-200">{item.ticker}</td>
-                  <td className="px-4 py-3 text-slate-400">{item.date ?? "—"}</td>
-                  <td className="px-4 py-3 text-slate-400">{item.source}</td>
-                  <td className="px-4 py-3 text-slate-300">{item.status}</td>
-                  <td className="px-4 py-3">
-                    <span className={item.review ? "text-amber-300" : "text-slate-300"}>
-                      {item.rating ?? "—"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <Link
-                      className="text-cyan-300 hover:text-cyan-200"
-                      to={`/history/${item.artifact_id}`}
-                    >
-                      {t("history.open")}
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="panel empty-state" role="alert">
+          <strong>History is unavailable</strong>
+          <p>{history.error.message}</p>
         </div>
       ) : (
-        <p className="text-slate-400">{t("history.empty")}</p>
+        <HistoryTable
+          items={items}
+          full
+          descending={descending}
+          onSort={() => setDescending(!descending)}
+        />
       )}
-    </main>
+    </>
   );
 }

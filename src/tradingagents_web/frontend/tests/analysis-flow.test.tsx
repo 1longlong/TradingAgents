@@ -16,15 +16,20 @@ import {
   getRunModels,
   getRun,
   startRun,
+  getActiveRun,
+  validatePortfolio,
 } from "../src/api/runClient";
 
-vi.mock("../src/api/runClient", () => ({
+vi.mock("../src/api/runClient", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../src/api/runClient")>()),
   getRunConfig: vi.fn(),
   getRunModels: vi.fn(),
   getRun: vi.fn(),
   startRun: vi.fn(),
   cancelRun: vi.fn(),
   runEventsUrl: vi.fn(),
+  getActiveRun: vi.fn(),
+  validatePortfolio: vi.fn(),
 }));
 afterEach(() => {
   cleanup();
@@ -32,6 +37,9 @@ afterEach(() => {
 });
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
+  vi.mocked(getActiveRun).mockResolvedValue({ run_id: null });
+  vi.mocked(validatePortfolio).mockResolvedValue({ valid: true });
   vi.mocked(getRunConfig).mockResolvedValue({
     defaults: {
       llm_provider: "deepseek",
@@ -66,7 +74,7 @@ beforeEach(() => {
 });
 async function next() {
   await act(async () => {
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
   });
 }
 
@@ -79,21 +87,20 @@ describe("analysis configuration", () => {
       </MemoryRouter>,
     );
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Next" })).toBeEnabled(),
+      expect(screen.getByRole("button", { name: "Continue" })).toBeEnabled(),
     );
-    fireEvent.change(screen.getByLabelText("Ticker"), {
+    fireEvent.change(screen.getByLabelText(/Ticker symbol/), {
       target: { value: "NVDA" },
     });
-    for (let i = 0; i < 5; i++) await next();
-    expect(screen.getByRole("combobox")).toHaveValue("deepseek");
-    expect(screen.getByText("Key configured")).toBeVisible();
-    fireEvent.change(screen.getByRole("combobox"), {
+    await next();
+    expect(screen.getByLabelText("Model provider")).toHaveValue("deepseek");
+    expect(screen.getByText(/Key configured/)).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Model provider"), {
       target: { value: "openai" },
     });
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Next" })).toBeEnabled(),
+      expect(screen.getByRole("button", { name: "Continue" })).toBeEnabled(),
     );
-    await next();
     expect(screen.getByLabelText("Quick model")).toHaveValue("gpt-4o-mini");
     expect(screen.getByLabelText("Deep model")).toHaveValue("gpt-4o");
     await next();
@@ -101,7 +108,7 @@ describe("analysis configuration", () => {
       new Error("The provider rejected authentication. (c_123)"),
     );
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Start Analysis" }));
+      fireEvent.click(screen.getByRole("button", { name: "Start analysis" }));
     });
     expect(startRun).toHaveBeenCalledWith(
       expect.objectContaining({

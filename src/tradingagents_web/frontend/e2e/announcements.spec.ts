@@ -13,5 +13,8 @@ test("announcements are displayed on the history page", async ({
   expect(response.status()).toBe(200);
 
   await page.goto("/history");
-  await expect(page.getByText(/E2E announcement/i)).toBeVisible();
+  // REQ-WEB-012: the reference opens workspace notes from the bell.
+  await page.getByRole("button", { name: "View announcements" }).click();
+  await expect(page.getByRole("dialog")).toContainText("E2E announcement");
+  await page.getByRole("button", { name: "Got it" }).click();
 });

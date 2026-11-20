@@ -1,4 +1,5 @@
-import { getSessionToken } from "./runClient";
+// REQ-WEB-006/011/012, ADR-003: preserve safe errors and real task conflicts.
+import { getSessionToken, jsonRequest } from "./runClient";
 
 export type BacktestRatingScore = {
   count: number;
@@ -46,12 +47,10 @@ export type AnnouncementPayload = {
 };
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, {
+  return jsonRequest<T>(url, {
     ...init,
     headers: { Accept: "application/json", ...(init?.headers ?? {}) },
   });
-  if (!response.ok) throw new Error(`request failed: ${response.status}`);
-  return (await response.json()) as T;
 }
 
 export async function startBacktest(body: Record<string, unknown>) {
@@ -67,7 +66,9 @@ export async function startBacktest(body: Record<string, unknown>) {
 }
 
 export function getBacktest(runId: string) {
-  return requestJson<BacktestSnapshot>(`/api/backtests/${encodeURIComponent(runId)}`);
+  return requestJson<BacktestSnapshot>(
+    `/api/backtests/${encodeURIComponent(runId)}`,
+  );
 }
 
 export function listBacktests() {

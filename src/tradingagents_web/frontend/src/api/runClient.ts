@@ -14,6 +14,20 @@ export type RunSnapshot = {
   ticker: string;
   trade_date: string;
   last_seq: number;
+  kind?: string;
+  asset_type?: string;
+  analysts?: string[];
+  research_depth?: number;
+  llm_provider?: string;
+  quick_think_llm?: string;
+  deep_think_llm?: string;
+  output_language?: string;
+  checkpoint_enabled?: boolean;
+  started_at?: string;
+  finished_at?: string | null;
+  wall_times?: Record<string, number>;
+  artifact_id?: string | null;
+  sections?: Record<string, string>;
   signal?: string | null;
   review: boolean;
   warnings: string[];
@@ -33,7 +47,20 @@ export async function getSessionToken(): Promise<string> {
   return csrfToken;
 }
 
-async function jsonRequest<T>(url: string, init?: RequestInit): Promise<T> {
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public activeRunId?: string,
+  ) {
+    super(message);
+  }
+}
+
+export async function jsonRequest<T>(
+  url: string,
+  init?: RequestInit,
+): Promise<T> {
   const response = await fetch(url, init);
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as {
@@ -49,7 +76,11 @@ async function jsonRequest<T>(url: string, init?: RequestInit): Promise<T> {
       body?.detail?.map((item) => item.msg).join("; ") ??
       `Request failed: ${response.status}`;
     const reference = body?.error?.correlation_id;
-    throw new Error(`${message}${reference ? ` (${reference})` : ""}`);
+    throw new ApiError(
+      `${message}${reference ? ` (${reference})` : ""}`,
+      response.status,
+      body?.error?.fields?.active_run_id,
+    );
   }
   return (await response.json()) as T;
 }
@@ -95,4 +126,29 @@ export async function cancelRun(runId: string): Promise<RunSnapshot> {
 
 export function runEventsUrl(runId: string, afterSeq: number) {
   return `/api/runs/${encodeURIComponent(runId)}/events?after_seq=${afterSeq}`;
+}
+
+export async function clearCheckpoints(): Promise<{ cleared: number }> {
+  const token = await getSessionToken();
+  return jsonRequest<{ cleared: number }>("/api/checkpoints/clear", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-CSRF-Token": token,
+    },
+    body: JSON.stringify({ confirm: "CLEAR" }),
+  });
+}
+
+export function getActiveRun() {
+  return jsonRequest<RunSnapshot | { run_id: null }>("/api/runs/active");
+}
+
+export async function validatePortfolio(json: string) {
+  const token = await getSessionToken();
+  return jsonRequest<{ valid: boolean }>("/api/portfolio/validate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
+    body: JSON.stringify({ json }),
+  });
 }
