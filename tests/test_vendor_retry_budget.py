@@ -617,8 +617,11 @@ def test_a_refused_request_says_why_in_the_log(caplog):
 def test_the_timeout_never_exceeds_the_time_left_and_honours_the_cap():
     import tradingagents.dataflows.retry_session as rs
 
-    session = RetrySession(rs.RetryBudget(max_attempts=2, max_total_seconds=45.0))
-    session.started -= 40.0  # 5s left
+    clock = Clock()
+    session = RetrySession(rs.RetryBudget(
+        max_attempts=2, max_total_seconds=45.0, clock=clock.clock,
+    ))
+    session.started -= 40.0  # 5s left on the injected clock
     with rs.retry_session(session):
         assert rs.request_timeout_for(5.0) == pytest.approx(5.0)
         assert rs.request_timeout_for(5.0, 15.0) == pytest.approx(5.0)
@@ -921,7 +924,10 @@ def test_the_router_waits_the_scrubbed_retry_after(router, monkeypatch):
 @pytest.mark.unit
 def test_alpha_vantage_caps_its_request_at_the_time_left(monkeypatch, alpha_vantage):
     seen = []
-    budget = retry_session.RetryBudget(max_attempts=2, max_total_seconds=4.0)
+    clock = Clock()
+    budget = retry_session.RetryBudget(
+        max_attempts=2, max_total_seconds=4.0, clock=clock.clock,
+    )
     with retry_session.retry_session(RetrySession(budget)):
         _av_call(monkeypatch, alpha_vantage, AvResponse("close\n1"), timeout_seen=seen)
     assert seen == [pytest.approx(4.0)]

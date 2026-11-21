@@ -251,17 +251,31 @@ def test_one_thread_exiting_does_not_clear_another_threads_session():
 def test_asyncio_tasks_in_one_loop_are_isolated():
     """One event loop, two tasks that interleave at an ``await`` inside the block."""
     a, b = session(), session()
-    entered = asyncio.Barrier(2)
-
-    async def worker(name, own):
-        with retry_session(own):
-            first = get_active_retry_session()
-            await entered.wait()  # both tasks are inside their blocks
-            second = get_active_retry_session()
-        return name, first, second, get_active_retry_session()
-
     async def main():
-        return await asyncio.gather(worker("a", a), worker("b", b))
+        # Event-based rendezvous works on the supported Python 3.10 too
+        # (asyncio.Barrier was added in 3.11). Both tasks read while both
+        # sessions are active; neither may exit before both reads complete.
+        entered, read_done = asyncio.Event(), asyncio.Event()
+        arrivals = reads = 0
+
+        async def worker(name, own):
+            nonlocal arrivals, reads
+            with retry_session(own):
+                first = get_active_retry_session()
+                arrivals += 1
+                if arrivals == 2:
+                    entered.set()
+                await entered.wait()
+                second = get_active_retry_session()
+                reads += 1
+                if reads == 2:
+                    read_done.set()
+                await read_done.wait()
+            return name, first, second, get_active_retry_session()
+
+        return await asyncio.wait_for(
+            asyncio.gather(worker("a", a), worker("b", b)), timeout=_JOIN_TIMEOUT,
+        )
 
     results = {}
     for name, first, second, after in asyncio.run(main()):

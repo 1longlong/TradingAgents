@@ -285,20 +285,30 @@ def test_date_truncation_matches_the_tool():
 
 
 @pytest.mark.unit
-def test_optional_none_date_is_left_for_the_tool_to_default():
-    # ``get_balance_sheet(curr_date=None)`` is *rejected* by the tool's own
-    # pydantic model, so the fingerprint rejects it too -- it must not be
-    # repaired into a valid request.
+@pytest.mark.parametrize("nullable", [False, True])
+def test_optional_none_date_follows_the_tools_declared_schema(nullable):
+    # LangChain releases differ on whether a str-with-None-default is exposed
+    # as nullable. Pin both contracts explicitly; do not assume the installed
+    # schema rejects null or repair a rejected value into a valid call.
+    date_spec = {"anyOf": [{"type": "string"}, {"type": "null"}], "default": None}
+    if not nullable:
+        date_spec = {"type": "string", "default": None}
+    schema = {
+        "type": "object", "required": ["ticker"], "properties": {
+            "ticker": {"type": "string"}, "curr_date": date_spec,
+        },
+    }
+    context = _context(schemas={"get_balance_sheet": schema})
     explicit_none = _call("a", "get_balance_sheet", ticker="AAPL", curr_date=None)
-    with pytest.raises(tg.MalformedCallError) as excinfo:
-        _fp(explicit_none)
-    assert excinfo.value.reason.endswith("type_mismatch:curr_date")
-
-    # Omitting it is valid: the schema default is None and the tool's ``as_of``
-    # turns that into the run date, so it equals the explicit run date.
     omitted = _call("b", "get_balance_sheet", ticker="AAPL")
     injected = _call("c", "get_balance_sheet", ticker="AAPL", curr_date=TRADE_DATE)
-    assert _fp(omitted) == _fp(injected)
+    assert context.fingerprint(omitted) == context.fingerprint(injected)
+    if nullable:
+        assert context.fingerprint(explicit_none) == context.fingerprint(omitted)
+    else:
+        with pytest.raises(tg.MalformedCallError) as excinfo:
+            context.fingerprint(explicit_none)
+        assert excinfo.value.reason.endswith("type_mismatch:curr_date")
 
 
 @pytest.mark.unit
@@ -1428,7 +1438,14 @@ def test_only_permitted_execute_calls_reach_the_tool_node():
         "call-2", "call-3", "call-4", "call-5", "call-6",
     ]
     # Only the execute calls ran; nothing else reached the node.
-    assert [entry[0] for entry in _CALLS] == ["indicator", "quote", "indicator"]
+    # ToolNode dispatches concurrently; completion order is not a contract.
+    # Check every executed name/symbol/argument exactly, while the separate
+    # assertions above still require dispatch/message order and paired IDs.
+    assert sorted(_CALLS, key=lambda entry: (entry[0], entry[1])) == [
+        ("indicator", "AAPL", {"curr_date": TRADE_DATE}),
+        ("indicator", "MSFT", {"curr_date": TRADE_DATE}),
+        ("quote", "MSFT", {"start_date": "2026-08-01", "end_date": TRADE_DATE}),
+    ]
     assert [call["id"] for call in host.batches[-1]] == ["call-3", "call-4", "call-5"]
 
     # The reuse keeps the current id and the recorded content.

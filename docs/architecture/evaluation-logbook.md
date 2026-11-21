@@ -2588,3 +2588,26 @@ removing two inherited extra EOF blank lines from the feature files. A full
 first-parent staged check also reports one existing trailing-space line in
 `.github/workflows/ci.yml:8` brought in verbatim from release. The CI file is
 unchanged relative to release and was not reformatted or otherwise edited.
+
+
+### PR #5 first remote CI and deterministic test repair
+
+Remote run 44857673774 on merge integration b9efb13 completed: Ruff, clean
+install and governance validation PASS; Python 3.10/3.11/3.12/3.13 test jobs FAIL.
+The Linux 3.12 job ran the complete tree (including simulated trading):
+**3796 passed, 2 failed, 9 skipped**, 22 warnings, 92 subtests. The two failures
+were budget tests using real monotonic time while expecting exact 4/5 seconds
+within microsecond tolerance. Python 3.10 additionally exposed asyncio.Barrier
+(added in 3.11) and a LangChain nullable-schema assumption. Python 3.11 exposed
+an unpinned snapshot fetched_at crossing a UTC second; Python 3.13 exposed a
+test's assumption that parallel tools complete in dispatch order.
+
+The repair changes TESTS ONLY: inject the existing fake Clock without widening
+numeric tolerance; use a two-phase asyncio.Event rendezvous with a timeout;
+explicitly test nullable AND non-nullable schemas; compare the exact executed
+name/symbol/argument multiset while keeping strict dispatch/message ID order;
+pin the existing snapshot clock in the fixed-snapshot fixture. No production
+clock, timeout, Gate logic, permission or CI workflow was changed.
+
+`python -m pytest tests/test_vendor_retry_budget.py tests/test_retry_session_context.py tests/test_tool_governance.py tests/test_stage2_multicategory_gate.py -q -p no:cacheprovider --tb=short`:
+**316 passed** (4.15s, Windows). Remote rerun remains pending at this entry.

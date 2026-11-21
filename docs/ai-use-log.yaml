@@ -589,3 +589,11 @@
   scope: 'PR 5 conflict integration: bounded execution protection with release Gate, evidence checkpoints, usage ledger and trusted outputs; ADR-012.'
   outcome: 'User approved the concrete conflict/test plan in chat (confirmation followed by an instruction to continue). Integration and offline verification performed; platform restrictions and exact results recorded in the evaluation logbook. No live API or trading call; final PR review/acceptance not fabricated.'
   human_review: requested
+
+- id: AUL-072
+  date: '2026-11-21'
+  tool: Codex
+  phase: verification
+  scope: 'PR 5 remote CI diagnosis and deterministic test-only portability repair within the approved integration/test plan.'
+  outcome: 'First Linux CI exposed real-clock tolerance, Python 3.10 asyncio API, nullable-schema version, snapshot-clock and parallel completion-order assumptions. Kept exact numeric/call/ID assertions; 316 focused tests pass locally. Remote rerun pending; no product or workflow change.'
+  human_review: requested
