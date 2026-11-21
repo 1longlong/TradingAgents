@@ -386,119 +386,237 @@ Please reference our work if you find *TradingAgents* provides you with some hel
 
 ## CS5351 Course Project Section (Downstream Student Fork)
 
-> The content above is the upstream (TauricResearch) product guide, preserved
+> The content above is the upstream (Tauric Research) product guide, preserved
 > verbatim for attribution and reference. The sections below are the CS5351
-> course-project governance overlay maintained by the student fork.
+> course-project overlay maintained by the student fork.
 
-### Purpose
+### Purpose and the three workstreams
 
-This repository is a downstream fork of the upstream `TradingAgents` framework
-used as the vehicle for the **CS5351** graduate course project that extends the
-framework with two deterministic, governance-driven improvements:
+This repository is the CS5351 downstream fork of TradingAgents. The integrated
+tree contains three distinct lines of work with separate provenance:
 
-- **Deterministic Data Quality Gate (FR-DQG-001)** — an LLM-free gate that
+1. **Release team work** — deterministic Data Quality Gate, dynamic debate
+   termination, evidence capture, durable usage accounting, blocked/degraded
+   safeguards, the Phase 4A offline comparison, and the independent simulated
+   trading subsystem.
+2. **WangTianQi's personal feature** — token observability and attribution,
+   Single-Pass structured finalisation, the batch-macro ablation, Finnhub-only
+   configured news, per-run experiment memory isolation, and the frozen V2/V3
+   CAND-01 measurement apparatus.
+3. **Shared integration** — the merged architecture, canonical requirement IDs,
+   ADR/invariant numbering, and the documentation/governance consolidation in
+   this worktree.
+
+Nothing here is financial, investment, or trading advice, and no result in this
+repository is a claim of alpha. The simulated-trading subsystem is a simulation;
+it has no real broker path.
+
+### Current integration status (2026-11-21)
+
+- This worktree is `integrate/token-into-release-20261121` at base `24adf97`,
+  **merging** the personal feature `57b93df` (personal final code `50b2ca3`).
+- **The Git merge is in progress and has not been completed, committed, or
+  pushed.** Do not read this tree as a published release.
+- D1–D9 documentation integration is staged in this worktree: the merged
+  requirements/ADR/invariant/governance set is present. The protected
+  `.opencode/rules.md`, `.opencode/permissions.jsonc` and the CI workflow remain
+  unresolved and require explicit human handling.
+- The remote CI has **not** been run for the integrated tree, and the full
+  offline suite has **not** been run while unrelated documentation conflicts
+  remain. See [`Report.md`](Report.md) and
+  [`docs/architecture/risk-list.md`](docs/architecture/risk-list.md).
+
+### Historical Release status (preserved, time-scoped)
+
+These statements are historical and are **not** the current integration state:
+
+- Phase 4A (deterministic offline baseline comparison) was completed and
+  human-approved with limitations (WANG Yiwen 60536848, 2026-10-23; see
+  [`docs/review-memo.md`](docs/review-memo.md)).
+- The 2026-11-06 maintenance fixes and the 2026-11-10 repair batches were
+  authorized as plan/test-only work and remained pending final human acceptance
+  at that time.
+- Phase 4B (live-provider benchmarking) and production threshold tuning were
+  prohibited by default. The personal V2/V3 paid campaigns later ran under dated,
+  run-specific authorizations recorded in [`docs/ai-use-log.yaml`](docs/ai-use-log.yaml);
+  those authorizations do not authorize further spend.
+- A 2026-11-06 authorized live check (NVDA / 2026-11-05) ended **degraded**, not
+  blocked; it is not exhaustive live proof.
+- Nothing in this repository has been submitted, presented, or graded.
+
+### Workstream A — Release team
+
+- **Deterministic Data Quality Gate (`FR-DQG-001`)** — an LLM-free gate that
   validates market evidence against five deterministic classes and fails closed
-  on missing or low-quality evidence before the Bull/Bear debate opens.
-- **Dynamic, evidence-aware debate termination (FR-DDT-001)** — a deterministic
-  Debate Evaluator that ends the debate on evidence/model conflict staleness or
-  budget exhaustion instead of always running a fixed number of rounds.
+  on missing or low-quality evidence before the Bull/Bear debate.
+- **Dynamic, evidence-aware debate termination (`FR-DDT-001`)** — a deterministic
+  Debate Evaluator that ends the debate on evidence/model-conflict staleness or
+  budget exhaustion instead of always running fixed rounds.
+- **Evidence capture and audit (`FR-DQG-004/005`, ADR-008)** — structured
+  optional-evidence ingestion and deterministic report artifacts
+  (`gate_summary.md`, `evidence_manifest.json`, `debate_trace.json`,
+  `run_summary.json`).
+- **Durable usage settlement (`FR-DDT-003`, ADR-009)** — a run-scoped SQLite
+  reservation/settlement ledger for debate budget safety.
+- **Blocked/degraded safeguards (`FR-DQG-006`, `NFR-FC-001`, ADR-011)** — the
+  output guard pins blocked runs to Hold, and a degraded run's confidence is
+  capped deterministically.
+- **Independent simulated trading subsystem (`FR-TRD-*`, `INV-TRD-*`)** — the
+  approved `src/trading/` + `src/safety/` subsystem; simulation only.
+- **Phase 4A comparison (`NFR-CMP-*`)** — offline scripted-fixture comparison,
+  approved with limitations; not live-provider measurement.
 
-Full course-metadata and requirement/layout details live under [`docs/`](docs/).
+### Workstream B — WangTianQi's personal token-observability feature
 
-### Branch and Deliverable Status (do not assume)
+- **Provider usage observability and attribution (`FR-OBS-001/003/004`,
+  `FR-ANL-004`; ADR-013)** — a per-run collector with `agent` / `system` / `none`
+  scopes. Missing usage is `null`, never zero; run totals close over agent,
+  system and unattributed buckets. An unattributed call voids a *measured
+  experiment sample* at the harness boundary; the product graph does not abort.
+- **Single-Pass structured finalisation (`FR-ANL-005`; ADR-014, ADR-018)** — the
+  analyst can emit its typed report on the terminal schema call instead of
+  paying a second prose rewrite. `single_pass_finalization_enabled` defaults to
+  `False` and requires structured output; fallbacks never present prose as a
+  typed object, never replay a dangling tool call, and never leak protocol markup.
+- **Batch-macro ablation (`FR-ANL-006`; ADR-015)** — `get_macro_indicators_batch`
+  behind `batch_macro_enabled`; the switch removes the tool from both the analyst
+  and the news `ToolNode`. Kept as an ablation, not a demonstrated optimisation.
+- **Finnhub-only configured news (`FR-ANL-008`; ADR-016)** — company news routes
+  only to Finnhub; global news is `CONFIG_DISABLED`; a Finnhub outage is never
+  rescued by GDELT. The GDELT adapter remains in the tree but is unreachable from
+  the configured route.
+- **Per-run experiment memory isolation (`FR-ANL-009`; ADR-017)** — registered
+  runs copy one immutable snapshot, hash it, and refuse a missing/changed copy
+  before spending. Harness-only: generic runs still use the shared host log.
+- **Frozen V2/V3 measurements and audits (`FR-HAR-*`, `FR-CAM-001`,
+  `NFR-VER-*`)** — pre-registered 16-run specs, config hashes, freeze
+  records/manifests, pre-spend gates, and three independent (AI-authored) audits.
+  See [`token_benchmarks/`](token_benchmarks/) and
+  [`docs/architecture/evaluation-logbook.md`](docs/architecture/evaluation-logbook.md).
 
-- Current working branch: `feature/data-quality-debate-control`.
-- **Phase 4A (deterministic offline baseline comparison) is completed and
-  human-approved with limitations** (WANG Yiwen 60536848, 2026-10-23). The base
-  commit `8abea81` is already pushed to `origin/feature/data-quality-debate-control`
-  (verified via `git ls-remote`). See [`docs/review-memo.md`](docs/review-memo.md).
-- **Phase 4B (live-provider benchmarking) and production threshold tuning have
-  NOT been performed** and remain prohibited without separate explicit human
-  authorization.
-- **Current status:** the 2026-11-06 maintenance fixes (guard/budget/audit,
-  FR-DQG-006/FR-DDT-002/003), the 2026-11-06 documentation/requirements revision,
-  and the 2026-11-10 repair batches (guard multiline containment, empty-map
-  override, shared ID uniqueness, plus the documentation/traceability batch) in
-  this revision form a **work-in-progress feature-branch checkpoint**, authorized
-  for commit/push by the human on 2026-11-10. They are technically verified
-  offline and **await explicit human review/acceptance**. Publishing this
-  checkpoint is not approval to merge or a claim that all defects are fixed.
-- **Next budget/participation repair is proposed, not implemented.** The measured
-  runtime accounting correction (DEBT-021), truthful partial-debate reporting
-  (DEBT-033), and subsequent live blocked-path verification still await approval
-  of the new plan/test matrix. Do not infer completion from this checkpoint.
-- **2026-11-10 human approval is PLAN + TESTS ONLY (not acceptance).** The human
-  authorized the November 10 repair plan and its test cases. Final human acceptance
-  remains **PENDING**; no traceability score is recorded.
-- **Verification is not all-green (recorded, not hidden).** The strict-offline
-  count-and-fail harness observes **4 known baseline failures** (3 date-sensitive
-  `test_ohlcv_cache_freshness` + the `test_no_data_handling` vendor-reachability
-  baseline) and **1 intercepted outbound socket attempt** (no connection made) from
-  that baseline, so NFR-OFF-001 stays **PARTIAL/OPEN** (DEBT-002/RISK-002). No
-  baseline test/CI/waiver was modified.
-- **Live check (2026-11-06, authorized, NVDA / 2026-11-05, school model
-  `CS5351/DeepSeek-V4-Flash`):** 18 successful model calls / 202,622 reported
-  tokens; final gate **degraded**; final signal **Overweight**. A first harness
-  attempt (18 calls / 178,453 tokens) failed only because the local streaming
-  harness omitted `graph.ticker` before logging — a harness error, **not** a
-  project bug; the corrected rerun totalled 36 calls / 381,075 reported tokens
-  (retry cost not hidden). Live verification is **not** exhaustive proof; two
-  **OPEN, unfixed** issues were found (see
-  [`docs/architecture/risk-list.md`](docs/architecture/risk-list.md) RISK-020 /
-  RISK-021 and DEBT-021 / DEBT-022).
-- **Nothing here has been submitted, presented, or graded.** Student identity is
-  confirmed as **WANG Yiwen**, CS5351 student ID **60536848** (see
-  [`transcripts/`](transcripts/) and [`docs/debt-register.md`](docs/debt-register.md)).
-  Team roster, contribution, and reflection data are **pending human input** and
-  are not fabricated.
+### Workstream C — shared integrated architecture
 
-### Artifact Index
+**Accounting scopes are distinct and must not be conflated:**
+
+| Scope | Enforcer | What it measures |
+| --- | --- | --- |
+| Debate budget | `tradingagents/debate/budget.py` | debate optional calls vs caps + summary reserve |
+| Durable ledger | `tradingagents/debate/usage_ledger.py` | per-run reservation/settlement across resume |
+| Paid-run spend contract | `tradingagents/budget_guard.py` + `scripts/token_benchmark.py` | known spend vs an explicit cap |
+| Per-agent telemetry | `tradingagents/observability.py` | run-wide calls/tokens by agent/system/none |
+| Report provenance | `tradingagents/report_artifacts.py` | debate-scoped measured/estimated labels |
+
+`run_summary.json` reports the **debate-scoped** view (`total_run_calls` and
+`tool_calls` are `null`); the telemetry artifact is the **run-wide** source. They
+are two artifacts with two scopes, not two copies of one number.
+
+**Canonical identifiers (integrated):**
+
+- 52 requirements: 32 Release IDs plus 20 retrospective IDs
+  (`FR-ANL-*`, `FR-OBS-*`, `FR-HAR-*`, `FR-CAM-*`, `NFR-VER-*`) — see
+  [`docs/req/requirements.yaml`](docs/req/requirements.yaml) and
+  [`docs/req/req-schema.json`](docs/req/req-schema.json).
+- ADR-001–ADR-018: ADR-012 is the simulated trading system; ADR-013 observability;
+  ADR-014 Single-Pass; ADR-015 batch macro; ADR-016 Finnhub-only news; ADR-017
+  memory isolation; ADR-018 structured fallback.
+- INV-1–INV-27 plus INV-TRD-001–003 — see
+  [`docs/architecture/invariants.md`](docs/architecture/invariants.md).
+- Risks `RISK-036`–`RISK-049` and debt `DEBT-042`–`DEBT-055` are the renumbered
+  personal records; Release `RISK-001`–`RISK-035` and `DEBT-001`–`DEBT-041` keep
+  their meanings.
+
+**Source/test layout:** `tradingagents/` and `cli/` are the product trees;
+`tests/` is the canonical suite; `src/trading/` and `src/safety/` are the approved
+additive subsystem; `test/offline/` and `test/live/` are pointer READMEs. See
+[`src/README.md`](src/README.md), [`test/offline/README.md`](test/offline/README.md)
+and [`test/live/README.md`](test/live/README.md).
+
+**Prompt artifacts:** `prompts/prompt_v1.3.yaml` is the current Coding-Agent
+startup prompt. `prompts/prompt_v1.0.yaml`/`v1.1.yaml` are the historical CS5351
+startup prompts. The Market Analyst runtime-prompt snapshots that the personal
+line also called v1.0/v1.1 are archived separately under
+[`prompts/archive/`](prompts/archive/README.md); they are not startup prompts and
+not runtime configuration.
+
+### Results and limitations (do not overstate)
+
+- V2: 7 attempts / 5 valid / 1 environment-failed / 1 invalid / 1,463,791 tokens.
+- V3: 18 attempts / 16 Run IDs / 15 valid / 1 environment-failed / 2 invalid /
+  3,067,669 tokens.
+- Combined: 25 attempts / 20 valid / 4,531,460 tokens (4,112,224 valid; 419,236
+  failed).
+- Single-Pass: −19,589 tokens/run (−8.96 %) on the balanced three-block mean,
+  negative in all three blocks — **exploratory**, n=1 per cell, one model, one
+  trade date. Batch macro was not robust (about −695/run excluding the
+  environment-degraded R01).
+- The recorded suite at `50b2ca3` is 2,227 passed / 4 known failed / 2 skipped /
+  319 subtests; a `.env`-free submission-branch run reports 2,233 / 0 / 2 / 319.
+  The merged-tree full suite is **NOT_RUN**. No paid rerun was executed after the
+  final remediation, and there is no ground truth or P&L evidence.
+
+### Artifact index
 
 | Path | Type | Description |
 | --- | --- | --- |
-| [`AGENTS.md`](AGENTS.md) | Governance | Coding-agent governance rules. |
-| [`architecture-blueprint.md`](architecture-blueprint.md) | Design | Master constraint/design document. |
-| [`Prompt.md`](Prompt.md) | Prompt | Static startup prompt for coding agents. |
-| [`Report.md`](Report.md) | Process | Phase progress report + student reflection. |
-| [`docs/req/requirements.yaml`](docs/req/requirements.yaml) | Requirements | Machine-readable PRD (validated against schema). |
-| [`docs/req/req-schema.json`](docs/req/req-schema.json) | Schema | CI validation schema for requirements. |
-| [`docs/architecture/adr/001-data-quality-gate.md`](docs/architecture/adr/001-data-quality-gate.md) | ADR | Deterministic Data Quality Gate decision. |
-| [`docs/architecture/adr/002-dynamic-debate-termination.md`](docs/architecture/adr/002-dynamic-debate-termination.md) | ADR | Dynamic debate-termination decision. |
-| [`docs/architecture/invariants.md`](docs/architecture/invariants.md) | Design | Non-negotiable system invariants. |
-| [`docs/architecture/trace-matrix.md`](docs/architecture/trace-matrix.md) | Trace | Requirement → artifact/source/test/evidence map. |
-| [`docs/architecture/memory-design.md`](docs/architecture/memory-design.md) | Design | Point-in-time / memory design notes. |
-| [`docs/architecture/option-ledger.md`](docs/architecture/option-ledger.md) | Decisions | Alternatives considered and why. |
-| [`docs/architecture/permission-model.md`](docs/architecture/permission-model.md) | Governance | Agent/permission model. |
-| [`docs/architecture/evaluation-logbook.md`](docs/architecture/evaluation-logbook.md) | Evidence | Per-verification evidence log. |
-| [`docs/architecture/risk-list.md`](docs/architecture/risk-list.md) | Risk | Known risks and mitigations. |
-| [`docs/architecture/evaluation-table.md`](docs/architecture/evaluation-table.md) | Evidence | Test/verification summary table. |
-| [`docs/architecture/runtime-policy-catalog.md`](docs/architecture/runtime-policy-catalog.md) | Policy | Runtime policy / config catalog. |
+| [`AGENTS.md`](AGENTS.md) | Governance | Coding-agent governance rules and honest enforcement status. |
+| [`architecture-blueprint.md`](architecture-blueprint.md) | Design | Master constraint/design document (Release base + token-observability sections). |
+| [`Prompt.md`](Prompt.md) | Prompt | Static startup-prompt anchor and prompt-lineage clarification. |
+| [`Report.md`](Report.md) | Process | Integrated team process report + personal reflection sections. |
+| [`docs/req/requirements.yaml`](docs/req/requirements.yaml) | Requirements | Machine-readable PRD + 52-requirement registry. |
+| [`docs/req/req-schema.json`](docs/req/req-schema.json) | Schema | Draft 2020-12 validation schema. |
+| [`docs/architecture/adr/012-simulated-trading-system.md`](docs/architecture/adr/012-simulated-trading-system.md) | ADR | Simulated trading system. |
+| [`docs/architecture/adr/013-provider-usage-observability.md`](docs/architecture/adr/013-provider-usage-observability.md) | ADR | Provider-usage observability and attribution. |
+| [`docs/architecture/adr/014-single-pass-finalization.md`](docs/architecture/adr/014-single-pass-finalization.md) | ADR | Single-Pass structured finalisation. |
+| [`docs/architecture/adr/015-batch-macro-switch.md`](docs/architecture/adr/015-batch-macro-switch.md) | ADR | Batch-macro ablation switch. |
+| [`docs/architecture/adr/016-finnhub-only-news.md`](docs/architecture/adr/016-finnhub-only-news.md) | ADR | Finnhub-only configured news. |
+| [`docs/architecture/adr/017-per-run-memory-isolation.md`](docs/architecture/adr/017-per-run-memory-isolation.md) | ADR | Per-run experiment memory isolation. |
+| [`docs/architecture/adr/018-structured-fallback-safety.md`](docs/architecture/adr/018-structured-fallback-safety.md) | ADR | Structured-fallback safety. |
+| [`docs/architecture/invariants.md`](docs/architecture/invariants.md) | Design | INV-1–INV-27 + INV-TRD invariants. |
+| [`docs/architecture/trace-matrix.md`](docs/architecture/trace-matrix.md) | Trace | Requirement → artifact/source/test/evidence map + reconciliation. |
+| [`docs/architecture/memory-design.md`](docs/architecture/memory-design.md) | Design | Product memory + experiment isolation. |
+| [`docs/architecture/option-ledger.md`](docs/architecture/option-ledger.md) | Decisions | Release options + personal OPT-01–OPT-10. |
+| [`docs/architecture/permission-model.md`](docs/architecture/permission-model.md) | Governance | Roles, matrix, honest enforcement status, credential handling. |
+| [`docs/architecture/risk-list.md`](docs/architecture/risk-list.md) | Risk | Release RISK-001–035 + personal RISK-036–049. |
+| [`docs/architecture/runtime-policy-catalog.md`](docs/architecture/runtime-policy-catalog.md) | Policy | Release policies + personal RP-01–RP-08. |
+| [`docs/architecture/evaluation-logbook.md`](docs/architecture/evaluation-logbook.md) | Evidence | Release log + personal LOG-001–LOG-012. |
+| [`docs/architecture/evaluation-table.md`](docs/architecture/evaluation-table.md) | Evidence | Release table + personal Part III. |
 | [`docs/code-governance/structural-constraints.md`](docs/code-governance/structural-constraints.md) | Governance | Module/structural constraints. |
-| [`docs/code-governance/verification-constraints.md`](docs/code-governance/verification-constraints.md) | Governance | How code must be verified. |
-| [`docs/code-governance/mcp-tool-manifest.md`](docs/code-governance/mcp-tool-manifest.md) | Governance | MCP tool manifest / usage policy. |
-| [`docs/ai-use-log.yaml`](docs/ai-use-log.yaml) | Governance | AI-tool use log (deterministic YAML upstream). |
-| [`docs/review-memo.md`](docs/review-memo.md) | Governance | Human review memo across phases. |
-| [`docs/debt-register.md`](docs/debt-register.md) | Debt | Known technical debt + uncertainty. |
-| [`docs/bug-diary.md`](docs/bug-diary.md) | Evidence | Detected defects & fixes. |
-| [`.opencode/permissions.jsonc`](.opencode/permissions.jsonc) | Governance | OpenCode permission config. |
-| [`.opencode/rules.md`](.opencode/rules.md) | Governance | OpenCode agent rules. |
-| [`.agent/rules.md`](.agent/rules.md) | Governance | Shared coding-agent rules. |
-| [`prompts/prompt_v1.0.yaml`](prompts/prompt_v1.0.yaml) | Prompt | v1.0 read-only analysis/frozen requirements (historical). |
-| [`prompts/prompt_v1.1.yaml`](prompts/prompt_v1.1.yaml) | Prompt | v1.1 implementation + verification + governance (prior authoritative; historical). |
-| [`prompts/prompt_v1.2.yaml`](prompts/prompt_v1.2.yaml) | Prompt | v1.2 implementation + verification + governance (prior authoritative; historical). |
-| [`prompts/prompt_v1.3.yaml`](prompts/prompt_v1.3.yaml) | Prompt | v1.3 plan-first + STOP + implementation + verification (current authoritative). |
-| [`docs/architecture/adr/004-governance-context-design.proposed.md`](docs/architecture/adr/004-governance-context-design.proposed.md) | ADR | PROPOSED context-assembly/compaction design (not implemented). |
-| [`docs/code-governance/ci-gate-matrix.md`](docs/code-governance/ci-gate-matrix.md) | Governance | CI gate matrix + PR review template + 8 debt categories (document only). |
-| [`docs/code-governance/agent-permissions-proposal.yaml`](docs/code-governance/agent-permissions-proposal.yaml) | Governance | Role×path deny-by-default whitelist PROPOSAL (not active). |
-| [`docs/code-governance/human-rules-proposal.md`](docs/code-governance/human-rules-proposal.md) | Governance | Proposed HUMAN-ONLY `.opencode/rules.md` text (awaiting manual adoption). |
-| [`transcripts/60536848-WANG-Yiwen.md`](transcripts/60536848-WANG-Yiwen.md) | Transcript | Annotated human-supervision record. |
-| [`src/README.md`](src/README.md) | Mapping | Maps deliverable D8 to canonical `tradingagents/`/`cli/`. |
-| [`test/offline/README.md`](test/offline/README.md) | Mapping | Indexes offline deterministic tests in `tests/`. |
-| [`test/live/README.md`](test/live/README.md) | Mapping | Documents `integration`-marker live tests (opt-in). |
+| [`docs/code-governance/verification-constraints.md`](docs/code-governance/verification-constraints.md) | Governance | Verification rules and tiers. |
+| [`docs/code-governance/mcp-tool-manifest.md`](docs/code-governance/mcp-tool-manifest.md) | Governance | MCP/tool policy (no MCP server configured). |
+| [`docs/ai-use-log.yaml`](docs/ai-use-log.yaml) | Governance | 105 integrated AI-use records. |
+| [`docs/ai-use-session-audit.md`](docs/ai-use-session-audit.md) | Governance | Session audit, ID mappings, tool-attribution evidence. |
+| [`docs/review-memo.md`](docs/review-memo.md) | Governance | Release reviews + personal REC-01–REC-10 (human-pending). |
+| [`docs/debt-register.md`](docs/debt-register.md) | Debt | Release DEBT-001–041 + personal DEBT-042–055. |
+| [`docs/bug-diary.md`](docs/bug-diary.md) | Evidence | Release defects + personal BUG-001–BUG-018. |
+| [`prompts/prompt_v1.3.yaml`](prompts/prompt_v1.3.yaml) | Prompt | Current authoritative Coding-Agent startup prompt. |
+| [`prompts/archive/`](prompts/archive/README.md) | Evidence | Archived historical Market Analyst prompt snapshots (not runtime config). |
+| [`transcripts/60726054-WangTianQi.md`](transcripts/60726054-WangTianQi.md) | Transcript | WangTianQi AI-prepared draft; personal annotations and signature **pending**. |
+| [`transcripts/60536848-WANG-Yiwen.md`](transcripts/60536848-WANG-Yiwen.md) | Transcript | Teammate's preserved human-supervision record (do not edit). |
 
 ### Deliverable-to-repo mapping (this fork)
 
 The authoritative project slide lists `src/`, `test/offline/`, and `test/live/`.
-This inherited repository uses `tradingagents/` and `cli/` as canonical source
-trees and `tests/` for all tests. The three `README` pointers above document
-that mapping explicitly; **no** code is duplicated or relocated.
+This repository uses `tradingagents/` and `cli/` as the product source trees,
+`src/trading/` and `src/safety/` for the approved simulated-trading subsystem,
+and `tests/` for all tests. The three README pointers above document that mapping
+explicitly; **no** product code is duplicated or relocated.
+
+### Transcripts and human review
+
+- [`transcripts/60726054-WangTianQi.md`](transcripts/60726054-WangTianQi.md) is an
+  **AI-prepared, unsigned draft**; the personal decisions, reflections and
+  attestation remain `HUMAN_CONFIRMATION_REQUIRED`.
+- [`transcripts/60536848-WANG-Yiwen.md`](transcripts/60536848-WANG-Yiwen.md) is the
+  teammate's preserved transcript and is not part of WangTianQi's deliverable.
+- Every personal review, ADR, risk and debt item remains
+  `PENDING_HUMAN_CONFIRMATION`; no human sign-off is claimed.
+
+### Attribution and license
+
+TradingAgents was created by [Tauric Research](https://github.com/TauricResearch)
+and is distributed under the Apache License 2.0; see [`LICENSE`](LICENSE). The
+upstream product documentation above is preserved for attribution. The CS5351
+overlay adds the Release team's improvements, WangTianQi's token-observability
+feature, and the integrated governance/verification set. AI-assisted work is
+recorded in [`docs/ai-use-log.yaml`](docs/ai-use-log.yaml); commit-author
+identities that the tree cannot establish remain unresolved rather than assigned.

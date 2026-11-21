@@ -1,0 +1,251 @@
+"""Credential-free tests for the one-command wrapper (scripts/run_token_benchmark.sh).
+
+These never call an LLM and never read the real ``~/.env_secrets``: every case
+that could touch credentials points ``TRADINGAGENTS_BENCHMARK_SECRETS`` at a
+synthetic file. The wrapper is exercised as a subprocess so argument parsing,
+exit codes, and "no assistant secrets leak" behavior are tested for real.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+WRAPPER = REPO_ROOT / "scripts" / "run_token_benchmark.sh"
+HARNESS = REPO_ROOT / "scripts" / "token_benchmark.py"
+
+
+def _sandbox(tmp_path: Path) -> Path:
+    """A minimal repo root the wrapper can operate on without touching the real tree."""
+    root = tmp_path / "repo"
+    scripts = root / "scripts"
+    scripts.mkdir(parents=True)
+    shutil.copy2(WRAPPER, scripts / WRAPPER.name)
+    shutil.copy2(HARNESS, scripts / HARNESS.name)
+    tmpl = root / "token_benchmarks" / "baseline_v2"
+    tmpl.mkdir(parents=True)
+    shutil.copy2(REPO_ROOT / "token_benchmarks" / "baseline_v2" / "experiment.json",
+                 tmpl / "experiment.json")
+    # ``baseline_v2`` predates the 2x2 study and states no arm, so the harness
+    # (correctly) refuses to derive a spec from it. This sandbox tests the
+    # wrapper's failure reporting, not the arm, so give it the frozen arm and
+    # note explicitly that the experiment only runs because it now says which
+    # arm it is -- the H-B hole was a spec that ran at DEFAULT_CONFIG instead.
+    experiment = json.loads((tmpl / "experiment.json").read_text())
+    experiment["switches"] = {"batch_macro": True, "structured": True,
+                              "single_pass": False, "s2_downstream": True}
+    experiment["switches_required"] = dict(experiment["switches"])
+    experiment["news_scope"] = {"company_news": "finnhub",
+                                "global_news": "finnhub:CONFIG_DISABLED",
+                                "gdelt": "excluded"}
+    # U-2: a cap must say what kind of contract it is; a bare number is no
+    # longer interpretable, by design.
+    experiment["budget"] = {"budget_mode": "capped", "max_total_tokens": 1000}
+    experiment["checkpoint_enabled"] = False
+    # The hash is computed here exactly as the harness computes it: a handed
+    # value would make this sandbox test the fixture rather than the code.
+    sys.path.insert(0, str(root / "scripts"))
+    import token_benchmark as sandbox_harness
+    experiment["config_sha256"] = sandbox_harness.registration_sha256(experiment)
+    (tmpl / "experiment.json").write_text(json.dumps(experiment, indent=2))
+    # The wrapper requires the project virtualenv; reuse the real interpreter.
+    venv_root = root / ".venv"
+    venv_root.mkdir(parents=True, exist_ok=True)
+    # A bare symlink to the interpreter is not a virtualenv: the interpreter
+    # finds its ``site-packages`` through the ``pyvenv.cfg`` beside it, so a
+    # symlinked binary in a temp directory silently falls back to the base
+    # Python and cannot import the project's dependencies. Mirror the real
+    # venv's layout instead, which keeps the sandbox a genuine environment.
+    real_venv = REPO_ROOT / ".venv"
+    if (real_venv / "pyvenv.cfg").is_file():
+        shutil.copy2(real_venv / "pyvenv.cfg", venv_root / "pyvenv.cfg")
+        for name in ("bin", "lib", "lib64"):
+            if (real_venv / name).exists():
+                (venv_root / name).symlink_to(real_venv / name,
+                                              target_is_directory=True)
+    else:  # pragma: no cover - a checkout without its own venv
+        (venv_root / "bin").mkdir()
+        (venv_root / "bin" / "python").symlink_to(
+            Path(sys.executable).resolve(), target_is_directory=False)
+    # The harness imports the application package, and C3-03 refuses to run
+    # unless ``tradingagents`` really lives under the experiment root. A symlink
+    # elsewhere would (correctly) be refused, so copy the tree in. The copy is
+    # what makes this sandbox a faithful root rather than a pointer at one.
+    shutil.copytree(REPO_ROOT / "tradingagents", root / "tradingagents",
+                    symlinks=True,
+                    ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    (root / "cli").symlink_to(REPO_ROOT / "cli", target_is_directory=True)
+    return root
+
+
+def _run(root: Path, *args: str, cwd: Path | None = None, secrets: Path | None = None):
+    env = dict(os.environ)
+    env.pop("TRADINGAGENTS_BENCHMARK_SECRETS", None)
+    # Never inherit provider credentials from the developer's shell: a "dead
+    # endpoint" probe must actually be dead. Before this, pytest's ``.env``
+    # export put the live API key and base URL in ``os.environ``, so the
+    # unreachable-endpoint test dialled the *real, paid* endpoint (observed as
+    # established sockets to :443) instead of failing fast.
+    for name in ("CITYU_FOUNDRY_API_KEY", "CITYU_FOUNDRY_BASE_URL",
+                 "OPENAI_API_KEY", "OPENAI_BASE_URL"):
+        env.pop(name, None)
+    if secrets is not None:
+        env["TRADINGAGENTS_BENCHMARK_SECRETS"] = str(secrets)
+    # The sandbox is not a frozen release, and these tests are about the
+    # wrapper's argument handling and failure reporting. The freeze-release
+    # refusal has its own tests; skipping it here keeps that control from being
+    # quietly untested by making every wrapper test depend on it.
+    env["TRADINGAGENTS_SKIP_FREEZE_CHECK"] = "1"
+    # ...and it must reach the measured child: the parent strips the seam from
+    # a child's environment unless this second, separately-named variable asks
+    # for it explicitly (audit A round 5, R-5-C).
+    env["TRADINGAGENTS_ALLOW_SKIP_FREEZE_CHECK_IN_CHILD"] = "1"
+    return subprocess.run(
+        [str(root / "scripts" / WRAPPER.name), *args],
+        cwd=str(cwd or root.parent), capture_output=True, text=True, env=env,
+        timeout=120, stdin=subprocess.DEVNULL,
+    )
+
+
+def _measurements(root: Path) -> list[Path]:
+    d = root / "token_benchmarks" / "measurements"
+    return sorted(d.iterdir()) if d.exists() else []
+
+
+class TestWrapperContract:
+    def test_help_is_offline_and_documents_the_defaults(self, tmp_path):
+        root = _sandbox(tmp_path)
+        proc = _run(root, "--help", cwd=tmp_path)
+        assert proc.returncode == 0
+        out = proc.stdout
+        assert "scripts/run_token_benchmark.sh" in out
+        assert "--label" in out and "--dry-run" in out and "--runs" in out
+        assert "default: 5" in out
+        # No side effects from --help.
+        assert _measurements(root) == []
+
+    def test_unsupported_option_is_a_clear_error(self, tmp_path):
+        root = _sandbox(tmp_path)
+        proc = _run(root, "--bogus")
+        assert proc.returncode == 2
+        assert "unsupported option: --bogus" in proc.stderr
+        assert _measurements(root) == []
+
+    def test_unexpected_positional_is_rejected(self, tmp_path):
+        root = _sandbox(tmp_path)
+        proc = _run(root, "NVDA")
+        assert proc.returncode == 2
+        assert "unexpected argument: NVDA" in proc.stderr
+
+    @pytest.mark.parametrize("value", ["0", "-3", "abc", "2.5", ""])
+    def test_runs_must_be_a_positive_integer(self, tmp_path, value):
+        root = _sandbox(tmp_path)
+        proc = _run(root, "--runs", value)
+        assert proc.returncode == 1
+        assert "--runs" in proc.stderr
+        assert _measurements(root) == []
+
+    def test_option_without_a_value_is_rejected(self, tmp_path):
+        root = _sandbox(tmp_path)
+        proc = _run(root, "--label")
+        assert proc.returncode == 1
+        assert "--label requires a value" in proc.stderr
+
+    def test_bad_date_format_is_rejected(self, tmp_path):
+        root = _sandbox(tmp_path)
+        proc = _run(root, "--date", "23/09/2026", "--dry-run")
+        assert proc.returncode == 1
+        assert "YYYY-MM-DD" in proc.stderr
+
+
+class TestWrapperDryRun:
+    def test_dry_run_needs_no_credentials_and_calls_no_llm(self, tmp_path):
+        root = _sandbox(tmp_path)
+        proc = _run(root, "--dry-run", "--runs", "2",
+                    secrets=tmp_path / "definitely-missing")
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert "dry run completed" in proc.stdout
+        assert "no LLM called" in proc.stdout
+        dirs = _measurements(root)
+        assert len(dirs) == 1
+        exp = json.loads((dirs[0] / "experiment.json").read_text())
+        assert exp["measured_runs"] == 2
+        # Nothing that looks like a measurement result exists yet.
+        assert not (dirs[0] / "summary.json").exists()
+
+    def test_dry_run_works_from_an_unrelated_cwd(self, tmp_path):
+        root = _sandbox(tmp_path)
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        proc = _run(root, "--dry-run", "--label", "from-elsewhere", cwd=elsewhere)
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert _measurements(root)[0].name.endswith("from-elsewhere")
+        assert _measurements(root)[0].parent == root / "token_benchmarks" / "measurements"
+
+    def test_dry_run_leaves_the_template_untouched(self, tmp_path):
+        root = _sandbox(tmp_path)
+        tmpl = root / "token_benchmarks" / "baseline_v2" / "experiment.json"
+        before = tmpl.read_bytes()
+        assert _run(root, "--dry-run").returncode == 0
+        assert tmpl.read_bytes() == before
+
+
+class TestWrapperCredentials:
+    def test_missing_secrets_file_fails_before_measuring(self, tmp_path):
+        root = _sandbox(tmp_path)
+        proc = _run(root, secrets=tmp_path / "nope")
+        assert proc.returncode == 1
+        combined = proc.stdout + proc.stderr
+        assert "credentials file not found" in combined
+        assert _measurements(root) == []
+
+    def test_partial_secrets_are_reported_by_name_only(self, tmp_path):
+        root = _sandbox(tmp_path)
+        secrets = tmp_path / "env"
+        secrets.write_text("CITYU_FOUNDRY_API_KEY=sk-never-print-this\n")
+        proc = _run(root, secrets=secrets)
+        combined = proc.stdout + proc.stderr
+        assert proc.returncode == 1
+        assert "CITYU_FOUNDRY_BASE_URL" in combined
+        assert "sk-never-print-this" not in combined
+        assert _measurements(root) == []
+
+    def test_secret_value_never_appears_in_output_or_artifacts(self, tmp_path):
+        root = _sandbox(tmp_path)
+        secrets = tmp_path / "env"
+        secrets.write_text(
+            "CITYU_FOUNDRY_API_KEY=sk-unique-sentinel-value\n"
+            "CITYU_FOUNDRY_BASE_URL=http://127.0.0.1:9/v1\n")
+        # Dry-run so no network is attempted; the credential path is still
+        # exercised by pointing at a real file.
+        proc = _run(root, "--dry-run", secrets=secrets)
+        assert "sk-unique-sentinel-value" not in proc.stdout + proc.stderr
+        for path in (root / "token_benchmarks").rglob("*"):
+            if path.is_file():
+                assert "sk-unique-sentinel-value" not in path.read_text(errors="replace")
+
+
+class TestWrapperFailureReporting:
+    def test_unreachable_endpoint_reports_incomplete_and_keeps_evidence(self, tmp_path):
+        """A dead endpoint must not be reported as success (or as 5/5)."""
+        root = _sandbox(tmp_path)
+        secrets = tmp_path / "env"
+        secrets.write_text(
+            "CITYU_FOUNDRY_API_KEY=sk-dummy\n"
+            "CITYU_FOUNDRY_BASE_URL=http://127.0.0.1:9/v1\n")
+        proc = _run(root, "--runs", "1", "--label", "dead", secrets=secrets)
+        assert proc.returncode != 0
+        assert "Benchmark completed" not in proc.stdout
+        dirs = _measurements(root)
+        assert len(dirs) == 1
+        # The failed attempt is preserved, not silently discarded.
+        attempts = list((dirs[0] / "runs").glob("run_*/attempt_*"))
+        assert attempts
+        assert (attempts[0] / "spec.json").exists()

@@ -1,0 +1,113 @@
+{
+  "arms": {
+    "AB": {
+      "batch_macro": true,
+      "s2_downstream": true,
+      "single_pass": false,
+      "structured": true
+    },
+    "B": {
+      "batch_macro": false,
+      "s2_downstream": true,
+      "single_pass": false,
+      "structured": true
+    },
+    "C0": {
+      "batch_macro": false,
+      "s2_downstream": true,
+      "single_pass": true,
+      "structured": true
+    },
+    "CC": {
+      "batch_macro": true,
+      "s2_downstream": true,
+      "single_pass": true,
+      "structured": true
+    }
+  },
+  "block_order": [
+    "NVDA",
+    "AAPL",
+    "JPM",
+    "XOM"
+  ],
+  "budget": {
+    "budget_mode": "uncapped_authorized",
+    "max_total_tokens": null
+  },
+  "cache_policy": "preserve_existing",
+  "cases": [
+    {
+      "analysts": [
+        "market",
+        "news",
+        "fundamentals"
+      ],
+      "case_id": "nvda_2026_09_23",
+      "research_rounds": 1,
+      "risk_rounds": 1,
+      "ticker": "NVDA",
+      "trade_date": "2026-09-23"
+    },
+    {
+      "analysts": [
+        "market",
+        "news",
+        "fundamentals"
+      ],
+      "case_id": "aapl_2026_09_23",
+      "research_rounds": 1,
+      "risk_rounds": 1,
+      "ticker": "AAPL",
+      "trade_date": "2026-09-23"
+    },
+    {
+      "analysts": [
+        "market",
+        "news",
+        "fundamentals"
+      ],
+      "case_id": "jpm_2026_09_23",
+      "research_rounds": 1,
+      "risk_rounds": 1,
+      "ticker": "JPM",
+      "trade_date": "2026-09-23"
+    },
+    {
+      "analysts": [
+        "market",
+        "news",
+        "fundamentals"
+      ],
+      "case_id": "xom_2026_09_23",
+      "research_rounds": 1,
+      "risk_rounds": 1,
+      "ticker": "XOM",
+      "trade_date": "2026-09-23"
+    }
+  ],
+  "checkpoint_enabled": false,
+  "deep_model": "CS5351/DeepSeek-V4-Flash",
+  "description": "CAND-01 x batch-macro 2x2: 4 stocks x 4 arms, one measured run each. Per-run definitions are in specs/<run_id>/experiment.json.",
+  "experiment_id": "cand01_batch_2x2_16run_v3",
+  "measured_runs": 1,
+  "memory": {
+    "baseline_relpath": "memory/baseline_v3.md",
+    "baseline_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "mode": "per_run_snapshot_copy"
+  },
+  "news_scope": {
+    "company_news": "finnhub",
+    "gdelt": "excluded",
+    "global_news": "finnhub:CONFIG_DISABLED"
+  },
+  "output_language": "English",
+  "per_run_definitions": "specs/<run_id>/experiment.json",
+  "protocol_version": "V3",
+  "provider": "openai_compatible",
+  "quick_model": "CS5351/DeepSeek-V4-Flash",
+  "randomisation": "one random.Random(seed); shuffle(['B','AB','C0','CC']) once per block in BLOCKS order (CPython stdlib random, Mersenne Twister)",
+  "schema_version": 3,
+  "seed": 20261114,
+  "switches_required": true
+}

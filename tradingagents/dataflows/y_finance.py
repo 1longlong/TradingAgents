@@ -187,10 +187,11 @@ def get_stock_stats_indicators_window(
             date_values.append((date_str, indicator_value))
             current_dt = current_dt - relativedelta(days=1)
 
-        # Build the result string
+        # Build the result string. Formatting happens here, at the render point,
+        # so it holds for whichever data path produced the values.
         ind_string = ""
         for date_str, value in date_values:
-            ind_string += f"{date_str}: {value}\n"
+            ind_string += f"{date_str}: {_format_indicator_value(value)}\n"
 
     except VendorError:
         raise  # Unknown/delisted symbol — let the router emit the sentinel
@@ -203,17 +204,40 @@ def get_stock_stats_indicators_window(
             indicator_value = get_stockstats_indicator(
                 symbol, indicator, curr_date_dt.strftime("%Y-%m-%d")
             )
-            ind_string += f"{curr_date_dt.strftime('%Y-%m-%d')}: {indicator_value}\n"
+            ind_string += (
+                f"{curr_date_dt.strftime('%Y-%m-%d')}: "
+                f"{_format_indicator_value(indicator_value)}\n"
+            )
             curr_date_dt = curr_date_dt - relativedelta(days=1)
 
     result_str = (
         f"## {indicator} values from {before.strftime('%Y-%m-%d')} to {end_date}:\n\n"
         + ind_string
-        + "\n\n"
-        + best_ind_params.get(indicator, "No description available.")
     )
 
     return result_str
+
+
+def _format_indicator_value(value) -> str:
+    """Render a stockstats indicator value at the pipeline's accuracy bar.
+
+    The series is context, not ground truth: ``market_data_validator._fmt``
+    renders the authoritative snapshot at 2 decimal places, and the market
+    analyst is instructed to treat that snapshot as the source of truth for any
+    exact claim. Full float repr (``55.84844444444444``) therefore adds ~12
+    bytes per row that no verified claim can ever use.
+
+    Idempotent: an already-rendered marker (``"N/A"``, or the weekend/holiday
+    text the window builder substitutes for a missing date) passes through
+    untouched, so calling this at the render point is safe regardless of what
+    the data path already did.
+    """
+    if value is None or pd.isna(value):
+        return "N/A"
+    if isinstance(value, str):
+        # Already-rendered marker or non-numeric text: keep it verbatim.
+        return value
+    return f"{float(value):.2f}"
 
 
 def _get_stock_stats_bulk(
@@ -239,13 +263,7 @@ def _get_stock_stats_bulk(
     result_dict = {}
     for _, row in df.iterrows():
         date_str = row["Date"]
-        indicator_value = row[indicator]
-
-        # Handle NaN/None values
-        if pd.isna(indicator_value):
-            result_dict[date_str] = "N/A"
-        else:
-            result_dict[date_str] = str(indicator_value)
+        result_dict[date_str] = _format_indicator_value(row[indicator])
 
     return result_dict
 
@@ -277,7 +295,7 @@ def get_stockstats_indicator(
             symbol, symbol, f"{indicator} could not be read for {curr_date}: {e}"
         ) from e
 
-    return str(indicator_value)
+    return _format_indicator_value(indicator_value)
 
 
 def get_fundamentals(

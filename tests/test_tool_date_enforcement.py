@@ -120,6 +120,48 @@ def test_direct_call_without_state_is_unchanged():
     assert routed.call_args.args == ("get_news", "AAPL", "2026-09-01", "2026-09-08")
 
 
+# --- the point-in-time cutoff actually reaching the vendor (F1) -------------------
+#
+# The checks above inspect ``call_args.args`` only, which cannot see a keyword
+# argument. That made the whole look-ahead guard untestable: deleting the
+# cutoff-forwarding lines in ``news_data_tools`` left the suite green while
+# disabling F1 entirely (audit finding M27). These tests assert the keyword.
+
+
+@pytest.mark.unit
+def test_get_news_injects_the_trade_date_as_the_publication_cutoff():
+    from tradingagents.dataflows.date_window import publication_cutoff
+
+    with mock.patch.object(news_data_tools, "route_to_vendor", return_value="ok") as routed:
+        news_data_tools.get_news.func(
+            "AAPL", "2026-09-01", "2026-09-08", trade_date=TRADE_DATE)
+    cutoff = routed.call_args.kwargs.get("as_of_cutoff")
+    assert cutoff, "get_news must pass as_of_cutoff so vendors cannot admit future news"
+    # Exclusive midnight after the trade date: publication_cutoff's own value.
+    assert cutoff == str(publication_cutoff(TRADE_DATE))
+
+
+@pytest.mark.unit
+def test_get_global_news_injects_the_trade_date_as_the_publication_cutoff():
+    with mock.patch.object(news_data_tools, "route_to_vendor", return_value="ok") as routed:
+        news_data_tools.get_global_news.func(
+            "2026-09-10", 7, 20, trade_date=TRADE_DATE)
+    cutoff = routed.call_args.kwargs.get("as_of_cutoff")
+    assert cutoff, "get_global_news must pass as_of_cutoff too"
+
+
+@pytest.mark.unit
+def test_the_cutoff_is_the_instant_the_vendors_filter_against():
+    # Pins the contract: whatever the tool passes must equal publication_cutoff()
+    # for the same trade date, or the injected value is decorative.
+    from tradingagents.dataflows.date_window import publication_cutoff
+
+    with mock.patch.object(news_data_tools, "route_to_vendor", return_value="ok") as routed:
+        news_data_tools.get_news.func(
+            "AAPL", "2026-09-01", "2026-09-08", trade_date=TRADE_DATE)
+    assert routed.call_args.kwargs["as_of_cutoff"] == str(publication_cutoff(TRADE_DATE))
+
+
 # --- the run date itself (#1319) -------------------------------------------------
 
 @pytest.mark.unit

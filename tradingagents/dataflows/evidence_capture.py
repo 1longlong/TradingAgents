@@ -138,11 +138,18 @@ def capture_news_articles(
                 fetched_at=record.fetched_at,
             ),
         )
+    # An empty article list normally means "the provider answered with nothing",
+    # but a caller that reports FAILED did call the provider and got an error;
+    # coercing that to ``empty`` would report an outage as a quiet window.
+    if records or result_status is SourceResultStatus.FAILED:
+        attempt_status = result_status
+    else:
+        attempt_status = SourceResultStatus.EMPTY
     capture_attempt(
         make_source_attempt(
             source=source_name,
             tool=tool,
-            result_status=result_status if records else SourceResultStatus.EMPTY,
+            result_status=attempt_status,
             started_at=started_at,
             error_type=error_type,
         )

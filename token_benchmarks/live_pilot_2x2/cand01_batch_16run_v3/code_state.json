@@ -1,0 +1,14 @@
+{
+  "experiment_definition_sha256": "f1d68931c9cb51818d9e46f8e03a3c97079c98bc2e8552b2738b9cf52f3b0a49",
+  "frozen_commit": null,
+  "generator": "scripts/gen_cand01_batch_16run_specs_v3.py",
+  "generator_sha256": "c99e41a55ed8b656467561b0e283b8d84a1b706a7362c39a60f4ef259aa460db",
+  "git_branch": "fix/cand01-v3",
+  "git_head_commit": "6e66dcad2c69265df4f99968a89b5943e2efc234",
+  "git_head_relation_to_freeze": "unfrozen",
+  "git_working_tree_dirty": true,
+  "phase": "spec_generation",
+  "python_version": "3.14.7",
+  "schema_version": 1,
+  "timestamp_utc": "2026-11-16T04:42:25.559876+00:00"
+}

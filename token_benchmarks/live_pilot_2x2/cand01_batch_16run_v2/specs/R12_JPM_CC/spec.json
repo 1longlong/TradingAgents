@@ -1,0 +1,40 @@
+{
+  "budget": {
+    "budget_mode": "uncapped_authorized",
+    "max_total_tokens": null
+  },
+  "cache_policy": "preserve_existing",
+  "case": {
+    "analysts": [
+      "market",
+      "news",
+      "fundamentals"
+    ],
+    "case_id": "jpm_2026_09_23",
+    "research_rounds": 1,
+    "risk_rounds": 1,
+    "ticker": "JPM",
+    "trade_date": "2026-09-23"
+  },
+  "config_sha256": "eeabfa7b25d20d293111a627c9a2b4d480df462ff9ccbf31845039cecafd7110",
+  "deep_model": "CS5351/DeepSeek-V4-Flash",
+  "experiment_id": "R12",
+  "experiment_root": "/home/sky/cs5351/TradingAgents/.worktrees/cand01_final_wt",
+  "news_scope": {
+    "company_news": "finnhub",
+    "gdelt": "excluded",
+    "global_news": "finnhub:CONFIG_DISABLED"
+  },
+  "output_language": "English",
+  "provider": "openai_compatible",
+  "quick_model": "CS5351/DeepSeek-V4-Flash",
+  "results_dir": "/home/sky/cs5351/TradingAgents/.worktrees/cand01_final_wt/token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/specs/R12_JPM_CC/runs/run_01/attempt_01/runtime/JPM/2026-09-23",
+  "run_index": 1,
+  "switches": {
+    "batch_macro": true,
+    "s2_downstream": true,
+    "single_pass": true,
+    "structured": true
+  },
+  "switches_source": "declared"
+}

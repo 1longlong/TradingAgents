@@ -1,0 +1,6 @@
+experiment_id,case_id,case,run_index,ticker,trade_date,run_status,input_tokens,output_tokens,total_tokens,cached_input_tokens,llm_calls,tool_calls,tool_rounds,runtime_ms,usage_complete,attribution_complete,telemetry_complete,valid,invalid_reason,llm_errors,telemetry_path
+baseline_v2,nvda_2026_09_23,NVDA / 2026-09-23,1,NVDA,2026-09-23,completed,169034,27832,196866,33920,19,30,5,422603.359,True,True,True,True,,0,runs/run_01/attempt_01/telemetry.json
+baseline_v2,nvda_2026_09_23,NVDA / 2026-09-23,2,NVDA,2026-09-23,completed,169923,29498,199421,38528,20,33,7,541537.601,True,True,True,True,,0,runs/run_02/attempt_02/telemetry.json
+baseline_v2,nvda_2026_09_23,NVDA / 2026-09-23,3,NVDA,2026-09-23,completed,239600,33223,272823,88960,23,29,9,843741.484,True,True,True,True,,0,runs/run_03/attempt_01/telemetry.json
+baseline_v2,nvda_2026_09_23,NVDA / 2026-09-23,4,NVDA,2026-09-23,completed,149285,29590,178875,24448,17,31,4,565046.898,True,True,True,True,,0,runs/run_04/attempt_01/telemetry.json
+baseline_v2,nvda_2026_09_23,NVDA / 2026-09-23,5,NVDA,2026-09-23,completed,197568,30637,228205,53888,22,34,7,487277.329,True,True,True,True,,0,runs/run_05/attempt_01/telemetry.json

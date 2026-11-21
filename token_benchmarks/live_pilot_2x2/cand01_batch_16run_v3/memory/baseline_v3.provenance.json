@@ -1,0 +1,27 @@
+{
+  "baseline": "token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/memory/baseline_v3.md",
+  "baseline_entries": 0,
+  "baseline_pending": 0,
+  "baseline_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "empty_baseline": true,
+  "empty_reason": "No legitimate pre-experiment history: the source log's only two entries (NVDA and AAPL, both 2026-09-23) were created by prior experiment runs of this same study, including the 2026-11-16 V2 batch. Keeping one and excluding the other would give the NVDA block a prior decision while AAPL/JPM/XOM start empty. V3 therefore starts every run from an empty, symmetric snapshot.",
+  "excluded": [
+    {
+      "date": "2026-09-23",
+      "sha256": "46e8269b5e9b7f46c1b8226c6865f6bf76de43ce28973de15c5c32d9810657ba",
+      "ticker": "NVDA"
+    },
+    {
+      "date": "2026-09-23",
+      "sha256": "5698209d84cc7323615db9c0ff21bb53ef9b866b830f96c635f3164832974f63",
+      "ticker": "AAPL"
+    }
+  ],
+  "generated_at_utc": "2026-11-16T04:42:25.523103+00:00",
+  "generator": "scripts/c3_build_memory_baseline.py",
+  "kept_entries": [],
+  "schema": 1,
+  "source": "/home/sky/.tradingagents/memory/trading_memory.md",
+  "source_entries": 2,
+  "source_sha256": "6eb92fe1417a870a97f5c78e900278b53bbc4cb21360c09e2ab6cad4fea43dc3"
+}

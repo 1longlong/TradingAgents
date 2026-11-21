@@ -365,7 +365,16 @@ def validate_requirements(requirements: object, schema: object) -> list[str]:
         rid = req.get("id")
         if not _is_nonempty_str(rid):
             errors.append(f"{prefix}.id is missing")
-        if not re.match(r"^(FR-(DQG|DDT|TRD)|INV-TRD|NFR-[A-Z]+)-[0-9]{3}$", str(rid)):
+        # Read the ID pattern from the real schema so the subset fallback cannot
+        # drift from it when a namespace is added (v1.3 added FR-ANL/OBS/HAR/CAM
+        # and, under the existing NFR-[A-Z]+ branch, NFR-VER). The schema declares
+        # it on $defs.requirement.properties.id. A minimal schema without that
+        # path keeps the historical fallback set rather than inventing a stricter
+        # rule, matching the helper's documented contract.
+        id_pattern = _schema_string_pattern(
+            schema, "$defs", "requirement", "properties", "id"
+        ) or r"^(FR-(DQG|DDT|TRD|ANL|OBS|HAR|CAM)|INV-TRD|NFR-[A-Z]+)-[0-9]{3}$"
+        if re.fullmatch(id_pattern, str(rid)) is None:
             errors.append(f"{prefix}.id {rid!r} does not match the stable ID pattern")
         for key in ("title", "description"):
             if not _is_nonempty_str(req.get(key)):
@@ -443,8 +452,12 @@ def scan_secrets(text: str) -> list[int]:
     hits: list[int] = []
     for lineno, line in enumerate(text.splitlines(), start=1):
         low = line.lower()
-        # sk-<long> pattern (OpenAI-style).
-        if re.search(r"[^a-zA-Z0-9]?sk-[A-Za-z0-9_-]{10,}", line):
+        # sk-<long> pattern (OpenAI-style). The boundary must be
+        # non-alphanumeric. The previous optional-prefix form
+        # `[^a-zA-Z0-9]?sk-...` also matched the substring inside ordinary
+        # hyphenated words ("risk-management", "disk-usage-..."), so the scanner
+        # could not distinguish prose from key material.
+        if re.search(r"(?<![A-Za-z0-9])sk-[A-Za-z0-9_-]{10,}", line):
             hits.append(lineno)
             continue
         # Bearer <token> literal.

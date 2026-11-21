@@ -168,6 +168,25 @@ _PASSTHROUGH_KWARGS = (
     "api_key", "callbacks", "http_client", "http_async_client",
 )
 
+# Provider-registry spec branch: constructor kwargs that may be handed to the
+# SDK chat class *before* the explicit ``_PASSTHROUGH_KWARGS`` loop. The handoff
+# must stay a whitelist: ``self.kwargs`` is whatever the caller put into
+# ``create_llm_client(...)``, and blindly forwarding all of it lets an internal
+# config / LangChain-only key reach ``ChatOpenAI(...)`` as a ``TypeError`` (or
+# be silently swallowed into the request body via ``model_kwargs``).
+# ``max_tokens`` is the caller-facing name; ``ChatOpenAI`` (and the Responses
+# API) expects ``max_completion_tokens``, so it is mapped on the way through to
+# keep ``TRADINGAGENTS_MAX_TOKENS`` working for the openai-compatible family
+# instead of raising "unexpected keyword argument".
+_SPEC_CLIENT_KWARGS = {
+    "timeout": "timeout",
+    "max_retries": "max_retries",
+    "temperature": "temperature",
+    "http_client": "http_client",
+    "http_async_client": "http_async_client",
+    "max_tokens": "max_completion_tokens",
+}
+
 # OpenAI's ``reasoning_effort`` is only accepted by reasoning models — GPT-5 and
 # later, and the o-series. Non-reasoning models (gpt-4.1, gpt-4o, ...) 400 with
 # "Unsupported parameter: 'reasoning.effort' is not supported with this model".
@@ -303,6 +322,16 @@ class OpenAIClient(BaseLLMClient):
             # placeholder. The env-var name is the single source in api_key_env.
             api_key_env = get_api_key_env(self.provider)
             api_key = os.environ.get(api_key_env) if api_key_env else None
+            # Extra constructor kwargs (e.g. ``max_retries``) must reach the SDK
+            # client too; dropping them silently disabled the configured retry
+            # budget, so an ephemeral timeout aborted a whole run. Only the
+            # whitelisted ChatOpenAI parameters cross over here (see
+            # ``_SPEC_CLIENT_KWARGS``) so an internal/LangChain-only kwarg can
+            # never turn into a TypeError. ``self.base_url`` is already resolved
+            # into ``llm_kwargs`` above and is not forwarded again.
+            for key, target in _SPEC_CLIENT_KWARGS.items():
+                if key in self.kwargs:
+                    llm_kwargs[target] = self.kwargs[key]
             if api_key:
                 llm_kwargs["api_key"] = api_key
             elif spec.key_optional:

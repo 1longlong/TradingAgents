@@ -8,6 +8,9 @@ these (or a thin vendor-named subclass) and needs no new ``except`` clause.
     VendorError
     ├── NoMarketDataError          no usable rows (empty result OR stale data)
     ├── VendorRateLimitError       transient throttle -> skip to next vendor
+    ├── VendorUnavailableError     endpoint not serving -> skip to next vendor
+    │   └── VendorTimeoutError     socket timeout -> skip to next vendor, but
+    │                              NOT a throttle, so no retry/backoff advice
     └── VendorNotConfiguredError   missing API key/config -> vendor unavailable
 
 The number of types is the number of distinct router reactions, not the number
@@ -52,4 +55,32 @@ class VendorNotConfiguredError(VendorError, ValueError):
 
     Also a ``ValueError`` so existing callers that catch ``ValueError`` keep
     working while the routing layer can treat it as "vendor unavailable".
+    """
+
+
+class VendorUnavailableError(VendorError):
+    """A vendor endpoint is permanently not serving (retired, removed, shut down).
+
+    Distinct from ``VendorRateLimitError``, which promises "try again later":
+    this one is final for the endpoint in question. The router treats it like a
+    rate-limit error (skip to the next vendor, and if none serves the call,
+    return ``DATA_UNAVAILABLE``) rather than re-raising, because the news
+    category is core and a retired third-party API must not end the run.
+    """
+
+
+class VendorTimeoutError(VendorUnavailableError):
+    """A vendor request did not answer before the socket timeout.
+
+    Distinct from ``VendorRateLimitError``: a timeout says nothing about how
+    fast the caller may retry, and folding it into the throttle class made the
+    two indistinguishable in logs and in the failure matrix. It subclasses
+    ``VendorUnavailableError`` so the router's existing reaction (skip to the
+    next vendor, end in ``DATA_UNAVAILABLE`` when none serves) applies
+    unchanged; a timeout must *not* take the rate-limit path.
+
+    Note this is "unavailable *for this call*", not the parent's usual
+    "permanently retired": the router only branches on the base class, so the
+    subclass changes the *label* callers see and which ``except`` clauses match,
+    not the routing.
     """

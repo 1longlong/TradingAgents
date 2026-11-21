@@ -1,0 +1,14 @@
+=== FINAL PROTECTED STATE (post-MANIFEST) ===   2026-11-15T19:39:56+08:00
+HEAD            : 9948bf8545cceeb0d7a60cda913a04826a06c007
+rc1 tag         : 1a27a857ac6296c42cdbcbdba1ce1104e10ae77e
+72ae0f8 exists  : yes
+2e62ccb exists  : yes
+stashes         : 3
+staged          : 0
+.env sha256     : 2eea649149af1d4c269603802abb830b57f9f6ed71061c7c30a1fa91a1d29645
+reflog top      : 9948bf8545cceeb0d7a60cda913a04826a06c007
+old_specs OK    : 66/66
+historical OK   : 2446/2446
+V1 protocol     : 20280 bytes Nov 14 23:56
+V2 dir exists   : 
+V2 in main tree : 

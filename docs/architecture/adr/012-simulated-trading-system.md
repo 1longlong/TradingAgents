@@ -1,4 +1,4 @@
-# ADR-001: Simulated Trading System
+# ADR-012: Simulated Trading System
 
 Status: Accepted.
 

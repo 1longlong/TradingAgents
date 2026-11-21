@@ -1,21 +1,37 @@
 # Report.md — Phase Progress Report and Student Reflection
 
-> **Status label (preliminary / not final):**
-> This is the **first version** of the process report. It deliberately separates
-> **completed evidence** from **planned work**, includes a preliminary student
-> reflection, and **does not claim submission, demo, or Phase 4 completion**.
+> **Status label (integrated draft / not final):**
+> This report merges the Release team's Phase 1–4A process report with the
+> personal Token Observability / CAND-01 report. It deliberately separates
+> **completed evidence** from **planned work**, records **historical failures and
+> limitations**, and contains explicit `HUMAN_REFLECTION_REQUIRED` and
+> `HUMAN_CONFIRMATION_REQUIRED` sections for WangTianQi. No submission, demo or
+> grading claim is made. The Release team's preliminary reflection is preserved
+> below with its original first-person voice; its separate authorship is not
+> recorded in the tree.
 
 ## 1. Project summary
 
-The project extends the downstream `TradingAgents` framework with two
-deterministic, governance-driven improvements:
+The project extends the downstream `TradingAgents` framework along three
+workstreams that are integrated in this tree but have distinct provenance:
 
-1. **Deterministic Data Quality Gate** — a pure, LLM-free node that validates the
-   verified market snapshot before the Bull/Bear debate and fails closed on
-   missing or low-quality evidence.
-2. **Dynamic, evidence-aware debate termination** — a deterministic Debate
-   Evaluator that stops the debate on evidence/model-conflict staleness or
-   budget exhaustion rather than always running a fixed number of rounds.
+1. **Deterministic Data Quality Gate** (Release team) — a pure, LLM-free node
+   that validates the verified market snapshot before the Bull/Bear debate and
+   fails closed on missing or low-quality evidence.
+2. **Dynamic, evidence-aware debate termination** (Release team) — a
+   deterministic Debate Evaluator that stops the debate on evidence/model-conflict
+   staleness or budget exhaustion rather than always running a fixed number of
+   rounds.
+3. **Token observability and CAND-01 measurement** (personal feature, WangTianQi)
+   — per-agent/system usage attribution that never turns missing usage into zero,
+   a Single-Pass structured finalisation path behind an off-by-default switch, a
+   batch-macro ablation switch, a Finnhub-only news scope, per-run memory
+   isolation for experiments, and a frozen 2×2 measurement apparatus with
+   pre-spend gates.
+
+The Release work is the canonical baseline and is recorded in ADR-001–ADR-012 and
+`FR-DQG-*`/`FR-DDT-*`/`FR-TRD-*`; the personal work is recorded retrospectively in
+ADR-013–ADR-018 and `FR-ANL-*`/`FR-OBS-*`/`FR-HAR-*`/`FR-CAM-*`/`NFR-VER-*`.
 
 ## 2. Completed evidence (verified)
 
@@ -153,6 +169,189 @@ for per-command outcomes.
   production tuning) is **not performed**.
 - Human review decision (historical): Phase 4A is **approved with limitations**
   (WANG Yiwen 60536848, 2026-10-23; `docs/review-memo.md`).
+
+### Pre-V2 development history — personal workstream (2026-09-06 → 2026-11-15)
+
+This chronology is reconstructed from the recorded AI-coding sessions (integrated
+as `AUL-074`–`AUL-104`) and from committed evidence. It is deliberately not
+compressed into a single sentence: the pre-V2 work is where the measurement
+discipline, the freeze apparatus and most of the disclosed failures come from.
+Where the evidence is only an agent's session report, that is said.
+
+**2026-09-06/07 — host and toolchain inspection (no repository work).** Two
+read-only sessions listed the host toolchain (Python, pip, Node, npm, Git) and
+checked command availability (`node` via nvm, no `nodejs`). No repository file was
+read or modified. This is environment verification, not project development
+(`AUL-096`).
+
+**2026-10-19/20 — checkout, exploration and foundation.** The upstream project was
+cloned and the feature branch created from `2d17df8`; three early attempts were
+stashed and the reason is `NOT_VERIFIED` (personal report §4). A plugin/skill
+discovery session and a read-only three-file inspection exercise are recorded as
+tool-use probes, not engineering changes (`AUL-097`). Seven 2026-10-20 sessions
+then built the observability and measurement foundation: per-agent and per-tool
+scoping, tool rounds, prefetch accounting, structured-output telemetry and the
+measurement surface, under an explicit "observability only, no trading-semantics
+change" instruction. The last session found and fixed a real end-to-end
+smoke-test regression rather than redesigning the system (`AUL-084`).
+
+**2026-10-23/24 — harness audit, QA and the first real baseline.** A read-only
+harness audit confirmed the harness existed; a credential-free QA pass ran before
+any paid benchmark. The session investigated two telemetry defects: a tool-call
+observability discrepancy (20 reported LLM calls against a different tool-call
+count) and a telemetry re-run conflict in which one run directory held two
+telemetry artifacts with different call counts. Both became later invariants
+(`BUG-017`, `BUG-018`, `FR-OBS-005`). A real five-run `baseline_v2` was executed,
+followed by a whole-repository pre-commit audit, a minimal repair pass and the
+one-command `scripts/run_token_benchmark.sh` with wrapper/harness tests. The
+quoted 114 / 1,178 test figures are the agent's self-report and were not re-run
+(`AUL-085`, `AUL-098`).
+
+**2026-11-02/03 — Stage 0–6 optimisation campaign.** The reproducible baseline
+`866133d` was created with a code fingerprint that includes untracked source files.
+The campaign then ran Stages 0–6. Stage 1 (report dedupe) and Stage 2 (structured
+one-shot output) were accepted; **Stage 4 (tool-payload compression) was rejected**
+on its five completed measurements (total tokens +3.8 %); **Stage 6 (evidence
+packets) was rejected and rolled back** after the QA framework found semantic
+information loss. The operator paused the campaign before leaving the machine and
+required every attempt to be preserved; an ECONNRESET / "No deployments available"
+interruption was recovered without restarting the task. These are experiment
+decisions with measured evidence, not defects (`AUL-086`, `AUL-099`,
+`LOG-001`–`LOG-003`).
+
+**2026-11-04–14 — main development arc.** Round 6 found the FRED key disabled and
+historical NVDA news unobtainable for the study date; Round 7 was a
+configuration-matched baseline. A mid-run loss of shell/filesystem tools followed;
+the operator refused static reading or simulated output and instructed recovery by
+Explore-Subagent delegation, with the main agent auditing and only the subagent
+executing. The operator approved a Stage-2 rollback, a clean-control re-run
+against a pinned tree fingerprint, and later an interrupted D1 benchmark re-run
+with the attempt preserved. A sustained Yahoo News HTTP 429 forced a pivot to
+configuration-matched replay. A historical-news/sentiment audit asked whether any
+real news had ever been fetched, followed by an autonomous full-cycle repair, a
+Batch-Macro + S2 structured-output completion campaign, per-arm valid-run top-up,
+RC1 stabilisation (`9948bf8`, 2026-11-12), the RC1 token-regression root-cause
+analysis, the CAND-01 single-pass design, an independent pre-live re-audit, the
+F1/F2/F3 remediation and the PF-01 news-status fix, and finally a preflight plus
+8-run A/B request and a stop of all live runs to restore tooling (`AUL-087`,
+`AUL-088`, `AUL-100`, `LOG-004`). The two CAND-01 audits returned
+`READY_WITH_LIMITATIONS` before F1/F2/F3 and READY after remediation; **no
+committed review report survives from this period** (`REC-09`).
+
+**2026-11-15 — pre-V2 apparatus, migration, audit rounds and the halt.** The 16-run
+2×2 apparatus was built and audited: the news route was reduced to Finnhub only
+after the GDELT quality gate found repeated 429s and a ticker-relevance leak, the
+PIT behaviour was audited, switch delivery and config hashing were verified, and
+the memory snapshot was registered. The preflight halted the campaign at **zero
+paid calls**. C3 audit rounds 2–5 (REC-01–REC-04) found Critical/blocking defects,
+including a configuration that would have run one arm under four names, a
+fingerprint that covered zero registered artefacts, and a self-tamper incident in
+which a `cp -a` worktree copy committed into the branch under audit. The incidents
+were disclosed and repaired additively; history was not rewritten. Plan C reported
+`BLOCKED` because the only experiment-spec generator could not be recovered, and
+it did **not** fabricate replacement specs; Plan C2 reconstructed the generator and
+re-registered the protocol. Paid-run authorizations and withholdings are recorded
+as conversation turns (`AUL-074`, `AUL-075`, `AUL-090`, `AUL-101`–`AUL-103`,
+`BUG-012`, `BUG-013`).
+
+### Phase 5 — Token observability and CAND-01 measurement (personal delivery, 2026-10-20 → 2026-11-16)
+
+This phase is recorded retrospectively: its requirement IDs and ADRs did not exist
+while the code was written. It is ADR-013–ADR-018 and
+`FR-ANL-*`/`FR-OBS-*`/`FR-HAR-*`/`FR-CAM-*`/`NFR-VER-*` in the integrated registry.
+
+**5.1 Observability and attribution (`FR-OBS-001/002/003/004`, `FR-ANL-004`;
+ADR-013).** `tradingagents/observability.py` installs a per-run collector whose
+`AttributionContext` has exactly one of `agent`, `system` or `none`. The pre-graph
+reflector is `system:pre_graph_reflector`; an unscoped call stays `none` and the
+harness treats it as `INCOMPLETE`. A provider usage field that was not reported is
+`null` and is counted as missing, never added as zero; run totals close over
+agent, system and unattributed buckets (`INV-15`–`INV-17`). One atomic telemetry
+artifact is written per CLI run. The product graph does not abort on `none`; the
+harness voids the sample. Telemetry carries counts, sizes, hashes and ids, never
+prompt/tool/news/memory content (`INV-27`).
+
+**5.2 Single-Pass structured finalisation (`FR-ANL-003/005`; ADR-014, ADR-018).**
+The three tool-loop analysts can bind the report schema as an extra tool on the
+terminal call, avoiding a second full-context rewrite. The switch
+`single_pass_finalization_enabled` defaults to `False` and requires structured
+output (`INV-22`). Every fallback returns free text with a `None` typed object
+(`INV-26`), never a dangling `tool_call` (`INV-18`) and never protocol markup
+(`INV-19`). Accounting settles each outbound attempt once at the transport
+boundary (ADR-009).
+
+**5.3 Batch macro (`FR-ANL-006`; ADR-015).** `get_macro_indicators_batch` fetches
+several FRED series in one tool round while preserving each series text exactly;
+when disabled, the tool is removed from both the analyst and the news `ToolNode`
+(`INV-23`). The V3 factorial's batch-macro effect is exploratory: mean −17,702
+tokens/run but not robust (about −695 excluding the environment-degraded R01;
+AAPL +1,612); n=1 per cell.
+
+**5.4 News provenance (`FR-ANL-008`; ADR-016).** Company news routes only to
+`get_news_finnhub_only`; global news under that route is `CONFIG_DISABLED`; a
+Finnhub outage is never rescued by GDELT. The GDELT adapter remains in the tree
+but is unreachable from the configured route. Publication times are UTC-normalised
+and filtered against an exclusive upper bound; undated articles are excluded in
+historical runs; relevance comes from provenance, not model prose (`INV-24`,
+merged `INV-3`).
+
+**5.5 Memory isolation (`FR-ANL-009`; ADR-017).** For registered experiment runs,
+each run copies one immutable snapshot into its own attempt directory, hashes it
+into `config_sha256`, refuses a missing/changed/modified copy before spending, and
+invalidates a run whose baseline changed afterwards (`INV-20`). This is
+**harness-only**: a generic `propagate()` run or the CLI `measure` path still uses
+the shared host memory log (`DEBT-050`).
+
+**5.6 Measurement, spend contract and freeze (`FR-HAR-001/002/003`, `FR-CAM-001`).**
+`scripts/run_token_benchmark.sh` resolves the repository from any cwd, defaults to
+the fixed benchmark ticker/trade date, supports a credential-free dry-run and
+archives every attempt. A measurement is reproducible from commit + annotated tag
++ freeze record + per-file `MANIFEST.sha256` + per-run `config_sha256` (`INV-21`).
+A paid run is admitted only under an explicit budget contract: a null cap is
+unlimited only with `budget_mode="uncapped_authorized"`; missing/malformed/missing
+mode/non-integer cap are distinct refusals; unknown spend is never zero
+(`FR-HAR-003`). Optimisation rounds end in an explicit accept or revert
+(`FR-CAM-001`).
+
+**5.7 V2 and V3 experiments and results.** V2 (freeze `15270b1`) attempted 7 runs:
+5 valid, 1 environment-failed (R05a01) and 1 invalid (R06, unattributed call),
+consuming 1,463,791 provider-reported tokens. It exposed the unattributed reflector
+call and cross-run memory pollution (`BUG-007`, `BUG-008`). V3 (freeze `e3b5cca`)
+ran 18 attempts over 16 Run IDs: 15 valid, 1 environment-failed (R02a01) and 2
+invalid (R12a01/a02, provider 400), consuming 3,067,669 tokens; valid runs carried
+298 LLM and 432 tool calls. Combined: 25 attempts, 20 valid, 4,531,460 tokens
+(4,112,224 valid; 419,236 failed). The Single-Pass effect on the balanced
+three-block mean was **−19,589 tokens/run (−8.96 %)**, negative in all three
+blocks; the Batch-Macro effect was not robust. These are **exploratory**
+measurements: n=1 per cell, one model, one trade date, no repeats and no confidence
+intervals (`DEBT-047`).
+
+**5.8 Rejected and abandoned approaches.** The V1 protocol's spec generator was
+lost, so its hashes cannot be reproduced; it was abandoned and re-registered as
+V2/V2.1. Batch macro was not adopted as a default optimisation. The CC arm was not
+adopted as a default despite the cheapest mean: 2 of 3 valid runs had degraded
+DSML reports and 1 crashed (R12). A pre-RC1 Stage 1/2 line was real locally but was
+not deliverable evidence. The Stage 4 and Stage 6 campaign candidates were rejected
+and rolled back in the pre-V2 campaign (above).
+
+**5.9 Final remediation and independent technical audits (2026-11-16).** R12
+provider-400 fallback, DSML markup leakage and single-pass `tool_rounds` were fixed
+in `e0ea1b0` and follow-ups, with 20 regression tests, a pre-fix detection probe
+(4/4 detected on `e3b5cca`, 0/4 after) and mutation checks (6/6 caught)
+(`BUG-009`–`BUG-011`). Three final audits (A product logic, B telemetry and
+infrastructure, C regression and data safety) returned PASS with no open
+High/Critical (`REC-07`). The audits are **AI-authored**; they are independent of
+each other, not of the AI toolchain, and no human reviewed them.
+
+**5.10 Verification state and limits.** The recorded suite at `50b2ca3` is 2,227
+passed / 4 known failed / 2 skipped / 319 subtests; the two V3 absolute-path tests
+and two host-coupled `cli_prefs` tests are classified (`DEBT-042`, `DEBT-043`). A
+`.env`-free run of the submission deliverable reports 2,233 passed / 0 failed / 2
+skipped / 319 subtests — that is the submission branch, not a re-measurement of
+`50b2ca3`. No paid rerun was executed after the final remediation (`DEBT-046`).
+There is no ground truth for decision quality and no claim of trading alpha
+(`DEBT-048`). In the current integration worktree the full suite is `NOT_RUN` while
+unrelated D7–D9 documentation conflicts remain.
 
 ### Blocked final-output enforcement (2026-11-06 review finding 1)
 
@@ -540,6 +739,19 @@ re-claimed as a fully-green full suite here**:
   RISK-021/DEBT-021) and a cited valid ID did not prevent a wrong claim date
   (RISK-020/DEBT-022). The run was degraded (not blocked); live integration is
   not all-bug-proof. See §"Live verification" below.
+- **Personal token-observability risks (RISK-036…RISK-049)** — missing or
+  contradictory provider usage (`RISK-041`), harness-only memory isolation
+  (`RISK-040`), freeze/spec paths not portable (`RISK-045`), no ground truth for
+  decision quality (`RISK-046`), endpoint not in the config hash (`RISK-047`),
+  generic/CLI runs bypassing the harness gates (`RISK-048`), and the recorded
+  suite being red at `50b2ca3` (`RISK-049`). See `docs/architecture/risk-list.md`.
+- **Personal token-observability debt (DEBT-042…DEBT-055)** — host-coupled
+  `cli_prefs` tests, absolute paths in V3 specs, single-pass per-tool telemetry
+  gap, CSV markup counter, no post-fix live rerun, n=1 per cell, no ground truth,
+  endpoint not hashed, generic `measure` sharing memory, the ruff baseline, plus
+  the recovered history/governance debt (no dated paid-run authorization, unresolved
+  commit authors, local session stores, the pending D5 transcript). See
+  `docs/debt-register.md`.
 - **Phase 4A results are scripted offline fixtures, not live-provider
   measurements** — they cannot support a production-grade performance claim;
   human traceability is pending a human score; no production thresholds were
@@ -561,14 +773,27 @@ re-claimed as a fully-green full suite here**:
   network-reachability-dependent baseline.
 - **Phase 4A** — deterministic offline baseline-comparison infrastructure is
   implemented and verified as scripted fixtures (see the Phase 4A section
-  above). **Phase 4B** (e.g. production threshold tuning, live-provider
-  benchmarking) is **not started**, and no production thresholds were tuned. Any
-  future Phase 4B or live-provider work requires explicit, separate authorization.
+  above). **Phase 4B** (production threshold tuning, further live-provider
+  benchmarking) is **not started**, and no production thresholds were tuned. The
+  personal V2/V3 paid campaigns were run under dated, run-specific authorizations
+  and do not authorize further spend. Any future Phase 4B or live-provider work
+  requires explicit, separate authorization.
+- **D7–D9 integration** — the remaining protected conflicts
+  (`.github/workflows/ci.yml`, `.opencode/rules.md`, `.opencode/permissions.jsonc`)
+  and the prompt-lineage validator mismatch are outside this report's scope; until
+  they are resolved the submission validators report those files, not the
+  integrated D7–D9 content, as failures.
+- **Human sign-off** — every personal review, ADR, risk and debt item is
+  `PENDING_HUMAN_CONFIRMATION`; the D5 transcript is an AI-prepared draft. See the
+  human-review checklist in the D4–D6 report.
 - No submission, demo, or grading claim is made or implied by this document.
 
-## 5. Preliminary student reflection (v1, to be expanded)
+## 5. Release-team preliminary reflection (v1, preserved)
 
-*This is a preliminary draft and will be revised before submission.*
+*This is the Release team's preliminary draft, preserved in its original
+first-person voice. The tree does not separately record who wrote it (Release
+approvals are recorded under WANG Yiwen, 60536848), so no author is asserted here.
+It is not WangTianQi's reflection; the personal reflection section is §7.*
 
 The two improvements were chosen because both are *deterministic* and
 *offline-testable*, which made them a good fit for demonstrating rigor under
@@ -588,3 +813,67 @@ date-sensitive and network-reachability-dependent tests mean that "the suite is
 green" is only meaningful on a specific day and network. The honest position,
 recorded throughout this scaffold, is to state the exact observed outcomes and
 the known failures rather than claim a blanket pass.
+
+## 6. Contribution attribution
+
+This tree merges two lines of work; the report must not assign either line to the
+wrong contributor.
+
+| Contribution | Provenance | Evidence |
+| --- | --- | --- |
+| Upstream TradingAgents v0.5.0 (graph topology, prompts scaffold, CLI, vendor router, PIT corpus) | inherited, not this project | `2d17df8`; `architecture-blueprint.md` |
+| Data Quality Gate, dynamic debate termination, evidence capture, durable usage ledger, confidence cap, Phase 4A comparison, simulated trading | **Release team** (WANG Yiwen 60536848 and the Release history) | ADR-001–ADR-012; `FR-DQG-*`, `FR-DDT-*`, `FR-TRD-*`, `NFR-CMP-*` |
+| Token observability and attribution, Single-Pass, batch macro, Finnhub-only news, per-run memory isolation, measurement harness/freeze, V2/V3 campaigns | **WangTianQi's personal feature** (submitted through the token-observability line) | ADR-013–ADR-018; `FR-ANL-*`, `FR-OBS-*`, `FR-HAR-*`, `FR-CAM-*`, `NFR-VER-*` |
+| AI-assisted implementation, tests, audits and documentation | OpenCode sessions (2026-10-20 → 2026-11-15) and DeepSeek Harness sessions (2026-11-16 → 2026-11-20, and the 2026-11-21 documentation rounds) | `docs/ai-use-log.yaml` `AUL-074`–`AUL-105`; `docs/ai-use-session-audit.md` |
+| Human decisions and approvals | recorded where evidenced; otherwise explicitly absent | `docs/review-memo.md`; `AUL-102`; paid-run authorization gap `DEBT-052` |
+
+**No human sign-off exists for any personal review, audit, ADR, risk or debt item.**
+Commit authors `WTQ`, `Plan C3`, `C3 Engine` and `t` are unresolved
+(`DEBT-053`); do not read a commit-author string as a person's identity. No
+contribution above is attributed to a teammate merely because the merged tree
+contains it, and WangTianQi is not credited with the Release team's development
+history.
+
+## 7. Personal reflection — WangTianQi (HUMAN_REFLECTION_REQUIRED)
+
+*This section is intentionally unfinished. The factual context and the questions
+are prepared; the first-person reflection must be written by the student. Nothing
+below is WangTianQi's opinion.*
+
+**7.1 Individual motivation.** Factual context: the personal workstream set out to
+make token cost attributable, auditable and comparable, then to test a
+single-pass finalisation optimisation under a frozen 2×2 design. The registry
+records the objectives (`FR-OBS-001`, `FR-ANL-005`, `FR-HAR-002`) but not why this
+student chose them.
+`HUMAN_REFLECTION_REQUIRED — WangTianQi: state which objective motivated you
+personally and why; replace this paragraph with your own account.`
+
+**7.2 The V2 halt and the subsequent re-freezes.** Factual context: the V2 batch
+was halted at zero paid calls by a preflight audit; C3 rounds 2–5 found
+Critical/blocking defects and a self-tamper incident; the apparatus was re-frozen
+twice before V2/V3 executed (`REC-01`–`REC-05`, `BUG-012`, `BUG-013`).
+`HUMAN_REFLECTION_REQUIRED — WangTianQi: explain what you understood at the time
+about why the halt was necessary, and how you weighed schedule against
+re-freezing.`
+
+**7.3 Lessons about measurement, evidence and audit independence.** Factual
+context: the audits were AI-authored and independent of each other but not of the
+AI toolchain; no human reviewed them; the V3 numbers are pre-fix and exploratory;
+several findings were recovered only by re-reading the record (`REC-09`,
+`REC-10`, `DEBT-052`, `DEBT-053`).
+`HUMAN_REFLECTION_REQUIRED — WangTianQi: state what you personally learned about
+what counts as evidence, and what you would verify yourself next time.`
+
+**7.4 Whether the freeze/audit overhead was justified.** Factual context: roughly
+30 commits of freeze/seal/audit work produced no paid-run data on its own; it did
+prevent a batch that would have run one arm under four names and a gate that would
+have certified a tampered registration (`REC-01`–`REC-04`, `BUG-015`, `BUG-016`).
+`HUMAN_REFLECTION_REQUIRED — WangTianQi: give a candid assessment of whether that
+overhead was worth it for a course project, and what you would keep or drop.`
+
+## 8. AI-prepared status of this report
+
+The technical content of this report was assembled by an AI coding agent (DeepSeek
+Harness, 2026-11-21) from committed evidence and the recorded sessions. It is an
+integrated draft, not a signed student report. The four reflection areas in §7 and
+the D5 transcript annotations remain the student's work.

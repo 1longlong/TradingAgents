@@ -23,6 +23,13 @@ from rich.text import Text
 from cli.announcements import display_announcements, fetch_announcements
 from cli.prefs import load_last_run, sanitize, save_last_run
 from cli.stats_handler import StatsCallbackHandler
+from tradingagents.observability import (
+    analyst_agent_id_for_key,
+    begin_observability_run,
+    bind_run_scope,
+    finalize_observability_run,
+    unbind_run_scope,
+)
 from cli.utils import (
     ask_anthropic_effort,
     ask_gemini_thinking_config,
@@ -477,12 +484,43 @@ def update_display(layout, spinner_text=None, stats_handler=None, start_time=Non
         stats_parts.append(f"LLM: {stats['llm_calls']}")
         stats_parts.append(f"Tools: {stats['tool_calls']}")
 
-        # Token display with graceful fallback
+        # Token display with graceful fallback; a partial-usage run is flagged so
+        # the reader knows the totals are provider-reported subsets, not zero.
         if stats["tokens_in"] > 0 or stats["tokens_out"] > 0:
             tokens_str = f"Tokens: {format_tokens(stats['tokens_in'])}\u2191 {format_tokens(stats['tokens_out'])}\u2193"
         else:
             tokens_str = "Tokens: --"
         stats_parts.append(tokens_str)
+
+        # Tool rounds / duplicate-tool observability (Phase 2).
+        tool_rounds = stats.get("tool_rounds", 0)
+        duplicates = stats.get("duplicate_tool_calls", 0)
+        if tool_rounds:
+            parts = [f"Rounds: {tool_rounds}"]
+            if duplicates:
+                parts.append(f"DupTools: {duplicates}")
+            stats_parts.append(" ".join(parts))
+
+        # Usage-coverage marking: show "partial" when some calls lack provider
+        # token usage rather than implying the totals are complete.
+        if stats.get("llm_calls", 0) and not stats.get("usage_complete", True):
+            stats_parts.append("Usage: partial")
+
+        # Structured-output fallback + unattributed attribution (Phase 2).
+        fallbacks = stats.get("structured_fallbacks", 0)
+        unsupported = stats.get("structured_unsupported", 0)
+        if fallbacks or unsupported:
+            stats_parts.append(f"StructFallback: {fallbacks}{'+U' if unsupported else ''}")
+        # A binding that succeeded without exposing raw usage: reported
+        # separately, never as a fallback or an unsupported provider.
+        estimated = stats.get("structured_estimate", 0)
+        if estimated:
+            stats_parts.append(f"StructEstimate: {estimated}")
+        unattributed = (stats.get("unattributed_llm", 0) or 0) + (
+            stats.get("unattributed_tool", 0) or 0
+        )
+        if unattributed:
+            stats_parts.append(f"Unattributed: {unattributed}")
 
     stats_parts.append(f"Reports: {reports_completed}/{reports_total}")
 
@@ -497,6 +535,69 @@ def update_display(layout, spinner_text=None, stats_handler=None, start_time=Non
     stats_table.add_row(" | ".join(stats_parts))
 
     layout["footer"].update(Panel(stats_table, border_style="grey50"))
+
+
+def _print_observability_summary(stats_handler, console):
+    """Print the compact post-run observability summary to the console.
+
+    Best-effort: reads the stats handler's ``get_stats`` observability fields
+    (per-agent counts, coverage, structured fallback, telemetry path) and prints
+    them under a single header. Never raises.
+    """
+    stats = stats_handler.get_stats()
+    agents = stats.get("agents") or {}
+    significant_agents = {
+        agent_id: data for agent_id, data in agents.items()
+        if agent_id != "unattributed" and any(data.values())
+    }
+
+    console.print("\n[bold cyan]Observability Summary[/bold cyan]")
+
+    coverage = []
+    if stats.get("llm_calls", 0):
+        coverage.append(f"calls_with_usage={stats.get('calls_with_provider_usage', 0)}")
+        coverage.append(f"calls_without_usage={stats.get('calls_without_provider_usage', 0)}")
+    coverage.append(f"usage_complete={'yes' if stats.get('usage_complete') else 'no'}")
+    console.print(
+        f"[dim]Coverage:[/dim] {', '.join(coverage)} | "
+        f"dup_tools={stats.get('duplicate_tool_calls', 0)} | "
+        f"struct_fallback={stats.get('structured_fallbacks', 0)}"
+    )
+
+    unattributed_llm = stats.get("unattributed_llm", 0) or 0
+    unattributed_tool = stats.get("unattributed_tool", 0) or 0
+    if unattributed_llm or unattributed_tool:
+        console.print(
+            f"[dim]Unattributed:[/dim] llm={unattributed_llm}, tools={unattributed_tool}"
+        )
+
+    if significant_agents:
+        table = Table(show_header=True, box=box.SIMPLE_HEAVY)
+        table.add_column("Agent", style="bold")
+        table.add_column("LLM", justify="right")
+        table.add_column("Tools", justify="right")
+        table.add_column("Rounds", justify="right")
+        table.add_column("Prefetch", justify="right")
+        table.add_column("Struct", justify="right")
+        table.add_column("Nodes", justify="right")
+        for agent_id in sorted(significant_agents):
+            data = significant_agents[agent_id]
+            table.add_row(
+                agent_id,
+                str(data.get("llm_calls", 0)),
+                str(data.get("tool_calls", 0)),
+                str(data.get("tool_rounds", 0)),
+                str(data.get("prefetch_calls", 0)),
+                str(data.get("structured_attempts", 0)),
+                str(data.get("node_invocations", 0)),
+            )
+        console.print(table)
+
+    telemetry_path = stats.get("telemetry_path")
+    if telemetry_path:
+        console.print(f"[dim]Telemetry:[/dim] {telemetry_path}")
+    else:
+        console.print("[dim]Telemetry: (not written for this run)[/dim]")
 
 
 def get_user_selections():
@@ -1131,259 +1232,313 @@ def run_analysis(checkpoint: bool | None = None, portfolio=None):
     # The alternate screen keeps a layout taller than the window from redrawing
     # by scrolling; the final report prints after this block, on the normal screen.
     with Live(layout, refresh_per_second=4, screen=True):
-        # Initial display
-        update_display(layout, stats_handler=stats_handler, start_time=start_time)
+        obs_scope_bound = False
+        try:
+            # Initial display
+            update_display(layout, stats_handler=stats_handler, start_time=start_time)
 
-        # Add initial messages
-        message_buffer.add_message("System", f"Selected ticker: {selections['ticker']}")
-        if selections["asset_type"] != "stock":
-            message_buffer.add_message("System", f"Detected asset type: {selections['asset_type']}")
-        message_buffer.add_message(
-            "System", f"Analysis date: {selections['analysis_date']}"
-        )
-        message_buffer.add_message(
-            "System",
-            f"Selected analysts: {', '.join(analyst.value for analyst in selections['analysts'])}",
-        )
-        update_display(layout, stats_handler=stats_handler, start_time=start_time)
-
-        # Update agent status to in_progress for the first analyst
-        first_analyst = get_initial_analyst_node(analyst_execution_plan)
-        message_buffer.update_agent_status(first_analyst, "in_progress")
-        analyst_wall_time_tracker.mark_started(selected_analyst_keys[0])
-        update_display(layout, stats_handler=stats_handler, start_time=start_time)
-
-        # Create spinner text
-        spinner_text = (
-            f"Analyzing {selections['ticker']} on {selections['analysis_date']}..."
-        )
-        update_display(layout, spinner_text, stats_handler=stats_handler, start_time=start_time)
-
-        # The same initial state propagate() builds: settled decision log, past
-        # context and resolved instrument identity. It is built after the
-        # checkpointer is set up (below) so the ADR-009 execution identity can be
-        # injected; a lightweight graph double without the ADR-009 methods builds
-        # the legacy state. See the branch below.
-        # Pass callbacks to graph config for tool execution tracking
-        # (LLM tracking is handled separately via LLM constructor)
-        args = graph.propagator.get_graph_args(callbacks=[stats_handler])
-
-        # Recompile with a checkpointer and inject the thread_id so --checkpoint
-        # actually saves and resumes on the CLI path (#1249); a no-op when
-        # checkpointing is disabled. Torn down in the finally below.
-        checkpoint_tid = graph.begin_checkpoint(
-            selections["ticker"], selections["analysis_date"], selections["asset_type"], portfolio
-        )
-        if checkpoint_tid is not None:
-            args.setdefault("config", {}).setdefault("configurable", {})["thread_id"] = checkpoint_tid
-
-        # ADR-009: resolve the real execution identity (resume keeps its own; a
-        # fresh run mints a new one) and open the durable usage ledger so every
-        # model call is reserved/settled before its state update can be lost.
-        prior_state = (
-            graph._read_checkpoint_state(args)
-            if getattr(graph, "_resuming", False) and hasattr(graph, "_read_checkpoint_state")
-            else None
-        )
-        # ADR-011: the CLI streams ``graph.graph.stream(...)`` DIRECTLY (it does not
-        # go through ``TradingAgentsGraph._run_graph``), so it must wire the SAME
-        # fail-closed resume sanitizer here, BEFORE any model/collector call, or a
-        # legacy over-confident checkpoint would flow straight into prompts. It is
-        # fail-closed: a sanitization failure raises and the stream never starts.
-        # No-op unless the trusted verdict is degraded.
-        if (
-            prior_state is not None
-            and hasattr(graph, "_sanitize_confidence_on_resume")
-        ):
-            graph._sanitize_confidence_on_resume(args, prior_state)
-        usage_capture = None
-        capture_ctx = None
-        if hasattr(graph, "_usage_run_identity") and hasattr(graph, "_open_usage_ledger"):
-            run_id, ledger_path = graph._usage_run_identity(
-                selections["ticker"], selections["analysis_date"], prior_state
+            # Add initial messages
+            message_buffer.add_message("System", f"Selected ticker: {selections['ticker']}")
+            if selections["asset_type"] != "stock":
+                message_buffer.add_message("System", f"Detected asset type: {selections['asset_type']}")
+            message_buffer.add_message(
+                "System", f"Analysis date: {selections['analysis_date']}"
             )
-            init_agent_state = graph.create_run_state(
-                selections["ticker"], selections["analysis_date"], selections["asset_type"], portfolio,
-                run_id=run_id, usage_ledger_path=ledger_path,
+            message_buffer.add_message(
+                "System",
+                f"Selected analysts: {', '.join(analyst.value for analyst in selections['analysts'])}",
             )
-            usage_ledger = graph._open_usage_ledger(
-                ledger_path, strict_resume=bool(getattr(graph, "_resuming", False))
+            update_display(layout, stats_handler=stats_handler, start_time=start_time)
+
+            # Update agent status to in_progress for the first analyst
+            first_analyst = get_initial_analyst_node(analyst_execution_plan)
+            message_buffer.update_agent_status(first_analyst, "in_progress")
+            analyst_wall_time_tracker.mark_started(selected_analyst_keys[0])
+            update_display(layout, stats_handler=stats_handler, start_time=start_time)
+
+            # Create spinner text
+            spinner_text = (
+                f"Analyzing {selections['ticker']} on {selections['analysis_date']}..."
             )
-            if usage_ledger is not None:
-                try:
-                    from tradingagents.debate.config import resolve_debate_termination_config
-                    from tradingagents.debate.usage_ledger import policy_signature
+            update_display(layout, spinner_text, stats_handler=stats_handler, start_time=start_time)
 
-                    usage_ledger.begin_run(
-                        run_id,
-                        policy_signature=policy_signature(
-                            debate_config=resolve_debate_termination_config(graph.config)
-                        ),
-                        require_existing=bool(getattr(graph, "_resuming", False)),
-                    )
-                except Exception:  # noqa: BLE001 — unreadable accounting is surfaced, not fatal
-                    usage_ledger = None
-            from tradingagents.debate.config import resolve_debate_termination_config
-            from tradingagents.debate.usage_capture import UsageCapture, use_usage_capture
+            # The same initial state propagate() builds: settled decision log, past
+            # context and resolved instrument identity. It is built after the
+            # checkpointer is set up (below) so the ADR-009 execution identity can be
+            # injected; a lightweight graph double without the ADR-009 methods builds
+            # the legacy state. See the branch below.
+            # Pass callbacks to graph config for tool execution tracking
+            # (LLM tracking is handled separately via LLM constructor)
+            args = graph.propagator.get_graph_args(callbacks=[stats_handler])
 
-            usage_capture = UsageCapture(run_id=run_id, ledger=usage_ledger)
-            usage_capture.debate_config = resolve_debate_termination_config(graph.config)
-            # A configured ledger path that could not be opened/registered (fresh or
-            # resume) fails closed; an intentional no-path run stays memory-only.
-            if ledger_path and usage_ledger is None:
-                usage_capture.accounting_unreadable = True
-            capture_ctx = use_usage_capture(usage_capture)
-        else:
-            # A lightweight graph double (e.g. a CLI wiring test) without the
-            # ADR-009 methods: build the legacy initial state with no usage capture.
-            init_agent_state = graph.create_run_state(
+            # Recompile with a checkpointer and inject the thread_id so --checkpoint
+            # actually saves and resumes on the CLI path (#1249); a no-op when
+            # checkpointing is disabled. Torn down in the finally below.
+            checkpoint_tid = graph.begin_checkpoint(
                 selections["ticker"], selections["analysis_date"], selections["asset_type"], portfolio
             )
+            if checkpoint_tid is not None:
+                args.setdefault("config", {}).setdefault("configurable", {})["thread_id"] = checkpoint_tid
 
-        # Stream the analysis. On resume, feed None so LangGraph continues the
-        # interrupted run instead of re-appending the initial state (#1249); the
-        # try/finally tears the checkpointer down even if the stream raises.
-        trace = []
-        # ADR-008: bind the run-scoped evidence collector for exactly this run so
-        # vendor dataflows capture structured optional evidence the gate reads.
-        # On a resume, re-seed it from the saved checkpoint state so a new tool
-        # call appends after already-captured evidence (never overwrites it).
-        collector_ctx = use_collector(
-            selections["ticker"], str(selections["analysis_date"]), prior_state=prior_state
-        )
-        collector_ctx.__enter__()
-        if capture_ctx is not None:
-            capture_ctx.__enter__()
-        try:
-            for chunk in graph.graph.stream(graph.checkpoint_input(init_agent_state), **args):
-                # Process all messages in chunk, deduplicating by message ID
-                for message in chunk.get("messages", []):
-                    msg_id = getattr(message, "id", None)
-                    if msg_id is not None:
-                        if msg_id in message_buffer._processed_message_ids:
-                            continue
-                        message_buffer._processed_message_ids.add(msg_id)
+            # ADR-009: resolve the real execution identity (resume keeps its own; a
+            # fresh run mints a new one) and open the durable usage ledger so every
+            # model call is reserved/settled before its state update can be lost.
+            prior_state = (
+                graph._read_checkpoint_state(args)
+                if getattr(graph, "_resuming", False) and hasattr(graph, "_read_checkpoint_state")
+                else None
+            )
+            # ADR-011: the CLI streams ``graph.graph.stream(...)`` DIRECTLY (it does not
+            # go through ``TradingAgentsGraph._run_graph``), so it must wire the SAME
+            # fail-closed resume sanitizer here, BEFORE any model/collector call, or a
+            # legacy over-confident checkpoint would flow straight into prompts. It is
+            # fail-closed: a sanitization failure raises and the stream never starts.
+            # No-op unless the trusted verdict is degraded.
+            if (
+                prior_state is not None
+                and hasattr(graph, "_sanitize_confidence_on_resume")
+            ):
+                graph._sanitize_confidence_on_resume(args, prior_state)
+            usage_capture = None
+            capture_ctx = None
+            if hasattr(graph, "_usage_run_identity") and hasattr(graph, "_open_usage_ledger"):
+                run_id, ledger_path = graph._usage_run_identity(
+                    selections["ticker"], selections["analysis_date"], prior_state
+                )
+                init_agent_state = graph.create_run_state(
+                    selections["ticker"], selections["analysis_date"], selections["asset_type"], portfolio,
+                    run_id=run_id, usage_ledger_path=ledger_path,
+                )
+                usage_ledger = graph._open_usage_ledger(
+                    ledger_path, strict_resume=bool(getattr(graph, "_resuming", False))
+                )
+                if usage_ledger is not None:
+                    try:
+                        from tradingagents.debate.config import resolve_debate_termination_config
+                        from tradingagents.debate.usage_ledger import policy_signature
 
-                    msg_type, content = classify_message_type(message)
-                    if content and content.strip():
-                        message_buffer.add_message(msg_type, content)
+                        usage_ledger.begin_run(
+                            run_id,
+                            policy_signature=policy_signature(
+                                debate_config=resolve_debate_termination_config(graph.config)
+                            ),
+                            require_existing=bool(getattr(graph, "_resuming", False)),
+                        )
+                    except Exception:  # noqa: BLE001 — unreadable accounting is surfaced, not fatal
+                        usage_ledger = None
+                from tradingagents.debate.config import resolve_debate_termination_config
+                from tradingagents.debate.usage_capture import UsageCapture, use_usage_capture
 
-                    if hasattr(message, "tool_calls") and message.tool_calls:
-                        for tool_call in message.tool_calls:
-                            if isinstance(tool_call, dict):
-                                message_buffer.add_tool_call(tool_call["name"], tool_call["args"])
-                            else:
-                                message_buffer.add_tool_call(tool_call.name, tool_call.args)
-
-                # Update analyst statuses based on report state (runs on every chunk)
-                update_analyst_statuses(
-                    message_buffer,
-                    chunk,
-                    wall_time_tracker=analyst_wall_time_tracker,
+                usage_capture = UsageCapture(run_id=run_id, ledger=usage_ledger)
+                usage_capture.debate_config = resolve_debate_termination_config(graph.config)
+                # A configured ledger path that could not be opened/registered (fresh or
+                # resume) fails closed; an intentional no-path run stays memory-only.
+                if ledger_path and usage_ledger is None:
+                    usage_capture.accounting_unreadable = True
+                capture_ctx = use_usage_capture(usage_capture)
+            else:
+                # A lightweight graph double (e.g. a CLI wiring test) without the
+                # ADR-009 methods: build the legacy initial state with no usage capture.
+                init_agent_state = graph.create_run_state(
+                    selections["ticker"], selections["analysis_date"], selections["asset_type"], portfolio
                 )
 
-                # Research Team - Handle Investment Debate State
-                if chunk.get("investment_debate_state"):
-                    debate_state = chunk["investment_debate_state"]
-                    bull_hist = debate_state.get("bull_history", "").strip()
-                    bear_hist = debate_state.get("bear_history", "").strip()
-                    judge = debate_state.get("judge_decision", "").strip()
-
-                    # Only update status when there's actual content
-                    if bull_hist or bear_hist:
-                        update_research_team_status("in_progress")
-                    if bull_hist:
-                        message_buffer.update_report_section(
-                            "investment_plan", f"### Bull Researcher Analysis\n{bull_hist}"
-                        )
-                    if bear_hist:
-                        message_buffer.update_report_section(
-                            "investment_plan", f"### Bear Researcher Analysis\n{bear_hist}"
-                        )
-                    if judge:
-                        message_buffer.update_report_section(
-                            "investment_plan", f"### Research Manager Decision\n{judge}"
-                        )
-                        update_research_team_status("completed")
-                        message_buffer.update_agent_status("Trader", "in_progress")
-
-                # Trading Team
-                if chunk.get("trader_investment_plan"):
-                    message_buffer.update_report_section(
-                        "trader_investment_plan", chunk["trader_investment_plan"]
-                    )
-                    if message_buffer.agent_status.get("Trader") != "completed":
-                        message_buffer.update_agent_status("Trader", "completed")
-                        message_buffer.update_agent_status("Aggressive Analyst", "in_progress")
-
-                # Risk Management Team - Handle Risk Debate State
-                if chunk.get("risk_debate_state"):
-                    risk_state = chunk["risk_debate_state"]
-                    agg_hist = risk_state.get("aggressive_history", "").strip()
-                    con_hist = risk_state.get("conservative_history", "").strip()
-                    neu_hist = risk_state.get("neutral_history", "").strip()
-                    judge = risk_state.get("judge_decision", "").strip()
-
-                    if agg_hist:
-                        if message_buffer.agent_status.get("Aggressive Analyst") != "completed":
-                            message_buffer.update_agent_status("Aggressive Analyst", "in_progress")
-                        message_buffer.update_report_section(
-                            "final_trade_decision", f"### Aggressive Analyst Analysis\n{agg_hist}"
-                        )
-                    if con_hist:
-                        if message_buffer.agent_status.get("Conservative Analyst") != "completed":
-                            message_buffer.update_agent_status("Conservative Analyst", "in_progress")
-                        message_buffer.update_report_section(
-                            "final_trade_decision", f"### Conservative Analyst Analysis\n{con_hist}"
-                        )
-                    if neu_hist:
-                        if message_buffer.agent_status.get("Neutral Analyst") != "completed":
-                            message_buffer.update_agent_status("Neutral Analyst", "in_progress")
-                        message_buffer.update_report_section(
-                            "final_trade_decision", f"### Neutral Analyst Analysis\n{neu_hist}"
-                        )
-                    if judge and message_buffer.agent_status.get("Portfolio Manager") != "completed":
-                        message_buffer.update_agent_status("Portfolio Manager", "in_progress")
-                        message_buffer.update_report_section(
-                            "final_trade_decision", f"### Portfolio Manager Decision\n{judge}"
-                        )
-                        message_buffer.update_agent_status("Aggressive Analyst", "completed")
-                        message_buffer.update_agent_status("Conservative Analyst", "completed")
-                        message_buffer.update_agent_status("Neutral Analyst", "completed")
-                        message_buffer.update_agent_status("Portfolio Manager", "completed")
-
-                # Update the display
-                update_display(layout, stats_handler=stats_handler, start_time=start_time)
-
-                trace.append(chunk)
-
-            # Streamed chunks are per-node deltas, not full state. Merge them
-            # so every report field populated across the run is present.
-            final_state = {}
-            for chunk in trace:
-                final_state.update(chunk)
-
-            # ADR-009: reconcile the whole-run usage from the durable ledger and
-            # attach it (reporting only) plus the execution identity, exactly like
-            # the propagate() path, so the CLI report cannot disagree.
-            if usage_capture is not None:
-                with contextlib.suppress(Exception):
-                    graph._attach_whole_run_usage(final_state, usage_capture, usage_capture.run_id)
-
-            # Clean run: log the decision, then drop this run's checkpoint so a
-            # later run starts fresh. A mid-stream failure skips both, keeping
-            # the checkpoint for resume.
-            graph.record_decision(selections["ticker"], selections["analysis_date"], final_state)
-            graph.clear_checkpoint_on_success(
-                selections["ticker"], selections["analysis_date"], selections["asset_type"], portfolio
+            # Begin the observability run (idempotent; shares the collector bound to
+            # the stats handler so LLM + tool events recorded from two callback paths
+            # land on one collector). Finalized on success/failure below.
+            obs_collector = begin_observability_run(
+                [stats_handler],
+                results_dir=str(results_dir),
+                ticker=selections["ticker"],
+                trade_date=str(selections["analysis_date"]),
+                asset_type=selections["asset_type"],
+                selected_analysts=[
+                    analyst_agent_id_for_key(key) for key in selected_analyst_keys
+                ],
+                llm_provider=config.get("llm_provider"),
+                quick_think_model=config.get("quick_think_llm"),
+                deep_think_model=config.get("deep_think_llm"),
+                max_debate_rounds=config.get("max_debate_rounds"),
+                max_risk_rounds=config.get("max_risk_discuss_rounds"),
             )
-        finally:
-            # Always restore the plain uncheckpointed graph and unbind the run
-            # collector, even on failure.
-            graph.end_checkpoint()
-            collector_ctx.__exit__(None, None, None)
+
+            # Bind the run scope so the Phase 2 instrumentation (agent node, tool
+            # round, prefetch, structured output) records against this collector via
+            # the context var, exactly as it does inside ``propagate``. The token is
+            # released in the ``finally`` below even when the stream raises.
+            obs_scope_token = bind_run_scope(obs_collector)
+            obs_scope_bound = True
+
+            # Stream the analysis. On resume, feed None so LangGraph continues the
+            # interrupted run instead of re-appending the initial state (#1249); the
+            # try/except/else/finally tears the checkpointer down even if the stream
+            # raises, and finalizes the observability run with the true status.
+            trace = []
+            # ADR-008: bind the run-scoped evidence collector for exactly this run so
+            # vendor dataflows capture structured optional evidence the gate reads.
+            # On a resume, re-seed it from the saved checkpoint state so a new tool
+            # call appends after already-captured evidence (never overwrites it).
+            collector_ctx = use_collector(
+                selections["ticker"], str(selections["analysis_date"]), prior_state=prior_state
+            )
+            collector_ctx.__enter__()
             if capture_ctx is not None:
-                capture_ctx.__exit__(None, None, None)
+                capture_ctx.__enter__()
+            try:
+                for chunk in graph.graph.stream(graph.checkpoint_input(init_agent_state), **args):
+                    # Process all messages in chunk, deduplicating by message ID
+                    for message in chunk.get("messages", []):
+                        msg_id = getattr(message, "id", None)
+                        if msg_id is not None:
+                            if msg_id in message_buffer._processed_message_ids:
+                                continue
+                            message_buffer._processed_message_ids.add(msg_id)
+
+                        msg_type, content = classify_message_type(message)
+                        if content and content.strip():
+                            message_buffer.add_message(msg_type, content)
+
+                        if hasattr(message, "tool_calls") and message.tool_calls:
+                            for tool_call in message.tool_calls:
+                                if isinstance(tool_call, dict):
+                                    message_buffer.add_tool_call(tool_call["name"], tool_call["args"])
+                                else:
+                                    message_buffer.add_tool_call(tool_call.name, tool_call.args)
+
+                    # Update analyst statuses based on report state (runs on every chunk)
+                    update_analyst_statuses(
+                        message_buffer,
+                        chunk,
+                        wall_time_tracker=analyst_wall_time_tracker,
+                    )
+
+                    # Research Team - Handle Investment Debate State
+                    if chunk.get("investment_debate_state"):
+                        debate_state = chunk["investment_debate_state"]
+                        bull_hist = debate_state.get("bull_history", "").strip()
+                        bear_hist = debate_state.get("bear_history", "").strip()
+                        judge = debate_state.get("judge_decision", "").strip()
+
+                        # Only update status when there's actual content
+                        if bull_hist or bear_hist:
+                            update_research_team_status("in_progress")
+                        if bull_hist:
+                            message_buffer.update_report_section(
+                                "investment_plan", f"### Bull Researcher Analysis\n{bull_hist}"
+                            )
+                        if bear_hist:
+                            message_buffer.update_report_section(
+                                "investment_plan", f"### Bear Researcher Analysis\n{bear_hist}"
+                            )
+                        if judge:
+                            message_buffer.update_report_section(
+                                "investment_plan", f"### Research Manager Decision\n{judge}"
+                            )
+                            update_research_team_status("completed")
+                            message_buffer.update_agent_status("Trader", "in_progress")
+
+                    # Trading Team
+                    if chunk.get("trader_investment_plan"):
+                        message_buffer.update_report_section(
+                            "trader_investment_plan", chunk["trader_investment_plan"]
+                        )
+                        if message_buffer.agent_status.get("Trader") != "completed":
+                            message_buffer.update_agent_status("Trader", "completed")
+                            message_buffer.update_agent_status("Aggressive Analyst", "in_progress")
+
+                    # Risk Management Team - Handle Risk Debate State
+                    if chunk.get("risk_debate_state"):
+                        risk_state = chunk["risk_debate_state"]
+                        agg_hist = risk_state.get("aggressive_history", "").strip()
+                        con_hist = risk_state.get("conservative_history", "").strip()
+                        neu_hist = risk_state.get("neutral_history", "").strip()
+                        judge = risk_state.get("judge_decision", "").strip()
+
+                        if agg_hist:
+                            if message_buffer.agent_status.get("Aggressive Analyst") != "completed":
+                                message_buffer.update_agent_status("Aggressive Analyst", "in_progress")
+                            message_buffer.update_report_section(
+                                "final_trade_decision", f"### Aggressive Analyst Analysis\n{agg_hist}"
+                            )
+                        if con_hist:
+                            if message_buffer.agent_status.get("Conservative Analyst") != "completed":
+                                message_buffer.update_agent_status("Conservative Analyst", "in_progress")
+                            message_buffer.update_report_section(
+                                "final_trade_decision", f"### Conservative Analyst Analysis\n{con_hist}"
+                            )
+                        if neu_hist:
+                            if message_buffer.agent_status.get("Neutral Analyst") != "completed":
+                                message_buffer.update_agent_status("Neutral Analyst", "in_progress")
+                            message_buffer.update_report_section(
+                                "final_trade_decision", f"### Neutral Analyst Analysis\n{neu_hist}"
+                            )
+                        if judge and message_buffer.agent_status.get("Portfolio Manager") != "completed":
+                            message_buffer.update_agent_status("Portfolio Manager", "in_progress")
+                            message_buffer.update_report_section(
+                                "final_trade_decision", f"### Portfolio Manager Decision\n{judge}"
+                            )
+                            message_buffer.update_agent_status("Aggressive Analyst", "completed")
+                            message_buffer.update_agent_status("Conservative Analyst", "completed")
+                            message_buffer.update_agent_status("Neutral Analyst", "completed")
+                            message_buffer.update_agent_status("Portfolio Manager", "completed")
+
+                    # Update the display
+                    update_display(layout, stats_handler=stats_handler, start_time=start_time)
+
+                    trace.append(chunk)
+
+                # Streamed chunks are per-node deltas, not full state. Merge them
+                # so every report field populated across the run is present.
+                final_state = {}
+                for chunk in trace:
+                    final_state.update(chunk)
+
+                # ADR-009: reconcile the whole-run usage from the durable ledger and
+                # attach it (reporting only) plus the execution identity, exactly like
+                # the propagate() path, so the CLI report cannot disagree.
+                if usage_capture is not None:
+                    with contextlib.suppress(Exception):
+                        graph._attach_whole_run_usage(final_state, usage_capture, usage_capture.run_id)
+
+                # Clean run: log the decision, then drop this run's checkpoint so a
+                # later run starts fresh. A mid-stream failure skips both, keeping
+                # the checkpoint for resume.
+                graph.record_decision(selections["ticker"], selections["analysis_date"], final_state)
+                graph.clear_checkpoint_on_success(
+                    selections["ticker"], selections["analysis_date"], selections["asset_type"], portfolio
+                )
+            except BaseException as exc:  # noqa: BLE001 — re-raised after teardown.
+                # Mark the run failed (partial metrics preserved) without masking the
+                # application exception, which is re-raised below after teardown.
+                finalize_observability_run(
+                    obs_collector, status="failed",
+                    failure_type=type(exc).__name__,
+                )
+                raise
+            else:
+                # Clean run: mark observability completed and write telemetry once.
+                finalize_observability_run(obs_collector, status="completed")
+            finally:
+                # Always restore the plain uncheckpointed graph and unbind the run
+                # collector, even on failure.
+                graph.end_checkpoint()
+                collector_ctx.__exit__(None, None, None)
+                try:
+                    if capture_ctx is not None:
+                        capture_ctx.__exit__(None, None, None)
+                finally:
+                    # Release the run scope binding (idempotent, never raises). It is
+                    # unbound after the collector and ADR-009 capture teardown so any
+                    # event recorded during teardown still lands on this run.
+                    unbind_run_scope(obs_scope_token)
+                    obs_scope_bound = False
+
+        finally:
+            if obs_scope_bound:
+                # The run was left mid-flight (e.g. an exception before the
+                # stream teardown completed); release the run scope so this
+                # context var does not leak into a later run.
+                unbind_run_scope(obs_scope_token)
 
         # Update all agent statuses to completed
         for agent in message_buffer.agent_status:
@@ -1413,6 +1568,14 @@ def run_analysis(checkpoint: bool | None = None, portfolio=None):
             "decision text below and judge it yourself.[/yellow]\n"
         )
     console.print(f"[dim]{analyst_wall_time_tracker.format_summary()}[/dim]")
+
+    # Post-run observability summary: compact per-agent totals, coverage,
+    # structured fallback and the written telemetry artifact path.
+    try:
+        _print_observability_summary(stats_handler, console)
+    except Exception:  # noqa: BLE001
+        # The summary is best-effort and must never fail the run.
+        pass
 
     # Prompt to save report
     save_choice = typer.prompt("Save report?", default="Y").strip().upper()

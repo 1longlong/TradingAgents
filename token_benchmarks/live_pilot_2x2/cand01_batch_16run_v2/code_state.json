@@ -1,0 +1,42 @@
+{
+  "code_state_phase": "start_of_measurement",
+  "experiment_config_sha256": "e77f7e9459bad29f5bfc20438b326fab9f8b57d8fda37644ce4b1d3ba53c120f",
+  "experiment_schema_version": 2,
+  "file_count": 205,
+  "fingerprint_algorithm": "working-tree-sha256-v2",
+  "git_branch": "HEAD",
+  "git_diff_sha256": "981b4c0ca0114039e5e01092876965bb6f24c93b8120abb9ea684199ffcdfb61",
+  "git_head_commit": "9948bf8545cceeb0d7a60cda913a04826a06c007",
+  "git_working_tree_dirty": true,
+  "package_versions": {
+    "langchain-core": "1.6.12",
+    "langgraph": "1.2.16"
+  },
+  "python_version": "3.14.7 | packaged by Anaconda, Inc. | (main, Aug 14 2026, 10:21:40) [GCC 14.3.0]",
+  "timestamp_utc": "2026-11-15T12:54:25.898249+00:00",
+  "tool_schema_version": 2,
+  "tracked_file_count": 186,
+  "untracked_file_count": 19,
+  "untracked_files": [
+    "scripts/gen_cand01_batch_16run_specs_v2.py",
+    "tests/test_audit_a_regressions.py",
+    "tests/test_audit_b_regressions.py",
+    "tests/test_audit_c_regressions.py",
+    "tests/test_c3_regressions.py",
+    "tests/test_cand01_batch_16run_v2_infra.py",
+    "tests/test_cand01_news_positive_path.py",
+    "tests/test_cand01_single_pass_finalization.py",
+    "tests/test_finnhub_news.py",
+    "tests/test_finnhub_only_scope.py",
+    "tests/test_gdelt_news.py",
+    "tests/test_news_audit_regressions.py",
+    "tests/test_news_dual_source.py",
+    "tests/test_news_relevance.py",
+    "tests/test_switch_consumption.py",
+    "tradingagents/dataflows/finnhub_news.py",
+    "tradingagents/dataflows/news_merge.py",
+    "tradingagents/dataflows/news_relevance.py",
+    "tradingagents/graph/switch_verification.py"
+  ],
+  "working_tree_sha256": "b7ea0c1fa104db57681120bb43558c67a4a23821fe5899996373bf859a498ce9"
+}

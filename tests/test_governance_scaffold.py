@@ -449,6 +449,16 @@ class TestSecretScan:
         # The validator's own scanner must not match its own regex literals as secrets.
         assert validate_requirements.scan_secrets(text) == []
 
+    def test_does_not_flag_hyphenated_prose_words(self):
+        # Regression (D1, 2026-11-21): "risk-management" and "disk-usage-..."
+        # contain the literal substring "sk-" but are not key material. The old
+        # optional-prefix pattern flagged them, which made the scanner unusable
+        # on ordinary governance prose.
+        for text in ("risk-management debaters\n", "disk-usage-reporting\n"):
+            assert validate_requirements.scan_secrets(text) == [], text
+        # A real key at a non-alphanumeric boundary must still be flagged.
+        assert validate_requirements.scan_secrets("key='x-sk-abcdefghijkl'\n") == [1]
+
 
 @pytest.mark.unit
 class TestRequiredArtifactPresence:
@@ -482,7 +492,52 @@ class TestRequiredArtifactPresence:
             yaml.safe_load(path.read_text(encoding="utf-8"))  # must not raise
 
 
-_TAG_RE = re.compile(r"(?:FR-(?:DQG|DDT|TRD)-\d{3}|NFR-[A-Z]+-\d{3}|INV-(?:TRD-\d{3}|\d+))")
+_TAG_RE = re.compile(
+    r"(?:FR-(?:DQG|DDT|TRD|ANL|OBS|HAR|CAM)-\d{3}|NFR-[A-Z]+-\d{3}|INV-(?:TRD-\d{3}|\d+))"
+)
+
+#: The Release registry's 32 original IDs. D1 (2026-11-21) must preserve every
+#: one of them; the test below pins the exact composition rather than a count.
+RELEASE_REQUIREMENT_IDS = frozenset({
+    "FR-DQG-001", "FR-DQG-002", "FR-DQG-003", "FR-DQG-004", "FR-DQG-005",
+    "FR-DQG-006", "FR-DDT-001", "FR-DDT-002", "FR-DDT-003", "FR-DDT-004",
+    "FR-DDT-005", "NFR-DET-001", "NFR-FC-001", "NFR-PIT-001", "NFR-AUD-001",
+    "NFR-BUD-001", "NFR-BC-001", "NFR-OFF-001", "NFR-SEC-001", "NFR-CMP-001",
+    "NFR-CMP-002", "NFR-CMP-003", "FR-TRD-001", "FR-TRD-002", "FR-TRD-003",
+    "FR-TRD-004", "FR-TRD-005", "FR-TRD-006", "INV-TRD-001", "INV-TRD-002",
+    "INV-TRD-003", "NFR-TRD-001",
+})
+
+#: IDs added retrospectively by the D1 integration. Their evidence was authored
+#: during the token-observability campaign, before the Release "Traceability:"
+#: convention existed, so the mapped files carry no declared tag. The exemption
+#: is ID-scoped: `test_d1_exemptions_are_real_and_not_a_blanket_bypass` proves
+#: every listed ID exists, is marked `retrospective`, and every supplemental file
+#: is genuinely mapped. Release-native rows keep the strict check.
+D1_RETROSPECTIVE_IDS = frozenset({
+    "FR-ANL-001", "FR-ANL-002", "FR-ANL-003", "FR-ANL-004", "FR-ANL-005",
+    "FR-ANL-006", "FR-ANL-008", "FR-ANL-009", "FR-ANL-010",
+    "FR-OBS-001", "FR-OBS-002", "FR-OBS-003", "FR-OBS-004", "FR-OBS-005",
+    "FR-HAR-001", "FR-HAR-002", "FR-HAR-003", "FR-CAM-001",
+    "NFR-VER-001", "NFR-VER-002",
+})
+
+#: Files added to an ESTABLISHED Release row by D1 whose own declared
+#: Traceability block does not name that row. The file predates the row or names
+#: the invariant instead, so requiring the row's own ID would demand editing an
+#: out-of-scope test file. Each entry is checked to be a real, non-empty file
+#: that the row actually maps.
+D1_SUPPLEMENTAL_FILES: dict[str, frozenset[str]] = {
+    "NFR-PIT-001": frozenset({
+        "tests/test_tool_date_enforcement.py",
+        "tests/test_undated_tools_as_of.py",
+        "tests/test_pit_notice.py",
+    }),
+    "NFR-SEC-001": frozenset({
+        "tests/test_api_key_env.py",
+        "tests/test_run_token_benchmark_sh.py",
+    }),
+}
 
 
 def _declared_traceability_tags(text):
@@ -523,17 +578,29 @@ def _invariant_ids():
 
 @pytest.mark.unit
 class TestMappedTestTraceability:
-    """Governance regression (2026-11-10): the mapped test files are traceable.
+    """Governance regression (2026-11-10, extended by D1 on 2026-11-21).
 
-    The mapped test files referenced by the 32 requirement entries must carry an
+    The mapped test files referenced by the requirement entries must carry an
     accurate, resolvable requirement/invariant tag; a tag is only valid if it
     names a real registry or invariant ID. This pins traceability mechanically
     without inventing acceptance, metrics, or new IDs.
+
+    D1 extended the registry with retrospectively numbered requirements. Their
+    evidence predates the tag convention, so those IDs are exempt from the
+    "own ID declared" rule through the explicit, audited sets above. The
+    Release-native rows keep the strict rule, and a dedicated test proves the
+    exemptions are real rather than a blanket bypass.
     """
 
-    def test_registry_keeps_expected_32_ids(self):
-        # Release's 22 requirements plus the 10 simulated-trading requirements.
-        assert len(_registry_ids(load_real_requirements())) == 32
+    def test_registry_composition_is_the_release_32_plus_retrospective_rows(self):
+        # Exact composition, not just a count: every Release ID must survive and
+        # the registry must contain exactly the Release IDs plus the D1 rows.
+        ids = _registry_ids(load_real_requirements())
+        assert ids >= RELEASE_REQUIREMENT_IDS, sorted(RELEASE_REQUIREMENT_IDS - ids)
+        assert ids == RELEASE_REQUIREMENT_IDS | D1_RETROSPECTIVE_IDS, sorted(
+            ids ^ (RELEASE_REQUIREMENT_IDS | D1_RETROSPECTIVE_IDS)
+        )
+        assert len(ids) == 52
 
     def test_invariants_register_ids_resolve(self):
         # INV-11/12 stay unmapped, INV-14 stays proposed: assert honest status
@@ -545,18 +612,28 @@ class TestMappedTestTraceability:
         requirements = load_real_requirements()
         registry = _registry_ids(requirements)
         invariants = _invariant_ids()
-        mapped = []
+        pairs = []
         for req in requirements["requirements"]:
             for rel in req.get("tests", []):
-                if rel not in mapped:
-                    mapped.append(rel)
-        assert mapped, "requirements.yaml must map at least one test file"
-        for rel in mapped:
+                pairs.append((req["id"], rel))
+        assert pairs, "requirements.yaml must map at least one test file"
+        for rid, rel in pairs:
             path = ROOT / rel
             assert path.exists(), f"mapped test file missing: {rel}"
             assert path.stat().st_size > 0, f"mapped test file empty: {rel}"
             tags = _declared_traceability_tags(path.read_text(encoding="utf-8"))
-            assert tags, f"mapped test file has no declared Traceability tag: {rel}"
+            if not tags:
+                # Allowed only for D1 retrospective rows, or for a file D1 added
+                # to an established row under the documented supplemental set.
+                allowed = (
+                    rid in D1_RETROSPECTIVE_IDS
+                    or rel in D1_SUPPLEMENTAL_FILES.get(rid, frozenset())
+                )
+                assert allowed, (
+                    f"mapped test file has no declared Traceability tag: {rel} "
+                    f"(mapped by {rid})"
+                )
+                continue
             unresolved = {
                 t
                 for t in tags
@@ -568,18 +645,47 @@ class TestMappedTestTraceability:
         # Stronger than "any resolved tag": for every (requirement, mapped file)
         # pair, the file's DECLARED Traceability block must include that
         # requirement's OWN ID (an unrelated resolved tag is not enough). This is
-        # true for the current tree; if a file legitimately verifies a requirement
-        # only via an invariant, that must be added here explicitly with a reason.
+        # true for every Release-native row. A file legitimately verifying a
+        # retrospective row without naming it must be in the documented set.
         requirements = load_real_requirements()
         for req in requirements["requirements"]:
+            rid = req["id"]
+            if rid in D1_RETROSPECTIVE_IDS:
+                continue
             for rel in req.get("tests", []):
+                if rel in D1_SUPPLEMENTAL_FILES.get(rid, frozenset()):
+                    continue
                 tags = _declared_traceability_tags(
                     (ROOT / rel).read_text(encoding="utf-8")
                 )
-                assert req["id"] in tags, (
-                    f"{req['id']} mapped to {rel} but its own ID is not in the "
+                assert rid in tags, (
+                    f"{rid} mapped to {rel} but its own ID is not in the "
                     f"declared Traceability block (declared: {sorted(tags)})"
                 )
+
+    def test_d1_exemptions_are_real_and_not_a_blanket_bypass(self):
+        # Anti-vacuity: every exempted ID/file must exist and be genuinely
+        # mapped, and every D1 ID must carry retrospective provenance. This is
+        # what keeps the exemption from turning into "skip the check".
+        requirements = load_real_requirements()
+        by_id = {req["id"]: req for req in requirements["requirements"]}
+        for rid in D1_RETROSPECTIVE_IDS:
+            assert rid in by_id, f"exempted D1 id is not in the registry: {rid}"
+            origin = by_id[rid].get("retrospective_origin")
+            assert isinstance(origin, dict), f"{rid} lacks retrospective_origin"
+            assert origin.get("classification") == "retrospective", rid
+            assert by_id[rid].get("tests"), f"{rid} maps no tests at all"
+        for rid, files in D1_SUPPLEMENTAL_FILES.items():
+            assert rid in by_id, f"supplemental exemption names unknown row {rid}"
+            mapped = set(by_id[rid].get("tests", []))
+            for rel in files:
+                assert rel in mapped, f"{rid} does not actually map {rel}"
+                path = ROOT / rel
+                assert path.exists() and path.stat().st_size > 0, rel
+                # A supplemental file must not silently qualify the row for the
+                # "own ID" rule it was exempted from.
+                tags = _declared_traceability_tags(path.read_text(encoding="utf-8"))
+                assert rid not in tags
 
     def test_governance_scaffold_itself_is_tagged(self):
         # This file verifies NFR-SEC-001 (secret scan) and NFR-OFF-001 (harness);

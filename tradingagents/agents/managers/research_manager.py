@@ -18,6 +18,7 @@ from tradingagents.agents.utils.structured import (
     NO_EXTERNAL_TOOLS,
     bind_structured,
     invoke_structured_or_freetext,
+    split_free_text_guidance,
 )
 from tradingagents.debate.claims import claim_summary_prompt_block
 from tradingagents.debate.conflicts import build_conflict_summary
@@ -318,6 +319,8 @@ def create_research_manager(llm):
 **Debate History:**
 {history}
 
+{NO_EXTERNAL_TOOLS}
+
 ## Output
 
 Write these sections, in this order, starting with the recommendation on its own line:
@@ -325,8 +328,7 @@ Write these sections, in this order, starting with the recommendation on its own
 - **Recommendation**: exactly one of Buy / Overweight / Hold / Underweight / Sell
 - **Rationale**: which arguments decided it
 - **Strategic Actions**: concrete steps for the trader, sized against a standard allocation
-
-{NO_EXTERNAL_TOOLS}""" + get_language_instruction()
+""" + get_language_instruction()
 
         if data_quality_verdict == "blocked":
             prompt += (
@@ -398,7 +400,11 @@ Write these sections, in this order, starting with the recommendation on its own
                 # Atomically consume ONE call slot per actual summary attempt, so a
                 # structured→free-text fallback cannot exceed the configured cap.
                 admit_attempt=lambda: admit_summary_attempt(state, summary_config),
+                # ADR-011 typed cap (runs after settlement, before render) and the
+                # CAND-01 structured prompt (the free-text "## Output" section is
+                # withheld from the schema-bound call only; the fallback keeps it).
                 sanitize_result=_cap_typed,
+                structured_prompt=split_free_text_guidance(prompt),
             )
         except BudgetDeniedError:
             return _summary_budget_denied_result(state, participation, blocked)

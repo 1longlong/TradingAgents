@@ -21,6 +21,7 @@ from tradingagents.agents.utils.structured import (
     NO_EXTERNAL_TOOLS,
     bind_structured,
     invoke_structured_or_freetext,
+    split_free_text_guidance,
 )
 
 
@@ -102,6 +103,16 @@ def create_trader(llm):
                 "aggressive action plan."
             )
 
+        # The "## Output" section describes the free-text answer shape, which
+        # competes with the bound tool schema and made the model answer in
+        # markdown instead of calling the tool. Trim it from the structured call
+        # only; the free-text fallback still receives the full prompt.
+        structured_messages = [
+            ({**msg, "content": split_free_text_guidance(msg["content"])}
+             if isinstance(msg.get("content"), str) else msg)
+            for msg in messages
+        ]
+
         from tradingagents.debate.confidence_policy import (
             cap_agent_text,
             cap_typed_confidence,
@@ -125,7 +136,10 @@ def create_trader(llm):
             messages,
             render_trader_proposal,
             "Trader",
+            # ADR-011 typed cap (post-settlement, pre-render) and the CAND-01
+            # structured prompt built above for the schema-bound call only.
             sanitize_result=_cap_typed,
+            structured_prompt=structured_messages,
         )
 
         # Authoritative contract: a blocked run's stored transaction proposal

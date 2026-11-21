@@ -24,6 +24,7 @@ from tradingagents.agents.utils.structured import (
     NO_EXTERNAL_TOOLS,
     bind_structured,
     invoke_structured_or_freetext,
+    split_free_text_guidance,
 )
 
 
@@ -75,6 +76,8 @@ def create_portfolio_manager(llm):
 
 Ground every conclusion in specific evidence from the analysts. The risk debate always contains conflicting stances; deciding which is stronger is the job, so conflict alone is not a reason to Hold. Commit to the stronger case, sized by how decisively it wins. Choose Hold only when the evidence is still balanced after that weighing, or too thin to support a call; do not force a direction to appear decisive. Weigh the analysts on their merits, independent of speaking order.
 
+{NO_EXTERNAL_TOOLS}
+
 ## Output
 
 Write these sections, in this order, starting with the rating on its own line:
@@ -82,8 +85,7 @@ Write these sections, in this order, starting with the rating on its own line:
 - **Rating**: exactly one of Buy / Overweight / Hold / Underweight / Sell
 - **Executive Summary**: the call and how to act on it
 - **Investment Thesis**: the evidence that decided it, and what would change it
-
-{NO_EXTERNAL_TOOLS}{get_language_instruction()}"""
+{get_language_instruction()}"""
 
         if blocked:
             prompt += (
@@ -115,7 +117,11 @@ Write these sections, in this order, starting with the rating on its own line:
             prompt,
             render_pm_decision,
             "Portfolio Manager",
+            # ADR-011 typed cap (post-settlement, pre-render) and the CAND-01
+            # structured prompt (free-text "## Output" section withheld from
+            # the schema-bound call only; the fallback keeps it).
             sanitize_result=_cap_typed,
+            structured_prompt=split_free_text_guidance(prompt),
         )
 
         # Authoritative contract: the final rating on a blocked run is pinned to

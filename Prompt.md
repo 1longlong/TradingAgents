@@ -83,3 +83,37 @@ unattended live trading remain out of scope.
   changelog at the top of the new file.
 - The current version marker is `prompt_v1.3.yaml`. The marker is read by any
   agent onboarding to confirm it is using the authoritative prompt.
+
+## Historical prompt artifacts and effective enforcement
+
+This section records provenance and enforcement facts. It does **not** change any
+binding rule above.
+
+- **Personal governance additions are dated 2026-11-19.** The expanded coding-agent
+  governance imported from the personal submission line (roles and authority
+  boundaries, frozen-artifact protection, independent read-only audits, no
+  self-approval, definition of done, enforcement-status vocabulary) was documented
+  on 2026-11-19. It is **not retroactive**: it did not govern the October or
+  early-November sessions, and no earlier record is judged against it.
+- **Two different prompt lineages share old filenames.** The CS5351 Coding-Agent
+  startup prompts are `prompts/prompt_v1.0.yaml` (read-only analysis, historical)
+  and `prompts/prompt_v1.1.yaml` (implementation, historical). The **Market
+  Analyst** runtime-prompt snapshots that the personal line also called
+  `prompt_v1.0.yaml`/`prompt_v1.1.yaml` are archived separately at
+  [`prompts/archive/market-analyst-rc1-v1.0.yaml`](prompts/archive/market-analyst-rc1-v1.0.yaml)
+  and [`prompts/archive/market-analyst-final-v1.1.yaml`](prompts/archive/market-analyst-final-v1.1.yaml).
+  They are historical exports of a product-agent prompt, are **not** Coding-Agent
+  startup prompts, and are **not** loaded as runtime configuration. The runtime
+  prompt remains hardcoded in `tradingagents/agents/analysts/market_analyst.py`.
+- **`Prompt.md` + `prompts/prompt_v1.3.yaml` remain the current authority.** The
+  archived Market Analyst files do not change the coding-agent policy, and copying
+  them does not change the application's runtime prompt.
+- **Prose rules are not a verified sandbox.** `.opencode/rules.md` and
+  `.opencode/permissions.jsonc` are documented project governance. OpenCode's
+  loading of `permissions.jsonc` and its rule matching are `NOT_VERIFIED`, and
+  DeepSeek Harness does **not** inherit OpenCode configuration (it uses its own
+  sandbox/permission mechanism). Effective technical enforcement must be verified
+  independently, never inferred from the presence of a file or a prose rule.
+- **Historical files are immutable.** Any future change to a binding rule must be
+  a new versioned file under `prompts/` with a changelog entry; do not rewrite the
+  historical `prompt_v1.0.yaml`/`prompt_v1.1.yaml` or the archived snapshots.

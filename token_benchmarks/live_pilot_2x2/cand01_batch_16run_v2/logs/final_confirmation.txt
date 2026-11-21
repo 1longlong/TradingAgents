@@ -1,0 +1,7 @@
+=== FINAL CONFIRMATION RUN (2026-11-15T19:40:10+08:00) ===
+-- full suite, repo cwd --
+2 failed, 1990 passed, 2 skipped, 26 warnings, 319 subtests passed in 8.87s
+-- targeted V2 + audit remediation set --
+175 passed in 1.01s
+-- generator --check --
+OK: 53 artefacts reproduce; 16 differ only in volatile fields
