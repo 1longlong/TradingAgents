@@ -1,0 +1,44 @@
+{
+  "budget": {
+    "budget_mode": "uncapped_authorized",
+    "max_total_tokens": null
+  },
+  "cache_policy": "preserve_existing",
+  "cases": [
+    {
+      "analysts": [
+        "market",
+        "news",
+        "fundamentals"
+      ],
+      "case_id": "xom_2026_09_23",
+      "research_rounds": 1,
+      "risk_rounds": 1,
+      "ticker": "XOM",
+      "trade_date": "2026-09-23"
+    }
+  ],
+  "checkpoint_enabled": false,
+  "config_sha256": "98d3b0b99e1a48ba8494f1b285f995badf079a0d5621ce9e214b3b2e95df94e4",
+  "deep_model": "CS5351/DeepSeek-V4-Flash",
+  "description": "CAND-01 x batch-macro 2x2, arm B on XOM (execution position 15); protocol V2.1",
+  "experiment_id": "R15",
+  "measured_runs": 1,
+  "news_scope": {
+    "company_news": "finnhub",
+    "gdelt": "excluded",
+    "global_news": "finnhub:CONFIG_DISABLED"
+  },
+  "output_language": "English",
+  "protocol_version": "V2.1",
+  "provider": "openai_compatible",
+  "quick_model": "CS5351/DeepSeek-V4-Flash",
+  "schema_version": 2,
+  "switches": {
+    "batch_macro": false,
+    "s2_downstream": true,
+    "single_pass": false,
+    "structured": true
+  },
+  "switches_required": true
+}

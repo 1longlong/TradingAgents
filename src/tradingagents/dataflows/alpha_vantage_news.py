@@ -1,3 +1,14 @@
+"""Alpha Vantage news-adjacent endpoints.
+
+The `NEWS_SENTIMENT` based :func:`get_news` and :func:`get_global_news` are kept
+because the evidence-capture release records their feeds as typed news evidence
+(:func:`_capture_news_sentiment_feed`); the routed news path itself is
+Finnhub + GDELT via ``interface.VENDOR_METHODS``. :func:`get_insider_transactions`
+rounds out the module.
+"""
+
+from __future__ import annotations
+
 import json
 
 from .alpha_vantage_common import _make_api_request, format_datetime_for_api

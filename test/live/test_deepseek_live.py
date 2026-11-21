@@ -47,5 +47,3 @@ class TestDeepSeekLiveStructuredOutput:
         assert isinstance(result, self._Pick)
         assert result.action in {"BUY", "SELL", "HOLD"}
         assert 0.0 <= result.confidence <= 1.0
-
-

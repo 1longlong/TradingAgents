@@ -225,7 +225,7 @@ Legend:
 
 | Requirement | Module | Planned test | Monitor | Evidence status |
 | --- | --- | --- | --- | --- |
-| REQ-WEB-001 | `api/config.py`, `api/runs.py`, `models/requests.py`, `frontend/src/pages/NewAnalysis` | `test/offline/test_web_wizard.py` | Run request validation; env-locked fields | planned |
+| REQ-WEB-001 | `api/config.py`, `api/runs.py`, `models/requests.py`, `frontend/src/pages/NewAnalysis` | `test/offline/test_web_runs.py` | Run request validation; env-locked fields | planned |
 | REQ-WEB-002 | `runtime/coordinator.py`, `runtime/projector.py`, `frontend/src/pages/LiveRun` | `test/offline/test_web_events.py` | Event sequence; statuses; stats | planned |
 | REQ-WEB-003 | `runtime/coordinator.py`, `api/runs.py`, `frontend/src/pages/NewAnalysis` | `test/offline/test_web_runs.py` | Checkpoint flag; clear audit line | planned |
 | REQ-WEB-004 | `api/runs.py`, `models/requests.py`, `frontend/src/components/PortfolioEditor` | `test/offline/test_web_portfolio.py` | Portfolio fingerprint; three-state label | planned |
@@ -300,13 +300,13 @@ Execution results are recorded in `evaluation-logbook.md`; the following nodes m
 
 | Requirements / invariants | Verification nodes |
 | --- | --- |
-| REQ-WEB-001, REQ-WEB-013 | `test/offline/test_web_analysis_flow.py::test_server_endpoint_and_locks_survive_browser_defaults`; frontend `tests/analysis-flow.test.tsx` provider/model submission case |
+| REQ-WEB-001, REQ-WEB-013 | `test/offline/test_web_analysis_flow.py::test_server_endpoint_and_locks_survive_browser_defaults`; frontend `src/tradingagents_web/frontend/tests/analysis-flow.test.tsx` provider/model submission case |
 | REQ-WEB-002, REQ-WEB-005, REQ-WEB-009, INV-WEB-001 | `test/offline/test_web_analysis_flow.py::test_real_graph_runner_through_core_graph_to_report` |
 | REQ-WEB-007 | `test/offline/test_web_analysis_flow.py::test_completed_snapshot_contains_report_messages_and_counters`, `test_expired_event_cursor_returns_full_snapshot`; frontend reload/failure snapshot cases; Chromium wizard completion/reload case |
 | INV-WEB-003 | `test/offline/test_web_analysis_flow.py::test_real_runner_failure_is_correlated_and_redacted` |
 | INV-WEB-009 | `test/offline/test_web_analysis_flow.py::test_artifact_initialization_failure_releases_slot` |
 | REQ-WEB-009, INV-WEB-001 | `test/offline/test_web_analysis_flow.py::test_repeated_analysis_keeps_each_run_and_legacy_artifacts` |
-| REQ-WEB-002, REQ-WEB-007 | `test/offline/test_web_analysis_flow.py::test_resumed_run_is_running`; frontend `tests/run-store.test.ts` resumed/snapshot fallback cases |
+| REQ-WEB-002, REQ-WEB-007 | `test/offline/test_web_analysis_flow.py::test_resumed_run_is_running`; frontend `src/tradingagents_web/frontend/tests/run-store.test.ts` resumed/snapshot fallback cases |
 
 
 ### Market-data error follow-up — 2026-11-06
@@ -339,13 +339,13 @@ relative to `src/tradingagents_web/frontend/`; ADR-003 is the frontend-stack ADR
 
 | Requirement / invariant | Implementation | Verification |
 | --- | --- | --- |
-| REQ-WEB-001/003/004/013; INV-WEB-006/014 | `src/pages/NewAnalysisPage.tsx`, `src/app/App.tsx`, `src/api/runClient.ts`: three-step sheet, explicit assets, configured models/locks/thinking, private drafts and server portfolio validation | `tests/analysis-flow.test.tsx`; `e2e/visual-parity.spec.ts` sheet geometry, invalid input/endpoint, crypto and privacy cases |
-| REQ-WEB-002/005/006/007; INV-WEB-009/010/014 | `src/pages/LiveRunPage.tsx`, `src/components/Research.tsx`, `src/api/runClient.ts`: recorded progress/events, confirmation, cancellation, active conflicts and terminal report | `e2e/run.spec.ts`; existing store tests and backend run/event suites |
-| REQ-WEB-008/009/010; INV-WEB-011/014 | `src/api/client.ts`, `src/components/HistoryTable.tsx`, `src/pages/OverviewPage.tsx`, `src/pages/HistoryPage.tsx`, `src/pages/HistoryDetailPage.tsx`, `src/utils/workspace.ts`: all-page history, reference tables, actual sections and downloads | `tests/history-parity.test.ts`; `e2e/visual-parity.spec.ts` missing complete artifact, archive and Markdown downloads |
-| REQ-WEB-010; INV-WEB-011/012 | `src/pages/JournalPage.tsx`, `src/components/Modal.tsx`: independent decision/outcome/reflection dialog with sanitized content | `e2e/visual-parity.spec.ts` journal detail; existing Markdown sanitization suite |
-| REQ-WEB-006/011/012/013; INV-WEB-014 | `src/pages/BacktestPage.tsx`, `src/pages/Backtest/BacktestSummary.tsx`, `src/api/backtestClient.ts`, `src/app/AppShell.tsx`, `src/components/Announcements.tsx`: actual summary/null scores, conflict, notes and idle-only clear confirmation | `tests/backtest-summary.test.tsx`; backtest/announcement E2E; settings negative confirmation case |
-| REQ-WEB-021; INV-WEB-014 | `src/styles/index.css`, reference `src/styles/workspace.css`, `src/components/Research.tsx`, `src/components/HistoryTable.tsx`: shared geometry/themes without conflicting preflight | `e2e/visual-parity.spec.ts` 0.75px geometry and both-theme responsive checks |
-| REQ-WEB-027; INV-WEB-001/014 | `src/pages/GapPage.tsx`: audit/comparison lack an approved read projection; no mock results or new routes | `e2e/visual-parity.spec.ts` unavailable surfaces; unchanged backend/API scope |
+| REQ-WEB-001/003/004/013; INV-WEB-006/014 | `src/tradingagents_web/frontend/src/pages/NewAnalysisPage.tsx`, `src/tradingagents_web/frontend/src/app/App.tsx`, `src/tradingagents_web/frontend/src/api/runClient.ts`: three-step sheet, explicit assets, configured models/locks/thinking, private drafts and server portfolio validation | `src/tradingagents_web/frontend/tests/analysis-flow.test.tsx`; `e2e/visual-parity.spec.ts` sheet geometry, invalid input/endpoint, crypto and privacy cases |
+| REQ-WEB-002/005/006/007; INV-WEB-009/010/014 | `src/tradingagents_web/frontend/src/pages/LiveRunPage.tsx`, `src/tradingagents_web/frontend/src/components/Research.tsx`, `src/tradingagents_web/frontend/src/api/runClient.ts`: recorded progress/events, confirmation, cancellation, active conflicts and terminal report | `e2e/run.spec.ts`; existing store tests and backend run/event suites |
+| REQ-WEB-008/009/010; INV-WEB-011/014 | `src/tradingagents_web/frontend/src/api/client.ts`, `src/tradingagents_web/frontend/src/components/HistoryTable.tsx`, `src/tradingagents_web/frontend/src/pages/OverviewPage.tsx`, `src/tradingagents_web/frontend/src/pages/HistoryPage.tsx`, `src/tradingagents_web/frontend/src/pages/HistoryDetailPage.tsx`, `src/tradingagents_web/frontend/src/utils/workspace.ts`: all-page history, reference tables, actual sections and downloads | `src/tradingagents_web/frontend/tests/history-parity.test.ts`; `e2e/visual-parity.spec.ts` missing complete artifact, archive and Markdown downloads |
+| REQ-WEB-010; INV-WEB-011/012 | `src/tradingagents_web/frontend/src/pages/JournalPage.tsx`, `src/tradingagents_web/frontend/src/components/Modal.tsx`: independent decision/outcome/reflection dialog with sanitized content | `e2e/visual-parity.spec.ts` journal detail; existing Markdown sanitization suite |
+| REQ-WEB-006/011/012/013; INV-WEB-014 | `src/tradingagents_web/frontend/src/pages/BacktestPage.tsx`, `src/tradingagents_web/frontend/src/pages/Backtest/BacktestSummary.tsx`, `src/tradingagents_web/frontend/src/api/backtestClient.ts`, `src/tradingagents_web/frontend/src/app/AppShell.tsx`, `src/tradingagents_web/frontend/src/components/Announcements.tsx`: actual summary/null scores, conflict, notes and idle-only clear confirmation | `src/tradingagents_web/frontend/tests/backtest-summary.test.tsx`; backtest/announcement E2E; settings negative confirmation case |
+| REQ-WEB-021; INV-WEB-014 | `src/tradingagents_web/frontend/src/styles/index.css`, reference `src/tradingagents_web/frontend/src/styles/workspace.css`, `src/tradingagents_web/frontend/src/components/Research.tsx`, `src/tradingagents_web/frontend/src/components/HistoryTable.tsx`: shared geometry/themes without conflicting preflight | `e2e/visual-parity.spec.ts` 0.75px geometry and both-theme responsive checks |
+| REQ-WEB-027; INV-WEB-001/014 | `src/tradingagents_web/frontend/src/pages/HistoryPage.tsx`: audit/comparison lack an approved read projection; no mock results or new routes | `e2e/visual-parity.spec.ts` unavailable surfaces; unchanged backend/API scope |
 
 
 ## Existing-core HTTP projections — 2026-11-20
@@ -359,7 +359,7 @@ requirements or claiming final human acceptance.
 | REQ-WEB-008/009/024, NFR-AUD-001; INV-WEB-003/004/005/011/012 | `artifacts/audit.py`: public-data redaction, no-follow canonical reads, strict JSON parsing, bounded bundles/downloads and identity/cutoff projection; `api/audit.py`: indexed history/run views and family previews/downloads | `test/offline/test_web_audit.py`: complete/legacy/partial/invalid/oversized/UTF-8/nonfinite/duplicate data, symlink escapes, opaque IDs, credentials/URL/path redaction, inconsistent identity/verdict and saved-date rejection |
 | REQ-WEB-002/009/010/013; INV-WEB-001/003/011/014 | `runtime/artifacts_writer.py`: run-local core audit copies, allowlisted lifecycle/origin context and effective configuration; `runtime/coordinator.py`, `api/runs.py`: writer association and language snapshot; `artifacts/index.py`, `readers.py`, `api/history.py`: optional safe presentation metadata | Same audit suite: real completed fake-run association, unavailable active-run families, actual runtime lifecycle, metadata/context privacy; previous run/history/security suites |
 | NFR-CMP-001/002/003; INV-9, INV-WEB-001/014 | `api/comparisons.py`: fixed core factories, catalog, core replay/pairing, bounded JSON projection/download; `app.py`: router registration | `test/offline/test_web_comparisons.py`: exact D/E/F/G outcomes, pending rubric, unknown/mismatched identities, bounded output and no writes/active slot use |
-| REQ-WEB-008/009/010/013, NFR-CMP-001; INV-WEB-011/012/014 | Frontend `api/auditClient.ts`, `pages/AuditPage.tsx` (including overview projection), `ComparisonPage.tsx`, `OverviewPage.tsx`, `HistoryDetailPage.tsx`, `LiveRunPage.tsx`, `components/HistoryTable.tsx`, API types and route registration | `tests/audit-comparison.test.tsx`, `e2e/audit-comparison.spec.ts`: unknown telemetry, evidence filter/detail, disagreement, available-only preview/download, actual replay, G not early stop, mismatched pairing/export refusal; previous frontend suites |
+| REQ-WEB-008/009/010/013, NFR-CMP-001; INV-WEB-011/012/014 | Frontend `api/auditClient.ts`, `pages/AuditPage.tsx` (including overview projection), `ComparisonPage.tsx`, `OverviewPage.tsx`, `HistoryDetailPage.tsx`, `LiveRunPage.tsx`, `components/HistoryTable.tsx`, API types and route registration | `src/tradingagents_web/frontend/tests/audit-comparison.test.tsx`, `e2e/audit-comparison.spec.ts`: unknown telemetry, evidence filter/detail, disagreement, available-only preview/download, actual replay, G not early stop, mismatched pairing/export refusal; previous frontend suites |
 
 All backend module paths above are relative to `src/tradingagents_web/`.
 
@@ -378,6 +378,178 @@ All backend module paths above are relative to `src/tradingagents_web/`.
 | **INV-TRD-003** — append-only audit | `src/trading/audit.py` | `test/offline/trading/test_audit.py`, `test/offline/trading/test_invariants.py`, `test/offline/trading/test_negative.py` |
 | **NFR-TRD-001** — 100% hard-rule rejection | `src/safety/rules.py`, `src/safety/engine.py` | `test/offline/trading/test_rules.py`, `test/offline/trading/test_engine.py` |
 
+## D1 integration trace rows (FR-ANL / FR-OBS / FR-HAR / FR-CAM)
+
+These rows record capabilities that the delivered token-observability work added
+without an identifier. They use the same columns as the table above. Every row is
+`implemented` in the merged tree; a row whose `fit_criterion.status.state` is
+`partially_verified` names the residual rather than claiming a green result.
+
+The D1 integration (2026-11-21) resolved the 21 personal requirements one at a
+time against this matrix. Two were merged into established Release rows
+(`FR-007` -> `NFR-PIT-001`, `NFR-003` -> `NFR-SEC-001`) and one into
+`FR-ANL-001` (`FR-013`); the interim point-in-time analysis row was therefore
+removed as a synonym and its paths, tests and evidence now live on
+`NFR-PIT-001` (the old personal alias is recorded in
+`ai-use-session-audit.md`, not as a registry row). The registry is 52 rows: the
+original 32 Release IDs plus 20 retrospective IDs. The complete 21-row
+reconciliation and the 64-row acceptance-criterion table follow the D1 table
+below.
+
+| Req ID | Requirement | Design artifacts | Source files | Tests | Verification evidence (observed) | Runtime/audit monitor |
+| --- | --- | --- | --- | --- | --- | --- |
+| FR-ANL-001 | Deterministic multi-agent analysis pipeline topology | `architecture-blueprint.md` | `src/tradingagents/graph/setup.py`; `src/tradingagents/graph/trading_graph.py`; `src/tradingagents/agents/analysts/{market,news,fundamentals}_analyst.py`; `src/tradingagents/agents/managers/{research,portfolio}_manager.py` | `test/offline/test_analyst_execution.py`; `test/offline/test_debate_opening.py`; `test/offline/test_c3_regressions.py` | Named files pass offline (merged worktree). | REAL: compiled `StateGraph` in `GraphSetup`; single graph per run. PLANNED: none. |
+| FR-ANL-002 | Typed vendor failures instead of silent empty successes | `invariants.md` | `src/tradingagents/dataflows/{errors,news_status,market_data_validator,interface}.py` | `test/offline/test_vendor_errors.py`; `test/live/test_no_data_handling.py`; `test/offline/test_news_error_classification.py`; `test/offline/test_news_status_taxonomy.py`; `test/offline/test_market_data_validator.py` | Named files pass offline; vendor reachability mocked. | REAL: typed exception classes + `SourceResultStatus`. PLANNED: none. |
+| FR-ANL-003 | Typed analyst reports with a labelled free-text fallback | `adr/014-single-pass-finalization.md`, `adr/018-structured-fallback-safety.md`, `invariants.md` | `src/tradingagents/agents/schemas.py`; `src/tradingagents/agents/utils/structured.py`; `src/tradingagents/agents/analysts/*.py` | `test/offline/test_structured_analyst_output.py`; `test/offline/test_structured_agents.py`; `test/offline/test_structured_agent_prompts.py` | Named files pass offline. Blank-report residual pinned by `test/offline/test_cand01_single_pass_finalization.py::BlankReportResidualTest`. | REAL: typed report fields in `AgentState`; explicit missing-field rendering. PLANNED: none. |
+| FR-ANL-004 | Agent and system-component usage attribution | `adr/013-provider-usage-observability.md`, `invariants.md` | `src/tradingagents/observability.py`; `src/tradingagents/graph/reflection.py`; `src/tradingagents/graph/propagation.py` | `test/offline/test_system_attribution.py`; `test/offline/test_observability.py`; `test/offline/test_c3_regressions.py` | Named files pass offline. Commit `e3b5cca` / tag `c3-v3-final-freeze`. | REAL: `AGENT_UNATTRIBUTED` bucket; `system:pre_graph_reflector` identity. PLANNED: none. |
+| FR-ANL-005 | Single-pass structured report finalisation | `adr/014-single-pass-finalization.md`, `adr/018-structured-fallback-safety.md` | `src/tradingagents/agents/utils/structured.py`; `src/tradingagents/graph/setup.py`; `src/tradingagents/default_config.py` | `test/offline/test_cand01_single_pass_finalization.py`; `test/offline/test_final_remediation.py`; `test/offline/test_c3_regressions.py` | Named files pass offline. Commit `e0ea1b0`. | REAL: `finalize_single_pass` at the transport boundary. PLANNED: none. |
+| FR-ANL-006 | `batch_macro_enabled` switch with exact per-series preservation | `adr/015-batch-macro-switch.md`, `evaluation-logbook.md`, `invariants.md` | `src/tradingagents/agents/utils/macro_data_tools.py`; `src/tradingagents/default_config.py`; `src/tradingagents/graph/setup.py`; `src/tradingagents/graph/switch_verification.py` | `test/offline/test_macro_batch.py`; `test/offline/test_switch_consumption.py`; `test/offline/test_ablation_switches.py` | Named files pass offline. Token effect recorded as exploratory/not robust; NOT restated as a verified saving. | REAL: switch read by `GraphSetup`; batch tool bound only when ON. PLANNED: none. |
+| FR-ANL-008 | Finnhub-only company-news provenance | `adr/016-finnhub-only-news.md`, `invariants.md` | `src/tradingagents/dataflows/finnhub_news.py`; `src/tradingagents/dataflows/news_merge.py`; `src/tradingagents/dataflows/interface.py`; `src/tradingagents/default_config.py` | `test/offline/test_finnhub_only_scope.py`; `test/offline/test_finnhub_news.py`; `test/offline/test_gdelt_news.py`; `test/offline/test_news_dual_source.py` | Named files pass offline. | REAL: configured route resolves company news to Finnhub; GDELT unreachable. PLANNED: none. |
+| FR-ANL-009 | Per-run memory isolation from an immutable snapshot | `adr/017-per-run-memory-isolation.md`, `memory-design.md`, `invariants.md` | `src/tradingagents/agents/utils/memory.py`; `scripts/token_benchmark.py`; `scripts/gen_cand01_batch_16run_specs_v3.py` | `test/offline/test_memory_isolation.py`; `test/offline/test_memory_pointintime.py`; `test/offline/test_memory_log.py`; `test/offline/test_cand01_batch_16run_v3_infra.py` | Isolation tests pass offline. Two absolute-path V3 infra checks are documented known failures outside their generating checkout; NOT claimed green. | REAL: registered snapshot hash + per-run copy. PLANNED: none. |
+| FR-ANL-010 | Vendor-routed market, news and macro data acquisition | `architecture-blueprint.md`, `runtime-policy-catalog.md`, `invariants.md` | `src/tradingagents/dataflows/{interface,config,y_finance,finnhub_news,fred,alpha_vantage_stock,alpha_vantage_fundamentals,alpha_vantage_indicator}.py`; `src/tradingagents/agents/utils/{core_stock_tools,fundamental_data_tools}.py` | `test/offline/test_dataflows_config.py`; `test/offline/test_fred.py`; `test/offline/test_vendor_errors.py`; `test/offline/test_finnhub_news.py` | Named files pass offline against stubbed vendors; no live key or vendor response claimed. | REAL: routing table + dated markdown rendering. PLANNED: none. |
+| FR-OBS-001 | Event-level token accounting with a null-not-zero rule | `adr/013-provider-usage-observability.md`, `runtime-policy-catalog.md`, `invariants.md` | `src/tradingagents/observability.py`; `src/cli/stats_handler.py` | `test/offline/test_observability.py`; `test/offline/test_graph_tool_observability.py`; `test/offline/test_whole_run_usage.py` | Named files pass offline against scripted transports. | REAL: per-event records with four separate counts; absent field is null. PLANNED: none. Overlaps `NFR-AUD-001`. |
+| FR-OBS-002 | Evaluated usage-completeness verdict that gates validity | `adr/013-provider-usage-observability.md`, `runtime-policy-catalog.md`, `evaluation-logbook.md` | `scripts/token_benchmark.py`; `src/tradingagents/observability.py` | `test/offline/test_c3_final_freeze.py`; `test/offline/test_token_benchmark.py`; `test/offline/test_c3_regressions.py` | Usage-verdict tests pass offline. | REAL: VALID/MISSING/INCOMPLETE/MISMATCH consumed by validity. PLANNED: none. |
+| FR-OBS-003 | Tool-round and system-component events counted outside agent buckets | `adr/013-provider-usage-observability.md`, `runtime-policy-catalog.md`, `invariants.md` | `src/tradingagents/observability.py`; `src/tradingagents/graph/evidence_tool_node.py`; `src/cli/stats_handler.py` | `test/offline/test_graph_tool_observability.py`; `test/offline/test_system_attribution.py`; `test/offline/test_merge_integration.py` | Named files pass offline; unattributed bucket asserted directly. | REAL: tool-round telemetry + unattributed bucket included in run totals. PLANNED: none. |
+| FR-OBS-004 | Invocation-level settlement of Single-Pass attempts | `adr/009-durable-run-usage-ledger.md`, `adr/014-single-pass-finalization.md`, `adr/013-provider-usage-observability.md` | `src/tradingagents/agents/utils/structured.py`; `src/tradingagents/debate/usage_capture.py` | `test/offline/test_merge_integration.py`; `test/offline/test_structured_raw_usage.py` | Named files pass offline with a scripted recording transport. | REAL: N outbound attempts produce N invocation records; no nested settlement. PLANNED: none. |
+| FR-OBS-005 | Telemetry selection integrity across repeated attempts | `adr/013-provider-usage-observability.md`, `evaluation-logbook.md` | `scripts/token_benchmark.py` | `test/offline/test_token_benchmark.py`; `test/offline/test_c3_regressions.py` | Named files pass offline against archived run directories. | REAL: pre-fixed selection rule; superseded attempts preserved. PLANNED: none. |
+| FR-HAR-001 | One-command archived token measurement harness | `evaluation-logbook.md`, `token_benchmarks/README.md` | `scripts/run_token_benchmark.sh`; `scripts/token_benchmark.py` | `test/offline/test_run_token_benchmark_sh.py`; `test/offline/test_token_benchmark.py` | `test/offline/test_token_benchmark.py` passes offline. `test/offline/test_run_token_benchmark_sh.py` passes in the final integrated suite (5,132 passed / 3 skipped, `94755cf`); earlier `NOT_RUN` was an environment limitation. | REAL: archived run directories + summary. PLANNED: none. |
+| FR-HAR-002 | Experiment reproducibility bound to one frozen commit | `runtime-policy-catalog.md`, `evaluation-logbook.md` | `scripts/c3_finalize_freeze.py`; `scripts/c3_verify_final_freeze.py`; `scripts/c3_build_manifest.py`; `scripts/c3_preflight_gate.py`; `scripts/gen_cand01_batch_16run_specs_v3.py` | `test/offline/test_c3_final_freeze.py`; `test/offline/test_c3_regressions.py`; `test/offline/test_cand01_batch_16run_v3_infra.py`; `test/offline/test_switch_consumption.py` | Freeze/regression checks pass offline. Two V3 infra checks are known path-sensitive failures; recorded, not hidden. | REAL: freeze record + tag + HEAD + manifest + release seal. PLANNED: none. |
+| FR-CAM-001 | Optimisation campaign with an explicit accept-or-revert decision | `evaluation-logbook.md`, `ai-use-session-audit.md` | `scripts/campaign_ablation_round.py`; `scripts/ablation_analysis.py`; `scripts/quality_evidence_check.py` | `test/offline/test_ablation_switches.py` | `test/offline/test_ablation_switches.py` passes offline. Campaign numbers NOT re-derived; recorded as NOT_VERIFIED for this submission. | REAL: campaign scripts + accept/revert records. PLANNED: none. |
+
+| FR-HAR-003 | Fail-closed spend contract for authorised paid runs | `token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/BUDGET_GUARD_DESIGN.md`, `runtime-policy-catalog.md` | `scripts/token_benchmark.py`; `src/tradingagents/budget_guard.py`; `scripts/gen_cand01_batch_16run_specs_v3.py` | `test/offline/test_budget_guard.py`; `test/offline/test_c3_final_freeze.py` | `test/offline/test_budget_guard.py` passes offline. Contract is a refusal rule, not a measured saving; no provider spend claimed. | REAL: mode-declared cap; distinct refusals; unknown spend never zero. PLANNED: none. |
+| NFR-VER-001 | Executed offline test suite and independent audit | `evaluation-logbook.md`, `ai-use-session-audit.md` | `test/offline/test_final_remediation.py`; `test/offline/test_c3_final_freeze.py`; `test/offline/test_c3_regressions.py`; `test/offline/test_audit_a_regressions.py`; `test/offline/test_audit_b_regressions.py`; `test/offline/test_audit_c_regressions.py` | `test/offline/test_final_remediation.py`; `test/offline/test_c3_final_freeze.py`; `test/offline/test_submission_compliance.py` | Historical: 2,227 passed / 4 known failed / 2 skipped at `50b2ca3`; .env-free 2,233 / 0 / 2 / 319; three AI audits PASS. Current integrated tree: **5,132 passed / 3 skipped**, validators PASS, `ruff check .` PASS (`94755cf`). | REAL: suite + audit reports are the verification of record. PLANNED: merged-tree green run (blocked). |
+| NFR-VER-002 | Executed verification instead of simulated results | `code-governance/verification-constraints.md`, `ai-use-session-audit.md` | `test/conftest.py`; `scripts/c3_verify_final_freeze.py`; `scripts/c3_finalize_freeze.py`; `scripts/c3_preflight_gate.py` | `test/offline/test_c3_final_freeze.py`; `test/offline/test_governance_scaffold.py` | Offline guards block live vendors; freeze verifier recomputes hashes; rehearsal-failure paths exist. Process control, DOCUMENTED_ONLY. | REAL: conftest guards + freeze verifier. PLANNED: mechanical detector for a simulated claim (none). |
+
+## Release rows extended by the D1 integration
+
+The 32 Release rows are preserved. Three were extended additively; no
+Release field was removed, no fit criterion was changed, and no threshold
+was altered. Everything added is source path, test path or evidence prose.
+
+| Release row | Added by D1 | Why it is additive, not a re-scope |
+| --- | --- | --- |
+| NFR-PIT-001 | +4 source files (`date_window.py`, `core_stock_tools.py`, `news_data_tools.py`, `memory.py`); +3 tests (`test_tool_date_enforcement.py`, `test_undated_tools_as_of.py`, `test_pit_notice.py`); +1 evidence line for personal FR-007 | The row already required "no future data reaches a decision"; the additions name the delivered analysis-pipeline paths that enforce it. The requirement text and fit criterion are unchanged. |
+| NFR-SEC-001 | +3 source files (`api_key_env.py`, `src/cli/utils.py`, `run_token_benchmark.sh`); `tests` changed from `[]` to 2 credential tests; +1 evidence line for personal NFR-003 | The row already required secret safety; the additions name the delivered credential-handling paths. Adding tests strengthens, never weakens, the row. |
+| FR-ANL-001 | +3 source files (conservative/neutral debaters, `trader.py`); `source_requirement_ids` gains `FR-013`; +1 evidence line | FR-ANL-001 is itself retrospective; personal FR-013 describes the same pipeline from the decision end, so it is merged rather than duplicated. |
+
+## Personal registry reconciliation (21 rows)
+
+The personal registry (`docs/req/requirements.yaml` on
+`feature/token-observability`, 21 requirements / 64 acceptance criteria)
+was resolved requirement by requirement against the Release text. `add` =
+a new Release-format ID; `merge` = integrated into an established Release
+row; `merge-new` = integrated into a new row created for the same
+obligation. No personal ID is left unmapped.
+
+| Personal ID | Destination | Decision | Rationale |
+| --- | --- | --- | --- | --- |
+| FR-001 | FR-ANL-001 | add | No Release row states the agent topology. Personal FR-013 (final decision synthesis) is the same pipeline described from the decision end and is merged into this row. |
+| FR-002 | FR-ANL-010 | add | No Release row states vendor-routed data acquisition. NFR-PIT-001 covers date integrity and FR-DQG-004 covers evidence gating, but neither covers acquisition. |
+| FR-003 | FR-ANL-003 | add | No Release row states typed analyst reports or the labelled free-text fallback. |
+| FR-004 | FR-ANL-004 | add | No Release row states per-agent/per-system-component usage attribution. NFR-AUD-001 audits decisions, not usage. |
+| FR-005 | FR-ANL-005 | add | No Release row states Single-Pass structured finalisation. |
+| FR-006 | FR-ANL-006 | add | No Release row states the batch-macro switch. |
+| FR-007 | NFR-PIT-001 | merge | NFR-PIT-001 already states the same obligation (no future data reaches a decision; every dated path evaluated as of the trade date). Integrated: personal paths, 3 extra test files and a D1 evidence line were added to NFR-PIT-001; no separate point-in-time row remains. |
+| FR-008 | FR-ANL-008 | add | No Release row states Finnhub-only news provenance; NFR-SEC-001 is about secrets and FR-DQG-004 about gating, not provenance. |
+| FR-009 | FR-ANL-009 | add | No Release row states per-run memory isolation from a registered snapshot. |
+| FR-010 | FR-ANL-002 | add | Kept separate from NFR-FC-001: NFR-FC-001 governs gate/evaluator fail-closed routing; this row governs the typed vendor/parser failure taxonomy. The shared principle is noted on the row. |
+| FR-011 | FR-OBS-002 | add | No Release row states the VALID/MISSING/INCOMPLETE/MISMATCH usage verdict or its consumption by run validity. |
+| FR-012 | FR-HAR-003 | add | Not merged into NFR-BUD-001: NFR-BUD-001 enforces the debate summary reserve, while this is the paid-run admission contract (null cap, refusal modes, unknown spend). Same word, different enforcement point. |
+| FR-013 | FR-ANL-001 | merge-new | Merged into the new pipeline row: the single final decision, configured debate rounds and the portfolio manager as the only decision emitter are the same obligation as FR-ANL-001. |
+| FR-014 | FR-HAR-001 | add | No Release row states a one-command archived measurement harness. |
+| FR-015 | FR-OBS-005 | add | No Release row states telemetry selection integrity across repeated attempts. |
+| FR-016 | FR-CAM-001 | add | No Release row states the optimisation campaign accept-or-revert loop. |
+| NFR-001 | FR-OBS-001 | add | No Release row states event-level token accounting or the null-not-zero rule. Two derived rows (FR-OBS-003, FR-OBS-004) separate tool-round/component accounting and Single-Pass invocation settlement. |
+| NFR-002 | FR-HAR-002 | add | No Release row states experiment freeze reproducibility. |
+| NFR-003 | NFR-SEC-001 | merge | NFR-SEC-001 already states secret safety. Integrated: key-file permissions, no interactive prompt, no-sourcing wrapper and argv hygiene are recorded with their source files and tests on NFR-SEC-001. |
+| NFR-004 | NFR-VER-001 | add | No Release row states that the delivered suite and independent audits are the verification of record. NFR-OFF-001 covers network isolation only. |
+| NFR-005 | NFR-VER-002 | add | No Release row states the executed-verification (no simulated results) process obligation. |
+
+## Personal acceptance-criterion destinations (64 rows)
+
+Every original personal acceptance criterion is listed. "Placement" says
+where the criterion lives in the destination row; none was dropped, and a
+criterion expressed through a named test is traceable to that file.
+
+| Personal AC | Destination | Placement | Test / evidence |
+| --- | --- | --- | --- |
+| AC-FR-001-01 | FR-ANL-001 | fit_criterion | `test/offline/test_analyst_execution.py` |
+| AC-FR-001-02 | FR-ANL-001 | fit_criterion | `test/offline/test_debate_opening.py` |
+| AC-FR-001-03 | FR-ANL-001 | fit_criterion | `test/offline/test_c3_regressions.py` |
+| AC-FR-002-01 | FR-ANL-010 | fit_criterion | `test/offline/test_dataflows_config.py` |
+| AC-FR-002-02 | FR-ANL-010 | fit_criterion + evidence | `test/offline/test_finnhub_news.py` |
+| AC-FR-002-03 | FR-ANL-010 | fit_criterion | `test/offline/test_vendor_errors.py` |
+| AC-FR-003-01 | FR-ANL-003 | fit_criterion | `test/offline/test_structured_analyst_output.py` |
+| AC-FR-003-02 | FR-ANL-003 | fit_criterion | `test/offline/test_structured_agents.py` |
+| AC-FR-003-03 | FR-ANL-003 | fit_criterion | `test/offline/test_structured_agents.py` |
+| AC-FR-004-01 | FR-ANL-004 | fit_criterion | `test/offline/test_system_attribution.py` |
+| AC-FR-004-02 | FR-ANL-004 | fit_criterion | `test/offline/test_system_attribution.py` |
+| AC-FR-004-03 | FR-ANL-004 | fit_criterion | `test/offline/test_system_attribution.py` |
+| AC-FR-005-01 | FR-ANL-005 | fit_criterion | `test/offline/test_cand01_single_pass_finalization.py` |
+| AC-FR-005-02 | FR-ANL-005 | fit_criterion | `test/offline/test_cand01_single_pass_finalization.py` |
+| AC-FR-005-03 | FR-ANL-005 | tests + evidence | `test/offline/test_final_remediation.py` |
+| AC-FR-006-01 | FR-ANL-006 | fit_criterion | `test/offline/test_macro_batch.py` |
+| AC-FR-006-02 | FR-ANL-006 | fit_criterion | `test/offline/test_macro_batch.py` |
+| AC-FR-006-03 | FR-ANL-006 | fit_criterion | `test/offline/test_switch_consumption.py` |
+| AC-FR-007-01 | NFR-PIT-001 | tests + evidence | `test/offline/test_news_lookahead.py` |
+| AC-FR-007-02 | NFR-PIT-001 | tests | `test/offline/test_tool_date_enforcement.py` |
+| AC-FR-007-03 | NFR-PIT-001 | tests | `test/offline/test_pit_notice.py` |
+| AC-FR-008-01 | FR-ANL-008 | fit_criterion | `test/offline/test_finnhub_only_scope.py` |
+| AC-FR-008-02 | FR-ANL-008 | fit_criterion | `test/offline/test_finnhub_only_scope.py` |
+| AC-FR-008-03 | FR-ANL-008 | fit_criterion | `test/offline/test_finnhub_only_scope.py` |
+| AC-FR-009-01 | FR-ANL-009 | fit_criterion | `test/offline/test_memory_isolation.py` |
+| AC-FR-009-02 | FR-ANL-009 | fit_criterion | `test/offline/test_memory_isolation.py` |
+| AC-FR-009-03 | FR-ANL-009 | fit_criterion | `test/offline/test_memory_isolation.py` |
+| AC-FR-010-01 | FR-ANL-002 | fit_criterion | `test/offline/test_news_error_classification.py` |
+| AC-FR-010-02 | FR-ANL-002 | fit_criterion | `test/offline/test_market_data_validator.py` |
+| AC-FR-010-03 | FR-ANL-002 | tests + evidence | `test/offline/test_c3_regressions.py` |
+| AC-FR-011-01 | FR-OBS-002 | fit_criterion | `test/offline/test_c3_final_freeze.py` |
+| AC-FR-011-02 | FR-OBS-002 | fit_criterion | `test/offline/test_c3_final_freeze.py` |
+| AC-FR-011-03 | FR-OBS-002 | fit_criterion | `test/offline/test_c3_final_freeze.py` |
+| AC-FR-012-01 | FR-HAR-003 | fit_criterion | `test/offline/test_budget_guard.py` |
+| AC-FR-012-02 | FR-HAR-003 | fit_criterion | `test/offline/test_c3_final_freeze.py` |
+| AC-FR-012-03 | FR-HAR-003 | fit_criterion | `test/offline/test_budget_guard.py` |
+| AC-FR-013-01 | FR-ANL-001 | fit_criterion (merged) | `test/offline/test_debate_opening.py` |
+| AC-FR-013-02 | FR-ANL-001 | tests (merged) | `test/offline/test_structured_agents.py` |
+| AC-FR-013-03 | FR-ANL-001 | tests (merged) | `test/offline/test_reporting.py` |
+| AC-FR-014-01 | FR-HAR-001 | fit_criterion | `test/offline/test_run_token_benchmark_sh.py` |
+| AC-FR-014-02 | FR-HAR-001 | fit_criterion | `test/offline/test_run_token_benchmark_sh.py` |
+| AC-FR-014-03 | FR-HAR-001 | fit_criterion | `test/offline/test_token_benchmark.py` |
+| AC-FR-015-01 | FR-OBS-005 | fit_criterion | `test/offline/test_token_benchmark.py` |
+| AC-FR-015-02 | FR-OBS-005 | fit_criterion | `test/offline/test_token_benchmark.py` |
+| AC-FR-015-03 | FR-OBS-005 | fit_criterion | `test/offline/test_token_benchmark.py` |
+| AC-FR-016-01 | FR-CAM-001 | evidence (script) | `scripts/campaign_ablation_round.py` |
+| AC-FR-016-02 | FR-CAM-001 | fit_criterion | `test/offline/test_ablation_switches.py` |
+| AC-FR-016-03 | FR-CAM-001 | evidence (report) | `token_benchmarks/baseline_v2/notes.md` |
+| AC-NFR-001-01 | FR-OBS-001 | fit_criterion | `test/offline/test_observability.py` |
+| AC-NFR-001-02 | FR-OBS-001 | fit_criterion | `test/offline/test_observability.py` |
+| AC-NFR-001-03 | FR-HAR-001 | fit_criterion (harness half) | `test/offline/test_token_benchmark.py` |
+| AC-NFR-002-01 | FR-HAR-002 | fit_criterion | `test/offline/test_c3_final_freeze.py` |
+| AC-NFR-002-02 | FR-HAR-002 | fit_criterion | `test/offline/test_cand01_batch_16run_v3_infra.py` |
+| AC-NFR-002-03 | FR-HAR-002 | fit_criterion | `test/offline/test_c3_regressions.py` |
+| AC-NFR-002-04 | FR-HAR-002 | evidence (known failure) | `token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/RUN_READINESS.md` |
+| AC-NFR-003-01 | NFR-SEC-001 | tests (integrated) | `test/offline/test_api_key_env.py` |
+| AC-NFR-003-02 | NFR-SEC-001 | tests (integrated) | `test/offline/test_api_key_env.py` |
+| AC-NFR-003-03 | NFR-SEC-001 | tests (integrated) | `test/offline/test_run_token_benchmark_sh.py` |
+| AC-NFR-004-01 | NFR-VER-001 | tests + evidence | `test/offline/test_final_remediation.py` |
+| AC-NFR-004-02 | NFR-VER-001 | evidence (recorded counts) | `token_benchmarks/final_remediation_20261116/TEST_RESULTS.md` |
+| AC-NFR-004-03 | NFR-VER-001 | evidence (audits) | `token_benchmarks/final_remediation_20261116/INDEPENDENT_AUDIT.md` |
+| AC-NFR-005-01 | NFR-VER-002 | evidence (offline guards) | `test/conftest.py` |
+| AC-NFR-005-02 | NFR-VER-002 | evidence (freeze verifier) | `scripts/c3_verify_final_freeze.py` |
+| AC-NFR-005-03 | NFR-VER-002 | evidence (rehearsal paths) | `test/offline/test_c3_final_freeze.py` |
+
+## D1 verification gaps preserved
+
+- The historical D1 note recorded the merged suite as `NOT_RUN` while D2–D9
+  conflicts existed. That state is superseded: the completed tree (`94755cf`)
+  passes **5,132 tests / 3 skipped**, both validators, and `ruff check .`.
+- Two V3 batch-16 infrastructure checks are absolute-path sensitive and fail
+  outside their generating checkout. They are recorded as known failures in
+  `FR-HAR-002` and are not hidden.
+- The campaign numbers quoted from `token_benchmarks/**` are session
+  self-reports; they are not re-derived here (`FR-CAM-001`).
+- `docs/ai-use-session-audit.md` is new in the D1 integration and remains
+  `PENDING_HUMAN_REVIEW`; no human approval is implied by this matrix.
 
 ## Release merge compatibility — 2026-11-20
 
@@ -427,7 +599,7 @@ REQ-WEB-009/021, ADR-003, INV-WEB-001/012/014 map to the existing shared
 `frontend/src/components/Markdown.tsx` and scoped `styles/index.css`. Tables
 retain native semantics within a keyboard-focusable horizontal scroll region;
 Markdown cells override inherited nowrap, fixed height and last-column sizing.
-`tests/markdown-sanitize.test.tsx` checks all-column/content preservation and
+`src/tradingagents_web/frontend/tests/markdown-sanitize.test.tsx` checks all-column/content preservation and
 unsafe table content. `e2e/report-tables.spec.ts` checks actual browser geometry,
 contents-sidebar separation, page width, wrapping and keyboard scrolling at
 desktop, portrait and landscape sizes. No core or history-list layout changes.
@@ -439,7 +611,7 @@ Scope: `web-i18n-20261120-v1`; REQ-WEB-014/021 and ADR-003.
 
 | Contract | Ownership | Verification |
 | --- | --- | --- |
-| UI-language switching, persistence and fallback | `frontend/src/i18n/index.ts`, `ui.ts`, existing en/zh JSON resources; `components/LanguageSwitch.tsx`, `app/AppShell.tsx` | `tests/localization.test.tsx`: matching variables/catalogues/static lookups and UI props, no hardcoded JSX copy, normalized unsupported locales, optional storage, document language, reactive stage labels, source-content preservation and plural/format behavior; existing catalogue parity tests |
+| UI-language switching, persistence and fallback | `frontend/src/i18n/index.ts`, `ui.ts`, existing en/zh JSON resources; `components/LanguageSwitch.tsx`, `app/AppShell.tsx` | `src/tradingagents_web/frontend/tests/localization.test.tsx`: matching variables/catalogues/static lookups and UI props, no hardcoded JSX copy, normalized unsupported locales, optional storage, document language, reactive stage labels, source-content preservation and plural/format behavior; existing catalogue parity tests |
 | Whole workspace presentation, preserved API/domain values | Existing app, pages, components and date utilities; top-bar/settings/wizard controls, scoped language-button styles | `e2e/localization.spec.ts`: route labels and persisted reload, Chinese narrow layouts, modal control, wizard validation and in-place values, original models/output language submitted, terminal recovery and active-run language changes with one SSE connection; previous English browser flows |
 | INV-WEB-001/007/012/014 | Display-only lookup; original form values, stores, report bodies, tool text, ratings, identifiers and stream lifecycle retained | Same locale suite explicitly checks REVIEW versus Hold, opaque identifiers, custom titles/windows, source Markdown and tool messages; prior offline/core/WebUI suites |
 
@@ -457,7 +629,7 @@ ADR-001-choice, ADR-003-frontend-stack and ADR-007-run-controls addenda.
 | Strict public settings, authoritative core validation, environment precedence and legacy depth | `models/requests.py`, `api/config.py`, `api/runs.py`, `runtime/debate_policy.py` | `test/offline/test_web_debate_config.py`: full/partial/default/legacy inputs, independent risk caps, environment locks, strict types/ranges/reserves, NaN/Inf, internal/unknown keys, no rejected-value echo and unchanged defaults |
 | Effective snapshots and historical settings without fabricated legacy values | `runtime/coordinator.py`, `runtime/artifacts_writer.py`, `artifacts/index.py`, frontend report/live components | Same offline suite: actual runner inputs, snapshots and saved history; malformed/missing historical policy; `e2e/debate-settings.spec.ts`: real API, completion, reload and history parity |
 | Custom-policy checkpoint isolation, preserved default identity | `runtime/analysis_graph.py`, existing `runtime/graph_runner.py` | Same offline suite: default core-signature equality and each threshold/budget/mode difference; `test_web_analysis_flow.py`: real offline core graph with default and custom fixed policies |
-| Bilingual controls, independent risk rounds, safe drafts, validation and canonical payload | `frontend/src/components/DebateSettings.tsx`, `utils/debateSettings.ts`, existing wizard/client/catalogues | `tests/debate-settings.test.tsx`, `tests/analysis-flow.test.tsx`: public projection, locks/draft priority, presets/risk independence, negative feedback, translations and payload; Chromium suite: real run plus negative Chinese validation and mobile locked controls |
+| Bilingual controls, independent risk rounds, safe drafts, validation and canonical payload | `frontend/src/components/DebateSettings.tsx`, `utils/debateSettings.ts`, existing wizard/client/catalogues | `src/tradingagents_web/frontend/tests/debate-settings.test.tsx`, `src/tradingagents_web/frontend/tests/analysis-flow.test.tsx`: public projection, locks/draft priority, presets/risk independence, negative feedback, translations and payload; Chromium suite: real run plus negative Chinese validation and mobile locked controls |
 
 INV-WEB-001/003/006/009/010/012/014 remain covered by these checks and the full
 offline/frontend/browser regression. Core, CLI and simulated trading have no

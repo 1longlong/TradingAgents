@@ -1,0 +1,54 @@
+=== MANDATED NON-VACUITY MUTATIONS (re-run on the FINAL tree) ===
+date: 2026-11-15T19:38:49+08:00
+
+-- M1: remove 'switches' from HASHED_FIELDS (hash must change -> tests fail) --
+6 failed, 40 passed in 0.46s
+   restored byte-identically
+-- M2: generator accepts s2_downstream=false --
+46 passed in 0.42s
+   restored byte-identically
+-- M3: /tmp/probe GDELT tripwire is alive (control: explicit gdelt DOES call) --
+Vendor 'finnhub' failed for get_news: get_news_finnhub_only() got an unexpected keyword argument 'vendor'
+   (control raised as expected: TypeError )
+   explicit gdelt control calls: 0 (>0 proves the tripwire works)
+9 passed in 0.47s
+-- M4: verifier skips s2_downstream --
+2 failed, 85 passed in 0.58s
+   restored byte-identically
+-- M5: seed changed 20261114 -> 1 --
+3 failed, 43 passed in 0.43s
+   restored byte-identically
+-- M6: mismatched spec rejected (spec says B, graph built as CC) --
+1 passed, 67 deselected in 0.45s
+
+-- post-mutation: full targeted set green again --
+175 passed in 1.03s
+
+=== CORRECTED M2 and M3 (the first attempt mutated a target the test does not reach) ===
+-- M2 (corrected): require_supported_switches body made a no-op --
+1
+1 failed, 45 passed in 0.45s
+   restored byte-identically
+-- M3 (corrected): the GDELT tripwire control, called the way route_to_vendor calls it --
+Vendor 'finnhub' failed for get_news: get_news_finnhub_only() got an unexpected keyword argument 'vendor'
+Traceback (most recent call last):
+  File "<stdin>", line 6, in <module>
+  File "/tmp/opencode/planC2_wt/tradingagents/dataflows/interface.py", line 309, in route_to_vendor
+    raise first_error
+  File "/tmp/opencode/planC2_wt/tradingagents/dataflows/interface.py", line 223, in route_to_vendor
+    return impl_func(*args, **kwargs)
+TypeError: get_news_finnhub_only() got an unexpected keyword argument 'vendor'
+-- M3 (corrected again): select GDELT through the CONFIG, as route_to_vendor really does --
+   explicit config vendor='gdelt' -> tripwire calls = 1 | returned: GDELT-CONTROL
+   CONTROL OK: 1 call proves the tripwire intercepts real GDELT use,
+   so '0 calls' on the shipped finnhub path is a meaningful measurement.
+
+=== SUMMARY OF MANDATED NON-VACUITY CHECKS ===
+M1  remove "switches" from HASHED_FIELDS          -> 6 failed   (hash really depends on every switch)
+M2  generator guard for s2_downstream=false off    -> 1 failed   (false is refused, not ignored)
+M3  GDELT tripwire live control (explicit gdelt)   -> 1 call     (0 calls on the shipped path is meaningful)
+M4  verifier skips s2_downstream                   -> 2 failed
+M5  seed 20261114 -> 1                             -> 3 failed   (order is reproducible from the seed)
+M6  spec arm B vs graph built as CC                -> rejected   (mismatch refused)
+Post-mutation targeted set                         -> 175 passed
+Every mutated file was restored and its SHA-256 re-verified byte-identical.

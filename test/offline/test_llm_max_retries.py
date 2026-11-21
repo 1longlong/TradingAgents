@@ -98,3 +98,99 @@ def test_env_override_sets_config(monkeypatch):
     # None-default key: env value arrives as a string and is coerced downstream.
     assert dc.DEFAULT_CONFIG["llm_max_retries"] == "8"
     assert _coerce_max_retries(dc.DEFAULT_CONFIG["llm_max_retries"]) == 8
+
+
+# --- regression: the budget must reach the OpenAI-compatible client -------
+# ``openai_compatible`` previously ignored max_retries (kwargs were dropped
+# before constructing the SDK client), so a single transient read timeout
+# aborted a benchmark run instead of being retried.
+
+@pytest.mark.unit
+@pytest.mark.parametrize("provider", ["openai", "openai_compatible"])
+def test_retry_budget_reaches_openai_chat_client(monkeypatch, provider):
+    from tradingagents.llm_clients.openai_client import OpenAIClient
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key-not-used")
+    client = OpenAIClient(
+        "gpt-4o-mini", base_url="https://example.invalid/v1", provider=provider,
+        max_retries=3,
+    )
+    llm = client.get_llm()
+    # LangChain passes max_retries to the underlying SDK client.
+    assert llm.root_client.max_retries == 3
+
+
+# --- regression: only real ChatOpenAI parameters may cross into the SDK -----
+# ``llm_kwargs.update(self.kwargs)`` forwarded *every* constructor kwarg to
+# ``ChatOpenAI(...)``. An internal config key or a LangChain-only argument then
+# raised ``TypeError: unexpected keyword argument`` (or, via ``extra_body``, got
+# smuggled into the request body). The handoff is a whitelist; the knobs that
+# matter for reliability — ``timeout``, ``max_retries``, temperature, client
+# objects — must still pass.
+
+@pytest.mark.unit
+@pytest.mark.parametrize("provider", ["openai", "openai_compatible"])
+def test_timeout_and_retries_both_reach_chat_client(monkeypatch, provider):
+    from tradingagents.llm_clients.openai_client import OpenAIClient
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key-not-used")
+    client = OpenAIClient(
+        "gpt-4o-mini", base_url="https://example.invalid/v1", provider=provider,
+        timeout=45, max_retries=3,
+    )
+    llm = client.get_llm()
+    assert llm.root_client.max_retries == 3
+    assert llm.request_timeout == 45
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("provider", ["openai", "openai_compatible"])
+def test_max_tokens_is_mapped_to_max_completion_tokens(monkeypatch, provider):
+    from tradingagents.llm_clients.openai_client import OpenAIClient
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key-not-used")
+    client = OpenAIClient(
+        "gpt-4o-mini", base_url="https://example.invalid/v1", provider=provider,
+        max_tokens=1234,
+    )
+    llm = client.get_llm()
+    assert llm.max_tokens == 1234
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("provider", ["openai", "openai_compatible"])
+def test_internal_kwargs_are_not_forwarded(monkeypatch, provider):
+    """Internal / LangChain-only keys must not reach the SDK chat constructor."""
+    from tradingagents.llm_clients.openai_client import OpenAIClient
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key-not-used")
+    client = OpenAIClient(
+        "gpt-4o-mini", base_url="https://example.invalid/v1", provider=provider,
+        max_retries=2,
+        # Internal graph config that is not a ChatOpenAI parameter.
+        llm_provider="openai_compatible",
+        max_debate_rounds=2,
+        # LangChain-only base-class parameter, not accepted by ChatOpenAI's
+        # OpenAI client kwargs.
+        verbose_tracing=True,
+    )
+    llm = client.get_llm()  # must not raise TypeError
+    assert llm.root_client.max_retries == 2
+    assert llm.max_tokens is None
+    for leaked in ("llm_provider", "max_debate_rounds", "verbose_tracing"):
+        assert leaked not in (llm.model_kwargs or {})
+
+
+@pytest.mark.unit
+def test_whitelist_covers_every_forwarded_parameter():
+    """Every key the registry branch forwards is a real ChatOpenAI parameter."""
+    from tradingagents.llm_clients import openai_client as oc
+
+    accepted = {
+        "timeout", "max_retries", "temperature", "http_client",
+        "http_async_client", "max_completion_tokens",
+    }
+    assert set(oc._SPEC_CLIENT_KWARGS.values()) <= accepted
+    # The user-facing names callers actually pass must all be covered.
+    for user_key in ("timeout", "max_retries", "temperature", "max_tokens"):
+        assert user_key in oc._SPEC_CLIENT_KWARGS

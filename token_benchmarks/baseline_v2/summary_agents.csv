@@ -1,0 +1,61 @@
+experiment_id,case_id,run_index,agent_id,agent,input_tokens,output_tokens,total_tokens,reasoning_tokens,cached_input_tokens,llm_calls,tool_calls,tool_rounds,prompt_bytes,tool_message_bytes,tool_result_bytes,valid
+baseline_v2,nvda_2026_09_23,1,aggressive_analyst,Aggressive Analyst,12584,1663,14247,0,0,1,0,0,42419,0,0,True
+baseline_v2,nvda_2026_09_23,1,bear_researcher,Bear Researcher,14333,2650,16983,0,128,1,0,0,49093,0,0,True
+baseline_v2,nvda_2026_09_23,1,bull_researcher,Bull Researcher,11642,1343,12985,0,128,1,0,0,38598,0,0,True
+baseline_v2,nvda_2026_09_23,1,conservative_analyst,Conservative Analyst,15879,1547,17426,0,0,1,0,0,57166,0,0,True
+baseline_v2,nvda_2026_09_23,1,fundamentals_analyst,Fundamentals Analyst,24800,5612,30412,0,12032,3,7,2,8114,46800,31552,True
+baseline_v2,nvda_2026_09_23,1,market_analyst,Market Analyst,35020,5184,40204,0,13184,3,14,2,16766,55997,48398,True
+baseline_v2,nvda_2026_09_23,1,neutral_analyst,Neutral Analyst,18940,1482,20422,0,0,1,0,0,70250,0,0,True
+baseline_v2,nvda_2026_09_23,1,news_analyst,News Analyst,5019,1788,6807,0,4224,2,9,1,5765,1860,2756,True
+baseline_v2,nvda_2026_09_23,1,portfolio_manager,Portfolio Manager,7726,1333,9059,0,640,1,0,0,30571,0,0,True
+baseline_v2,nvda_2026_09_23,1,research_manager,Research Manager,9418,2662,12080,0,768,2,0,0,35446,0,0,True
+baseline_v2,nvda_2026_09_23,1,sentiment_analyst,Sentiment Analyst,2116,1197,3313,0,1920,1,0,0,5603,0,0,True
+baseline_v2,nvda_2026_09_23,1,trader,Trader,11557,1371,12928,0,896,2,0,0,38830,0,0,True
+baseline_v2,nvda_2026_09_23,2,aggressive_analyst,Aggressive Analyst,13909,1383,15292,0,0,1,0,0,46923,0,0,True
+baseline_v2,nvda_2026_09_23,2,bear_researcher,Bear Researcher,16682,2540,19222,0,128,1,0,0,57540,0,0,True
+baseline_v2,nvda_2026_09_23,2,bull_researcher,Bull Researcher,13363,1657,15020,0,128,1,0,0,44767,0,0,True
+baseline_v2,nvda_2026_09_23,2,conservative_analyst,Conservative Analyst,16644,1727,18371,0,0,1,0,0,58456,0,0,True
+baseline_v2,nvda_2026_09_23,2,fundamentals_analyst,Fundamentals Analyst,24812,6220,31032,0,12032,3,7,2,8086,46800,31552,True
+baseline_v2,nvda_2026_09_23,2,market_analyst,Market Analyst,26363,5780,32143,0,11648,3,13,2,16780,38634,33009,True
+baseline_v2,nvda_2026_09_23,2,neutral_analyst,Neutral Analyst,20065,1930,21995,0,0,1,0,0,73552,0,0,True
+baseline_v2,nvda_2026_09_23,2,news_analyst,News Analyst,11754,2352,14106,0,10496,4,13,3,12141,6130,3904,True
+baseline_v2,nvda_2026_09_23,2,portfolio_manager,Portfolio Manager,7657,1271,8928,0,640,1,0,0,30531,0,0,True
+baseline_v2,nvda_2026_09_23,2,research_manager,Research Manager,9826,2736,12562,0,768,2,0,0,37596,0,0,True
+baseline_v2,nvda_2026_09_23,2,sentiment_analyst,Sentiment Analyst,2116,1427,3543,0,1920,1,0,0,5603,0,0,True
+baseline_v2,nvda_2026_09_23,2,trader,Trader,6732,475,7207,0,768,1,0,0,22140,0,0,True
+baseline_v2,nvda_2026_09_23,3,aggressive_analyst,Aggressive Analyst,15506,1482,16988,0,0,1,0,0,52434,0,0,True
+baseline_v2,nvda_2026_09_23,3,bear_researcher,Bear Researcher,18273,2965,21238,0,128,1,0,0,64586,0,0,True
+baseline_v2,nvda_2026_09_23,3,bull_researcher,Bull Researcher,14576,1847,16423,0,128,1,0,0,48859,0,0,True
+baseline_v2,nvda_2026_09_23,3,conservative_analyst,Conservative Analyst,18439,1508,19947,0,0,1,0,0,63995,0,0,True
+baseline_v2,nvda_2026_09_23,3,fundamentals_analyst,Fundamentals Analyst,38274,7157,45431,0,25344,4,8,3,11036,74380,31933,True
+baseline_v2,nvda_2026_09_23,3,market_analyst,Market Analyst,70524,6097,76621,0,52224,5,12,4,28327,106979,37397,True
+baseline_v2,nvda_2026_09_23,3,neutral_analyst,Neutral Analyst,21422,2047,23469,0,0,1,0,0,76937,0,0,True
+baseline_v2,nvda_2026_09_23,3,news_analyst,News Analyst,7821,2001,9822,0,6912,3,9,2,8869,3268,2954,True
+baseline_v2,nvda_2026_09_23,3,portfolio_manager,Portfolio Manager,8028,2888,10916,0,640,1,0,0,31225,0,0,True
+baseline_v2,nvda_2026_09_23,3,research_manager,Research Manager,11054,2452,13506,0,768,2,0,0,44044,0,0,True
+baseline_v2,nvda_2026_09_23,3,sentiment_analyst,Sentiment Analyst,2116,1485,3601,0,1920,1,0,0,5603,0,0,True
+baseline_v2,nvda_2026_09_23,3,trader,Trader,13567,1294,14861,0,896,2,0,0,45288,0,0,True
+baseline_v2,nvda_2026_09_23,4,aggressive_analyst,Aggressive Analyst,11980,1202,13182,0,0,1,0,0,42749,0,0,True
+baseline_v2,nvda_2026_09_23,4,bear_researcher,Bear Researcher,16361,2878,19239,0,128,1,0,0,59220,0,0,True
+baseline_v2,nvda_2026_09_23,4,bull_researcher,Bull Researcher,11412,2473,13885,0,128,1,0,0,40509,0,0,True
+baseline_v2,nvda_2026_09_23,4,conservative_analyst,Conservative Analyst,14353,1540,15893,0,0,1,0,0,53188,0,0,True
+baseline_v2,nvda_2026_09_23,4,fundamentals_analyst,Fundamentals Analyst,16183,4152,20335,0,3456,2,7,1,5430,30491,31552,True
+baseline_v2,nvda_2026_09_23,4,market_analyst,Market Analyst,27605,6007,33612,0,12544,3,14,2,16755,39492,33324,True
+baseline_v2,nvda_2026_09_23,4,neutral_analyst,Neutral Analyst,17400,1826,19226,0,0,1,0,0,66554,0,0,True
+baseline_v2,nvda_2026_09_23,4,news_analyst,News Analyst,5122,2249,7371,0,4224,2,10,1,5754,2069,3068,True
+baseline_v2,nvda_2026_09_23,4,portfolio_manager,Portfolio Manager,7478,2583,10061,0,640,1,0,0,29896,0,0,True
+baseline_v2,nvda_2026_09_23,4,research_manager,Research Manager,12134,3002,15136,0,768,2,0,0,46044,0,0,True
+baseline_v2,nvda_2026_09_23,4,sentiment_analyst,Sentiment Analyst,2116,1185,3301,0,1920,1,0,0,5603,0,0,True
+baseline_v2,nvda_2026_09_23,4,trader,Trader,7141,493,7634,0,640,1,0,0,23905,0,0,True
+baseline_v2,nvda_2026_09_23,5,aggressive_analyst,Aggressive Analyst,13390,1306,14696,0,0,1,0,0,47432,0,0,True
+baseline_v2,nvda_2026_09_23,5,bear_researcher,Bear Researcher,16820,2912,19732,0,128,1,0,0,61038,0,0,True
+baseline_v2,nvda_2026_09_23,5,bull_researcher,Bull Researcher,12557,2129,14686,0,128,1,0,0,44135,0,0,True
+baseline_v2,nvda_2026_09_23,5,conservative_analyst,Conservative Analyst,15971,1466,17437,0,0,1,0,0,58417,0,0,True
+baseline_v2,nvda_2026_09_23,5,fundamentals_analyst,Fundamentals Analyst,24825,6076,30901,0,12032,3,7,2,8262,46800,31552,True
+baseline_v2,nvda_2026_09_23,5,market_analyst,Market Analyst,46261,5055,51316,0,29312,4,12,3,22499,68837,35660,True
+baseline_v2,nvda_2026_09_23,5,neutral_analyst,Neutral Analyst,18870,1664,20534,0,0,1,0,0,70605,0,0,True
+baseline_v2,nvda_2026_09_23,5,news_analyst,News Analyst,9453,2533,11986,0,8064,3,15,2,8794,6369,5078,True
+baseline_v2,nvda_2026_09_23,5,portfolio_manager,Portfolio Manager,14140,2100,16240,0,640,2,0,0,57906,0,0,True
+baseline_v2,nvda_2026_09_23,5,research_manager,Research Manager,11514,2792,14306,0,768,2,0,0,44364,0,0,True
+baseline_v2,nvda_2026_09_23,5,sentiment_analyst,Sentiment Analyst,2116,1343,3459,0,1920,1,0,0,5603,0,0,True
+baseline_v2,nvda_2026_09_23,5,trader,Trader,11651,1261,12912,0,896,2,0,0,41280,0,0,True

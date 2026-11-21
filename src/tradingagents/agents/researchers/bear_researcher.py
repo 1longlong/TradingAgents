@@ -6,9 +6,10 @@ from tradingagents.agents.utils.agent_utils import (
     get_data_quality_context_from_state,
     get_instrument_context_from_state,
     get_language_instruction,
-    opponent_argument_or_opening,
+    opponent_argument_without_repetition,
     report_or_absent,
 )
+from tradingagents.agents.utils.s2_context import bear_context_block, routed_report
 from tradingagents.debate import researcher_accounting as accounting
 from tradingagents.debate.budget import (
     budget_admission_decision,
@@ -93,13 +94,24 @@ def create_bear_researcher(llm, debate_termination_config=None, *, clock=time.mo
         durable = invocation_id is not None
         history = investment_debate_state.get("history", "")
 
-        current_response = opponent_argument_or_opening(
-            investment_debate_state.get("current_response", ""), "bull analyst"
+        # ``history`` already ends with the opponent's latest argument, so the
+        # separate "last argument" slot only repeats text the prompt carries.
+        current_response = opponent_argument_without_repetition(
+            investment_debate_state.get("current_response", ""), "bull analyst", history
         )
-        market_research_report = report_or_absent(state["market_report"], "market")
+        routed = bear_context_block(
+            state.get("market_report_obj"), state.get("fundamentals_report_obj")
+        )
+        market_research_report = routed_report(
+            report_or_absent(state["market_report"], "market"), routed.get("market"), "market"
+        )
         sentiment_report = report_or_absent(state["sentiment_report"], "sentiment")
         news_report = report_or_absent(state["news_report"], "news")
-        fundamentals_report = report_or_absent(state["fundamentals_report"], "fundamentals")
+        fundamentals_report = routed_report(
+            report_or_absent(state["fundamentals_report"], "fundamentals"),
+            routed.get("fundamentals"),
+            "fundamentals",
+        )
         instrument_context = get_instrument_context_from_state(state)
         data_quality_context = get_data_quality_context_from_state(state)
         data_quality_allowlist = build_citation_allowlist(

@@ -1,0 +1,17 @@
+run_id,position,ticker,arm,batch_macro,single_pass,structured,s2_downstream
+R01,1,NVDA,C0,False,True,True,True
+R02,2,NVDA,AB,True,False,True,True
+R03,3,NVDA,CC,True,True,True,True
+R04,4,NVDA,B,False,False,True,True
+R05,5,AAPL,C0,False,True,True,True
+R06,6,AAPL,B,False,False,True,True
+R07,7,AAPL,CC,True,True,True,True
+R08,8,AAPL,AB,True,False,True,True
+R09,9,JPM,C0,False,True,True,True
+R10,10,JPM,AB,True,False,True,True
+R11,11,JPM,B,False,False,True,True
+R12,12,JPM,CC,True,True,True,True
+R13,13,XOM,C0,False,True,True,True
+R14,14,XOM,CC,True,True,True,True
+R15,15,XOM,B,False,False,True,True
+R16,16,XOM,AB,True,False,True,True

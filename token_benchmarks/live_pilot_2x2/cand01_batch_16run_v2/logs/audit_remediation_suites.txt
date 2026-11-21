@@ -1,0 +1,11 @@
+=== per-file counts ===
+tests/test_audit_a_regressions.py -> 15 passed in 0.46s
+tests/test_audit_b_regressions.py -> 68 passed in 0.52s
+tests/test_audit_c_regressions.py -> 18 passed in 0.50s
+tests/test_cand01_batch_16run_v2_infra.py -> 46 passed in 0.44s
+tests/test_switch_consumption.py -> 19 passed in 0.48s
+tests/test_finnhub_only_scope.py -> 9 passed in 0.47s
+
+=== combined (the preflight command) ===
+...............................                                          [100%]
+175 passed in 1.05s

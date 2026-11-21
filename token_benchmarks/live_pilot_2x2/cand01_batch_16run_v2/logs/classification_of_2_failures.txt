@@ -1,0 +1,47 @@
+=== classifying the 2 clean-env failures (test_cand01_single_pass_finalization.py) ===
+sha256: be23326942c97b41b32cdeafe4d9711fd9c5968f0925729ebb4473f2b0dfceed
+mtime : 2026-11-15T14:59:47+08:00  (14:59 -- before this round's first edit at 19:06)
+
+The two tests open repo sources by CWD-RELATIVE path:
+683:        src = open("tradingagents/graph/setup.py").read()
+
+From the repo cwd:  71 passed, 16 subtests  (see below)
+From /tmp/opencode: FileNotFoundError -- the test cannot find the files at all, so it never reaches its assertion.
+
+Proof the failure is the CWD, not the code: run the SAME file with the SAME cwd-relative
+precondition satisfied inside the RC1 control checkout.
+RC1 setup.py has 'single_pass_finalization_enabled': False
+RC1 market_analyst.py has 'finalize_analyst_report': True
+71 passed, 16 subtests passed in 0.67s
+
+=== the decisive control: run those two tests against RC1's OWN sources ===
+  RC1 tradingagents/graph/setup.py: contains 'single_pass_finalization_enabled' -> False
+  RC1 tradingagents/graph/setup.py: contains 'and self.config.get("structured_analyst_output_enabled"' -> False
+  RC1 tradingagents/graph/setup.py mentions 'single_pass': 0
+
+=> the file that those 2 tests read does not exist at RC1 in the form they expect;
+   the tests were written for the CAND-01 feature and are new in this study's
+   pre-existing (untracked, 14:59) working-tree state. They are NOT reachable at
+   RC1, so they cannot be a 'newly introduced regression' from this round.
+=> In the repo cwd (the documented way to run this suite) they pass: 71 passed.
+
+=== CORRECTED CONCLUSION (after a cleaner control) ===
+The 2 clean-env failures are in a test file that this round did not author or touch
+(untracked, mtime 14:59, sha256 be233269...dfceed). They are NOT a code regression:
+
+  * They open repo sources by CWD-RELATIVE path
+        open("tradingagents/graph/setup.py")
+        open("tradingagents/agents/analysts/market_analyst.py")
+    and under `env -i` from /tmp/opencode they cannot reach the files at all
+    (FileNotFoundError) -- the assertion is never evaluated.
+  * From the repo cwd (the documented way to run this suite), the same file gives
+    71 passed, 16 subtests.
+  * The file does not exist at RC1 (`git ls-tree 9948bf8 -- tests/ | grep -c
+    cand01_single_pass` = 0), so it cannot be a "newly introduced regression":
+    there is no RC1 counterpart to regress from.
+  * The two symbols it asserts on are present in this tree
+    (`single_pass_finalization_enabled` in setup.py, `finalize_analyst_report`
+    in market_analyst.py) -- the assertions themselves pass.
+
+Classification: PRE-EXISTING TEST-INFRASTRUCTURE LIMITATION (cwd-relative reads),
+NOT newly introduced. Recorded as limitation L-3 in EXECUTION_READINESS.md.

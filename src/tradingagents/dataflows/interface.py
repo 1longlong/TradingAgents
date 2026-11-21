@@ -28,7 +28,9 @@ from .errors import (
     VendorRequestRejectedError,
     retryable_status,
 )
+from .finnhub_news import get_global_news_finnhub, get_news_finnhub_only
 from .fred import FRED_API_BASE, get_macro_data as get_fred_macro_data
+from .gdelt_news import get_global_news_gdelt, get_news_gdelt
 from .polymarket import GAMMA_BASE, get_prediction_markets as get_polymarket_prediction_markets
 from .retry_session import (
     RetryBudget,
@@ -117,6 +119,8 @@ VENDOR_LIST = [
     "fred",
     "polymarket",
     "alpha_vantage",
+    "finnhub",
+    "gdelt",
 ]
 
 # Optional enrichment categories. These add macro/event context to the news
@@ -163,10 +167,18 @@ VENDOR_METHODS: dict[str, dict[str, Callable[..., Any] | list[Callable[..., Any]
     },
     # news_data
     "get_news": {
+        # Personal Finnhub-only route (explicit symbol + window); GDELT stays
+        # available for a study that deliberately includes it.
+        "finnhub": get_news_finnhub_only,
+        "gdelt": get_news_gdelt,
         "alpha_vantage": get_alpha_vantage_news,
         "yfinance": get_news_yfinance,
     },
     "get_global_news": {
+        # Finnhub has no global endpoint: the personal route returns
+        # CONFIG_DISABLED rather than silently filling from another provider.
+        "finnhub": get_global_news_finnhub,
+        "gdelt": get_global_news_gdelt,
         "yfinance": get_global_news_yfinance,
         "alpha_vantage": get_alpha_vantage_global_news,
     },

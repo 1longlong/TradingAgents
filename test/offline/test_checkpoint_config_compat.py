@@ -199,10 +199,16 @@ def test_disabled_section_ignores_its_inert_caps():
 
 @pytest.mark.unit
 def test_vendor_chain_order_is_significant():
+    # The merged personal default pins `tool_vendors.get_news`; remove the
+    # news tool-level overrides so this test exercises category-level order.
+    tv = {k: v for k, v in DEFAULT_CONFIG["tool_vendors"].items()
+          if k not in ("get_news", "get_global_news")}
     a = _config(data_vendors={**DEFAULT_CONFIG["data_vendors"],
-                              "news_data": "yfinance,alpha_vantage"})
+                              "news_data": "yfinance,alpha_vantage"},
+                tool_vendors=tv)
     b = _config(data_vendors={**DEFAULT_CONFIG["data_vendors"],
-                              "news_data": "alpha_vantage,yfinance"})
+                              "news_data": "alpha_vantage,yfinance"},
+                tool_vendors=tv)
     assert execution_digest(a) != execution_digest(b)
     assert execution_identity(a)["vendor_chains"]["get_news"] == "yfinance,alpha_vantage"
 

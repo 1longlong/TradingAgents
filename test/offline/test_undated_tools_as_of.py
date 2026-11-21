@@ -194,6 +194,30 @@ def test_a_yfinance_failure_is_a_vendor_error_not_a_report(func, args):
 
 
 @pytest.mark.unit
+@pytest.mark.parametrize("adapter, args", [
+    ("finnhub", ("AAPL", "2026-08-25", "2026-09-01")),
+    ("gdelt", ("AAPL", "2026-08-25", "2026-09-01")),
+])
+def test_a_news_transport_failure_is_a_vendor_error_not_a_report(adapter, args):
+    """Returning the failure as text makes the router count it as an answer, so
+    the chain stops and the analyst reads the error message as if it were data.
+    A broken transport must be classified into the vendor-error hierarchy by the
+    adapter itself, never escape as a bare exception that aborts the node."""
+    import urllib.request
+
+    from tradingagents.dataflows import finnhub_news, gdelt_news
+    from tradingagents.dataflows.errors import VendorError
+
+    func = (
+        finnhub_news.fetch_news_finnhub if adapter == "finnhub" else gdelt_news.get_news_gdelt
+    )
+    with mock.patch.object(urllib.request, "urlopen", side_effect=RuntimeError("hiccup")), \
+            mock.patch(f"{finnhub_news.__name__}.get_api_key", return_value="test-key"), \
+            pytest.raises(VendorError):
+        func(*args)
+
+
+@pytest.mark.unit
 @pytest.mark.parametrize("func, args", [
     ("get_news_yfinance", ("AAPL", "2026-08-25", "2026-09-01")),
     ("get_global_news_yfinance", ("2026-09-01", 7, 5)),
@@ -270,3 +294,5 @@ def test_the_price_path_also_tells_an_outage_from_an_unknown_symbol(monkeypatch)
     monkeypatch.setattr(stockstats_utils, "vendor_reachable", lambda url: True)
     with pytest.raises(NoMarketDataError):
         y_finance.get_YFin_data_online("AAPL", "2026-09-01", "2026-09-10")
+
+"""Traceability: NFR-PIT-001"""

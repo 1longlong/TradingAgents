@@ -89,6 +89,10 @@ class Propagator:
             "data_quality_context": "",
             "data_quality_error": "gate not run",
             "data_quality_source_attempts": [],
+            # Typed structured reports (CAND-01). A run that never produces a
+            # schema call leaves them ``None`` rather than an empty object.
+            "market_report_obj": None,
+            "fundamentals_report_obj": None,
         }
         if run_id:
             state["run_id"] = run_id

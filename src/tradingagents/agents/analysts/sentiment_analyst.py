@@ -34,15 +34,22 @@ See: https://github.com/TauricResearch/TradingAgents/issues/796
 """
 
 # ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
-
+import logging
+from collections.abc import Callable
 from datetime import datetime, timedelta
-from typing import cast
+from typing import Any, cast
 
 from langchain_core.messages import AIMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.tools import StructuredTool
 
-from tradingagents.agents.schemas import SentimentReport, render_sentiment_report
+from tradingagents.agents.schemas import (
+    SentimentBand,
+    SentimentDataStatus,
+    SentimentReport,
+    classify_sentiment_sources,
+    render_sentiment_report,
+)
 from tradingagents.agents.utils.agent_utils import (
     get_instrument_context_from_state,
     get_language_instruction,
@@ -53,8 +60,17 @@ from tradingagents.agents.utils.structured import (
     bind_structured,
     invoke_structured_or_freetext,
 )
+from tradingagents.dataflows.errors import (
+    NoMarketDataError,
+    VendorRateLimitError,
+    VendorTimeoutError,
+    VendorUnavailableError,
+)
 from tradingagents.dataflows.reddit import fetch_reddit_posts
 from tradingagents.dataflows.stocktwits import fetch_stocktwits_messages
+from tradingagents.observability import record_prefetch_call
+
+logger = logging.getLogger(__name__)
 
 
 def _prefetch_module():
@@ -176,6 +192,58 @@ def _run_config(state):
     return get_config()
 
 
+def _render_without_measurement(report: SentimentReport) -> str:
+    """Render a report whose sources returned nothing usable.
+
+    The model must still describe what each source said, but it must not be
+    allowed to emit a sentiment reading: any band and score it supplied are
+    discarded and replaced with an explicit Unknown / not-scored header. This
+    is the enforcement point, not merely a prompt instruction, because the
+    placeholder header reaches six downstream agents first.
+    """
+    forced = report.model_copy(
+        update={
+            "overall_band": SentimentBand.UNKNOWN,
+            "overall_score": None,
+            "data_status": SentimentDataStatus.UNAVAILABLE,
+        }
+    )
+    rendered = render_sentiment_report(forced)
+    return (
+        rendered
+        + "\n\n> No usable sentiment source for this window. The band is"
+        " **Unknown**, not Neutral: absence of data is not evidence of a"
+        " balanced market."
+    )
+
+
+#: Conditions the legacy single-node path may degrade to a sentinel. A typed
+#: throttle/timeout/unavailability/absence is "could not answer", not "no news";
+#: an untyped ``RuntimeError`` is the historical prefetch-failure shape the
+#: legacy contract documents. Fatal/auth/rejected/unknown-internal errors are
+#: NOT in this set and propagate to the caller (Release-first policy).
+_RECOVERABLE_PREFETCH_ERRORS = (
+    VendorRateLimitError,
+    VendorTimeoutError,
+    VendorUnavailableError,
+    NoMarketDataError,
+    RuntimeError,
+)
+
+
+def _prefetch_or_degrade(label: str, fetch) -> str:
+    """Run a prefetch, degrading only the documented recoverable failures."""
+    try:
+        return fetch()
+    except _RECOVERABLE_PREFETCH_ERRORS as exc:
+        logger.warning("Sentiment %s prefetch failed (%s); degrading", label, exc)
+        return (
+            f"DATA_UNAVAILABLE: the {label} prefetch raised "
+            f"{type(exc).__name__}. Treat this source as unavailable; do not "
+            "infer that the instrument is quiet in any direction."
+        )
+
+
 def create_sentiment_analyst(llm, prefetch_split: bool = False):
     """Create a sentiment analyst node for the trading graph.
 
@@ -213,22 +281,40 @@ def create_sentiment_analyst(llm, prefetch_split: bool = False):
                     snapshot=snapshot,
                 )
         else:
-            # Pre-fetch is not persisted on this path: a re-run of this node
-            # fetches all three again. One context-local snapshot serves both
-            # the fetch and the label, like the prefetch node.
-            prefetch = _prefetch_module()
-            with prefetch.fetch_snapshot(_run_config(state)) as snapshot:
-                blocks = _fetch_sources(
-                    ticker, start_date, end_date, snapshot.parameters
-                )
+            # Personal single-node path: fetch all three, degrading an untyped
+            # failure to a visible sentinel so a prefetch cannot abort the node.
+            news_block = _prefetch_or_degrade(
+                "news",
+                lambda: record_prefetch_call(
+                    "news", cast(Callable[..., Any], getattr(get_news, "func", get_news)), ticker, start_date, end_date,
+                    trade_date=end_date,
+                ),
+            )
+            stocktwits_block = record_prefetch_call(
+                "stocktwits", fetch_stocktwits_messages,
+                ticker, limit=30, start_date=start_date, end_date=end_date,
+            )
+            reddit_block = record_prefetch_call(
+                "reddit", fetch_reddit_posts,
+                ticker, start_date=start_date, end_date=end_date,
+            )
+            blocks = {
+                "news": news_block,
+                "stocktwits": stocktwits_block,
+                "reddit": reddit_block,
+            }
+
+        news_block = blocks["news"]
+        stocktwits_block = blocks["stocktwits"]
+        reddit_block = blocks["reddit"]
 
         system_message = _build_system_message(
             ticker=ticker,
             start_date=start_date,
             end_date=end_date,
-            news_block=blocks["news"],
-            stocktwits_block=blocks["stocktwits"],
-            reddit_block=blocks["reddit"],
+            news_block=news_block,
+            stocktwits_block=stocktwits_block,
+            reddit_block=reddit_block,
         )
 
         prompt = ChatPromptTemplate.from_messages(
@@ -257,14 +343,54 @@ def create_sentiment_analyst(llm, prefetch_split: bool = False):
         # data is already in the prompt.
         formatted_messages = prompt.format_messages(messages=state["messages"])
 
+        # Availability is decided here, from the strings actually handed to the
+        # model, so an outage cannot be read as a neutral reading. Without this
+        # every run whose three sources were placeholders still produced
+        # "Neutral (Score: 5.0/10)" — a measurement nobody made.
+        data_status = classify_sentiment_sources(
+            news_block, stocktwits_block, reddit_block
+        )
+
+        def render(report: SentimentReport) -> str:
+            # The header's data status must be the one Python just computed from
+            # the actual source strings, not the model's own field: that field
+            # defaults to AVAILABLE, so rendering it verbatim let a degraded or
+            # empty news prefetch still print "Data status: AVAILABLE". Stamp the
+            # computed verdict onto a copy so the deterministic classification is
+            # the single source of truth on both the structured and prose paths.
+            same_status = getattr(report, "data_status", None) is data_status
+            if not same_status:
+                report = report.model_copy(update={"data_status": data_status})
+            if data_status in (
+                SentimentDataStatus.AVAILABLE,
+                SentimentDataStatus.PARTIAL,
+            ):
+                return render_sentiment_report(report)
+            return _render_without_measurement(report)
+
         report_text = invoke_structured_or_freetext(
             structured_llm,
             llm,
             formatted_messages,
-            render_sentiment_report,
+            render,
             "Sentiment Analyst",
             schema=SentimentReport,
         )
+        if data_status is SentimentDataStatus.UNAVAILABLE and not report_text.startswith(
+            "**Overall Sentiment:** **Unknown**"
+        ):
+            # Free-text fallback (provider without structured output, or a
+            # structured miss) bypasses ``_render_without_measurement``, so the
+            # model's own header is still in the text. Prepend the authoritative
+            # one rather than trusting prose about a measurement never taken.
+            report_text = (
+                "**Overall Sentiment:** **Unknown** (Score: not scored (no data))\n"
+                "**Confidence:** Low\n"
+                f"**Data status:** {SentimentDataStatus.UNAVAILABLE.value}"
+                "\n\n> No usable sentiment source for this window. The band is"
+                " **Unknown**, not Neutral: absence of data is not evidence of a"
+                " balanced market.\n\n" + report_text
+            )
 
         return {
             "messages": [AIMessage(content=report_text)],
@@ -321,7 +447,7 @@ Community discussion, without vote or comment counts. Subreddit character matter
 
 5. **Identify recurring narrative themes.** What topic keeps coming up across sources? That's the dominant narrative driving current sentiment.
 
-6. **Be honest about data limits.** If StockTwits returned only a handful of messages, or one or more sources returned an "<unavailable>" placeholder, the sentiment read is less robust — flag this explicitly in the `confidence` field and the narrative. If the sources are silent on a given subreddit, say so.
+6. **Be honest about data limits, and never score an absence.** If StockTwits returned only a handful of messages, or one or more sources returned an "<unavailable>" / "coverage starts" placeholder, the sentiment read is less robust — flag this explicitly in the `confidence` field and the narrative. If the sources are silent on a given subreddit, say so. **A placeholder is not a neutral reading.** A source that did not reach the requested window tells you nothing about what people thought on those dates; "no data" and "balanced opinion" are different findings and must never be reported as the same thing.
 
 7. **Identify catalysts and risks** that emerge across sources — news of upcoming earnings, product launches, competitive threats, macro headlines, etc.
 
@@ -331,8 +457,9 @@ Community discussion, without vote or comment counts. Subreddit character matter
 
 Fill the following fields:
 
-- **overall_band**: Exactly one of Bullish / Mildly Bullish / Neutral / Mixed / Mildly Bearish / Bearish. Use Mixed when sources point in clearly different directions; Neutral only when all sources are genuinely silent.
-- **overall_score**: A number from 0 (maximally bearish) to 10 (maximally bullish); 5 is neutral. Keep it consistent with overall_band.
+- **overall_band**: Exactly one of Bullish / Mildly Bullish / Neutral / Mixed / Mildly Bearish / Bearish / **Unknown**. Use Mixed when sources point in clearly different directions. Use Neutral only when the sources you *did* receive contain real messages that genuinely balance out — silence from a source is not neutral evidence. Use **Unknown** when no source returned usable data for the window: nothing was measured, so there is no direction to report.
+- **overall_score**: A number from 0 (maximally bearish) to 10 (maximally bullish); 5 is neutral. Keep it consistent with overall_band. **Set it to null when overall_band is Unknown** — a score implies a measurement that did not happen.
+- **data_status**: AVAILABLE when all three sources returned usable data, PARTIAL when some did, UNAVAILABLE when none did, ERROR when a source failed outright rather than merely not covering the window.
 - **confidence**: low / medium / high, based on data quality and sample size.
 - **narrative**: Full source-by-source breakdown, divergences, dominant narrative themes, catalysts and risks, and a markdown summary table of key sentiment signals (direction, source, supporting evidence).
 

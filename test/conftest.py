@@ -38,6 +38,21 @@ def _dummy_api_keys(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _dummy_backend_url(monkeypatch):
+    """Supply a placeholder endpoint when the host has no developer `.env`.
+
+    Several dry-run/measurement tests only need *a* base_url to build the
+    default experiment; they never contact it (the dry-run tests assert that no
+    runner is called). CI has no `.env`, so without this the suite would fail
+    for an environment reason, not a code defect.
+    """
+    monkeypatch.setenv(
+        "TRADINGAGENTS_LLM_BACKEND_URL",
+        os.environ.get("TRADINGAGENTS_LLM_BACKEND_URL") or "https://ci.invalid/v1",
+    )
+
+
+@pytest.fixture(autouse=True)
 def _isolate_config():
     """Reset the global dataflows config before and after each test.
 
@@ -54,6 +69,46 @@ def _isolate_config():
     config_module._config = copy.deepcopy(default_config.DEFAULT_CONFIG)
     yield
     config_module._config = copy.deepcopy(default_config.DEFAULT_CONFIG)
+
+
+#: Network endpoints tests must never reach for real. The default ``get_news``
+#: chain is now Finnhub + GDELT; without this guard those are live HTTP calls,
+#: which makes results depend on the network and on whatever key happens to be
+#: in the environment (and risks spending a real credential's quota during a
+#: test run).
+_LIVE_NETWORK_HOSTS = (
+    "finnhub.io",
+    "api.gdeltproject.org",
+    "gdeltproject",
+)
+
+
+@pytest.fixture(autouse=True)
+def _block_live_news_vendors(monkeypatch):
+    """Make the news vendors fail fast instead of dialling out.
+
+    The default ``get_news`` chain is ``finnhub,gdelt``. Without this, a test
+    that only patches one adapter's transport would still make a **real**
+    request to the other (locally with a real key), so results would depend on
+    the network and on the environment. Both transports are replaced with the
+    providers' own deterministic failure shape, which classifies to
+    ``PROVIDER_UNAVAILABLE`` and is handled by the router exactly as a real
+    outage would be.
+
+    Tests that exercise these adapters patch their internals themselves, which
+    overrides this fixture.
+    """
+
+    import tradingagents.dataflows.finnhub_news as finnhub
+
+    monkeypatch.setattr(finnhub, "_request", lambda *a, **k: (None, None, "transport"))
+
+    import tradingagents.dataflows.gdelt_news as gdelt
+
+    monkeypatch.setattr(gdelt, "_request", lambda *a, **k: (None, None, "transport"))
+    monkeypatch.setattr(gdelt, "_fetch_page", lambda *a, **k: (None, None, "transport"))
+    # GDELT asks callers to space requests; tests must not sleep for it.
+    monkeypatch.setattr(gdelt, "_throttle", lambda: None)
 
 
 @pytest.fixture()

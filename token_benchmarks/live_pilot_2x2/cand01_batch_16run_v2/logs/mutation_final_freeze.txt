@@ -1,0 +1,20 @@
+CAUGHT M1 U-1: stop consuming the usage verdict  [1 failed, 12 passed in 0.63s]
+       scripts/token_benchmark.py: 1178d5c6c7ac138b… -> restored 1178d5c6c7ac138b… OK
+CAUGHT M2 U-1: publish an unknown total as 0  [1 failed in 0.57s]
+       scripts/token_benchmark.py: 1178d5c6c7ac138b… -> restored 1178d5c6c7ac138b… OK
+CAUGHT M3 U-2: accept a budget block with no mode  [3 failed, 17 passed in 0.77s]
+       scripts/token_benchmark.py: 1178d5c6c7ac138b… -> restored 1178d5c6c7ac138b… OK
+CAUGHT M4 A-00: drop the gate script's repo-root pin  [1 failed in 0.58s]
+       scripts/c3_preflight_gate.py: 50f2409f8e7feff3… -> restored 50f2409f8e7feff3… OK
+CAUGHT M5 dry run: rehearse without building the graph  [1 failed in 0.60s]
+       scripts/token_benchmark.py: 1178d5c6c7ac138b… -> restored 1178d5c6c7ac138b… OK
+CAUGHT M6 effective_config: write without verifying  [1 failed in 0.59s]
+       scripts/token_benchmark.py: 1178d5c6c7ac138b… -> restored 1178d5c6c7ac138b… OK
+CAUGHT M7 L-5: accept a negative token count  [1 failed in 0.59s]
+       tradingagents/observability.py: 1f8f389557fb3bc7… -> restored 1f8f389557fb3bc7… OK
+CAUGHT M8 L-5: an empty run reports complete attribution  [1 failed in 0.61s]
+       tradingagents/observability.py: 1f8f389557fb3bc7… -> restored 1f8f389557fb3bc7… OK
+CAUGHT M9 freeze: the verifier stops requiring HEAD == the record  [1 failed in 0.60s]
+       scripts/c3_verify_final_freeze.py: 32fb420f831d6017… -> restored 32fb420f831d6017… OK
+
+9/9 mutations caught and restored byte-identically

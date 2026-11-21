@@ -1,0 +1,14 @@
+{
+  "experiment_definition_sha256": "6005da06294aaa0dfec735221bca61a9cf6e2b461252379ed87368822c924544",
+  "frozen_commit": null,
+  "generator": "scripts/gen_cand01_batch_16run_specs_v2.py",
+  "generator_sha256": "3683928ca13113a902d48e8a33f76bc15ab18fc424eebac64bce4eb1e03063de",
+  "git_branch": "fix/cand01-final-freeze",
+  "git_head_commit": "af45681678ac43fa48d2d47a1854d891bb1d56aa",
+  "git_head_relation_to_freeze": "unfrozen",
+  "git_working_tree_dirty": true,
+  "phase": "spec_generation",
+  "python_version": "3.14.7",
+  "schema_version": 1,
+  "timestamp_utc": "2026-11-15T17:08:22.541905+00:00"
+}
