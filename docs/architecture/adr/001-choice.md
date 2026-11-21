@@ -1,6 +1,6 @@
 # ADR-001: Web Entry Point, Module Boundary, and Run-State Ownership
 
-- Status: **Accepted for documentation** by the human owner on 2026-11-05. Implementation requires `[safety-approved]`, `[test-plan-approved]`, and `[governance-approved]` where applicable.
+- Status: **Accepted for documentation** by the human owner on 2026-11-05. Applicable plan, test, safety and governance changes require human review. The 2026-11-21 policy revision in ADR-012-error-handling-merge-integration.md delegates merge approval to GitHub branch protection without special markers or test-only commit chronology.
 - Date: 2026-11-05
 - Baseline: TradingAgents v0.5.0, commit `2d17df8da1536c121e4d7395ac5a5dcec9e96d6f`
 - Related requirements: `REQ-WEB-001` to `REQ-WEB-014`, `REQ-WEB-020` to `REQ-WEB-031`

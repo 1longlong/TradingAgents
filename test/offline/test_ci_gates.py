@@ -6,6 +6,7 @@ Fixtures are synthetic test data, never product requirements or human approvals.
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import subprocess
 from pathlib import Path
@@ -200,130 +201,89 @@ def test_ai_log_imports_legacy_list_without_waiving_new_coverage(tmp_path, monke
         gates.check_ai_log(tmp_path, "base", "head")
 
 
-@pytest.fixture
-def approval_history(tmp_path, monkeypatch):
-    approved = {"test/offline/test_feature.py": "tests", "docs/req/requirements.yaml": "req",
-                "architecture-blueprint.md": "plan"}
-    final = {**approved, "src/new.py": "implementation"}
-    monkeypatch.setattr(gates, "tree", lambda root, ref: final if ref == "head" else approved)
-    monkeypatch.setattr(gates, "runtime_changes", lambda root, base, ref: {"src/new.py"} if ref == "head" else set())
-    monkeypatch.setattr(gates, "is_ancestor", lambda *args: True)
-    monkeypatch.setattr(gates, "git", lambda root, *args: "head\n" if args[0] == "rev-list" else "2026-10-24T02:00:00+00:00\n")
-    review = {"state": "COMMENTED", "body": "[test-plan-approved]", "commit_id": "approved",
-              "submitted_at": "2026-10-24T01:00:00Z"}
-    return tmp_path, review, final
+def test_approval_command_delegates_to_github_without_claiming_a_review(monkeypatch, capsys):
+    """ADR-012 / REQ-WEB-026: CI never invents or backdates human approval."""
+    monkeypatch.setattr(gates.sys, "argv", ["ci_gates", "approval"])
+    for name in ["GITHUB_TOKEN", "GITHUB_EVENT_PATH", "GITHUB_REPOSITORY"]:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(gates, "git", lambda *args: pytest.fail("Review notice must not inspect Git chronology"))
+    assert gates.main() == 0
+    output = capsys.readouterr().out
+    assert "GitHub branch protection" in output
+    assert "does not issue or verify an approval" in output
+    assert "PASS:" not in output
 
 
-@pytest.mark.parametrize("state", ["COMMENTED", "APPROVED"])
-def test_test_approval_precedes_implementation(approval_history, state):
-    root, review, _ = approval_history
-    review["state"] = state
-    gates.check_prior_approval(root, "base", "head", [review])
+def test_workflow_retains_blocking_checks_without_duplicate_review_logic():
+    """ADR-012 / REQ-WEB-026: native review and automated checks have separate owners."""
+    jobs = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())["jobs"]
+    commands = [step.get("run", "") for step in jobs["review-and-log"]["steps"]]
+    assert any("ci_gates ai-log" in command for command in commands)
+    assert all("ci_gates approval" not in command for command in commands)
+    assert jobs["review-and-log"]["permissions"] == {"contents": "read"}
+    required = {"context", "regression", "static-analysis", "architecture-security",
+                "requirements", "review-and-log", "semantic-evaluation", "smoke-install",
+                "governance-validation"}
+    assert set(jobs["blocking-gate"]["needs"]) == required
+    assert any("ci_gates semantic" in step.get("run", "")
+               for step in jobs["semantic-evaluation"]["steps"])
+    assert all(not job.get("continue-on-error", False) for job in jobs.values())
+    assert all(not step.get("continue-on-error", False)
+               for job in jobs.values() for step in job["steps"])
 
 
-def test_explicitly_dismissed_plan_review_does_not_approve(approval_history):
-    root, review, _ = approval_history
-    review["state"] = "DISMISSED"
-    with pytest.raises(gates.GateError, match="Missing earlier"):
-        gates.check_prior_approval(root, "base", "head", [review])
-
-
-def test_late_test_approval_blocks(approval_history):
-    root, review, _ = approval_history
-    review["submitted_at"] = "2026-10-24T03:00:00Z"
-    with pytest.raises(gates.GateError, match="Missing earlier"):
-        gates.check_prior_approval(root, "base", "head", [review])
-
-
-def test_test_changes_after_approval_block(approval_history):
-    root, review, final = approval_history
-    final["test/offline/test_feature.py"] = "unapproved-tests"
-    with pytest.raises(gates.GateError):
-        gates.check_prior_approval(root, "base", "head", [review])
-
-
-def test_empty_design_cannot_be_treated_as_approval(approval_history, monkeypatch):
-    root, review, _ = approval_history
-    monkeypatch.setattr(gates, "blob", lambda root, ref, path: "")
-    with pytest.raises(gates.GateError, match="nonempty approved design"):
-        gates.check_prior_approval(root, "base", "head", [review])
-
-
-def test_self_approval_and_bots_are_not_trusted():
-    client = gates.GitHub("owner/repo", "not-a-real-token")
-    assert not client.trusted({"user": {"login": "author", "type": "User"}}, "author")
-    assert not client.trusted({"user": {"login": "bot", "type": "Bot"}}, "author")
-
-
-@pytest.fixture
-def review_context(tmp_path, monkeypatch):
-    client = gates.GitHub("owner/repo", "synthetic-token")
-    request = {"head": {"sha": "head"}, "base": {"sha": "base"}, "user": {"login": "author"}}
-    reviews = [{"state": "APPROVED", "commit_id": "head", "body": "[governance-approved]",
-                "user": {"login": "reviewer", "type": "User"}}]
-    monkeypatch.setattr(client, "get", lambda route: request if route == "pulls/1" else {"permission": "write"})
-    monkeypatch.setattr(client, "reviews", lambda number: reviews)
-    monkeypatch.setattr(gates, "changes", lambda *args: {".github/workflows/ci.yml"})
-    monkeypatch.setattr(gates, "runtime_changes", lambda *args: set())
-    return tmp_path, client, reviews
-
-
-def test_governance_review_binds_the_current_head(review_context):
-    root, client, _ = review_context
-    gates.check_pull_request(root, "base", "head", 1, client)
-
-
-def test_governance_review_on_an_old_head_blocks(review_context):
-    root, client, reviews = review_context
-    reviews[0]["commit_id"] = "old-head"
-    with pytest.raises(gates.GateError, match="Current head"):
-        gates.check_pull_request(root, "base", "head", 1, client)
-
-
-def test_outstanding_request_for_changes_blocks(review_context):
-    root, client, reviews = review_context
-    reviews.append({**reviews[0], "state": "CHANGES_REQUESTED"})
-    with pytest.raises(gates.GateError, match="still requests"):
-        gates.check_pull_request(root, "base", "head", 1, client)
-
-
-@pytest.mark.parametrize("has_adr", [False, True])
-def test_safety_review_also_requires_accompanying_adr(review_context, monkeypatch, has_adr):
-    root, client, reviews = review_context
-    reviews[0]["body"] = "[safety-approved]"
-    adr = "docs/architecture/adr/002-fixture.md"
-    monkeypatch.setattr(gates, "runtime_changes", lambda *args: {"src/new.py"})
-    monkeypatch.setattr(gates, "check_prior_approval", lambda *args: None)
-    monkeypatch.setattr(gates, "changes", lambda *args: {"src/new.py", adr} if has_adr else {"src/new.py"})
-    monkeypatch.setattr(gates, "tree", lambda *args: {adr: "fixture"})
-    monkeypatch.setattr(gates, "blob", lambda *args: "# Context\n# Decision\n# Consequences\n" + "fixture " * 30)
-    if has_adr:
-        gates.check_pull_request(root, "base", "head", 1, client)
-    else:
-        with pytest.raises(gates.GateError, match="accompanying ADR"):
-            gates.check_pull_request(root, "base", "head", 1, client)
-
-
-def test_read_only_collaborator_cannot_approve(review_context, monkeypatch):
-    _, client, reviews = review_context
-    monkeypatch.setattr(client, "get", lambda route: {"permission": "read"})
-    assert not client.trusted(reviews[0], "author")
-
-
-def test_github_api_url_is_not_user_controlled():
-    with pytest.raises(gates.GateError, match="Invalid GitHub"):
-        gates.GitHub("https://untrusted.example", "fixture")
-
-
-def test_prompt_change_without_approved_evaluation_blocks(tmp_path, monkeypatch):
+@pytest.mark.parametrize("policy", [
+    "[tool.tradingagents.ci]\n", "[tool.tradingagents.ci]\nsemantic_evaluation = {}\n",
+])
+def test_unconfigured_semantic_evaluation_is_explicitly_unrun(tmp_path, monkeypatch, capsys, policy):
+    """ADR-012 / REQ-WEB-026: optional absence is not model-quality evidence."""
     monkeypatch.setattr(gates, "semantic_needed", lambda *args: True)
-    monkeypatch.setattr(gates, "blob", lambda *args: "[tool.tradingagents.ci]\nsemantic_evaluation = {}\n")
-    with pytest.raises(gates.GateError, match="no base-approved"):
+    monkeypatch.setattr(gates, "blob", lambda *args: policy)
+    monkeypatch.setattr(gates.subprocess, "run", lambda *args, **kwargs: pytest.fail("No evaluator is configured"))
+    assert gates.check_semantic(tmp_path, "base", "head") is False
+    output = capsys.readouterr().out
+    assert "::notice" in output and "NOT RUN" in output
+    assert "not a model-quality pass" in output
+    assert "PASS:" not in output
+
+
+def test_semantic_command_does_not_report_unrun_evaluation_as_pass(monkeypatch, capsys):
+    """ADR-012 / REQ-WEB-026: the CLI preserves the NOT RUN outcome."""
+    monkeypatch.setattr(gates.sys, "argv", ["ci_gates", "semantic", "--base", "base"])
+    monkeypatch.setattr(gates, "git", lambda *args: "fixture-commit")
+    monkeypatch.setattr(gates, "semantic_needed", lambda *args: True)
+    monkeypatch.setattr(gates, "blob", lambda *args: "[tool.tradingagents.ci]\n")
+    assert gates.main() == 0
+    output = capsys.readouterr().out
+    assert "NOT RUN" in output
+    assert "PASS:" not in output
+
+
+def test_semantic_evaluation_is_not_required_without_model_changes(tmp_path, monkeypatch, capsys):
+    """ADR-012 / REQ-WEB-026: unrelated changes do not invoke an evaluator."""
+    monkeypatch.setattr(gates, "semantic_needed", lambda *args: False)
+    monkeypatch.setattr(gates, "blob", lambda *args: pytest.fail("No policy read needed"))
+    assert gates.check_semantic(tmp_path, "base", "head") is False
+    assert "NOT REQUIRED" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("policy", [
+    '[tool.tradingagents.ci.semantic_evaluation]\nevaluator = "test/evaluator.py"\n',
+    '[tool.tradingagents.ci]\nsemantic_evaluation = "disabled"\n',
+    '[tool.tradingagents.ci.semantic_evaluation]\nevaluator = 3\ndataset = "test/data.json"\n'
+    '[tool.tradingagents.ci.semantic_evaluation.thresholds.quality]\ncomparison = "gte"\nthreshold = 0.9\n',
+])
+def test_partially_configured_or_invalid_semantic_policy_still_blocks(tmp_path, monkeypatch, policy):
+    """ADR-012 / REQ-WEB-026: only absent/empty policy is optional; errors block."""
+    monkeypatch.setattr(gates, "semantic_needed", lambda *args: True)
+    monkeypatch.setattr(gates, "blob", lambda *args: policy)
+    with pytest.raises(gates.GateError, match="semantic|Semantic"):
         gates.check_semantic(tmp_path, "base", "head")
 
 
 @pytest.mark.parametrize("score,success", [(1.0, True), (0.4, False)])
 def test_semantic_replay_applies_fixed_dataset_and_threshold(tmp_path, monkeypatch, score, success):
+    """ADR-012 / REQ-WEB-026: configured quality failures remain blocking."""
     monkeypatch.setattr(gates, "semantic_needed", lambda *args: True)
     policy = '''[tool.tradingagents.ci.semantic_evaluation]
 evaluator = "test/evaluator.py"
@@ -343,10 +303,53 @@ Path(a.output).write_text(json.dumps({{'dataset_sha256':hashlib.sha256(data).hex
     values = {"pyproject.toml": policy, "test/evaluator.py": evaluator, "test/dataset.json": '[{"fixture": true}]'}
     monkeypatch.setattr(gates, "blob", lambda root, ref, path: values[path])
     if success:
-        gates.check_semantic(tmp_path, "base", "head")
+        assert gates.check_semantic(tmp_path, "base", "head") is True
     else:
         with pytest.raises(gates.GateError, match="threshold"):
             gates.check_semantic(tmp_path, "base", "head")
+
+
+@pytest.mark.parametrize("failure", ["evaluator_changed", "dataset_changed", "process_failed",
+                                      "report_missing", "wrong_dataset", "nonfinite_metric"])
+def test_configured_semantic_evaluation_retains_failure_boundaries(tmp_path, monkeypatch, failure):
+    """ADR-012 / REQ-WEB-026: optional setup cannot waive configured evidence."""
+    monkeypatch.setattr(gates, "semantic_needed", lambda *args: True)
+    policy = '''[tool.tradingagents.ci.semantic_evaluation]
+evaluator = "test/evaluator.py"
+dataset = "test/dataset.json"
+[tool.tradingagents.ci.semantic_evaluation.thresholds.quality]
+comparison = "gte"
+threshold = 0.9
+'''
+    dataset = '[{"fixture": true}]'
+    values = {"pyproject.toml": policy, "test/evaluator.py": "# fixed evaluator", "test/dataset.json": dataset}
+
+    def read_blob(root, ref, path):
+        if ref == "head" and path == {"evaluator_changed": "test/evaluator.py",
+                                      "dataset_changed": "test/dataset.json"}.get(failure):
+            return values[path] + "\n"
+        return values[path]
+
+    def evaluate(command, **kwargs):
+        if failure.endswith("_changed"):
+            pytest.fail("Changed evaluation fixtures must be rejected before execution")
+        assert not any("API_KEY" in name for name in kwargs["env"])
+        assert "disable_socket" in command[2]
+        if failure not in {"process_failed", "report_missing"}:
+            report = {"dataset_sha256": hashlib.sha256(dataset.encode()).hexdigest(),
+                      "sample_count": 1, "metrics": {"quality": 1.0}}
+            if failure == "wrong_dataset":
+                report["sample_count"] = 2
+            else:
+                report["metrics"]["quality"] = float("nan")
+            Path(command[-1]).write_text(json.dumps(report))
+        return subprocess.CompletedProcess(command, 1 if failure == "process_failed" else 0, "", "")
+
+    monkeypatch.setenv("PROVIDER_API_KEY", "fixture-secret")
+    monkeypatch.setattr(gates, "blob", read_blob)
+    monkeypatch.setattr(gates.subprocess, "run", evaluate)
+    with pytest.raises(gates.GateError):
+        gates.check_semantic(tmp_path, "base", "head")
 
 
 def test_transcript_export_is_complete_and_cannot_overwrite(tmp_path, monkeypatch):

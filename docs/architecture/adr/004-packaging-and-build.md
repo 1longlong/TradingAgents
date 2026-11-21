@@ -1,6 +1,6 @@
 # ADR-004: Package Boundary, Build Pipeline, and Packaging
 
-- Status: **Accepted for documentation** by the human owner on 2026-11-05. `pyproject.toml` and CI changes still require `[governance-approved]`.
+- Status: **Accepted for documentation** by the human owner on 2026-11-05. `pyproject.toml` and CI changes require human governance review. Under the 2026-11-21 revision in ADR-012-error-handling-merge-integration.md, merge reviews use GitHub branch protection without special markers.
 - Date: 2026-11-05
 - Related requirements: `REQ-WEB-026`, `REQ-WEB-009`
 - Related invariants: `INV-WEB-001`, `INV-WEB-015`

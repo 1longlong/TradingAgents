@@ -3789,3 +3789,44 @@ No live/provider/broker calls, browser rerun, separate clean-install rerun,
 Python 3.10–3.13 runtime rerun, new GitHub run or independent/human final review
 is claimed. Human prior-test/current-head and base semantic evidence remain
 open. No commit, push, merge, workflow rerun or external comment was performed.
+
+
+## CI policy simplification — 2026-11-21
+
+Scope: web-ci-policy-simple-20261121-v1, explicitly requested by the human owner.
+ADR-012-error-handling-merge-integration.md records the replacement policy and
+test strategy before implementation. Only checker/tests, workflow, the policy
+comment and existing documentation changed; no product/runtime behavior changes.
+
+- Full credential-free regression with Python sockets denied:
+  `env -i PATH="$PATH" PYTHON_DOTENV_DISABLED=1 PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q --disable-socket --allow-unix-socket -p no:cacheprovider --tb=short`:
+  **4240 passed, 3 skipped, 22 warnings, 92 subtests passed**, 44.37s.
+  Skips: no real DeepSeek key, opt-in live trading disabled, optional
+  langchain_aws absent. No live verification or model-quality pass is claimed.
+- Whole-repository Ruff: initial run found one SIM102 in the new CLI branch;
+  combined the conditional without changing outcomes, then **PASS**.
+- Scoped checker mypy (`--follow-imports=silent`, temporary cache): first run
+  found an existing unannotated dependency-inventory dictionary; added
+  `dict[str, str]`, then **PASS**, one source file. This final annotation-only
+  refinement does not change dependency inventory behavior. No second full
+  regression or new full-source type run is claimed.
+- `python -m test.ci_gates schema`: **PASS**.
+- `python scripts/validate/validate_requirements.py`: **PASS**, 43/43 required
+  artifacts valid; no likely governance-file secrets detected.
+- Actual `python -m test.ci_gates semantic --base release --head HEAD`:
+  exit **0**, explicit **NOT RUN** notice for empty base policy, no evaluator
+  execution or PASS claim. This validates optional configuration handling, not
+  model quality. `python -m test.ci_gates approval`: exit **0**, GitHub review
+  ownership notice, no approval/PASS claim and no token/API needed.
+- New negative cases retain failure for partial/invalid policy, altered
+  evaluator/dataset, failed evaluator/missing report, wrong dataset coverage,
+  nonfinite metrics and failed thresholds. Existing AI-log/schema/permission/
+  structure/transcript/dependency tests remain. Removed protocol tests belong
+  to the custom historical approval gate explicitly retired by the user.
+
+Read-only GitHub protection inspection confirmed release's native review
+protections; required status-check contexts were empty. No protection setting,
+review decision or remote CI run was changed. No dependency installation,
+frontend/product test change, credential access, live API call, commit or push.
+Historical failure records retain their original meaning; the two policy
+blockers are retired/redefined rather than falsely reported as previously met.

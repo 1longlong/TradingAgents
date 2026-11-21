@@ -2,7 +2,8 @@
 
 Contract: docs/code-governance/verification-constraints.md.
 This module inspects data and Git history; it never executes registry commands.
-Missing evidence fails closed. It does not issue human approvals.
+Configured checks fail closed. Unconfigured semantic evaluation is explicitly unrun.
+Human reviews belong to GitHub branch protection; this module never issues approval.
 """
 
 from __future__ import annotations
@@ -19,9 +20,6 @@ import re
 import subprocess
 import sys
 import tempfile
-import urllib.error
-import urllib.request
-from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -241,22 +239,6 @@ def changes(root: Path, base: str, head: str) -> set[str]:
     return {p for p in left.keys() | right.keys() if left.get(p) != right.get(p)}
 
 
-def runtime_changes(root: Path, base: str, head: str) -> set[str]:
-    result = {p for p in changes(root, base, head) if p.startswith("src/")}
-    for ref in [base, head]:
-        git(root, "rev-parse", "--verify", f"{ref}^{{commit}}")
-    docs = [tomllib.loads(blob(root, ref, "pyproject.toml")) for ref in [base, head]]
-
-    def dependencies(doc):
-        project = doc.get("project", {})
-        return (project.get("dependencies"), project.get("requires-python"),
-                {k: v for k, v in project.get("optional-dependencies", {}).items() if k != "dev"})
-
-    if dependencies(docs[0]) != dependencies(docs[1]):
-        result.add("pyproject.toml")
-    return result
-
-
 def check_ai_log(root: Path, base: str, head: str) -> None:
     changed = changes(root, base, head)
     covered = {p for p in changed if p.startswith(("src/", "test/", "prompts/", ".github/"))
@@ -297,110 +279,10 @@ def check_ai_log(root: Path, base: str, head: str) -> None:
         raise GateError(f"New AI-use entries do not cover: {sorted(covered - paths)}")
 
 
-class GitHub:
-    """Read-only review metadata. Never accept local approval files as authority."""
-
-    def __init__(self, repository: str, token: str):
-        if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
-            raise GateError("Invalid GitHub repository")
-        self.repository = repository
-        self.token = token
-
-    def get(self, route):
-        request = urllib.request.Request(
-            f"https://api.github.com/repos/{self.repository}/{route}",
-            headers={"Accept": "application/vnd.github+json", "Authorization": f"Bearer {self.token}",
-                     "User-Agent": "TradingAgents-governance"},
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=30) as response:
-                return json.load(response)
-        except (urllib.error.URLError, ValueError) as exc:
-            raise GateError(f"GitHub review metadata unavailable: {type(exc).__name__}") from exc
-
-    def reviews(self, number: int):
-        records = []
-        for page in range(1, 101):
-            batch = self.get(f"pulls/{number}/reviews?per_page=100&page={page}")
-            records.extend(batch)
-            if len(batch) < 100:
-                return records
-        raise GateError("Review pagination limit exceeded")
-
-    def trusted(self, review: dict, author: str) -> bool:
-        user = review.get("user", {})
-        login = user.get("login", "")
-        if user.get("type") != "User" or login.lower() == author.lower():
-            return False
-        permission = self.get(f"collaborators/{login}/permission").get("permission")
-        return permission in {"admin", "maintain", "write"}
-
-
-def is_ancestor(root: Path, earlier: str, later: str) -> bool:
-    return subprocess.run(["git", "merge-base", "--is-ancestor", earlier, later],
-                          cwd=root, capture_output=True, check=False).returncode == 0
-
-
-def check_prior_approval(root: Path, base: str, head: str, reviews: list[dict]) -> None:
-    """Bind an earlier test-only reviewed tree to unchanged final test contents."""
-    if not runtime_changes(root, base, head):
-        return
-    current = tree(root, head)
-    for path in ["docs/req/requirements.yaml", "architecture-blueprint.md"]:
-        if path not in current or not blob(root, head, path).strip():
-            raise GateError(f"Product implementation needs a nonempty approved design artifact: {path}")
-    bound = {p: h for p, h in current.items() if p.startswith("test/") or
-             p in {"docs/req/requirements.yaml", "architecture-blueprint.md"}}
-    for review in reviews:
-        reviewed = review.get("commit_id", "")
-        # A dedicated COMMENTED plan review survives automatic dismissal of
-        # stale code approvals. It approves tests, not the final code merge.
-        if review.get("state") not in {"COMMENTED", "APPROVED"} or "[test-plan-approved]" not in review.get("body", ""):
-            continue
-        if not reviewed or not is_ancestor(root, reviewed, head):
-            continue
-        if runtime_changes(root, base, reviewed):
-            continue
-        snapshot = tree(root, reviewed)
-        if {p: h for p, h in snapshot.items() if p in bound or p.startswith("test/")} != bound:
-            continue
-        commits = git(root, "rev-list", "--reverse", f"{reviewed}..{head}").splitlines()
-        first = next((c for c in commits if runtime_changes(root, base, c)), None)
-        if first:
-            implementation_time = datetime.fromisoformat(git(root, "show", "-s", "--format=%cI", first).strip())
-            approval_time = datetime.fromisoformat(review["submitted_at"].replace("Z", "+00:00"))
-            if approval_time < implementation_time:
-                return
-    raise GateError("Missing earlier human [test-plan-approved] review of unchanged tests/requirements/plan, before product implementation")
-
-
-def check_pull_request(root: Path, base: str, head: str, number: int, client: GitHub) -> None:
-    request = client.get(f"pulls/{number}")
-    if request["head"]["sha"] != head or request["base"]["sha"] != base:
-        raise GateError("PR changed while checking reviews; rerun at its current base/head")
-    reviews = [r for r in client.reviews(number) if client.trusted(r, request["user"]["login"])]
-    latest = {}
-    for review in reviews:
-        if review["state"] in {"APPROVED", "CHANGES_REQUESTED", "DISMISSED"}:
-            latest[review["user"]["login"]] = review
-    if any(r["state"] == "CHANGES_REQUESTED" for r in latest.values()):
-        raise GateError("A trusted reviewer still requests changes")
-    check_prior_approval(root, base, head, reviews)
-    changed = changes(root, base, head)
-    safety = runtime_changes(root, base, head)
-    controls = any(p.startswith((".github/", ".agent/", ".opencode/")) or p in
-                   {"AGENTS.md", "Prompt.md", "test/ci_gates.py", "pyproject.toml", "docs/req/req-schema.json"}
-                   for p in changed)
-    for required, marker in [(bool(safety), "[safety-approved]"), (controls, "[governance-approved]")]:
-        if required and not any(r["state"] == "APPROVED" and r["commit_id"] == head and
-                                marker in r.get("body", "") for r in latest.values()):
-            raise GateError(f"Current head needs a human {marker} approval")
-    if safety:
-        adrs = [p for p in changed if p.startswith("docs/architecture/adr/") and p.endswith(".md")]
-        if not any(len(blob(root, head, p).strip()) >= 100 and all(
-                heading in blob(root, head, p) for heading in ["Context", "Decision", "Consequences"])
-                for p in adrs if p in tree(root, head)):
-            raise GateError("Safety-relevant changes need an accompanying ADR with Context, Decision, and Consequences")
+def review_notice() -> None:
+    """ADR-012: human merge approval belongs to GitHub branch protection."""
+    print("Human review is handled by GitHub branch protection. "
+          "This command does not issue or verify an approval; no special markers are required.")
 
 
 def semantic_needed(root: Path, base: str, head: str) -> bool:
@@ -421,15 +303,24 @@ def semantic_needed(root: Path, base: str, head: str) -> bool:
     return False
 
 
-def check_semantic(root: Path, base: str, head: str) -> None:
+def check_semantic(root: Path, base: str, head: str) -> bool:
     """Replay an evaluator and dataset approved on the base, with Python sockets disabled."""
     if not semantic_needed(root, base, head):
-        print("Semantic evaluation: no runtime prompt/model change")
-        return
+        print("Semantic evaluation: NOT REQUIRED (no runtime prompt/model change)")
+        return False
     policy = tomllib.loads(blob(root, base, "pyproject.toml")).get("tool", {}).get(
         "tradingagents", {}).get("ci", {}).get("semantic_evaluation", {})
+    if not isinstance(policy, dict):
+        raise GateError("Semantic evaluation policy must be a table")
+    if not policy:
+        print("::notice title=Semantic evaluation::NOT RUN: no evaluator, fixed dataset "
+              "or thresholds configured on the base. This is not a model-quality pass.")
+        return False
     if not all(policy.get(k) for k in ["evaluator", "dataset", "thresholds"]):
-        raise GateError("Prompt/model change blocked: no base-approved evaluator, fixed dataset, and thresholds")
+        raise GateError("Incomplete semantic policy: configure evaluator, dataset and thresholds")
+    if (not isinstance(policy["evaluator"], str) or not isinstance(policy["dataset"], str)
+            or not isinstance(policy["thresholds"], dict)):
+        raise GateError("Invalid semantic evaluator, dataset or thresholds")
     approved = {}
     for key in ["evaluator", "dataset"]:
         path = policy[key]
@@ -473,6 +364,7 @@ def check_semantic(root: Path, base: str, head: str) -> None:
                 not isinstance(expected, (int, float)) or not math.isfinite(expected) or
                 comparison is None or not comparison(actual, expected)):
             raise GateError(f"Semantic threshold failed or missing: {metric}")
+    return True
 
 
 def export_transcript(root: Path, session: str, destination: str) -> None:
@@ -507,7 +399,7 @@ def export_transcript(root: Path, session: str, destination: str) -> None:
 
 def audit_pins(distributions) -> list[str]:
     """Audit exact installed dependency versions, excluding this application."""
-    versions = {}
+    versions: dict[str, str] = {}
     for distribution in distributions:
         name = distribution.metadata["Name"]
         version = distribution.version
@@ -563,6 +455,9 @@ def main() -> int:
             structural_checks(root)
         elif args.gate == "dependencies":
             audit_dependencies()
+        elif args.gate == "approval":
+            review_notice()
+            return 0
         elif args.gate == "transcript":
             if not args.session or not args.output:
                 raise GateError("Transcript export needs --session and --output")
@@ -575,18 +470,8 @@ def main() -> int:
             args.head = git(root, "rev-parse", "--verify", "--end-of-options", f"{args.head}^{{commit}}").strip()
             if args.gate == "ai-log":
                 check_ai_log(root, args.base, args.head)
-            elif args.gate == "semantic":
-                check_semantic(root, args.base, args.head)
-            else:
-                event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())
-                request = event.get("pull_request")
-                if not request:
-                    # The workflow reports branch-checks, never blocking-gate,
-                    # outside PR/review events. This is not merge approval.
-                    print("No PR approval context: branch checks only; require the PR blocking-gate before merge")
-                else:
-                    client = GitHub(os.environ["GITHUB_REPOSITORY"], os.environ["GITHUB_TOKEN"])
-                    check_pull_request(root, args.base, args.head, request["number"], client)
+            elif args.gate == "semantic" and not check_semantic(root, args.base, args.head):
+                return 0
         print(f"PASS: {args.gate}")
         return 0
     except (GateError, OSError, ValueError, KeyError, TypeError, subprocess.TimeoutExpired) as exc:

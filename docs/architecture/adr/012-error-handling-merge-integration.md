@@ -139,3 +139,52 @@ current environment. Explicit hardened parsing avoids suppressing B314 or
 building another XML parser. The user-authorized complete security repair
 covers this necessary dependency declaration; no separate release or platform
 approval is inferred. Existing API/data semantics and tests stay authoritative.
+
+
+## Simplify CI review and evaluation policy — 2026-11-21
+
+Scope: web-ci-policy-simple-20261121-v1. The user explicitly asked to make the
+two overly strict gates simpler after their failure modes were explained. This
+authorizes a policy/test change, not fabricated historic approvals or quality
+results. Existing implementation and business-safety acceptance remain unchanged.
+
+Context: duplicated custom chronology/marker checks cannot recover approvals
+that were never made on early test-only commits. Read-only GitHub inspection
+confirms release already requires one approval, stale-review dismissal,
+code-owner review and last-push approval with administrator enforcement. Remote
+required-status contexts were empty at inspection; this change does not configure
+branch protection or claim CI is remotely required. The empty semantic policy
+has never supplied a reviewed evaluator, dataset or numeric thresholds.
+
+Decisions:
+- GitHub branch protection owns human merge reviews. Remove custom checks for
+  prior test-only commit chronology and special review markers from CI; keep
+  planning, authentic review records and required safety ADRs as human process.
+  The approval CLI remains a compatibility notice only and never issues approval.
+- Keep meaningful AI-use coverage as a blocking job, with a read-only content
+  permission and no review API/token requirement. Keep all automatic regression,
+  schema, structure, type, dependency and security checks and the aggregate.
+- An absent/empty base semantic policy is optional: emit an explicit NOT RUN
+  notice and exit zero without executing an evaluator or claiming evaluation
+  passed. A partial/invalid policy still blocks. Once configured on the base,
+  keep immutable evaluator/dataset, exact dataset coverage, credential filtering,
+  socket isolation and quality thresholds; failures remain blocking. Do not
+  introduce a continue-on-error flag, dummy evaluation or scope exemptions.
+
+Allowlist: test/ci_gates.py, test/offline/test_ci_gates.py, existing workflow,
+pyproject policy comment, AGENTS CI description, README and existing governance/
+architecture/review/AI-use/evaluation/debt records. No product runtime, dependency
+installation, permission widening, remote protection update or Git publication.
+
+Test strategy: replace retired chronology/marker assertions with checks that
+human review is delegated explicitly, no review API/token or automatic approval
+is used, and the workflow retains meaningful AI logging and all aggregate
+prerequisites. Test absent/empty policy produces NOT RUN without a subprocess;
+malformed/partial policy fails; configured passing/failing thresholds, changed
+fixtures and evaluator/report failures still block as appropriate. Run full
+isolated regression once after edits plus Ruff/schema and scoped type checks.
+
+Consequences: CI reflects executable automatic checks instead of impossible
+historical metadata. Human merge review remains on GitHub and is not claimed by
+a green CI result. Unconfigured evaluation is visibly unrun, not model-quality
+proof. Prior recorded failures and approvals retain their historical truth.

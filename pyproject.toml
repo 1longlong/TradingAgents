@@ -112,5 +112,5 @@ show_error_codes = true
 
 [tool.tradingagents.ci]
 # Runtime evaluation must be approved on the PR base before a prompt/model change.
-# No evaluator, fixed dataset, or quality thresholds have been approved yet.
+# Empty policy reports NOT RUN without blocking; configured failures still block.
 semantic_evaluation = {}

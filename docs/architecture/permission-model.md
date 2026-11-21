@@ -1,6 +1,6 @@
 # TradingAgents WebUI Permission Model
 
-Status: **Approved for documentation by the human owner on 2026-11-05.** Implementation still requires `[safety-approved]` and `[governance-approved]` where applicable. This document defines the WebUI runtime permission boundary and its relationship to the coding-agent roles.
+Status: **Approved for documentation by the human owner on 2026-11-05.** Implementation still requires human review of applicable safety/governance changes. Under the 2026-11-21 CI policy revision in ADR-012-error-handling-merge-integration.md, GitHub branch protection owns merge approval; special review markers are not required. This document defines the WebUI runtime permission boundary and its relationship to the coding-agent roles. Runtime permissions are unchanged by that CI revision.
 
 ## 1. Scope
 

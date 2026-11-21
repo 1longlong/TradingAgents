@@ -6,6 +6,8 @@ Humans must approve the iteration plan and test strategy before product implemen
 
 Only humans issue approval decisions. Changes to approved requirements, interfaces, safety boundaries, or test standards require a revision and approval of the affected scope. Do not request the same valid approval again.
 
+Plan/test agreement is a development process requirement and can be recorded in the actual conversation or review memo. CI does not require a test-only commit, special review markers, or reconstruct historical approval chronology. GitHub branch protection owns human merge review, as revised in ADR-012-error-handling-merge-integration.md on 2026-11-21. This policy supersedes contradictory review-marker requirements in historical records below.
+
 ## 2. Three verification tiers
 
 | Tier | Required checks | Decision |
@@ -77,26 +79,28 @@ rejects unsupported validation keywords; it never runs registry commands.
 
 | Gate | Required before merge |
 | --- | --- |
-| Prior test approval | Verifiable test approval predates implementation and covers the current change version |
+| Human merge review | GitHub branch protection enforces human approval; CI does not duplicate review history or special-marker checks |
 | Static analysis | Lint, type, and dependency checks on every commit; contract, security, API-surface, and permission checks on safety-relevant pull requests |
 | Schema | YAML passes the schema and necessary semantic checks |
-| Semantic evaluation | Every prompt/model change replays the same fixed evaluation set against approved quality/safety thresholds; failures block release |
+| Semantic evaluation | For prompt/model changes, absent/empty base policy reports NOT RUN; invalid/partial policies and configured evaluation failures block |
 | Regression | All previous suites pass with zero regressions |
 | AI-use log | Code/prompt changes update `docs/ai-use-log.yaml` meaningfully; touching its timestamp is insufficient |
 
-`.github/workflows/ci.yml` now runs on pushes to all branches, PR updates, review submissions/edits/dismissals, and manual dispatch. The `blocking-gate` aggregation fails if any prerequisite fails, is cancelled, or is skipped. No `continue-on-error` or automatic baseline waiver is used. A read-only GitHub token is limited to the review-check step; provider credentials are not exposed to PR code, and `pull_request_target` is not used.
+`.github/workflows/ci.yml` runs on pushes to all branches, PR updates, review submissions/edits/dismissals, and manual dispatch. The `blocking-gate` aggregation fails if any prerequisite fails, is cancelled, or is skipped. No `continue-on-error` or automatic baseline waiver is used. Unconfigured semantic evaluation completes its job with an explicit NOT RUN notice, not a model-quality pass. The former review API step and its `pull-requests: read` permission are removed; provider credentials are not exposed to PR code, and `pull_request_target` is not used.
 
 Only PR/review events publish the merge-required `blocking-gate` status. Push and manual events report `branch-checks` and do not claim PR approval, so their results cannot satisfy the required merge gate or overwrite its review verdict. Require only the PR aggregation as the stable merge check.
 
 Configure branch protection/rulesets separately to require `blocking-gate`, human PR review, and stale-review dismissal on every integration branch. Do not permit direct pushes or reviewer bypass for protected safety/governance changes. Protect workflow/checker modifications through human review. No remote setting is implied by a local YAML file, and merge-queue integration is not configured.
 
-Review markers, identity checks, chronology binding, first-adoption limits, and final-head approval rules are defined in `docs/review-memo.md`. Git timestamps cannot prove when private work began. Public API/contract compatibility is checked by the fixed contract suite and full regression; safety changes require an ADR and current-head review, not an invented claim of complete automatic API-surface equivalence.
+Use ordinary GitHub reviews under the configured branch protection instead of special markers or CI chronology checks. The current protocol and historical records are in `docs/review-memo.md`. Public API/contract compatibility is checked by the fixed contract suite and full regression; safety changes require an ADR and human review, not an invented claim of complete automatic API-surface equivalence. The compatibility `approval` command prints this ownership notice only; exit status zero is not approval evidence.
 
-AI-use records must add a new meaningful entry covering the exact changed code/prompt/tooling paths. Existing entries or a timestamp-only edit are insufficient. Review and log checks compare canonical source paths so the approved mechanical root-to-src relocation is not mistaken for a new product implementation.
+AI-use records must add a new meaningful entry covering the exact changed code/prompt/tooling paths. Existing entries or a timestamp-only edit are insufficient. Log checks compare canonical source paths so the approved mechanical root-to-src relocation is not mistaken for a new product implementation.
 
 For runtime prompt/model changes, the semantic gate reads `[tool.tradingagents.ci.semantic_evaluation]` from the PR base. That approved policy must specify `evaluator`, `dataset`, and numeric `thresholds`. The evaluator and dataset must already exist unchanged on that base. The evaluator runs against candidate `src/`, outside the checkout, with Python socket calls disabled and credential-like environment variables removed. A fresh report must contain the exact dataset SHA-256, sample count, and every required metric.
 
-The approved evaluator accepts `--dataset PATH --output PATH`; its dataset is a nonempty JSON list. Its JSON report contains `dataset_sha256`, `sample_count`, and `metrics`. Thresholds specify `comparison` (`eq`, `lte`, `gte`) and a finite numeric `threshold`. Missing evaluators, altered datasets, empty reports, nonfinite metrics, and failed thresholds block the change. No real semantic evaluator or product quality thresholds have been invented during preparation; the policy remains empty and such changes will be blocked until a separately reviewed policy is established. Fixed prompt-contract tests are additional checks, not a substitute for model-quality evaluation.
+An absent or empty base policy reports NOT RUN without blocking. A partial or invalid policy blocks; changes without runtime prompt/model impact report NOT REQUIRED. No real semantic evaluator or product quality thresholds have been invented, and the current policy remains empty. Establish a real evaluator and dataset in a separately reviewed base change before relying on model-quality evaluation.
+
+The configured evaluator accepts `--dataset PATH --output PATH`; its dataset is a nonempty JSON list. Its JSON report contains `dataset_sha256`, `sample_count`, and `metrics`. Thresholds specify `comparison` (`eq`, `lte`, `gte`) and a finite numeric `threshold`. Configured but missing evaluators, altered datasets, empty reports, nonfinite metrics, and failed thresholds still block the change. Candidate policy edits cannot disable evaluation already configured on the base. Fixed prompt-contract tests are additional checks, not a substitute for model-quality evaluation.
 
 ## 7. Baseline failures and honest reporting
 

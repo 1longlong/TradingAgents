@@ -4234,3 +4234,51 @@ entries:
     discussion comment.
   - Actual commit/push/PR outcomes are reported in the current conversation after execution; this entry
     does not predeclare their success or a passing remote CI run.
+
+- id: AI-20261121-CI-POLICY-SIMPLE-001
+  date: '2026-11-21'
+  tool: OpenCode
+  purpose: Simplify duplicate human-review and unconfigured semantic-evaluation CI gates at the user's explicit request.
+  source: Current conversation requesting simpler rules for the two remaining CI blockers.
+  human_review: Policy/test revision explicitly authorized by the human owner; no independent final review or platform approval is claimed.
+  paths:
+  - .github/workflows/ci.yml
+  - AGENTS.md
+  - README.md
+  - architecture-blueprint.md
+  - pyproject.toml
+  - test/ci_gates.py
+  - test/offline/test_ci_gates.py
+  - docs/architecture/adr/001-choice.md
+  - docs/architecture/adr/004-packaging-and-build.md
+  - docs/architecture/adr/006-security-and-permission-boundary.md
+  - docs/architecture/adr/012-error-handling-merge-integration.md
+  - docs/architecture/permission-model.md
+  - docs/architecture/trace-matrix.md
+  - docs/architecture/evaluation-logbook.md
+  - docs/code-governance/ci-gate-matrix.md
+  - docs/code-governance/verification-constraints.md
+  - docs/review-memo.md
+  - docs/debt-register.md
+  - docs/ai-use-log.yaml
+  notes:
+  - GitHub branch protection owns ordinary human merge reviews. Remove duplicate custom review markers/chronology and the review API step; preserve manual plan agreement, real records and safety ADRs.
+  - Meaningful AI-use coverage remains blocking. Absent/empty base semantic policy reports NOT RUN without claiming a quality pass; partial/invalid setup and configured failures remain blocking.
+  - Replace obsolete protocol tests with positive/negative checks for the new authorized policy, configured evaluator integrity/failures and retained aggregate prerequisites. No runtime business code or acceptance threshold is changed.
+  - Existing tests, schema, type/security/dependency checks and aggregate remain. No continue-on-error, fake reviewer, dummy evaluation or retrospective approval is introduced.
+  - Read-only GitHub inspection confirmed native release review protections and empty required-status contexts; no remote setting is modified.
+  - Verification results are recorded after execution in the evaluation logbook. No new dependency, credential access, live API call, commit, push or merge is authorized by this policy scope.
+  - 'Executed final isolated regression: 4240 passed, 3 skipped, 22 warnings, 92 subtests, 44.37s. Ruff, checker-scoped mypy and both requirements validators pass after recorded lint/annotation corrections. Actual semantic and approval commands issue NOT RUN/ownership notices with exit zero, without quality or approval claims.'
+
+- id: AI-20261121-CI-POLICY-PUBLISH-001
+  date: '2026-11-21'
+  tool: OpenCode
+  purpose: Commit and publish the verified CI policy simplification and update the existing release PR.
+  source: Current user instruction to commit, push and submit a PR.
+  human_review: Publication explicitly authorized; no human merge approval or remote passing CI result is claimed.
+  paths:
+  - docs/ai-use-log.yaml
+  - docs/review-memo.md
+  notes:
+  - Reuse open PR 7 from feature/webui to release, preserving its complete feature scope and updating the review/evaluation policy and actual validation evidence.
+  - No new product code, dependency, repeated full suite, force push, merge, review approval or remote protection change is introduced for publication.

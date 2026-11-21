@@ -26,15 +26,15 @@ For each real PR, append its URL, base/head commits, reviewer identity, review t
 
 ## GitHub review protocol
 
-Use a tests/design-only PR commit before product implementation. After reviewing the exact tests, requirements, and nonempty blueprint, a human collaborator with write/maintain/admin permission submits a `COMMENTED` review containing an explicit `[test-plan-approved]` decision. This dedicated test-plan decision is separate from merge approval and survives automatic dismissal of stale code approvals. An undismissed `APPROVED` review with the marker also qualifies, but is unsuitable for durable plan evidence when stale-review dismissal is enabled. Preserve that commit in history. Product implementation commits follow the plan decision; the bound tests, requirements, and blueprint must remain unchanged. A changed test/plan needs a new approved test-only revision before dependent implementation. Remove the marker to revoke the plan decision; dismissed reviews do not qualify.
+Current policy, revised 2026-11-21 in ADR-012-error-handling-merge-integration.md: use ordinary human GitHub reviews and the repository's native branch protection. CI no longer requires special approval markers, a tests/design-only commit, or retrospective reconstruction of approval chronology. The compatibility `approval` command only explains this ownership and does not certify review.
 
-For safety-relevant changes, update an ADR with `Context`, `Decision`, and `Consequences`, then obtain a human `[safety-approved]` approval on the final head. Changes to CI, permission/rule files, gate code, schema, or developer configuration need `[governance-approved]` on the final head. One real approval may contain both markers when the reviewer has assessed both scopes. Self-approval and bots do not qualify; an outstanding trusted request for changes blocks.
+Continue to agree on iteration plans and tests, record authentic decisions and their scope, and update an ADR for safety-relevant changes. Reviewers assess safety and governance changes as part of their normal PR review. Never invent reviewer identities, timestamps, approvals, or model-quality evidence.
 
-The gate verifies Git ancestry, exact reviewed content, server review records, and recorded commit chronology. It cannot prove when private or uncommitted coding began; Git timestamps and editable review bodies are not tamper-proof attestations. Trusted reviewers must submit plan markers before implementation rather than adding them retrospectively. Human oversight and protected branches remain necessary. Do not forge timestamps or review markers.
+A read-only protection check on 2026-11-21 confirmed one required approving review, code-owner review, stale-review dismissal, last-push approval and administrator enforcement on `release`. Required status-check contexts were empty; `blocking-gate` is not proven required by that configuration. No remote setting was changed. Dated records below describe the policy and evidence at their recorded time; obsolete marker/chronology requirements are historical, not current instructions.
 
 ## First CI adoption
 
-The existing base branch does not contain these new checks. Their first introduction requires explicit human inspection of the workflow and checker themselves. Subsequent changes are also protected by current-head governance review. This repository cannot protect its own unmerged workflow from every hostile edit; require the stable `blocking-gate` check and human review through GitHub rulesets/branch protection before relying on enforcement.
+Workflow and checker changes require human inspection through normal PR review. This repository cannot protect its own unmerged workflow from every hostile edit; require the stable `blocking-gate` check and human review through GitHub rulesets/branch protection before relying on enforcement. The former special-marker protocol is retired, not retrospectively satisfied.
 
 ## Local verification evidence — 2026-10-24
 
@@ -2609,3 +2609,40 @@ normal push and current scope/evidence. This authorizes publication of the
 completed working tree, not a force push, gate bypass, approval, merge or
 fabricated CI result. The earlier no-publication statements describe their
 original implementation phases and are superseded only for this Git action.
+
+
+## CI policy simplification authorization — 2026-11-21
+
+The current user requested simplifying the prior-review and semantic gates.
+web-ci-policy-simple-20261121-v1 and ADR-012 record the concrete replacement:
+native GitHub reviews, blocking AI-use coverage, optional explicitly unrun empty
+semantic policy, and unchanged enforcement of configured semantic evaluations.
+This is direct authority to change these CI policies and their tests, not an
+independent test-file review, final approval or permission to forge missing
+history. Existing role/path and business-safety rules remain. No commit, push,
+merge or remote-protection change is authorized by this implementation request.
+
+Implementation evidence: the custom review API/chronology/marker checker is
+removed; the compatibility approval command issues an ownership notice only.
+The workflow retains blocking AI-use coverage and all automatic prerequisites.
+Absent/empty semantic policy reports NOT RUN; configured policy errors and
+quality failures still block. Active documentation is synchronized, while dated
+history remains historical.
+
+Final isolated regression: 4240 passed, 3 skipped, 22 warnings, 92 subtests,
+44.37s. Ruff, checker-scoped mypy and both requirements validators pass after
+the recorded lint/annotation corrections. Actual semantic/approval commands
+return zero with explicit unrun/ownership notices, not quality/review passes.
+See the evaluation logbook for exact limits. Agent assessment: ready for human
+review of this policy revision; no human merge approval or remote green CI
+result is claimed. Changes remain local and uncommitted.
+
+### CI policy publication authorization — 2026-11-21
+
+The user subsequently requested commit, push and PR submission for the completed
+policy simplification. This authorizes a normal feature/webui push and updating
+the existing open PR #7 to release. Earlier no-publication statements describe
+the implementation phase; this instruction supersedes them for publication
+only. No force push, merge, reviewer approval or branch-protection change is
+authorized. Verification remains the results recorded above; remote CI outcomes
+will be reported separately after publication.

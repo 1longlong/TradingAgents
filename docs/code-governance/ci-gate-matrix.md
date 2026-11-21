@@ -1,3 +1,12 @@
+> Current policy — 2026-11-21 (ADR-012-error-handling-merge-integration.md):
+> human merge reviews belong to GitHub branch protection. Custom test-only commit
+> chronology and special approval markers are retired. Semantic evaluation with
+> an absent/empty base policy reports NOT RUN without blocking; partial/invalid
+> configuration and configured failures block. AI-use coverage, schema, static,
+> security, regression and aggregate checks remain blocking. The matrix below
+> is the imported historical design; its ACTUAL/TARGET labels do not describe
+> the current workflow. See verification-constraints.md for the active policy.
+
 > Integration note — 2026-11-19: the observations and proposals below describe
 > the imported release snapshot. The current workflow retains the WebUI
 > `blocking-gate` and adds the release governance job to its prerequisites. The

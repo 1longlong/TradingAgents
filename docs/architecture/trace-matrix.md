@@ -635,3 +635,28 @@ suite. Full mypy and Bandit scan the same complete src tree with unchanged rules
   literal SHA-256 while retaining the language-instruction call.
 
 No requirement ID/status or invariant threshold is changed by this maintenance.
+
+
+web-ci-policy-simple-20261121-v1 (ADR-012-error-handling-merge-integration.md):
+REQ-WEB-026 retains executable installation/CI checks with GitHub-owned human
+merge review. No runtime acceptance criterion or invariant threshold changes.
+`test/offline/test_ci_gates.py` covers:
+
+- `test_approval_command_delegates_to_github_without_claiming_a_review`: no
+  token, Git chronology or fabricated approval required/issued by the command.
+- `test_workflow_retains_blocking_checks_without_duplicate_review_logic`: AI
+  logging and all aggregate prerequisites remain, no continue-on-error added.
+- `test_unconfigured_semantic_evaluation_is_explicitly_unrun` and
+  `test_semantic_command_does_not_report_unrun_evaluation_as_pass`: absent/empty
+  policy returns NOT RUN without evaluator execution or a quality-pass claim.
+- `test_semantic_evaluation_is_not_required_without_model_changes`: unrelated
+  changes do not read a policy or execute evaluation.
+- `test_partially_configured_or_invalid_semantic_policy_still_blocks`,
+  `test_semantic_replay_applies_fixed_dataset_and_threshold` and
+  `test_configured_semantic_evaluation_retains_failure_boundaries`: invalid
+  setup, changed fixtures, evaluator failure/missing report, wrong dataset,
+  nonfinite metrics and failed thresholds cannot become optional success.
+
+Obsolete tests for the retired custom review-marker/chronology protocol are
+replaced under explicit human policy-change authorization. Existing schema,
+permission, structure, AI-log, transcript and dependency checks are retained.

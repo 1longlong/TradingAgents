@@ -198,3 +198,22 @@ semantic detector sees. No detector exemption, empty evaluator, fabricated
 baseline score or retrospective prior-test approval is supplied. Maintainers
 must decide the compliant integration/review path. No new broker or trading
 capability is added.
+
+
+### CI policy simplification — 2026-11-21
+
+Scope web-ci-policy-simple-20261121-v1, explicitly requested by the human owner.
+The former missing special-marker/prior-test chronology blocker is retired by
+policy, not retroactively satisfied. Human merge review remains GitHub-owned.
+An absent/empty semantic base policy is now NOT RUN without blocking; no model
+quality evidence or completed evaluation is claimed. Designing a real evaluator,
+fixed dataset and thresholds remains open work owned by maintainers. Once
+configured, replay failures remain blocking. Earlier failure records above
+remain historical, not current policy instructions.
+
+Read-only release protection inspection confirmed one required approving review,
+code-owner review, stale-review dismissal, last-push approval and administrator
+enforcement. Required status contexts were empty. Maintainers must separately
+configure the aggregate status if mandatory remote CI enforcement is desired;
+this task does not change remote protection. Local edits do not update PR #7
+until a separately authorized commit and push.

@@ -669,7 +669,7 @@ The full matrix is `docs/architecture/permission-model.md`. Summary:
 - Build output: `src/tradingagents_web/static/`; not committed.
 - Runtime entry: `tradingagents-web --port 8000` or `python -m tradingagents_web --port 8000`.
 - Uvicorn single worker; `--host` restricted to `127.0.0.1`.
-- `pyproject.toml` changes needed: `[web]` optional dependencies, `tradingagents-web` script, `package-data` for static assets. These require `[governance-approved]`.
+- `pyproject.toml` changes needed: `[web]` optional dependencies, `tradingagents-web` script, `package-data` for static assets. These require human governance review through the normal review process.
 - If `static/index.html` is missing, the server starts in API-only mode and reports a clear build instruction; it does not serve a broken UI.
 - No container, cloud, domain, TLS, or orchestration work.
 - Existing `results_dir`, `data_cache_dir`, and `memory_log_path` defaults apply. The web layer does not write `.env`.
@@ -711,13 +711,21 @@ The full matrix is `docs/architecture/permission-model.md`. Summary:
 
 ## 15. Approval gates
 
+Current CI policy (2026-11-21, ADR-012-error-handling-merge-integration.md):
+GitHub branch protection owns human merge approval. CI does not demand special
+review markers or a historical test-only commit. Plan/test agreement, safety
+ADRs and authentic decision records remain development process requirements.
+Absent/empty base semantic policy reports NOT RUN without blocking; partial or
+invalid configuration and configured evaluation failures block. A green CI run
+does not certify human approval or unrun model-quality evaluation.
+
 Before product implementation:
 
 1. Requirements registry and this blueprint reviewed; the design was approved for documentation on 2026-11-05, but the written artifacts need a review record.
-2. Test plan and concrete test nodes approved via `[test-plan-approved]` on a test-only revision.
-3. ADR-001 through ADR-007 reviewed; the new entry point needs `[safety-approved]` on the final head.
+2. Test plan and concrete test nodes reviewed and agreed with the human owner, with the scope/version recorded authentically.
+3. ADR-001 through ADR-007 reviewed; the new entry point needs human safety review.
 4. Dependency additions (`fastapi`, `uvicorn`, frontend npm packages) reviewed and approved.
-5. `pyproject.toml` and CI changes approved via `[governance-approved]`.
+5. `pyproject.toml` and CI changes receive human governance review through the normal review process.
 6. Official `python -m test.ci_gates schema`, `structure`, lint, type, dependency, and security checks run in an environment with dev dependencies.
 7. No implementation begins while a required approval or material is missing.
 
