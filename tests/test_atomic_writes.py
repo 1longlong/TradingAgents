@@ -18,8 +18,8 @@ from tradingagents.file_io import write_text_atomic
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 from tradingagents.reporting import write_report_tree
 
-OLD = "旧版本：完整内容\nline two\n"
-NEW = "新版本：中文内容 ✓\nline two\n"
+OLD = "旧版本:完整内容\nline two\n"
+NEW = "新版本:中文内容 ✓\nline two\n"
 
 
 def _temp_files(directory: Path, target: Path) -> list[Path]:
@@ -137,15 +137,15 @@ def test_first_report_write_creates_the_whole_tree(tmp_path):
 def test_report_over_write_replaces_every_file_with_utf8(tmp_path):
     write_report_tree(_report_state(), "AAPL", tmp_path)
     out = write_report_tree(
-        _report_state(market_report="市场：看涨", trader_investment_plan="交易：买入"), "AAPL", tmp_path
+        _report_state(market_report="市场:看涨", trader_investment_plan="交易:买入"), "AAPL", tmp_path
     )
 
-    assert (tmp_path / "1_analysts" / "market.md").read_text(encoding="utf-8") == "市场：看涨"
-    assert (tmp_path / "3_trading" / "trader.md").read_text(encoding="utf-8") == "交易：买入"
+    assert (tmp_path / "1_analysts" / "market.md").read_text(encoding="utf-8") == "市场:看涨"
+    assert (tmp_path / "3_trading" / "trader.md").read_text(encoding="utf-8") == "交易:买入"
     # Sections the second run no longer carries are not deleted (unchanged behaviour).
     assert (tmp_path / "1_analysts" / "news.md").read_text(encoding="utf-8") == "NEWS"
     complete = out.read_bytes().decode("utf-8")
-    assert "市场：看涨" in complete and "交易：买入" in complete
+    assert "市场:看涨" in complete and "交易:买入" in complete
     assert "## V. Portfolio Manager Decision" in complete
 
 

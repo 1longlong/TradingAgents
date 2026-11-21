@@ -31,12 +31,13 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping
+from dataclasses import asdict
 from typing import Any
 
 #: Bumped when the identity's fields or their meaning change. A checkpoint
 #: tagged with another version is not treated as compatible: its thread id was
 #: computed by a different rule, so it is simply a different run.
-IDENTITY_VERSION = "run-identity/v1"
+IDENTITY_VERSION = "run-identity/v2"
 
 #: The tools the graph's ``ToolNode``s are built from, with the vendor category
 #: each routes through (``tradingagents.dataflows.interface.TOOLS_CATEGORIES``).
@@ -149,9 +150,12 @@ def execution_identity(config: Mapping[str, Any] | None) -> dict[str, Any]:
     Only the allow-listed execution fields are read; see the module docstring.
     The returned mapping contains no credential, token or URL by construction.
     """
+    from tradingagents.debate.config import resolve_debate_termination_config
+
     cfg = dict(config or {})
     return {
         "version": IDENTITY_VERSION,
+        "debate_policy": asdict(resolve_debate_termination_config(cfg)),
         "analysts_tool_allowance": _governance_identity(cfg),
         "vendor_chains": {
             tool: _vendor_chain(cfg, tool, category) for tool, category in ROUTED_TOOLS

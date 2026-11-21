@@ -449,6 +449,8 @@ def test_trader_success_path():
     plain_llm.with_structured_output.return_value = structured_llm
     result = create_trader(plain_llm)({
         "company_of_interest": "NVDA",
+        "data_quality_verdict": "normal",
+        "data_quality_gate_decision": {"decision": "normal"},
         "investment_plan": "plan",
         "market_report": "",
     })
@@ -470,7 +472,9 @@ def test_research_manager_success_path():
     plain_llm.with_structured_output.return_value = structured_llm
     result = create_research_manager(plain_llm)({
         "company_of_interest": "NVDA",
-        "investment_debate_state": {"history": "debate", "count": 1},
+        "data_quality_verdict": "normal",
+        "data_quality_gate_decision": {"decision": "normal"},
+        "investment_debate_state": {"history": "debate", "count": 2, "turns": [{"speaker": "Bull"}, {"speaker": "Bear"}]},
     })
     assert "**Recommendation**: Overweight" in result["investment_plan"]
     assert structured_llm.invoke.call_count == 1
@@ -490,6 +494,8 @@ def test_portfolio_manager_success_path():
              "judge_decision": "", "count": 0}
     result = create_portfolio_manager(plain_llm)({
         "company_of_interest": "NVDA",
+        "data_quality_verdict": "normal",
+        "data_quality_gate_decision": {"decision": "normal"},
         "investment_plan": "plan",
         "trader_investment_plan": "trade",
         "risk_debate_state": empty,

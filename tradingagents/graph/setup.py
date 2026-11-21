@@ -23,9 +23,20 @@ from tradingagents.agents import (
 )
 from tradingagents.agents.utils.agent_states import AgentState
 from tradingagents.dataflows.config import get_config
+from tradingagents.debate.confidence_policy import (
+    create_confidence_state_sanitize_node,
+    with_sanitized_state,
+)
+from tradingagents.debate.config import (
+    DEFAULT_DEBATE_TERMINATION_CONFIG,
+    DebateTerminationConfig,
+)
+from tradingagents.debate.evaluator_node import create_debate_evaluator_node
 
 from .analyst_execution import build_analyst_execution_plan
 from .conditional_logic import ConditionalLogic
+from .data_quality_gate import create_data_quality_gate_node
+from .evidence_tool_node import EvidenceCapturingAnalystNode, EvidenceCapturingToolNode
 from .fundamentals_governance import parse_fundamentals_tool_governance
 from .fundamentals_tool_governance import create_fundamentals_governance_nodes
 from .market_governance import parse_market_tool_governance
@@ -43,11 +54,36 @@ DEBATE_PATH_MAP = {
     "Bear Researcher": "Bear Researcher",
     "Research Manager": "Research Manager",
 }
+# The Debate Evaluator routes back to a speaker (continue) or to the Research
+# Manager (summarize/stop). Complete map so a fall-through return can never hit
+# a missing entry (#1088).
+DEBATE_EVALUATOR_PATH_MAP = {
+    "Bull Researcher": "Bull Researcher",
+    "Bear Researcher": "Bear Researcher",
+    "Research Manager": "Research Manager",
+}
+# After a researcher: either the next debate step (Bear / Debate Evaluator) or a
+# safe skip to the Research Manager when a pre-call budget guard refused the
+# call. Complete map so a fall-through never crashes LangGraph (#1088).
+RESEARCHER_STEP_PATH_MAP = {
+    "Bear Researcher": "Bear Researcher",
+    "Debate Evaluator": "Debate Evaluator",
+    "Research Manager": "Research Manager",
+}
 RISK_ANALYSIS_PATH_MAP = {
     "Aggressive Analyst": "Aggressive Analyst",
     "Conservative Analyst": "Conservative Analyst",
     "Neutral Analyst": "Neutral Analyst",
     "Portfolio Manager": "Portfolio Manager",
+}
+# The Data Quality Gate routes to exactly two targets: Bull Researcher (the
+# gate deemed the market data normal or degraded, so the debate may proceed with
+# restrictions) or Research Manager (the gate blocked the debate, forcing an
+# evidence-insufficient restricted conclusion). Complete map so a fall-through
+# can never hit a missing entry (#1088).
+GATE_PATH_MAP = {
+    "Bull Researcher": "Bull Researcher",
+    "Research Manager": "Research Manager",
 }
 
 
@@ -61,8 +97,23 @@ class GraphSetup:
         tool_nodes: dict[str, ToolNode],
         conditional_logic: ConditionalLogic,
         config: dict[str, Any] | None = None,
+        data_quality_gate_factory: Any = None,
+        debate_termination_config: DebateTerminationConfig | None = None,
+        debate_evaluator_factory: Any = None,
     ):
-        """Initialize with required components."""
+        """Initialize with required components.
+
+        ``data_quality_gate_factory`` is an optional node factory (defaults to
+        :func:`create_data_quality_gate_node`) so tests can inject a fixed
+        snapshot / deterministic clock without touching a network. It must be
+        callable with no arguments and return a LangGraph node.
+
+        ``debate_termination_config`` is the validated Phase 3B configuration
+        group; when ``None`` the built-in defaults are used and the evaluator
+        resolves the config from the state on first run. ``debate_evaluator_factory``
+        is an optional node factory so tests can inject a deterministic evaluator
+        node; it defaults to :func:`create_debate_evaluator_node`.
+        """
         self.quick_thinking_llm = quick_thinking_llm
         self.deep_thinking_llm = deep_thinking_llm
         self.tool_nodes = tool_nodes
@@ -70,6 +121,19 @@ class GraphSetup:
         # The run config decides whether market tool governance is on. ``None``
         # falls back to the configuration the run installed (``get_config``).
         self.config = config
+        self.debate_termination_config = (
+            debate_termination_config or DEFAULT_DEBATE_TERMINATION_CONFIG
+        )
+        self.data_quality_gate_node = (
+            data_quality_gate_factory()
+            if data_quality_gate_factory is not None
+            else create_data_quality_gate_node()
+        )
+        self.debate_evaluator_node = (
+            debate_evaluator_factory()
+            if debate_evaluator_factory is not None
+            else create_debate_evaluator_node(config=self.debate_termination_config)
+        )
 
     def setup_graph(
         self, selected_analysts=("market", "social", "news", "fundamentals")
@@ -131,8 +195,12 @@ class GraphSetup:
         }
 
         # Create researcher and manager nodes
-        bull_researcher_node = create_bull_researcher(self.quick_thinking_llm)
-        bear_researcher_node = create_bear_researcher(self.quick_thinking_llm)
+        bull_researcher_node = create_bull_researcher(
+            self.quick_thinking_llm, self.debate_termination_config
+        )
+        bear_researcher_node = create_bear_researcher(
+            self.quick_thinking_llm, self.debate_termination_config
+        )
         research_manager_node = create_research_manager(self.deep_thinking_llm)
         trader_node = create_trader(self.quick_thinking_llm)
 
@@ -147,27 +215,79 @@ class GraphSetup:
 
         # Add analyst nodes to the graph
         for spec in plan.specs:
-            workflow.add_node(spec.agent_node, analyst_factories[spec.key]())
+            # Wrap analysts that prefetch vendor data in-node (e.g. the Sentiment
+            # Analyst) so a checkpoint right after the analyst retains captures
+            # (ADR-008). A no-op when the analyst captured nothing.
+            workflow.add_node(
+                spec.agent_node,
+                EvidenceCapturingAnalystNode(analyst_factories[spec.key](), name=spec.agent_node),
+            )
             workflow.add_node(spec.clear_node, create_msg_delete())
-            workflow.add_node(spec.tool_node, self.tool_nodes[spec.key])
+            # Wrap the tool node so captured vendor evidence is written into
+            # state at the tool-boundary checkpoint itself (ADR-008 durability;
+            # the ContextVar alone is not durable and the analyst loop means a
+            # later clear node is not sufficient).
+            workflow.add_node(
+                spec.tool_node,
+                EvidenceCapturingToolNode(self.tool_nodes[spec.key], name=spec.tool_node),
+            )
             if spec.key == "social" and prefetch_split:
-                workflow.add_node(PREFETCH_NODE, create_sentiment_prefetch_node())
+                workflow.add_node(
+                    PREFETCH_NODE, EvidenceCapturingAnalystNode(
+                        create_sentiment_prefetch_node(), name=PREFETCH_NODE
+                    ),
+                )
             if spec.key in governance_nodes:
                 prefix = spec.key
                 workflow.add_node(f"{prefix}_tool_prepare", governance_nodes[spec.key]["prepare"])
-                workflow.add_node(f"{prefix}_tool_execute", governance_nodes[spec.key]["execute"])
+                workflow.add_node(
+                    f"{prefix}_tool_execute", EvidenceCapturingAnalystNode(
+                        governance_nodes[spec.key]["execute"], name=f"{prefix}_tool_execute"
+                    ),
+                )
                 workflow.add_node(f"{prefix}_finish", governance_nodes[spec.key]["finish"])
                 workflow.add_node(f"{prefix}_wrap_up", governance_nodes[spec.key]["wrap_up"])
 
-        # Add other nodes
-        workflow.add_node("Bull Researcher", bull_researcher_node)
-        workflow.add_node("Bear Researcher", bear_researcher_node)
-        workflow.add_node("Research Manager", research_manager_node)
-        workflow.add_node("Trader", trader_node)
-        workflow.add_node("Aggressive Analyst", aggressive_analyst)
-        workflow.add_node("Neutral Analyst", neutral_analyst)
-        workflow.add_node("Conservative Analyst", conservative_analyst)
-        workflow.add_node("Portfolio Manager", portfolio_manager_node)
+        # Add other nodes. Every POST-gate node is wrapped so the analyst reports /
+        # plans / debate+risk histories interpolated into its prompt are capped on a
+        # degraded run BEFORE the model reads them (ADR-011). The reports are written
+        # by the analysts BEFORE the gate verdict is known, so this read-boundary
+        # sanitizer — not an analyst-time rewrite — is what keeps a raw over-cap
+        # confidence out of downstream prompts on every entry path (graph, direct
+        # GraphSetup, API and CLI). A no-op on a normal/blocked run.
+        workflow.add_node("Data Quality Gate", self.data_quality_gate_node)
+        # A deterministic POST-gate node that PERSISTS the capped analyst-report /
+        # plan / history fields (and turn/stance numeric confidence) back into the
+        # state, so the RETURNED state and any _log_state / public JSON export carry
+        # the effective values — not only the protected model prompts. No model call.
+        workflow.add_node(
+            "Confidence Sanitizer", create_confidence_state_sanitize_node()
+        )
+        workflow.add_node("Bull Researcher", with_sanitized_state(bull_researcher_node, name="bull"))
+        workflow.add_node("Bear Researcher", with_sanitized_state(bear_researcher_node, name="bear"))
+        workflow.add_node(
+            "Debate Evaluator",
+            with_sanitized_state(self.debate_evaluator_node, name="debate_evaluator"),
+        )
+        workflow.add_node(
+            "Research Manager",
+            with_sanitized_state(research_manager_node, name="research_manager"),
+        )
+        workflow.add_node("Trader", with_sanitized_state(trader_node, name="trader"))
+        workflow.add_node(
+            "Aggressive Analyst", with_sanitized_state(aggressive_analyst, name="aggressive")
+        )
+        workflow.add_node(
+            "Neutral Analyst", with_sanitized_state(neutral_analyst, name="neutral")
+        )
+        workflow.add_node(
+            "Conservative Analyst",
+            with_sanitized_state(conservative_analyst, name="conservative"),
+        )
+        workflow.add_node(
+            "Portfolio Manager",
+            with_sanitized_state(portfolio_manager_node, name="portfolio"),
+        )
 
         def entry_node(spec) -> str:
             # The sentiment analyst is always entered through its prefetch node
@@ -234,24 +354,56 @@ class GraphSetup:
                 )
                 workflow.add_edge(current_tools, current_analyst)
 
-            # Connect to next analyst or to Bull Researcher if this is the last analyst
+            # Connect to next analyst or to the Data Quality Gate if this is the
+            # last analyst. The gate then conditionally routes to Bull Researcher
+            # (normal/degraded) or straight to Research Manager (blocked).
             if i < len(plan.specs) - 1:
                 workflow.add_edge(current_clear, entry_node(plan.specs[i + 1]))
             else:
-                workflow.add_edge(current_clear, "Bull Researcher")
+                workflow.add_edge(current_clear, "Data Quality Gate")
 
         if prefetch_split:
             # Prefetch has no branch and no tools: success flows straight into
             # the generation node, and a failure propagates out (nothing saved).
             workflow.add_edge(PREFETCH_NODE, "Sentiment Analyst")
 
-        # Both research-debate edges share the complete DEBATE_PATH_MAP (#1088).
-        for debate_node in ("Bull Researcher", "Bear Researcher"):
-            workflow.add_conditional_edges(
-                debate_node,
-                self.conditional_logic.should_continue_debate,
-                DEBATE_PATH_MAP,
-            )
+        # After the gate, persist the capped report/history/plan deltas (degraded)
+        # then route to the Bull Researcher (normal/degraded) or the Research
+        # Manager (blocked). The sanitizer is a no-op on a normal/blocked run and the
+        # router is re-evaluated on the same (unchanged-verdict) state, failing
+        # closed in the router (#1088).
+        workflow.add_edge("Data Quality Gate", "Confidence Sanitizer")
+        workflow.add_conditional_edges(
+            "Confidence Sanitizer",
+            self.conditional_logic.should_continue_after_data_gate,
+            GATE_PATH_MAP,
+        )
+
+        # The debate runs Bull -> Bear -> Debate Evaluator, and the evaluator is
+        # the single authoritative dynamic router (Phase 3B): it either returns
+        # to a speaker (continue) or routes to the Research Manager
+        # (summarize/stop). The old per-turn fixed-count router is retained as a
+        # helper for the disabled baseline mode but is not a graph edge, so the
+        # evaluator owns every routing decision (#1088).
+        # Pre-call budget guards may refuse an optional call before it runs; the
+        # conditional steps below let a refused Bull/Bear skip safely to the
+        # Research Manager with budget_exhausted instead of executing over
+        # budget (the normal route is Bull -> Bear -> Debate Evaluator).
+        workflow.add_conditional_edges(
+            "Bull Researcher",
+            self.conditional_logic.should_continue_after_bull,
+            RESEARCHER_STEP_PATH_MAP,
+        )
+        workflow.add_conditional_edges(
+            "Bear Researcher",
+            self.conditional_logic.should_continue_after_bear,
+            RESEARCHER_STEP_PATH_MAP,
+        )
+        workflow.add_conditional_edges(
+            "Debate Evaluator",
+            self.conditional_logic.should_continue_after_debate_evaluator,
+            DEBATE_EVALUATOR_PATH_MAP,
+        )
         workflow.add_edge("Research Manager", "Trader")
         workflow.add_edge("Trader", "Aggressive Analyst")
         # All three risk edges share the complete RISK_ANALYSIS_PATH_MAP (#1088).

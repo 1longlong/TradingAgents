@@ -7,6 +7,7 @@ from tradingagents.agents.utils.agent_utils import (
     get_stock_data,
     get_verified_market_snapshot,
 )
+from tradingagents.debate.usage_capture import instrument_analyst_invoke
 
 
 def create_market_analyst(llm):
@@ -79,7 +80,7 @@ Write a very detailed and nuanced report of the trends you observe. Provide spec
 
         chain = prompt | llm.bind_tools(tools)
 
-        result = chain.invoke(state["messages"])
+        result = instrument_analyst_invoke(chain, state["messages"], speaker="Market Analyst")
 
         report = ""
 

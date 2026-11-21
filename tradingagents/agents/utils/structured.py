@@ -39,6 +39,8 @@ from typing import Any, TypeVar
 from langchain_core.exceptions import OutputParserException
 from pydantic import BaseModel, ValidationError
 
+from tradingagents.debate.usage_capture import BudgetDeniedError, instrumented_model_call
+
 logger = logging.getLogger(__name__)
 
 T = TypeVar("T", bound=BaseModel)
@@ -153,6 +155,8 @@ def bind_structured(llm: Any, schema: type[T], agent_name: str) -> Any | None:
             return binder(schema)
         return binder(schema, include_raw=True)
     except NotImplementedError as exc:
+        if "include_raw" in str(exc):
+            return binder(schema)
         logger.warning(
             "%s: provider does not support with_structured_output (%s); "
             "falling back to free-text generation",
@@ -399,6 +403,10 @@ def invoke_structured_or_freetext(
     render: Callable[[T], str],
     agent_name: str,
     schema: type[T] | None = None,
+    *,
+    affordable: Callable[[], bool] | None = None,
+    admit_attempt: Callable[[], str | None] | None = None,
+    sanitize_result: Callable[[Any], Any] | None = None,
 ) -> str:
     """Run the structured call, recover or derive a typed result, then render.
 
@@ -413,9 +421,37 @@ def invoke_structured_or_freetext(
     Rendering is outside the guard and its errors propagate. The free-text
     call is made at most once and its own failure propagates.
     """
+    # ADR-009: settle transport usage before any parsing, sanitizing or rendering.
+    # Only a real parse failure may spend the optional second model attempt.
+    phase = _phase_for(agent_name)
+
+    def _admit() -> str | None:
+        if admit_attempt is None:
+            return None
+        admitted = admit_attempt()
+        if admitted is None:
+            raise BudgetDeniedError(f"{agent_name}: summary attempt not affordable")
+        return admitted or None
+
     if structured_llm is not None:
         try:
-            result = structured_llm.invoke(prompt)
+            prealloc = _admit()
+            holder: dict[str, Any] = {}
+
+            def transport():
+                envelope = structured_llm.invoke(prompt)
+                holder["envelope"] = envelope
+                return envelope
+
+            result = instrumented_model_call(
+                transport, phase=phase, speaker=agent_name,
+                prompt_chars=_prompt_chars(prompt),
+                response_chars_hint=lambda: _safe_output_length(
+                    _raw_or_parsed(holder.get("envelope"))
+                ),
+                usage_response=lambda: _raw_from_envelope(holder.get("envelope")),
+                preallocated_id=prealloc,
+            )
         except Exception as exc:
             if not _is_parse_failure(exc):
                 raise
@@ -440,6 +476,8 @@ def invoke_structured_or_freetext(
             raise StructuredResponseTruncated(agent_name)
 
         if parsed is not None:
+            if sanitize_result is not None:
+                parsed = sanitize_result(parsed)
             return render(parsed)
 
         parse_miss = _reason_code(parsing_error)
@@ -456,6 +494,8 @@ def invoke_structured_or_freetext(
                 "%s: recovered structured result locally (reason=%s)",
                 agent_name, parse_miss,
             )
+            if sanitize_result is not None:
+                recovered = sanitize_result(recovered)
             return render(recovered)
 
         logger.warning(
@@ -463,7 +503,12 @@ def invoke_structured_or_freetext(
             agent_name, parse_miss,
         )
 
-    response = plain_llm.invoke(prompt)
+    if affordable is not None and not affordable():
+        raise BudgetDeniedError(f"{agent_name}: free-text attempt not affordable")
+    response = instrumented_model_call(
+        lambda: plain_llm.invoke(prompt), phase=phase, speaker=agent_name,
+        prompt_chars=_prompt_chars(prompt), preallocated_id=_admit(),
+    )
     content = response.content
     if _refusal_text(response) is not None:
         raise StructuredResponseRefused(agent_name)
@@ -477,3 +522,70 @@ def invoke_structured_or_freetext(
         # letting a blank decision propagate as if it were an analysis.
         raise ValueError(f"{agent_name}: free-text fallback returned no content")
     return content
+
+
+_AGENT_PHASE = {
+    "Research Manager": "research_manager",
+    "Trader": "trader",
+    "Portfolio Manager": "portfolio",
+    "Sentiment Analyst": "analyst",
+}
+
+
+def _phase_for(agent_name: str) -> str:
+    return _AGENT_PHASE.get(agent_name, "unknown_phase")
+
+
+def _raw_from_envelope(raw_envelope: Any) -> Any:
+    """The RAW transport AIMessage when the envelope carries one, else ``None``."""
+    if isinstance(raw_envelope, dict) and (
+        "raw" in raw_envelope or "parsed" in raw_envelope or "parsing_error" in raw_envelope
+    ):
+        return raw_envelope.get("raw")
+    return None
+
+
+def _raw_or_parsed(raw_envelope: Any) -> Any:
+    """The object to size for a legacy estimate: raw AIMessage if present, else the
+    bare parsed result (never invokes an arbitrary renderer)."""
+    raw = _raw_from_envelope(raw_envelope)
+    if raw is not None:
+        return raw
+    if isinstance(raw_envelope, dict) and "parsed" in raw_envelope:
+        return raw_envelope.get("parsed")
+    return raw_envelope
+
+
+def _safe_output_length(obj: Any) -> int:
+    """A safe output length for a character ESTIMATE (never raises, no renderer).
+
+    Uses the AIMessage ``.content`` when present; otherwise a bounded JSON/`str`
+    serialization length of the typed object. This gives a non-zero estimate for a
+    legacy structured result without forcing an arbitrary renderer inside the
+    billed-call boundary. Never fabricates an exact claim — the result stays
+    ``estimated``.
+    """
+    if obj is None:
+        return 0
+    content = getattr(obj, "content", None)
+    if isinstance(content, str):
+        return len(content)
+    import json
+
+    try:
+        return len(json.dumps(obj, default=str))
+    except Exception:  # noqa: BLE001 — any failure yields no usable length
+        try:
+            return len(str(obj))
+        except Exception:  # noqa: BLE001
+            return 0
+
+
+def _prompt_chars(prompt: Any) -> int:
+    """Best-effort prompt character count (never raises for a non-string prompt)."""
+    if isinstance(prompt, str):
+        return len(prompt)
+    try:
+        return len(str(prompt))
+    except Exception:  # noqa: BLE001 — a weird prompt never blocks accounting
+        return 0

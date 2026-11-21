@@ -1,3 +1,4 @@
+import contextlib
 import datetime
 import os
 import sys
@@ -46,6 +47,7 @@ from tradingagents.agents.utils.rating import is_review
 from tradingagents.backtest import iter_grid, run_backtest, summarize
 from tradingagents.dataflows.utils import safe_ticker_component
 from tradingagents.default_config import DEFAULT_CONFIG
+from tradingagents.evidence.ingest import use_collector
 from tradingagents.graph.analyst_execution import (
     AnalystWallTimeTracker,
     build_analyst_execution_plan,
@@ -1158,10 +1160,10 @@ def run_analysis(checkpoint: bool | None = None, portfolio=None):
         update_display(layout, spinner_text, stats_handler=stats_handler, start_time=start_time)
 
         # The same initial state propagate() builds: settled decision log, past
-        # context and resolved instrument identity.
-        init_agent_state = graph.create_run_state(
-            selections["ticker"], selections["analysis_date"], selections["asset_type"], portfolio
-        )
+        # context and resolved instrument identity. It is built after the
+        # checkpointer is set up (below) so the ADR-009 execution identity can be
+        # injected; a lightweight graph double without the ADR-009 methods builds
+        # the legacy state. See the branch below.
         # Pass callbacks to graph config for tool execution tracking
         # (LLM tracking is handled separately via LLM constructor)
         args = graph.propagator.get_graph_args(callbacks=[stats_handler])
@@ -1175,10 +1177,83 @@ def run_analysis(checkpoint: bool | None = None, portfolio=None):
         if checkpoint_tid is not None:
             args.setdefault("config", {}).setdefault("configurable", {})["thread_id"] = checkpoint_tid
 
+        # ADR-009: resolve the real execution identity (resume keeps its own; a
+        # fresh run mints a new one) and open the durable usage ledger so every
+        # model call is reserved/settled before its state update can be lost.
+        prior_state = (
+            graph._read_checkpoint_state(args)
+            if getattr(graph, "_resuming", False) and hasattr(graph, "_read_checkpoint_state")
+            else None
+        )
+        # ADR-011: the CLI streams ``graph.graph.stream(...)`` DIRECTLY (it does not
+        # go through ``TradingAgentsGraph._run_graph``), so it must wire the SAME
+        # fail-closed resume sanitizer here, BEFORE any model/collector call, or a
+        # legacy over-confident checkpoint would flow straight into prompts. It is
+        # fail-closed: a sanitization failure raises and the stream never starts.
+        # No-op unless the trusted verdict is degraded.
+        if (
+            prior_state is not None
+            and hasattr(graph, "_sanitize_confidence_on_resume")
+        ):
+            graph._sanitize_confidence_on_resume(args, prior_state)
+        usage_capture = None
+        capture_ctx = None
+        if hasattr(graph, "_usage_run_identity") and hasattr(graph, "_open_usage_ledger"):
+            run_id, ledger_path = graph._usage_run_identity(
+                selections["ticker"], selections["analysis_date"], prior_state
+            )
+            init_agent_state = graph.create_run_state(
+                selections["ticker"], selections["analysis_date"], selections["asset_type"], portfolio,
+                run_id=run_id, usage_ledger_path=ledger_path,
+            )
+            usage_ledger = graph._open_usage_ledger(
+                ledger_path, strict_resume=bool(getattr(graph, "_resuming", False))
+            )
+            if usage_ledger is not None:
+                try:
+                    from tradingagents.debate.config import resolve_debate_termination_config
+                    from tradingagents.debate.usage_ledger import policy_signature
+
+                    usage_ledger.begin_run(
+                        run_id,
+                        policy_signature=policy_signature(
+                            debate_config=resolve_debate_termination_config(graph.config)
+                        ),
+                        require_existing=bool(getattr(graph, "_resuming", False)),
+                    )
+                except Exception:  # noqa: BLE001 — unreadable accounting is surfaced, not fatal
+                    usage_ledger = None
+            from tradingagents.debate.config import resolve_debate_termination_config
+            from tradingagents.debate.usage_capture import UsageCapture, use_usage_capture
+
+            usage_capture = UsageCapture(run_id=run_id, ledger=usage_ledger)
+            usage_capture.debate_config = resolve_debate_termination_config(graph.config)
+            # A configured ledger path that could not be opened/registered (fresh or
+            # resume) fails closed; an intentional no-path run stays memory-only.
+            if ledger_path and usage_ledger is None:
+                usage_capture.accounting_unreadable = True
+            capture_ctx = use_usage_capture(usage_capture)
+        else:
+            # A lightweight graph double (e.g. a CLI wiring test) without the
+            # ADR-009 methods: build the legacy initial state with no usage capture.
+            init_agent_state = graph.create_run_state(
+                selections["ticker"], selections["analysis_date"], selections["asset_type"], portfolio
+            )
+
         # Stream the analysis. On resume, feed None so LangGraph continues the
         # interrupted run instead of re-appending the initial state (#1249); the
         # try/finally tears the checkpointer down even if the stream raises.
         trace = []
+        # ADR-008: bind the run-scoped evidence collector for exactly this run so
+        # vendor dataflows capture structured optional evidence the gate reads.
+        # On a resume, re-seed it from the saved checkpoint state so a new tool
+        # call appends after already-captured evidence (never overwrites it).
+        collector_ctx = use_collector(
+            selections["ticker"], str(selections["analysis_date"]), prior_state=prior_state
+        )
+        collector_ctx.__enter__()
+        if capture_ctx is not None:
+            capture_ctx.__enter__()
         try:
             for chunk in graph.graph.stream(graph.checkpoint_input(init_agent_state), **args):
                 # Process all messages in chunk, deduplicating by message ID
@@ -1288,6 +1363,13 @@ def run_analysis(checkpoint: bool | None = None, portfolio=None):
             for chunk in trace:
                 final_state.update(chunk)
 
+            # ADR-009: reconcile the whole-run usage from the durable ledger and
+            # attach it (reporting only) plus the execution identity, exactly like
+            # the propagate() path, so the CLI report cannot disagree.
+            if usage_capture is not None:
+                with contextlib.suppress(Exception):
+                    graph._attach_whole_run_usage(final_state, usage_capture, usage_capture.run_id)
+
             # Clean run: log the decision, then drop this run's checkpoint so a
             # later run starts fresh. A mid-stream failure skips both, keeping
             # the checkpoint for resume.
@@ -1296,8 +1378,12 @@ def run_analysis(checkpoint: bool | None = None, portfolio=None):
                 selections["ticker"], selections["analysis_date"], selections["asset_type"], portfolio
             )
         finally:
-            # Always restore the plain uncheckpointed graph, even on failure.
+            # Always restore the plain uncheckpointed graph and unbind the run
+            # collector, even on failure.
             graph.end_checkpoint()
+            collector_ctx.__exit__(None, None, None)
+            if capture_ctx is not None:
+                capture_ctx.__exit__(None, None, None)
 
         # Update all agent statuses to completed
         for agent in message_buffer.agent_status:

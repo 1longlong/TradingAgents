@@ -3,6 +3,7 @@
 import re
 from pathlib import Path
 
+from tradingagents.agents.utils.output_guard import HOLD
 from tradingagents.agents.utils.rating import parse_rating
 
 
@@ -32,8 +33,14 @@ class TradingMemoryLog:
         ticker: str,
         trade_date: str,
         final_trade_decision: str,
+        blocked: bool = False,
     ) -> None:
-        """Append pending entry at end of propagate(). No LLM call."""
+        """Append pending entry at end of propagate(). No LLM call.
+
+        ``blocked`` carries the structured gate verdict: a blocked run is always
+        recorded with the Hold tag so the memory log agrees with the authoritative
+        final signal, regardless of how the decision text was rendered.
+        """
         if not self._log_path:
             return
         # Idempotency guard: fast raw-text scan instead of full parse. Any entry
@@ -45,7 +52,7 @@ class TradingMemoryLog:
             for line in raw.splitlines():
                 if line.startswith(f"[{trade_date} | {ticker} |") and line.endswith("]"):
                     return
-        rating = parse_rating(final_trade_decision)
+        rating = HOLD if blocked else parse_rating(final_trade_decision)
         tag = f"[{trade_date} | {ticker} | {rating} | pending]"
         entry = f"{tag}\n\nDECISION:\n{final_trade_decision}{self._SEPARATOR}"
         with open(self._log_path, "a", encoding="utf-8") as f:

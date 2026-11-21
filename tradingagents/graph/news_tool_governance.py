@@ -350,7 +350,11 @@ def _make_wrap_up(llm: Any):
         # The model is shown the analyst's last request *with* its answers, so
         # the conversation it writes from ends in a usable (blocked/restated)
         # tool reply instead of an unanswered tool call.
-        result = llm.invoke(_wrap_up_prompt(state, [*messages, *pairs]))
+        from tradingagents.debate.usage_capture import instrument_analyst_invoke
+
+        result = instrument_analyst_invoke(
+            llm, _wrap_up_prompt(state, [*messages, *pairs]), speaker="News Analyst",
+        )
 
         # A refusal, a token-limit cut-off, an empty body or a request for more
         # tools is final: raise, so nothing is stored and nothing is generated

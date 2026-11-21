@@ -314,7 +314,7 @@ def test_off_keeps_the_single_node_graph():
     assert ("START", ANALYST_NODE) in edges
     # The analyst keeps its original tool/clear routing.
     assert ("tools_social", ANALYST_NODE) in edges
-    assert ("Msg Clear Sentiment", "Bull Researcher") in edges
+    assert ("Msg Clear Sentiment", "Data Quality Gate") in edges
 
 
 @pytest.mark.unit
@@ -1212,7 +1212,7 @@ def test_split_social_not_first_still_enters_prefetch():
     assert (PREFETCH_NODE, ANALYST_NODE) in edges
     # Only one edge leaves the prefetch: straight into generation.
     assert [t for s, t in edges if s == PREFETCH_NODE] == [ANALYST_NODE]
-    assert ("Msg Clear Sentiment", "Bull Researcher") in edges
+    assert ("Msg Clear Sentiment", "Data Quality Gate") in edges
 
 
 @pytest.mark.unit
@@ -1236,7 +1236,7 @@ def test_split_does_not_change_other_analysts():
     for key in ("tools_market", "tools_news", "tools_fundamentals"):
         assert key in on_workflow.nodes
     # Fundamental's chain into the researcher is where it always was.
-    assert ("Msg Clear Fundamentals", "Bull Researcher") in on_edges
+    assert ("Msg Clear Fundamentals", "Data Quality Gate") in on_edges
 
 
 # ---------------------------------------------------------------------------

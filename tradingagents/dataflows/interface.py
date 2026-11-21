@@ -2,6 +2,8 @@ import contextlib
 import logging
 import threading
 
+from tradingagents.evidence.models import SourceResultStatus
+
 from .alpha_vantage import (
     get_balance_sheet as get_alpha_vantage_balance_sheet,
     get_cashflow as get_alpha_vantage_cashflow,
@@ -191,6 +193,29 @@ VENDOR_ENDPOINTS = {
     "fred": FRED_API_BASE,
     "polymarket": GAMMA_BASE,
 }
+def _record_router_attempt(method, vendor, result_status, *, error_type=None):
+    """Record a router-level source attempt (sanitized; no-op outside a run).
+
+    Records the vendors the router actually operated but that did NOT produce
+    data (failure / rate-limit / not-configured / no-data / skipped-after-success).
+    The authoritative *success* attempt is recorded by the dataflow adapter WITH
+    the captured data, so this never double-counts a successful fetch. Errors are
+    a short classification only (never the raw exception text, URL, key, or body).
+    """
+    try:
+        from tradingagents.evidence.ingest import capture_attempt
+        from tradingagents.evidence.vendor_adapters import make_source_attempt
+
+        capture_attempt(
+            make_source_attempt(
+                source=str(vendor),
+                tool=str(method),
+                result_status=result_status,
+                error_type=error_type,
+            )
+        )
+    except Exception:  # noqa: BLE001 — attempt recording must never break routing
+        return
 
 
 def get_category_for_method(method: str) -> str:
@@ -712,6 +737,18 @@ def route_to_vendor(method: str, *args, **kwargs):
             first_error = exc
         return first_error
 
+    def capture_final_failure(vendor, error):
+        # SourceAttempt describes an operated vendor, not a local admission skip.
+        if isinstance(error, NoMarketDataError):
+            status, kind = SourceResultStatus.EMPTY, "no_data"
+        elif isinstance(error, VendorNotConfiguredError):
+            status, kind = SourceResultStatus.SKIPPED, "unconfigured"
+        elif isinstance(error, VendorRateLimitError):
+            status, kind = SourceResultStatus.SKIPPED, "rate_limited"
+        else:
+            status, kind = SourceResultStatus.FAILED, type(error).__name__
+        _record_router_attempt(method, vendor, status, error_type=kind)
+
     def retry_verdict(vendor: str, exc: BaseException) -> tuple[bool, str]:
         """Whether one more invocation of ``vendor`` may fix ``exc``, and the wait.
 
@@ -867,6 +904,7 @@ def route_to_vendor(method: str, *args, **kwargs):
                         logger.info(
                             "Vendor %r for %s will not be retried: %s.", vendor, method, wait
                         )
+                        capture_final_failure(vendor, error)
                         release(breaker_category)
                         break
                     logger.warning(
@@ -884,6 +922,7 @@ def route_to_vendor(method: str, *args, **kwargs):
                         # The wait did not fit. The vendor *did* say the condition
                         # was momentary, so this is a real vendor failure (the
                         # vendor-side evidence, not our own limit, decides).
+                        capture_final_failure(vendor, error)
                         release(breaker_category)
                         break
                     # The wait is over: the deadline is checked again by precheck at

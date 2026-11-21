@@ -401,6 +401,13 @@ def get_balance_sheet(
         if data.empty:
             raise_for_empty(ticker, canonical, "balance sheet data")
 
+        # Capture structured fundamentals before formatting prose (no-op outside a
+        # run; never changes the returned string). yfinance carries no filing
+        # date, so the captured record is undated and honestly Low (ADR-008).
+        from .evidence_capture import capture_yfinance_statement
+
+        capture_yfinance_statement(ticker, data, "balance_sheet", "get_balance_sheet")
+
         # Convert to CSV string for consistency with other functions
         csv_string = data.to_csv()
 
@@ -442,6 +449,10 @@ def get_cashflow(
         if data.empty:
             raise_for_empty(ticker, canonical, "cash flow data")
 
+        from .evidence_capture import capture_yfinance_statement
+
+        capture_yfinance_statement(ticker, data, "cashflow", "get_cashflow")
+
         # Convert to CSV string for consistency with other functions
         csv_string = data.to_csv()
 
@@ -482,6 +493,10 @@ def get_income_statement(
 
         if data.empty:
             raise_for_empty(ticker, canonical, "income statement data")
+
+        from .evidence_capture import capture_yfinance_statement
+
+        capture_yfinance_statement(ticker, data, "income_statement", "get_income_statement")
 
         # Convert to CSV string for consistency with other functions
         csv_string = data.to_csv()

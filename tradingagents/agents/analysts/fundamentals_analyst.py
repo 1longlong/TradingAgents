@@ -8,6 +8,7 @@ from tradingagents.agents.utils.agent_utils import (
     get_instrument_context_from_state,
     get_language_instruction,
 )
+from tradingagents.debate.usage_capture import instrument_analyst_invoke
 
 
 def create_fundamentals_analyst(llm):
@@ -53,7 +54,7 @@ def create_fundamentals_analyst(llm):
 
         chain = prompt | llm.bind_tools(tools)
 
-        result = chain.invoke(state["messages"])
+        result = instrument_analyst_invoke(chain, state["messages"], speaker="Fundamentals Analyst")
 
         report = ""
 

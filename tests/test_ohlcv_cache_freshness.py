@@ -336,3 +336,27 @@ def test_local_tz_is_an_explicit_timezone():
     # The caller needs a real tz to interpret a naive wall time; on a normal
     # host that is a tzinfo, never the naive ``None`` used as "UTC".
     assert su.local_tz() is not None
+
+
+@pytest.mark.parametrize("zone", ["UTC", "Asia/Hong_Kong", "America/New_York"])
+@pytest.mark.parametrize("day", ["2026-07-18", "2026-01-15"])
+def test_cache_freshness_round_trips_local_wall_time(monkeypatch, zone, day):
+    """INV-9 / NFR-OFF-001: retain release's summer/winter offset matrix.
+
+    Inject the mtime read so Windows future-mtime clamping and process-wide
+    tzset availability cannot alter the intended instant. Exercise the real
+    freshness function with a naive LOCAL now and an absolute file epoch.
+    """
+    now = pd.Timestamp(f"{day} 12:00", tz=zone)
+    monkeypatch.setattr(su, "local_tz", lambda: now.tzinfo)
+    written = [now.timestamp()]
+    monkeypatch.setattr(su.os.path, "getmtime", lambda _: written[0])
+    local_now = now.tz_localize(None)
+    request = now.normalize().tz_localize(None)
+    assert su._cache_is_fresh("cache.csv", request, local_now) is True
+    written[0] = now.timestamp() - STALE
+    assert su._cache_is_fresh("cache.csv", request, local_now) is False
+    historical_request = request - pd.Timedelta(days=13)
+    assert su._cache_is_fresh("cache.csv", historical_request, local_now) is True
+    written[0] = now.timestamp() - 86400
+    assert su._cache_is_fresh("cache.csv", request, local_now) is False

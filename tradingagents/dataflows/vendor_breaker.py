@@ -643,4 +643,3 @@ def breaker_scope(endpoint: str, policy: BreakerPolicy) -> str:
         # the safe fallback and never widens sharing across endpoints.
         endpoint = "unknown"
     return f"endpoint={endpoint};{policy.signature()}"
-
