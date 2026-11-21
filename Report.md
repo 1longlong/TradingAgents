@@ -4,9 +4,9 @@
 > This report merges the Release team's Phase 1–4A process report with the
 > personal Token Observability / CAND-01 report. It deliberately separates
 > **completed evidence** from **planned work**, records **historical failures and
-> limitations**, and marks Section 7 as an **AI-assisted first-person draft
-> awaiting WangTianQi's confirmation** and the D5 transcript annotations as
-> pending the student's signature. No submission, demo or grading claim is made. The Release team's preliminary reflection is preserved
+> limitations**, and records Section 7 as **AI-assisted text reviewed and
+> confirmed by WangTianQi on 2026-11-21**; the transcript's formal signature
+> remains pending. No submission, demo or grading claim is made. The Release team's preliminary reflection is preserved
 > below with its original first-person voice; its separate authorship is not
 > recorded in the tree.
 
@@ -350,8 +350,42 @@ and two host-coupled `cli_prefs` tests are classified (`DEBT-042`, `DEBT-043`). 
 skipped / 319 subtests — that is the submission branch, not a re-measurement of
 `50b2ca3`. No paid rerun was executed after the final remediation (`DEBT-046`).
 There is no ground truth for decision quality and no claim of trading alpha
-(`DEBT-048`). In the current integration worktree the full suite is `NOT_RUN` while
-unrelated D7–D9 documentation conflicts remain.
+(`DEBT-048`). In the completed integration tree (`94755cf`) the full local suite is
+**5,132 passed / 3 skipped**, both validators PASS, and `ruff check .` PASS. The
+older `NOT_RUN` statements in the historical sections describe earlier snapshots
+and are retained as history.
+
+### Recorded V2/V3 experimental evidence (evidence boundaries)
+
+| Phase | Attempts / sample | Dispositions | Recorded tokens | Evidence |
+| --- | --- | --- | --- | --- |
+| V2 | 7 attempts | 5 valid; 1 environment-failed (`R05a01`); 1 invalid | 1,463,791 provider-reported | `token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/TEST_RESULTS.md`, `MANIFEST.sha256`, REC-01–REC-05 |
+| V3 | 18 attempts across 16 Run IDs | 15 valid; 1 environment-failed; 2 invalid (`R12a01`, `R12a02`, provider 400) | 3,067,669 provider-reported | `.../cand01_batch_16run_v3/TEST_RESULTS.md`, `MANIFEST.sha256`, REC-06 |
+
+The V3 work added system-component attribution, the telemetry schema changes and
+per-run memory isolation; freeze/re-freeze records and independent AI subagent
+audits accompany it. **Evidence limitations:** the raw provider telemetry is
+git-ignored and absent from the delivered tree, so the totals are archived ledger
+values that cannot be recomputed from the delivered artifacts alone. The V3
+comparisons are exploratory (n=1 per cell, one model, one trade date). The final
+remediation occurred **after** the measurements; no post-remediation paid
+benchmark was run, and offline regression tests do not establish new performance
+results. See `DEBT-046` (no post-fix paid rerun), `DEBT-052` (no dated paid-run
+authorization artefact), and REC-01–REC-07 for the audit provenance.
+
+### Final delivery (2026-11-21)
+
+- Personal feature `57b93df` (final personal code `50b2ca3`) completed and merged.
+- D1–D9 documentation integrated: 52 requirements, 108 unique AUL records,
+  19 ADRs (`ADR-012` Release error handling; `ADR-019` simulated trading;
+  Release `AUL-071–073`; personal repaired `AUL-106–108`).
+- Old-base merge `702d957`; PR #5 Release `9a08e08`; second merge `f2220a6`;
+  final documentation commit `94755cf`.
+- Branch pushed; GitHub PR **#8** (`release` ← `integrate/token-into-release-20261121`)
+  is open, `MERGEABLE`, with **7/7 CI checks successful** at run
+  `44886419113` (tests on Python 3.10–3.13, clean-install smoke, strict Ruff,
+  governance validation). **PR #8 is not merged**; reviewer approval remains
+  outstanding.
 
 ### Blocked final-output enforcement (2026-11-06 review finding 1)
 
@@ -750,7 +784,7 @@ re-claimed as a fully-green full suite here**:
   gap, CSV markup counter, no post-fix live rerun, n=1 per cell, no ground truth,
   endpoint not hashed, generic `measure` sharing memory, the ruff baseline, plus
   the recovered history/governance debt (no dated paid-run authorization, unresolved
-  commit authors, local session stores, the pending D5 transcript). See
+  commit authors, local session stores, the transcript signature/attestation). See
   `docs/debt-register.md`.
 - **Phase 4A results are scripted offline fixtures, not live-provider
   measurements** — they cannot support a production-grade performance claim;
@@ -778,14 +812,18 @@ re-claimed as a fully-green full suite here**:
   personal V2/V3 paid campaigns were run under dated, run-specific authorizations
   and do not authorize further spend. Any future Phase 4B or live-provider work
   requires explicit, separate authorization.
-- **D7–D9 integration** — the remaining protected conflicts
-  (`.github/workflows/ci.yml`, `.opencode/rules.md`, `.opencode/permissions.jsonc`)
-  and the prompt-lineage validator mismatch are outside this report's scope; until
-  they are resolved the submission validators report those files, not the
-  integrated D7–D9 content, as failures.
-- **Human sign-off** — every personal review, ADR, risk and debt item is
-  `PENDING_HUMAN_CONFIRMATION`; the D5 transcript is an AI-prepared draft. See the
-  human-review checklist in the D4–D6 report.
+- **D7–D9 integration and delivery** — completed. Old-base merge `702d957`,
+  PR #5 Release `9a08e08`, second merge `f2220a6`, final documentation commit
+  `94755cf`; branch pushed and PR **#8** opened against `release` with 7/7 CI
+  checks successful at the verified point. PR #8 is **not merged**; reviewer
+  approval remains outstanding. The historical `NOT_RUN` statements above are
+  time-scoped and no longer describe the current tree.
+- **Human review and sign-off** — WangTianQi has personally reviewed and
+  confirmed the personal documentation as an accurate account of the work, with
+  AI assistance (2026-11-21). Formal record-level sign-offs for REC-01–10,
+  ADR/risk/debt items, the transcript signature and the dated paid-run
+  authorization remain `PENDING_HUMAN_CONFIRMATION`; documentation review is not
+  independent technical audit or experimental reproduction.
 - No submission, demo, or grading claim is made or implied by this document.
 
 ## 5. Release-team preliminary reflection (v1, preserved)
@@ -824,22 +862,23 @@ wrong contributor.
 | Upstream TradingAgents v0.5.0 (graph topology, prompts scaffold, CLI, vendor router, PIT corpus) | inherited, not this project | `2d17df8`; `architecture-blueprint.md` |
 | Data Quality Gate, dynamic debate termination, evidence capture, durable usage ledger, confidence cap, Phase 4A comparison, simulated trading | **Release team** (WANG Yiwen 60536848 and the Release history) | ADR-001–ADR-012, ADR-019; `FR-DQG-*`, `FR-DDT-*`, `FR-TRD-*`, `NFR-CMP-*` |
 | Token observability and attribution, Single-Pass, batch macro, Finnhub-only news, per-run memory isolation, measurement harness/freeze, V2/V3 campaigns | **WangTianQi's personal feature** (submitted through the token-observability line) | ADR-013–ADR-018; `FR-ANL-*`, `FR-OBS-*`, `FR-HAR-*`, `FR-CAM-*`, `NFR-VER-*` |
-| AI-assisted implementation, tests, audits and documentation | OpenCode sessions (2026-10-20 → 2026-11-15) and DeepSeek Harness sessions (2026-11-16 → 2026-11-20, and the 2026-11-21 documentation rounds) | `docs/ai-use-log.yaml` `AUL-074`–`AUL-105`; `docs/ai-use-session-audit.md` |
+| AI-assisted implementation, tests, audits and documentation | OpenCode sessions (2026-10-20 → 2026-11-15) and DeepSeek Harness sessions (2026-11-16 → 2026-11-20, and the 2026-11-21 documentation rounds) | `docs/ai-use-log.yaml` `AUL-074`–`AUL-108` (Release `AUL-071–073`; personal repaired records `106–108`); `docs/ai-use-session-audit.md` |
 | Human decisions and approvals | recorded where evidenced; otherwise explicitly absent | `docs/review-memo.md`; `AUL-102`; paid-run authorization gap `DEBT-052` |
 
-**No human sign-off exists for any personal review, audit, ADR, risk or debt item.**
+**No formal technical/record-level human sign-off exists for any personal review, audit, ADR, risk or debt item.** The personal documentation itself has been reviewed and confirmed by WangTianQi with AI assistance on 2026-11-21; that review does not independently verify audit findings or reproduce experiments.
 Commit authors `WTQ`, `Plan C3`, `C3 Engine` and `t` are unresolved
 (`DEBT-053`); do not read a commit-author string as a person's identity. No
 contribution above is attributed to a teammate merely because the merged tree
 contains it, and WangTianQi is not credited with the Release team's development
 history.
 
-## 7. Personal reflection — WangTianQi (AI-ASSISTED DRAFT; HUMAN CONFIRMATION PENDING)
+## 7. Personal reflection — WangTianQi (AI-ASSISTED; HUMAN-REVIEWED AND CONFIRMED)
 
-*AI-assisted draft. The four paragraphs below were prepared by DeepSeek Harness
+*AI-assisted text. The four paragraphs below were prepared by DeepSeek Harness
 from the documented project history and inserted with the owner's authorization.
-They are not yet attested as WangTianQi's own account; the student's personal
-confirmation remains pending.*
+WangTianQi has personally read and reviewed them and confirmed them as an accurate
+account of the work, with AI assistance, on 2026-11-21. They remain AI-assisted
+prose, not an independently authored or independently verified testimony.*
 
 **7.1 Individual motivation.**
 
@@ -861,8 +900,7 @@ The freeze and audit process was more extensive than I would ideally expect for 
 
 The technical content of this report was assembled by an AI coding agent (DeepSeek
 Harness, 2026-11-21) from committed evidence and the recorded sessions. It is an
-integrated draft, not a signed student report. Section 7 now contains AI-assisted
-first-person draft text prepared from the project record and inserted with the
-owner's authorization; it is **not** attested as the student's own account and
-remains pending personal confirmation. The D5 transcript annotations likewise
-remain pending the student's signature and attestation.
+integrated report. Section 7 contains AI-assisted first-person text prepared from
+the project record and inserted with the owner's authorization; WangTianQi has
+reviewed and confirmed that text on 2026-11-21. The D5 transcript's content review
+is likewise confirmed, while its formal signature and attestation remain pending.

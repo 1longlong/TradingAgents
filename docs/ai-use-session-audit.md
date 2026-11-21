@@ -453,9 +453,10 @@ is claimed that was not executed; everything not run is labelled `NOT_RUN`.
    `adr/001`…`006` beside the Release `adr/001`…`006`. Reconciling that requires
    renaming architecture documents and updating their references, which is
    outside the D1 file scope. It is reported as a merge-integration blocker.
-3. **Full suite NOT_RUN.** The offline suite needs the D2–D9 conflicts resolved
-   and a complete environment; running it now would test conflicted documents.
-   No merged-tree green claim is made.
+3. **Full suite historical NOT_RUN — superseded.** The D1 state recorded the
+   merged suite as not run while D2–D9 conflicts existed. The completed tree
+   (`94755cf`) now records **5,132 passed / 3 skipped**, both validators PASS and
+   `ruff check .` PASS; the historical statement is retained above.
 4. **No live run.** No provider, vendor or paid call was made. No token saving or
    performance figure is claimed.
 

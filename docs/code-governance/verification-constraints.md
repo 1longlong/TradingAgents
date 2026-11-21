@@ -139,8 +139,9 @@ rule, three-tier model) remain normative. The personal delivery added its own co
 known-failure policy, mutation tests, read-only audit discipline and evidence-retention
 rules, recorded below as a distinct set. Date/scope stamp: the personal statuses were
 recorded on the personal branch (2026-11-19/21); they are **not** a merged-tree
-verification, and in this integration worktree the full suite is `NOT_RUN` while the
-protected D7–D9 conflicts remain.
+verification. In the completed integration tree (`94755cf`) the full suite is
+**5,132 passed / 3 skipped**, both validators PASS and `ruff check .` PASS; the
+`NOT_RUN` value below is historical.
 
 Status: **established 2026-11-19** for the CS5351 final-submission tree (base
 commit `50b2ca3`). This document defines how verification must be performed and
@@ -186,7 +187,7 @@ with the D7 test-isolation changes included in this submission.
 
 | ID | Command | Purpose | Observed |
 | --- | --- | --- | --- |
-| VC-01 | `TZ=UTC PYTHONPATH=. .venv/bin/python -m pytest tests -q` | Full offline suite on the personal branch (`50b2ca3`); the old-base merged tree is `NOT_RUN` | `2233 passed, 2 skipped, 319 subtests passed` in 28.59 s, exit 0 |
+| VC-01 | `TZ=UTC PYTHONPATH=. .venv/bin/python -m pytest tests -q` | Full offline suite; historical personal branch (`50b2ca3`) and current integrated tree (`94755cf`) | Personal: `2233 passed, 2 skipped, 319 subtests`; integrated: **5,132 passed, 3 skipped**, exit 0 |
 | VC-02 | `TZ=UTC PYTHONPATH=. .venv/bin/python -m pytest tests/test_prompt_integrity.py tests/test_structured_agent_prompts.py tests/test_cand01_single_pass_finalization.py -q` | Prompt/structured-output guard tests | `90 passed, 16 subtests passed` in 0.78 s, exit 0 |
 | VC-03 | `.venv/bin/python -m ruff check .` | Whole-repo lint baseline measurement (not a CI gate; see `DEBT-051` (ruff baseline)) | 233 findings on the personal branch (`50b2ca3`, ruff 0.17.1, 2026-11-19 22:45 HKT / 14:45 UTC); 244 on the old-base merged tree (2026-11-21) |
 | VC-04 | `ruff check scripts/validate tests/test_submission_compliance.py tests/test_cand01_batch_16run_v3_infra.py tests/test_cli_prefs.py` | CI lint gate (the files this submission adds/changes) | `All checks passed!`, exit 0 |
@@ -374,13 +375,13 @@ not relevant, and anything that could be a secret.
 
 | Check | Status |
 | --- | --- |
-| Offline pytest (VC-01) | verified green **on the personal branch**: 2233 passed, 2 skipped; pristine base had 4 environment failures. Merged-tree full suite: `NOT_RUN`. |
+| Offline pytest (VC-01) | Historical personal branch: 2233 passed, 2 skipped. Current integrated tree (`94755cf`): **5,132 passed, 3 skipped**; both validators PASS. |
 | Prompt/structured guards (VC-02) | verified green |
 | Experiment schema (VC-05) | verified green |
 | Protocol freeze (VC-06) | verified green |
 | Final-freeze certificate (VC-07) | verified failing (v2 record absent; this is not the v2-certified tree) |
 | Frozen manifest (VC-08) | verified green (55/55) |
-| Ruff (VC-03/VC-04) | whole-repo baseline 233 findings on the personal branch (`DEBT-051`); 244 on the old-base merged tree; CI gates the submission files only (green) |
-| Submission validator (VC-11) | verified PASS on the personal branch (34/34 artifacts, 2 warnings, 22:45 HKT). In the integration worktree it is blocked by the protected D7–D9 conflicts; see the D2/D3 verification report. |
+| Ruff (VC-03/VC-04) | Historical baselines: 233 (personal `50b2ca3`) and 244 (old-base merged tree) findings under Ruff 0.17.1. Current integrated tree: **`ruff check .` PASS** after ordinary-code cleanup plus 12 per-file exceptions for SHA-256-sealed audit scripts. The scripts are exempted, not lint-clean; the strict CI command is unchanged. |
+| Submission validator (VC-11) | PASS on the personal branch (34/34 artifacts, 2 warnings) and on the current integrated tree (`94755cf`). |
 | YAML/JSONC syntax | checked by VC-11 and the scripts in §4 |
 | OpenCode permission loading | `NOT_VERIFIED` — see `.opencode/permissions.jsonc` |

@@ -11,6 +11,11 @@
 #   scope:    short description of what the tool did
 #   outcome:  result (evidence, key output, or review decision)
 #   human_review: one of: none | requested | approved | rejected | noted
+#   NOTE (2026-11-21): these records log AI activity. WangTianQi reviewed and
+#   confirmed the personal documentation on 2026-11-21 (see review-memo and the
+#   transcript). `human_review` is the review status of the individual AI record;
+#   it does not indicate whether a human made a decision/authorization. Such
+#   decisions are recorded in AUL-101/AUL-102 and the review memo.
 
 - id: AUL-001
   date: "2026-10-19"

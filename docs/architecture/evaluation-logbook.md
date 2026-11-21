@@ -2857,3 +2857,15 @@ now-successful Linux evidence. No simulated-trading source, CI workflow or
 permission file differs from release. PR #5 still needs at least one separate
 approving review by a collaborator with write access; the user/chat approval
 must not be presented as that GitHub review. Shared dev was not updated.
+
+## 2026-11-21 — final integration and PR #8 verification
+
+- Local integrated tree `94755cf`: `ruff check .` PASS; `validate_requirements.py`
+  PASS; `validate_submission.py` PASS (transcript PENDING warning retained);
+  full offline suite `5,132 passed, 3 skipped` (323 subtests).
+- GitHub PR #8 (`release` ← `integrate/token-into-release-20261121`): open,
+  `MERGEABLE`, 7/7 CI checks SUCCESS (run 44886419113). PR #8 is **not merged**.
+- Lint policy: 12 explicit per-file exceptions cover SHA-256-sealed historical
+  audit scripts; those scripts were not modified and are not claimed lint-clean.
+- Human sign-offs (transcript, REC-01–10, ADR/risk/debt, paid-run authorization)
+  remain pending; no approval is inferred from CI.

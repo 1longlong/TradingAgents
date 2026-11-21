@@ -1,4 +1,4 @@
-# Review Memo — Human Review Record
+# Review Memo — Phase Reviews, AI Audits and Recorded Human Decisions
 
 Each project phase requires an explicit recorded human review before it is
 declared complete. A phase without a recorded review is **not** claimed
@@ -1295,11 +1295,27 @@ review memo from the latest personal worktree (`docs/review-memo.md`, revision
 REC-09 and REC-10. It is appended to, not substituted for, the Release review
 record above.
 
-> **NO HUMAN SIGN-OFF.** Every review below was performed by an AI subagent
-> (separate context, read-only worktree) or by an offline test command. The audit
-> reports were written by AI agents. No human has reviewed, approved, or signed
-> off on any personal record. All personal statuses are
-> `PENDING_HUMAN_CONFIRMATION`.
+> **NO FORMAL TECHNICAL SIGN-OFF; STUDENT DOCUMENTATION REVIEW CONFIRMED.**
+> The audit reports below were written by AI subagents or offline test commands,
+> and the student directed and supervised the development. WangTianQi has
+> personally reviewed and confirmed the personal documentation as an accurate
+> account of the work, with AI assistance, on 2026-11-21. This is a documentation
+> review, not an independent technical audit or experimental reproduction, and it
+> does not convert any REC/ADR/risk/debt verdict into an independently verified
+> result. Formal record-level acceptance remains `PENDING_HUMAN_CONFIRMATION`.
+
+### Student documentation-review acknowledgement (2026-11-21)
+
+WangTianQi states: “I have personally read and reviewed all the
+personal-contribution documents involved in this documentation round. I found no
+material problems with their contents and accept the documentation as an accurate
+account of my work, with AI assistance appropriately disclosed.”
+
+This acknowledges review of the **written documentation** (Report §7, this memo's
+personal summaries, the transcript, and the personal governance records). It does
+not assert that the student independently reproduced the V2/V3 experiments,
+re-ran the full suite, or formally accepted REC-01–REC-10, the ADRs, risks or
+debts; those remain pending where recorded.
 
 **Identifier note.** The personal memo's requirement aliases were canonicalised
 during the D1/D2 integration: `FR-014` → `FR-HAR-001`, `FR-015` → `FR-OBS-005`,
@@ -1332,7 +1348,7 @@ artefact exists, that absence is stated instead of inventing one.
 | 2026-11-02/03 | Stage 0–6 optimisation campaign | Reproducible baseline `866133d`; Stage 1 report dedupe and Stage 2 structured output accepted; **Stage 4 rejected** (+3.8 % total tokens); **Stage 6 rejected and rolled back** after the QA framework found semantic information loss; ECONNRESET recovery without restarting the task. | `AUL-086` (AIU-013), `AUL-099` (AIU-026); `LOG-001`–`LOG-003` | Campaign decisions with measured evidence. No formal review artefact. |
 | 2026-11-04–14 | Main development arc | Rounds 6–8; FRED key found disabled and historical NVDA news unobtainable; shell/tool loss recovered by subagent delegation after the operator refused simulated output; **Stage-2 rollback approved**; HTTP 429 pivot; historical news/sentiment audit; batch-macro and S2 structured output; RC1 freeze `9948bf8`; CAND-01 design; two CAND-01 audits (`READY_WITH_LIMITATIONS`) and the PF-01 re-audit; stop-before-live-runs instruction. | `AUL-087` (AIU-015), `AUL-088` (AIU-016), `AUL-100` (AIU-027); `LOG-004`; `REC-09` | Technical verification and operator decisions. `REC-09` records that no committed audit report survives from this period. |
 | 2026-11-15 | Pre-V2 apparatus, C3 audit rounds 2–5, migration | C3 rounds 2–5 (REC-01…REC-04) found Critical/blocking defects and the **self-tamper incident**; the campaign was halted at **zero paid calls**; Finnhub+GDELT migration, PIT audit and the final **Finnhub-only** scope decision; explicit paid-run authorizations and withheld authorizations recorded as conversation turns; Plan C `BLOCKED` on the lost generator, then C2 reconstruction and C3 execution. | `AUL-074` (AIU-001), `AUL-075` (AIU-002), `AUL-090` (AIU-017), `AUL-101` (AIU-028), `AUL-102` (AIU-029), `AUL-103` (AIU-030); `REC-01`–`REC-04` | Formal **AI-authored** audit rounds with committed reports (REC-01–04). No human reviewer. |
-| 2026-11-16 | V2/V3 batches, freezes, audits, remediation | V2 batch (7 attempts/5 valid/1 env-failed/1 invalid/1,463,791 tokens); V3 freeze `e3b5cca` and batch (18 attempts/15 valid/3,067,669 tokens); V3 audits (REC-06); final remediation (REC-07) and `50b2ca3`. | `AUL-076`–`AUL-082`, `AUL-092`, `AUL-093`, `AUL-095`; `REC-05`–`REC-07`; `LOG-005`–`LOG-011` | AI-authored audit rounds with committed reports. No human reviewer. |
+| 2026-11-16 | V2/V3 batches, freezes, audits, remediation | V2 batch (7 attempts/5 valid/1 env-failed/1 invalid/1,463,791 tokens); V3 freeze `e3b5cca` and batch (18 attempts / 16 Run IDs / 15 valid / 1 environment-failed / 2 invalid / 3,067,669 tokens); V3 audits (REC-06); final remediation (REC-07) and `50b2ca3`. | `AUL-076`–`AUL-082`, `AUL-092`, `AUL-093`, `AUL-095`; `REC-05`–`REC-07`; `LOG-005`–`LOG-011` | AI-authored audit rounds with committed reports. No human reviewer. |
 
 **What remains unresolved from this period:** the pre-V2 sessions were read at
 human-prompt level; the 509 delegated OpenCode sessions and 36 `dsh` subagent
@@ -1380,7 +1396,8 @@ above are unchanged.
 | REC-10 | `AI_EVIDENCE_CHECKED_WITH_LIMITATIONS` | Read-only record re-read; attribution and requirement gaps remain recorded. |
 
 None of these assessments replaces `PENDING_HUMAN_CONFIRMATION`; they record only
-what an AI tool could verify locally.
+what an AI tool could verify locally. The student's 2026-11-21 review confirms the
+documentation text, not the independent correctness of these technical audits.
 
 Resolution rule used below: a record is `FIXED` only when a later commit and a
 named test/command exist; otherwise the finding is marked `NOT_VERIFIED`.

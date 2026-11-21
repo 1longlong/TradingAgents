@@ -1,13 +1,14 @@
 # Student-annotated transcript — WangTianQi (60726054)
 
-> **STATUS: AI-PREPARED DRAFT — NOT SIGNED, NOT FINAL.**
+> **STATUS: AI-ASSISTED; HUMAN-REVIEWED AND CONFIRMED; SIGNATURE PENDING.**
 > This file was drafted on 2026-11-21 by DeepSeek Harness (dsh) from committed
 > evidence and the recorded AI-coding sessions, at the project owner's request.
-> It is structurally complete and evidence-grounded, but the personal decisions,
-> reasoning and reflections belong to the student. Every place that needs a real
-> personal annotation is marked
-> `HUMAN_CONFIRMATION_REQUIRED`. The final attestation at the end is **unsigned**.
-> Do not treat this draft as a completed human-authored transcript.
+> WangTianQi has personally read and reviewed this documentation and confirmed it
+> as an accurate account of the work, with AI assistance, on 2026-11-21
+> (“Documentation reviewed and confirmed by WangTianQi, with AI assistance, on
+> 2026-11-21”). The final attestation/signature field remains unsigned and
+> pending; content review is not a handwritten or electronic signature, and it
+> does not independently reproduce the historical experiments.
 
 | Field | Value |
 | --- | --- |
@@ -500,8 +501,9 @@
   as a deliverable; it changed no product code or frozen artefact.
 - **How it was verified.** The validator ran and reported the required artifacts;
   the personal branch recorded 2,233 passed / 0 failed / 2 skipped / 319 subtests
-  after the test-isolation fixes. The merged-tree full suite is `NOT_RUN`
-  (`DEBT-054`).
+  after the test-isolation fixes. The historical merged-tree statement was
+  `NOT_RUN` (`DEBT-054`); the completed integration tree (`94755cf`) records
+  **5,132 passed / 3 skipped**, both validators PASS and `ruff check .` PASS.
 - **Evidence links.** `AUL-094`, `AUL-104`; `0fddb9f`, `3097060`, `57b93df`;
   personal `docs/ai-use-session-audit.md`.
 - **Remaining doubt.** The personal governance files were introduced 2026-11-19;
@@ -563,17 +565,17 @@
   cost-saving or trading-alpha claim.
 - This transcript contains no credential, key, token or `.env` value.
 
-## What remains for WangTianQi to write personally
+## What remains for WangTianQi to sign or confirm formally
 
-1. The personal reasoning in every entry marked `HUMAN_CONFIRMATION_REQUIRED`.
-2. Confirmation of the four AI-assisted draft paragraphs now in `Report.md` §7
-   (motivation; the V2 halt and re-freezes; lessons about measurement/evidence/audit
-   independence; whether the freeze/audit overhead was justified).
+The content review has been completed (2026-11-21). The following formal items
+remain separate:
+
+1. The final attestation/signature below (unsigned).
+2. Formal record-level acceptance of REC-01–10 and ADR/risk/debt items.
 3. The dated paid-run authorization (or an explicit statement that none exists).
-4. The session-authorship and commit-author confirmations.
-5. The final attestation below.
+4. The session-authorship and commit-author confirmations (`DEBT-053`).
 
-## Final attestation (UNSIGNED — do not submit as-is)
+## Final attestation (UNSIGNED — content reviewed 2026-11-21; signature pending)
 
 I confirm that the annotations above are my own account of my work, that I have
 not fabricated results, and that I have not included any credential or private

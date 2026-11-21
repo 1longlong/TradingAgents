@@ -413,17 +413,24 @@ it has no real broker path.
 
 ### Current integration status (2026-11-21)
 
-- This worktree is `integrate/token-into-release-20261121` at base `24adf97`,
-  **merging** the personal feature `57b93df` (personal final code `50b2ca3`).
-- **The Git merge is in progress and has not been completed, committed, or
-  pushed.** Do not read this tree as a published release.
-- D1–D9 documentation integration is staged in this worktree: the merged
-  requirements/ADR/invariant/governance set is present. The protected
-  `.opencode/rules.md`, `.opencode/permissions.jsonc` and the CI workflow remain
-  unresolved and require explicit human handling.
-- The remote CI has **not** been run for the integrated tree, and the full
-  offline suite has **not** been run while unrelated documentation conflicts
-  remain. See [`Report.md`](Report.md) and
+- Branch `integrate/token-into-release-20261121`, HEAD `94755cf` (documentation
+  commit). History: Release `24adf97` → personal feature `57b93df` → old-base
+  merge `702d957` → PR #5 Release `9a08e08` → second merge `f2220a6` → final
+  documentation `94755cf`.
+- **Both merges are completed and the branch is pushed.** GitHub PR **#8** is
+  open, targeting `release`; it is **not merged**. PR #8 is `MERGEABLE`, with
+  **7/7 GitHub CI checks successful** at the verified point (2026-11-21).
+- D1–D9 documentation is **integrated, not merely staged**: 52 requirements,
+  **108** unique AI-use records, **19** ADRs (Release `AUL-071–073`; personal
+  repaired records `AUL-106–108`), invariant and risk/debt reconciliation.
+  Protected `.opencode` configuration and CI were resolved to the old Release
+  versions by the human maintainer.
+- Local verification at `94755cf`: **5,132 passed, 3 skipped**; both validators
+  PASS; full-repository `ruff check .` PASS. The lint gate carries **12 narrow
+  per-file exceptions** for SHA-256-sealed historical audit scripts; those scripts
+  are exempted, not individually lint-clean.
+- PR #8 is **not merged into `release`**; reviewer approval and merge remain
+  outstanding. See [`Report.md`](Report.md) and
   [`docs/architecture/risk-list.md`](docs/architecture/risk-list.md).
 
 ### Historical Release status (preserved, time-scoped)
@@ -551,7 +558,7 @@ not runtime configuration.
   environment-degraded R01).
 - The recorded suite at `50b2ca3` is 2,227 passed / 4 known failed / 2 skipped /
   319 subtests; a `.env`-free submission-branch run reports 2,233 / 0 / 2 / 319.
-  The merged-tree full suite is **NOT_RUN**. No paid rerun was executed after the
+  The integrated-tree full suite is **5,132 passed / 3 skipped** at `94755cf`; the older `50b2ca3` figures above are historical. No paid rerun was executed after the
   final remediation, and there is no ground truth or P&L evidence.
 
 ### Artifact index
@@ -582,15 +589,16 @@ not runtime configuration.
 | [`docs/architecture/evaluation-table.md`](docs/architecture/evaluation-table.md) | Evidence | Release table + personal Part III. |
 | [`docs/code-governance/structural-constraints.md`](docs/code-governance/structural-constraints.md) | Governance | Module/structural constraints. |
 | [`docs/code-governance/verification-constraints.md`](docs/code-governance/verification-constraints.md) | Governance | Verification rules and tiers. |
+| [`docs/audits/PERSONAL_V2_TO_PR8_DOCUMENTATION_AUDIT.md`](docs/audits/PERSONAL_V2_TO_PR8_DOCUMENTATION_AUDIT.md) | Audit | Personal V2→PR #8 documentation audit and remediation tracking. |
 | [`docs/code-governance/mcp-tool-manifest.md`](docs/code-governance/mcp-tool-manifest.md) | Governance | MCP/tool policy (no MCP server configured). |
-| [`docs/ai-use-log.yaml`](docs/ai-use-log.yaml) | Governance | 105 integrated AI-use records. |
+| [`docs/ai-use-log.yaml`](docs/ai-use-log.yaml) | Governance | 108 integrated AI-use records (Release `AUL-071–073`; personal `AUL-106–108`). |
 | [`docs/ai-use-session-audit.md`](docs/ai-use-session-audit.md) | Governance | Session audit, ID mappings, tool-attribution evidence. |
 | [`docs/review-memo.md`](docs/review-memo.md) | Governance | Release reviews + personal REC-01–REC-10 (human-pending). |
 | [`docs/debt-register.md`](docs/debt-register.md) | Debt | Release DEBT-001–041 + personal DEBT-042–055. |
 | [`docs/bug-diary.md`](docs/bug-diary.md) | Evidence | Release defects + personal BUG-001–BUG-018. |
 | [`prompts/prompt_v1.3.yaml`](prompts/prompt_v1.3.yaml) | Prompt | Current authoritative Coding-Agent startup prompt. |
 | [`prompts/archive/`](prompts/archive/README.md) | Evidence | Archived historical Market Analyst prompt snapshots (not runtime config). |
-| [`transcripts/60726054-WangTianQi.md`](transcripts/60726054-WangTianQi.md) | Transcript | WangTianQi AI-prepared draft; personal annotations and signature **pending**. |
+| [`transcripts/60726054-WangTianQi.md`](transcripts/60726054-WangTianQi.md) | Transcript | AI-assisted; content reviewed and confirmed by WangTianQi (2026-11-21); signature **pending**. |
 | [`transcripts/60536848-WANG-Yiwen.md`](transcripts/60536848-WANG-Yiwen.md) | Transcript | Teammate's preserved human-supervision record (do not edit). |
 
 ### Deliverable-to-repo mapping (this fork)
@@ -604,12 +612,13 @@ explicitly; **no** product code is duplicated or relocated.
 ### Transcripts and human review
 
 - [`transcripts/60726054-WangTianQi.md`](transcripts/60726054-WangTianQi.md) is an
-  **AI-prepared, unsigned draft**; the personal decisions, reflections and
-  attestation remain `HUMAN_CONFIRMATION_REQUIRED`.
+  **AI-assisted transcript reviewed and confirmed by WangTianQi on 2026-11-21**;
+  its formal signature/attestation remains unsigned and pending.
 - [`transcripts/60536848-WANG-Yiwen.md`](transcripts/60536848-WANG-Yiwen.md) is the
   teammate's preserved transcript and is not part of WangTianQi's deliverable.
-- Every personal review, ADR, risk and debt item remains
-  `PENDING_HUMAN_CONFIRMATION`; no human sign-off is claimed.
+- The personal documentation has been reviewed and confirmed by WangTianQi with
+  AI assistance; formal record-level acceptance of REC-01–10, ADR/risk/debt items
+  and the transcript signature remains `PENDING_HUMAN_CONFIRMATION`.
 
 ### Attribution and license
 

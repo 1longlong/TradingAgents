@@ -10,11 +10,12 @@ not a replacement for the code, tests or evidence.
 
 **NO SIGNED STUDENT TRANSCRIPT HAS BEEN DELIVERED YET.**
 
-- [`60726054-WangTianQi.md`](60726054-WangTianQi.md) is an **AI-prepared draft**
-  for WangTianQi (60726054). It is structurally complete and evidence-grounded,
-  but the personal interpretations, the four reflection areas and the final
-  attestation are marked `HUMAN_CONFIRMATION_REQUIRED` and remain **unsigned**.
-  It must not be represented as a signed transcript.
+- [`60726054-WangTianQi.md`](60726054-WangTianQi.md) is an **AI-assisted
+  transcript reviewed and confirmed by WangTianQi (60726054) on 2026-11-21**.
+  It is structurally complete and evidence-grounded; the formal final
+  attestation/signature remains **unsigned**. It must not be represented as a
+  signed transcript, and content review is not an independent experimental
+  reproduction.
 - [`60536848-WANG-Yiwen.md`](60536848-WANG-Yiwen.md) is the teammate's existing
   human-supervision transcript. It is preserved **unchanged** and is not part of
   WangTianQi's personal deliverable.
@@ -36,7 +37,8 @@ Open `transcripts/60726054-WangTianQi.md` and complete:
 4. The session-authorship and commit-author confirmations (`DEBT-053`).
 5. The final attestation and date (currently blank and unsigned).
 
-Until then the file stays `PENDING_HUMAN_CONFIRMATION`.
+Content review is complete (2026-11-21); the final signature remains
+`PENDING_HUMAN_CONFIRMATION`.
 
 ## D5 requirements
 
@@ -72,6 +74,6 @@ fail if it finds one.
 | --- | --- |
 | `README.md` | This policy and status. |
 | `TEMPLATE_student-id-student-name.md` | Placeholder template; not a transcript. |
-| `60726054-WangTianQi.md` | **AI-prepared draft** for WangTianQi; personal annotations and signature pending. Not final. |
+| `60726054-WangTianQi.md` | AI-assisted; content reviewed/confirmed by WangTianQi (2026-11-21); signature pending. |
 | `60536848-WANG-Yiwen.md` | The teammate's preserved human-supervision transcript. Do not edit. |
 | `<student-id>-<student-name>.md` | A real human-annotated transcript. None is signed yet. |
