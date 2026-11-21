@@ -93,8 +93,10 @@ def _sandbox(tmp_path: Path) -> Path:
 def _run(root: Path, *args: str, cwd: Path | None = None, secrets: Path | None = None):
     env = dict(os.environ)
     site_paths = [p for p in sys.path if "site-packages" in p]
-    if site_paths:
-        env["PYTHONPATH"] = os.pathsep.join(site_paths + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else []))
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(root / "src"), *site_paths]
+        + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else [])
+    )
     env.pop("TRADINGAGENTS_BENCHMARK_SECRETS", None)
     # Never inherit provider credentials from the developer's shell: a "dead
     # endpoint" probe must actually be dead. Before this, pytest's ``.env``

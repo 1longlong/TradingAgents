@@ -6406,3 +6406,17 @@ entries:
   human_review: pending
   paths:
   - test/offline/test_ci_gates.py
+- id: AUL-111
+  date: '2026-11-22'
+  tool: ChatGPT
+  phase: verification
+  purpose: AI-assisted repair of GitHub Actions regression failures involving cross-test module imports and subprocess
+    sandbox import-path isolation.
+  scope: 'PR #8 regression CI remediation; test-only changes. No production behavior or security guard was weakened.'
+  outcome: 'Local full socket-disabled suite: 5576 passed, 3 skipped, 323 subtests passed. Focused regression tests
+    and Ruff passed after repair. Remote multi-version CI verification remains pending.'
+  human_review: pending
+  paths:
+  - test/offline/test_audit_b_regressions.py
+  - test/offline/test_audit_c_regressions.py
+  - test/offline/test_run_token_benchmark_sh.py

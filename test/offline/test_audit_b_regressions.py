@@ -232,8 +232,7 @@ def test_a_mismatched_spec_is_rejected_after_a_real_build(monkeypatch):
 
 def test_consume_from_setup_matches_the_real_graphsetup(monkeypatch):
     """The mirrored derivation must equal what the real graph really passes."""
-    from test_switch_consumption import ARMS, build_real_graph
-
+    from test.offline.test_switch_consumption import ARMS, build_real_graph
     from tradingagents.graph.switch_verification import consume_switches_from_setup
 
     for arm, switches in ARMS.items():

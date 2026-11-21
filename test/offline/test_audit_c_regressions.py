@@ -113,7 +113,7 @@ def test_dropping_single_pass_from_one_analyst_is_caught() -> None:
 @pytest.mark.parametrize("arm", ["B", "AB", "C0", "CC"])
 def test_the_consumer_table_matches_what_graphsetup_passes(arm, monkeypatch) -> None:
     """The table must describe the *real* GraphSetup, not an intention."""
-    from test_switch_consumption import ARMS, build_real_graph
+    from test.offline.test_switch_consumption import ARMS, build_real_graph
 
     switches = ARMS[arm]
     observed = build_real_graph(switches, monkeypatch)
@@ -134,7 +134,7 @@ def test_the_consumer_table_matches_what_graphsetup_passes(arm, monkeypatch) -> 
     ("fundamentals", "single_pass"),
 ])
 def test_every_declared_consumer_switch_is_really_passed(analyst, switch, monkeypatch) -> None:
-    from test_switch_consumption import ARMS, build_real_graph
+    from test.offline.test_switch_consumption import ARMS, build_real_graph
 
     observed = build_real_graph(ARMS["CC"], monkeypatch)
     assert switch in observed[analyst], (analyst, switch)
