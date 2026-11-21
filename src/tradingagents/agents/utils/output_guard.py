@@ -42,6 +42,8 @@ prompt instruction until a schema/policy defines one (recorded in
 ``docs/debt-register.md``), so a degraded run is never coerced to Hold.
 """
 
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+
 from __future__ import annotations
 
 import re
@@ -381,7 +383,9 @@ def _line_has_label_without_value(norm_line: str, label: str) -> bool:
     """
     if not norm_line or _BLOCKQUOTE_RE.match(norm_line):
         return False
-    pos = _HEADER_BULLET_RE.match(norm_line).end()
+    bullet = _HEADER_BULLET_RE.match(norm_line)
+    assert bullet is not None
+    pos = bullet.end()
     while True:
         label_at = _label_end(norm_line, pos, label)
         if label_at is not None:
@@ -1340,6 +1344,7 @@ def _contain_cross_line_facts(
         if _BOUNDARY_NUMBER_RE.search(date_masked):
             continue
         date_match = _BOUNDARY_DATE_RE.search(masked)
+        assert date_match is not None
         cited = _cited_ids_near(index, date_match.start(), date_match.end(), tokens)
         if not cited:
             continue
@@ -1363,6 +1368,7 @@ def _contain_cross_line_facts(
             continue
         # Cross-line per-token authority: a verified date (on this line) or value
         # (on its own line) is never erased; only UNAUTHORIZED components are blanked.
+        assert value_span is not None
         date_span_abs = (date_match.start(1), date_match.end(1))
         date_protected = _span_is_authorized(
             date_span_abs, protected_spans.get(index, [])

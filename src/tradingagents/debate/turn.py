@@ -15,6 +15,8 @@ heuristic is used; if that also cannot recover a stance, the turn is marked
 failure can never extend the debate.
 """
 
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+
 from __future__ import annotations
 
 import re
@@ -217,7 +219,7 @@ def _parse_new_claims(value: str) -> list[ClaimEvidenceLink]:
     return links
 
 
-def _parse_confidence(value: str) -> float | None:
+def _parse_confidence(value: str | None) -> float | None:
     if value is None:
         return None
     text = value.strip()

@@ -4056,3 +4056,181 @@ entries:
     rerun is claimed.'
   - No real environment/key/user-runtime reads, new dependencies, paid calls, remote push, force push
     or deployment. Existing ignored demo/skills/dependencies remain outside version control.
+
+- id: AI-20261121-PR7-CI-001
+  date: '2026-11-21'
+  tool: OpenCode
+  purpose: 'Diagnose PR #7 CI run 44867605790 and repair missing WebUI CI extras and migrated live-test
+    identity without weakening gates.'
+  source: Current user report that many PR checks failed; bounded plan web-ci-repair-20261121-v1.
+  human_review: CI diagnosis and bounded maintenance only; broader core/safety repair scope has been requested
+    from the user. No independent test-plan approval, final acceptance or remote publication is claimed.
+  paths:
+  - .github/workflows/ci.yml
+  - test/ci_gates.py
+  - test/offline/test_ci_gates.py
+  - docs/architecture/adr/004-packaging-and-build.md
+  - docs/architecture/evaluation-logbook.md
+  - docs/architecture/trace-matrix.md
+  - docs/ai-use-log.yaml
+  - docs/review-memo.md
+  - docs/bug-diary.md
+  - docs/debt-register.md
+  notes:
+  - Used read-only GitHub CLI check/job logs after the diagnostics connection was unavailable and an all-job
+    download ended with EOF. No workflow rerun, approval, merge or external comment.
+  - All four Python matrices failed collection because dev did not install optional FastAPI. Three source-verification
+    jobs now install existing dev,web extras; core clean-install and every check remain unchanged.
+  - Canonical live relocation now maps tests/trading/live to test/live/trading; equal relocated files
+    are unchanged, modified fixtures still count and duplicate logical files are rejected.
+  - Corrected checker passes actual PR 095fa59 versus release 9a08e08 AI-use coverage without fake offline
+    paths or blanket exemptions.
+  - 'Full no-credential/socket-denied test tree: 4212 passed, 3 skipped, 52 warnings, 92 subtests, 42.92s.
+    Skips: opt-in live trading, absent real DeepSeek credentials and optional langchain_aws. Ruff, schema
+    and whitespace pass.'
+  - 'Remote mypy: 322 errors in 60 files; 58 files byte-identical to release. Bandit: 9 medium/1 high
+    findings in existing core. Approval gate lacks earlier human test-plan evidence. Semantic gate triggers
+    four renamed development-prompt files and lacks base-approved policy. All remain explicit blockers.'
+  - No core/CLI/safety/trading/runtime prompt changes, dependencies installed, test weakening, fabricated
+    approvals, credential/user-runtime reads, automatic commit/push or live API calls.
+
+- id: AI-20261121-CI-TYPES-SECURITY-001
+  date: '2026-11-21'
+  tool: OpenCode
+  purpose: Complete user-authorized type and security repairs across core, CLI, simulated trading, safety
+    and WebUI while preserving business behavior.
+  source: Current user reply explicitly authorizing all type/security fixes while retaining business behavior;
+    scope web-ci-types-security-20261121-v1.
+  human_review: Direct implementation scope authorization received after the concrete CI findings; independent
+    test-file review, earlier platform approval, final acceptance and Git publication are not fabricated.
+  paths:
+  - architecture-blueprint.md
+  - .github/workflows/ci.yml
+  - docs/ai-use-log.yaml
+  - docs/architecture/adr/004-packaging-and-build.md
+  - docs/architecture/adr/012-error-handling-merge-integration.md
+  - docs/architecture/evaluation-logbook.md
+  - docs/architecture/trace-matrix.md
+  - docs/bug-diary.md
+  - docs/debt-register.md
+  - docs/review-memo.md
+  - pyproject.toml
+  - src/cli/announcements.py
+  - src/cli/config.py
+  - src/cli/main.py
+  - src/cli/utils.py
+  - src/safety/engine.py
+  - src/trading/audit.py
+  - src/trading/backtest.py
+  - src/trading/portfolio.py
+  - src/tradingagents/agents/analysts/market_analyst.py
+  - src/tradingagents/agents/analysts/sentiment_analyst.py
+  - src/tradingagents/agents/managers/portfolio_manager.py
+  - src/tradingagents/agents/researchers/bear_researcher.py
+  - src/tradingagents/agents/researchers/bull_researcher.py
+  - src/tradingagents/agents/utils/fundamental_data_tools.py
+  - src/tradingagents/agents/utils/memory.py
+  - src/tradingagents/agents/utils/output_guard.py
+  - src/tradingagents/agents/utils/rating.py
+  - src/tradingagents/agents/utils/structured.py
+  - src/tradingagents/agents/utils/tool_governance.py
+  - src/tradingagents/backtest.py
+  - src/tradingagents/comparison/runner.py
+  - src/tradingagents/comparison/schemas.py
+  - src/tradingagents/dataflows/alpha_vantage_common.py
+  - src/tradingagents/dataflows/alpha_vantage_fundamentals.py
+  - src/tradingagents/dataflows/config.py
+  - src/tradingagents/dataflows/date_window.py
+  - src/tradingagents/dataflows/errors.py
+  - src/tradingagents/dataflows/evidence_capture.py
+  - src/tradingagents/dataflows/interface.py
+  - src/tradingagents/dataflows/market_data_validator.py
+  - src/tradingagents/dataflows/reddit.py
+  - src/tradingagents/dataflows/retry_session.py
+  - src/tradingagents/dataflows/sec_edgar.py
+  - src/tradingagents/dataflows/stockstats_utils.py
+  - src/tradingagents/dataflows/stocktwits.py
+  - src/tradingagents/dataflows/utils.py
+  - src/tradingagents/dataflows/vendor_breaker.py
+  - src/tradingagents/dataflows/y_finance.py
+  - src/tradingagents/debate/budget.py
+  - src/tradingagents/debate/claims.py
+  - src/tradingagents/debate/confidence_policy.py
+  - src/tradingagents/debate/conflicts.py
+  - src/tradingagents/debate/evidence_manifest.py
+  - src/tradingagents/debate/turn.py
+  - src/tradingagents/debate/usage_capture.py
+  - src/tradingagents/debate/usage_ledger.py
+  - src/tradingagents/evidence/multi_category_gate.py
+  - src/tradingagents/evidence/validate.py
+  - src/tradingagents/graph/checkpointer.py
+  - src/tradingagents/graph/conditional_logic.py
+  - src/tradingagents/graph/data_quality_gate.py
+  - src/tradingagents/graph/evidence_tool_node.py
+  - src/tradingagents/graph/setup.py
+  - src/tradingagents/graph/trading_graph.py
+  - src/tradingagents/llm_clients/anthropic_client.py
+  - src/tradingagents/llm_clients/azure_client.py
+  - src/tradingagents/llm_clients/google_client.py
+  - src/tradingagents/llm_clients/openai_client.py
+  - src/tradingagents/report_artifacts.py
+  - test/ci_gates.py
+  - test/offline/test_ci_gates.py
+  - test/offline/test_debate_conflicts.py
+  - test/offline/test_durable_usage_ledger.py
+  - test/offline/test_reddit_fallback.py
+  - test/offline/test_stocktwits_resilience.py
+  - test/offline/test_structured_agent_prompts.py
+  notes:
+  - Existing bounded CI-extra/live-path repairs retained. ADR-012 records the expanded plan and negative-test
+    strategy before product edits; no permission or human-owned rule is changed.
+  - Mypy corrections express heterogeneous SDK options, optional values, Self-preserving vendor errors,
+    read-only mappings, typed state/graph callback contracts, initialized state and existing control-flow
+    guarantees. No ignore_errors, type-ignore, broad Any cast, disabled check or relaxed threshold.
+  - The conflict-state adapter had a real two-versus-three-value unpacking defect. It now passes the existing
+    denials output list into derive_conflicts and returns its documented three state outputs; negative
+    invalid-evidence retention is covered.
+  - HTTPS feed transport checks initial schemes/authorities and same-origin redirects; defusedxml explicitly
+    rejects DTD, entities and external references. Existing public transport seams, bounded body read,
+    normal Atom parsing, retries and unavailable/error distinction remain.
+  - defusedxml>=0.7.1,<1 is declared as a direct runtime dependency; installed version 0.7.1 reused without
+    installation or upgrade. No new framework/service or additional deliverable file.
+  - Conflict SHA1 IDs retain exact legacy bytes with usedforsecurity=False. Ledger SQL uses fixed tokens
+    and parameter-bound values; checkpoint deletes use fixed statements. Market-prompt literal hash remains
+    release-identical.
+  - 'Complete credential-free/socket-denied suite: 4240 passed, 3 skipped, 52 warnings, 92 subtests, 44.03s.
+    Frontend: 71 passed/16 files, 2.69s. Full mypy: zero errors/194 files. Bandit configured medium/high
+    scan: zero findings, no skipped/nosec tests; low findings remain visible.'
+  - Full Ruff, schema, both registry/artifact validators, pip check and deliverable-tree structure pass.
+    Dependency audit first failed on a PyPI proxy connection; unchanged retry passed for 127 exact installed
+    versions. Temporary logs/caches are outside project deliverables.
+  - After full tests, final annotation/import-order refinements were checked with mypy/Ruff/import/CLI
+    smoke; no second full suite claimed. Existing live/broker/provider checks were not run.
+  - Remaining genuine review/semantic gates are not bypassed; current source type corrections also touch
+    model/graph paths seen by the existing semantic detector. No Git commit/push/merge, workflow rerun,
+    external comment or approval is part of this repair.
+
+- id: AI-20261121-CI-PUBLISH-001
+  date: '2026-11-21'
+  tool: OpenCode
+  purpose: 'Publish the completed authorized PR #7 CI type/security repairs after the user explicitly
+    requested commit, push and PR submission.'
+  source: Current user instruction to commit, push and submit a PR.
+  human_review: Git publication and updating the existing feature/webui-to-release PR are explicitly authorized;
+    no final acceptance or platform gate approval is claimed.
+  paths:
+  - docs/ai-use-log.yaml
+  - docs/review-memo.md
+  notes:
+  - Publish the already-verified candidate including earlier bounded CI extras/live-path fixes. No further
+    product changes or repeated regression suites are introduced for publication.
+  - 'Existing PR #7 is OPEN, head feature/webui and base release; update that PR instead of creating a
+    duplicate. Rewrite the description to reflect actual type/security fixes and remaining approval/semantic
+    requirements.'
+  - 'Local results remain: 4240 passed/3 skipped/92 subtests, frontend 71 passed, complete mypy/Bandit/Ruff/schema/structure
+    and 127-version dependency audit passed as scoped in the evaluation logbook.'
+  - Ignored .agents/demo, real environment files, dependency trees, caches and generated output remain
+    outside version control. Normal push only; no force push, approval, merge, deployment or external
+    discussion comment.
+  - Actual commit/push/PR outcomes are reported in the current conversation after execution; this entry
+    does not predeclare their success or a passing remote CI run.

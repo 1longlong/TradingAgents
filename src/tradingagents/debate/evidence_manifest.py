@@ -20,6 +20,8 @@ as new. An ID absent from the evidence manifest never counts, nor does an ID
 that is not explicitly linked to a current claim.
 """
 
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -235,7 +237,7 @@ def build_citation_allowlist(
         record = _first_record(records, evidence_id)
         metric = str(record.get("metric_name", "") or "") if record else ""
         value_raw = str(record.get("value_raw", "") or "") if record else ""
-        unit = str(record.get("unit_normalized", "") or record.get("unit_raw", "") or "")
+        unit = str(record.get("unit_normalized", "") or record.get("unit_raw", "") or "") if record else ""
         unit_suffix = f" {unit}" if unit else ""
         status = str(manifest.status_by_id.get(evidence_id, ""))
         entries.append(

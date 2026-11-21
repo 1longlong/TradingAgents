@@ -33,10 +33,14 @@ See: https://github.com/TauricResearch/TradingAgents/issues/557
 See: https://github.com/TauricResearch/TradingAgents/issues/796
 """
 
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+
 from datetime import datetime, timedelta
+from typing import cast
 
 from langchain_core.messages import AIMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.tools import StructuredTool
 
 from tradingagents.agents.schemas import SentimentReport, render_sentiment_report
 from tradingagents.agents.utils.agent_utils import (
@@ -100,8 +104,10 @@ def _fetch_sources(
             f"{prefetch.news_article_limit_now()!r}); "
             "refusing to label the fetched text with a stale limit"
         )
+    news_function = cast(StructuredTool, get_news).func
+    assert news_function is not None  # The registered get_news tool is synchronous.
     return {
-        "news": get_news.func(ticker, start_date, end_date, trade_date=end_date),
+        "news": news_function(ticker, start_date, end_date, trade_date=end_date),
         # Pass the analysis window so a historical run trims social posts to it
         # instead of leaking today's chatter into a backtest (#1220).
         "stocktwits": fetch_stocktwits_messages(

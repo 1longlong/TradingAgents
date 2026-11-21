@@ -1,3 +1,4 @@
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
 import json
 import os
 from datetime import datetime
@@ -133,7 +134,7 @@ def _http_status_error(exc):
     return None
 
 
-def _make_api_request(function_name: str, params: dict) -> dict | str:
+def _make_api_request(function_name: str, params: dict) -> str:
     """Helper function to make API requests and handle responses.
 
     Raises:
@@ -228,6 +229,7 @@ def _request_timeout() -> float:
     timeout = request_timeout(REQUEST_TIMEOUT, what)
     if timeout is None:
         stop_before_request(what, VendorRateLimitError)
+    assert timeout is not None  # stop_before_request always raises.
     return timeout
 
 

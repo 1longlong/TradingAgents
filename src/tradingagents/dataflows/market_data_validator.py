@@ -21,6 +21,8 @@ Two surfaces are exposed:
   structured result and never parses Markdown back into evidence.
 """
 
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+
 from __future__ import annotations
 
 import numbers
@@ -145,7 +147,7 @@ def _to_decimal(value) -> Decimal | None:
     elif isinstance(value, numbers.Real):
         # Covers int, float, numpy int/float scalars. Reject non-finite first.
         if isinstance(value, numbers.Integral) and not isinstance(value, bool):
-            number = int(value)
+            number: int | float = int(value)
         else:
             number = float(value)
         if number != number or number in (float("inf"), float("-inf")):

@@ -14,6 +14,8 @@ nobody can read is not a Hold, and a Hold recorded in its place is quoted back t
 the next run as a call that was never made (#1170).
 """
 
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+
 from __future__ import annotations
 
 import re
@@ -91,11 +93,15 @@ _WRAP_RE = re.compile(_WRAP)
 
 
 def _skip_spaces(norm_line: str, pos: int) -> int:
-    return _SPACE_RE.match(norm_line, pos).end()
+    match = _SPACE_RE.match(norm_line, pos)
+    assert match is not None  # The whitespace expression accepts an empty match.
+    return match.end()
 
 
 def _match_wrap(norm_line: str, pos: int) -> int:
-    return _WRAP_RE.match(norm_line, pos).end()
+    match = _WRAP_RE.match(norm_line, pos)
+    assert match is not None  # The wrapper expression accepts an empty match.
+    return match.end()
 
 
 def _label_end(norm_line: str, pos: int, label: str) -> int | None:
@@ -150,7 +156,9 @@ def _split_header(norm_line: str, label: str) -> tuple[str, str, str, str] | Non
     """
     if not norm_line or _BLOCKQUOTE_RE.match(norm_line):
         return None
-    pos = _HEADER_BULLET_RE.match(norm_line).end()
+    bullet = _HEADER_BULLET_RE.match(norm_line)
+    assert bullet is not None  # An absent bullet is matched as an empty prefix.
+    pos = bullet.end()
     while True:
         label_at = _label_end(norm_line, pos, label)
         if label_at is not None:
@@ -245,7 +253,9 @@ def _sizing_split(norm_line: str, label: str) -> str | None:
     """
     if not norm_line or _BLOCKQUOTE_RE.match(norm_line):
         return None
-    pos = _HEADER_BULLET_RE.match(norm_line).end()
+    bullet = _HEADER_BULLET_RE.match(norm_line)
+    assert bullet is not None  # An absent bullet is matched as an empty prefix.
+    pos = bullet.end()
     while True:
         label_at = _label_end(norm_line, pos, label)
         if label_at is not None:
@@ -327,6 +337,7 @@ def extract_rating(text: str) -> str | None:
         if tail is None:
             continue
         head = _split_header(line, _RATING_HEADER_LABEL)
+        assert head is not None  # _rating_header_tail already matched this header.
         structural = head[2].capitalize()
     if structural:
         return structural

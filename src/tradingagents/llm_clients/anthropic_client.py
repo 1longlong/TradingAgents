@@ -1,3 +1,4 @@
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
 import re
 from typing import Any
 
@@ -59,7 +60,7 @@ class AnthropicClient(BaseLLMClient):
     def get_llm(self) -> Any:
         """Return configured ChatAnthropic instance."""
         self.warn_if_unknown_model()
-        llm_kwargs = {"model": self.model}
+        llm_kwargs: dict[str, Any] = {"model": self.model}
 
         if self.base_url:
             llm_kwargs["base_url"] = self.base_url

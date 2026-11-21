@@ -1,3 +1,4 @@
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
 import contextlib
 import datetime
 import os
@@ -6,6 +7,7 @@ import time
 from collections import deque
 from functools import wraps
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich import box
@@ -111,8 +113,8 @@ class MessageBuffer:
     }
 
     def __init__(self, max_length=100):
-        self.messages = deque(maxlen=max_length)
-        self.tool_calls = deque(maxlen=max_length)
+        self.messages: deque[tuple[str, str, str]] = deque(maxlen=max_length)
+        self.tool_calls: deque[tuple[str, str, dict[str, Any]]] = deque(maxlen=max_length)
         self.current_report = None
         self.final_report = None  # Store the complete final report
         self.agent_status = {}
@@ -340,6 +342,7 @@ def update_display(layout, spinner_text=None, stats_handler=None, start_time=Non
         if active_agents:
             teams[team] = active_agents
 
+    status_cell: Spinner | str
     for team, agents in teams.items():
         # Add first agent with team name
         first_agent = agents[0]
@@ -684,6 +687,7 @@ def _prompt_selections(prefs):
         # For Ollama, surface the resolved endpoint (OLLAMA_BASE_URL vs default)
         # before model selection so it's obvious where we're connecting.
         if selected_llm_provider == "ollama":
+            assert backend_url is not None
             confirm_ollama_endpoint(backend_url)
 
         # Confirm the provider's API key is present; prompt the user to paste
@@ -1101,8 +1105,8 @@ def run_analysis(checkpoint: bool | None = None, portfolio=None):
         @wraps(func)
         def wrapper(*args, **kwargs):
             func(*args, **kwargs)
-            timestamp, tool_name, args = obj.tool_calls[-1]
-            args_str = ", ".join(f"{k}={v}" for k, v in args.items())
+            timestamp, tool_name, tool_args = obj.tool_calls[-1]
+            args_str = ", ".join(f"{k}={v}" for k, v in tool_args.items())
             with open(log_file, "a", encoding="utf-8") as f:
                 f.write(f"{timestamp} [Tool Call] {tool_name}({args_str})\n")
         return wrapper
@@ -1121,9 +1125,12 @@ def run_analysis(checkpoint: bool | None = None, portfolio=None):
                         f.write(text)
         return wrapper
 
-    message_buffer.add_message = save_message_decorator(message_buffer, "add_message")
-    message_buffer.add_tool_call = save_tool_call_decorator(message_buffer, "add_tool_call")
-    message_buffer.update_report_section = save_report_section_decorator(message_buffer, "update_report_section")
+    for method_name, decorator in (
+        ("add_message", save_message_decorator),
+        ("add_tool_call", save_tool_call_decorator),
+        ("update_report_section", save_report_section_decorator),
+    ):
+        setattr(message_buffer, method_name, decorator(message_buffer, method_name))
 
     # Now start the display layout
     layout = create_layout()
@@ -1525,7 +1532,7 @@ def backtest(
         console.print("[red]No ticker to analyze; pass them comma-separated, e.g. NVDA,AAPL[/red]")
         raise typer.Exit(code=1)
 
-    kwargs = {"asset_type": asset_type, "portfolio": book, "run_id": run_id}
+    kwargs: dict[str, Any] = {"asset_type": asset_type, "portfolio": book, "run_id": run_id}
     if analysts:
         kwargs["selected_analysts"] = [a.strip().lower() for a in analysts.split(",") if a.strip()]
 

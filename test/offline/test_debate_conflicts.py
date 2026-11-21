@@ -793,3 +793,30 @@ class TestEvaluatorNodePersistence:
         # No tracked conflict -> safe empty summary, nothing fabricated.
         assert debate.get("conflicts") == []
         assert debate.get("conflict_summary", {}).get("open_blocking_count") == 0
+
+
+
+def test_conflict_id_keeps_legacy_bytes_without_a_security_hash():
+    """ADR-012 / INV-5: do not invalidate persisted conflict identities."""
+    assert conflict_id_for(" Valuation ", ConflictKind.INTERPRETIVE) == "conflict-bcce6788dda99e46"
+
+
+def test_state_adapter_returns_conflicts_notes_and_denials():
+    """ADR-012 / FR-DDT-005: the public state adapter uses the two-value core contract."""
+    from tradingagents.debate.conflicts import track_round_conflicts
+
+    state = {"trade_date": TARGET, "company_of_interest": "NVDA",
+             "data_quality_evidence_records": [_RECORD_RUN1]}
+    created, notes, denials = track_round_conflicts(
+        state=state, round_turns=[_turn("Bull", _assert_assert())], round_index=1,
+    )
+    assert len(created) == 1
+    assert notes == [] and denials == []
+    state["investment_debate_state"] = {"conflicts": created}
+    kept, notes, denials = track_round_conflicts(
+        state=state, round_turns=[_turn("Bear", _assert_assert(evidence=["unknown"]))],
+        round_index=2,
+    )
+    assert kept[0]["conflict_id"] == created[0]["conflict_id"]
+    assert kept[0]["status"] == "open"
+    assert len(denials) == 1 and "observation_rejected" in denials[0]

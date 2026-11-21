@@ -157,3 +157,44 @@ those tests pass in ordinary offline mocked execution. These are explicit
 verification limits, not waived failures or evidence of a complete green suite.
 TODO (another contributor): review PR #5 before final merge. See ADR-012 and the
 integration entry in the evaluation logbook for exact results.
+
+
+## PR #7 CI blockers — 2026-11-21
+
+Observed run 44867605790 on 095fa59: complete-source mypy has 322 errors in
+60 files; 58 files are unchanged release implementations after relocation.
+Bandit reports nine medium and one high findings, including URL/XML handling,
+non-security SHA1 and dynamically assembled SQL statements requiring individual
+triage. Owner: maintainers. Action: authorize a separate core/CLI/trading/safety
+type and security repair with ADR/tests; do not suppress scans or change trading
+semantics just to pass. No such source changes are made by the bounded CI fix.
+
+The approval gate lacks a genuine earlier test-plan review. Owner: human
+maintainers/reviewer. Existing chat authorization cannot fabricate that platform
+history; a later code review alone does not satisfy the current prior-test gate.
+A human must decide the compliant review/integration path. The four changed
+prompts/prompt_v1.* files are development-governance prompts with naming edits,
+but the current semantic detector treats all prompt-file changes as model
+changes. Owner: governance maintainers. Action: review that classification and,
+where runtime prompt/model evaluation is required, establish the evaluator,
+fixed dataset and thresholds on the base first. No fake evaluation, automatic
+approval or fail-open gate is added. These blockers keep blocking-gate red.
+
+
+### PR #7 type/security repair status — 2026-11-21
+
+The 322 type errors and 10 configured medium/high scan findings from head
+095fa59 are repaired in the current working tree under explicit expanded user
+authorization. Full mypy/Bandit/Ruff and complete isolated regressions pass;
+127-version dependency audit passes after a recorded proxy-failed attempt.
+The existing CORE-BT-20261121-TYPES summarize errors are included in this repair:
+known-alpha narrowing now matches the already-filtered runtime values.
+These are local results, not a passing remote job or final human acceptance.
+
+Approval chronology/current-head reviews and the base-approved semantic policy
+remain open. The larger candidate now includes type-only model/graph source
+edits as well as historical development-prompt naming changes, which the current
+semantic detector sees. No detector exemption, empty evaluator, fabricated
+baseline score or retrospective prior-test approval is supplied. Maintainers
+must decide the compliant integration/review path. No new broker or trading
+capability is added.

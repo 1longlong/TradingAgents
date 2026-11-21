@@ -33,6 +33,8 @@ import. The same pure evaluation is reused by the report-artifact writer and by
 tests without re-entering LangGraph.
 """
 
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
@@ -383,6 +385,7 @@ def _resolve_optional_group(
     # beat a manually claimed grade. A manual group can only appear when no
     # records were captured, and even then its quality never exceeds what the
     # record-less state supports (it stays LOW, see below).
+    group: EvidenceGroupQuality | None
     if captured_group is not None:
         group = captured_group
     else:

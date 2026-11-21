@@ -9,9 +9,12 @@ undated item is kept only when the window reaches the present (a live run), sinc
 in a backtest we can't prove it isn't future.
 """
 
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from typing import overload
 
 from .utils import get_current_date
 
@@ -60,10 +63,20 @@ def coverage_gap(
 
 
 def _parse(date: str | None) -> datetime | None:
+    if date is None:
+        return None
     try:
         return datetime.strptime(date, "%Y-%m-%d")
     except (TypeError, ValueError):
         return None
+
+
+@overload
+def as_of(requested: str, trade_date: str) -> str: ...
+
+
+@overload
+def as_of(requested: str | None, trade_date: str) -> str | None: ...
 
 
 def as_of(requested: str | None, trade_date: str) -> str | None:
@@ -76,7 +89,10 @@ def as_of(requested: str | None, trade_date: str) -> str | None:
     if not trade_date:
         return requested
     parsed = _parse(requested)
-    return requested if parsed is not None and parsed <= _parse(trade_date) else trade_date
+    target = _parse(trade_date)
+    if parsed is not None:
+        assert target is not None
+    return requested if parsed is not None and target is not None and parsed <= target else trade_date
 
 
 def as_of_window(start_date: str, end_date: str, trade_date: str) -> tuple[str, str]:
@@ -86,10 +102,14 @@ def as_of_window(start_date: str, end_date: str, trade_date: str) -> tuple[str, 
     """
     end = as_of(end_date, trade_date)
     start, old_end = _parse(start_date), _parse(end_date)
-    if end == end_date or start is None or start <= _parse(end):
+    parsed_end = _parse(end)
+    if end != end_date and start is not None:
+        assert parsed_end is not None
+    if end == end_date or start is None or (parsed_end is not None and start <= parsed_end):
         return start_date, end
     span = (old_end - start) if old_end is not None and old_end >= start else timedelta(0)
-    return f"{_parse(end) - span:%Y-%m-%d}", end
+    assert parsed_end is not None
+    return f"{parsed_end - span:%Y-%m-%d}", end
 
 
 def withhold_live_profile(curr_date: str | None, label: str) -> str | None:

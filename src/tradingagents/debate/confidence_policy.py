@@ -75,13 +75,15 @@ as a "price"; only unambiguously currency-glued figures are excluded from being 
 confidence candidate. Ordinary prices/dates remain byte-for-byte unchanged.
 """
 
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+
 from __future__ import annotations
 
 import contextlib
 import math
 import re
 import unicodedata
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -759,6 +761,7 @@ def cap_debate_turn(
 
     from dataclasses import replace
 
+    assert effective_confidence is not None
     capped_turn = replace(
         turn,
         confidence=float(effective_confidence),
@@ -768,7 +771,7 @@ def cap_debate_turn(
 
 
 def update_audit(
-    state: Mapping[str, Any] | Any, new_entries: list[dict[str, Any] | None]
+    state: Mapping[str, Any] | Any, new_entries: Sequence[dict[str, Any] | None]
 ) -> list[dict[str, Any]]:
     """Merge new audit entries into the state's existing audit block (deduped)."""
     existing = state.get("confidence_cap_audit") if isinstance(state, Mapping) else None

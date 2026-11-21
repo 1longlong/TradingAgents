@@ -22,9 +22,11 @@ All timing/token inputs are recorded (measured or estimated); no wall clock is
 read here.
 """
 
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -448,7 +450,7 @@ def pair_and_aggregate(results: Sequence[CaseResult]) -> ComparisonReport:
     )
 
 
-def _count_stop_reasons(reasons: Sequence[str]) -> dict[str, int]:
+def _count_stop_reasons(reasons: Iterable[str]) -> dict[str, int]:
     """Count occurrences of each non-empty stop reason (stable, sorted keys)."""
     counts: dict[str, int] = {}
     for reason in reasons:

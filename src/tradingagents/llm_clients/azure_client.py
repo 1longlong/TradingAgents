@@ -1,3 +1,4 @@
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
 import os
 from typing import Any
 
@@ -35,7 +36,7 @@ class AzureOpenAIClient(BaseLLMClient):
         """Return configured AzureChatOpenAI instance."""
         self.warn_if_unknown_model()
 
-        llm_kwargs = {
+        llm_kwargs: dict[str, Any] = {
             "model": self.model,
             "azure_deployment": os.environ.get("AZURE_OPENAI_DEPLOYMENT_NAME", self.model),
         }

@@ -1,5 +1,7 @@
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
 # TradingAgents/graph/setup.py
 
+from collections.abc import Hashable
 from typing import Any
 
 from langgraph.graph import END, START, StateGraph
@@ -49,7 +51,7 @@ from .sentiment_prefetch import PREFETCH_NODE, parse_sentiment_prefetch
 # router maps all of them, so a fall-through return (e.g. under prompt/i18n/
 # refactor drift in the speaker labels) can never hit a missing path_map entry
 # and crash LangGraph mid-run (#1088).
-DEBATE_PATH_MAP = {
+DEBATE_PATH_MAP: dict[Hashable, str] = {
     "Bull Researcher": "Bull Researcher",
     "Bear Researcher": "Bear Researcher",
     "Research Manager": "Research Manager",
@@ -57,7 +59,7 @@ DEBATE_PATH_MAP = {
 # The Debate Evaluator routes back to a speaker (continue) or to the Research
 # Manager (summarize/stop). Complete map so a fall-through return can never hit
 # a missing entry (#1088).
-DEBATE_EVALUATOR_PATH_MAP = {
+DEBATE_EVALUATOR_PATH_MAP: dict[Hashable, str] = {
     "Bull Researcher": "Bull Researcher",
     "Bear Researcher": "Bear Researcher",
     "Research Manager": "Research Manager",
@@ -65,12 +67,12 @@ DEBATE_EVALUATOR_PATH_MAP = {
 # After a researcher: either the next debate step (Bear / Debate Evaluator) or a
 # safe skip to the Research Manager when a pre-call budget guard refused the
 # call. Complete map so a fall-through never crashes LangGraph (#1088).
-RESEARCHER_STEP_PATH_MAP = {
+RESEARCHER_STEP_PATH_MAP: dict[Hashable, str] = {
     "Bear Researcher": "Bear Researcher",
     "Debate Evaluator": "Debate Evaluator",
     "Research Manager": "Research Manager",
 }
-RISK_ANALYSIS_PATH_MAP = {
+RISK_ANALYSIS_PATH_MAP: dict[Hashable, str] = {
     "Aggressive Analyst": "Aggressive Analyst",
     "Conservative Analyst": "Conservative Analyst",
     "Neutral Analyst": "Neutral Analyst",
@@ -81,7 +83,7 @@ RISK_ANALYSIS_PATH_MAP = {
 # restrictions) or Research Manager (the gate blocked the debate, forcing an
 # evidence-insufficient restricted conclusion). Complete map so a fall-through
 # can never hit a missing entry (#1088).
-GATE_PATH_MAP = {
+GATE_PATH_MAP: dict[Hashable, str] = {
     "Bull Researcher": "Bull Researcher",
     "Research Manager": "Research Manager",
 }
@@ -255,7 +257,7 @@ class GraphSetup:
         # sanitizer — not an analyst-time rewrite — is what keeps a raw over-cap
         # confidence out of downstream prompts on every entry path (graph, direct
         # GraphSetup, API and CLI). A no-op on a normal/blocked run.
-        workflow.add_node("Data Quality Gate", self.data_quality_gate_node)
+        workflow.add_node("Data Quality Gate", self.data_quality_gate_node, input_schema=AgentState)
         # A deterministic POST-gate node that PERSISTS the capped analyst-report /
         # plan / history fields (and turn/stance numeric confidence) back into the
         # state, so the RETURNED state and any _log_state / public JSON export carry

@@ -207,6 +207,8 @@ def canonical_name(path: str) -> str:
         return "src/" + path
     if path.startswith("tests/"):
         name = path.removeprefix("tests/")
+        if name.startswith("trading/live/"):
+            return "test/live/trading/" + name.removeprefix("trading/live/")
         if name in {"conftest.py", "__init__.py"}:
             return "test/" + name
         if name == "test_no_data_handling.py":

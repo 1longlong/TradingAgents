@@ -1,5 +1,7 @@
 """Authoritative safety-engine orchestration for simulated trading."""
 
+# ADR-012-error-handling-merge-integration.md: preserve INV-TRD-001/002 and NFR-TRD-001.
+
 from __future__ import annotations
 
 import uuid
@@ -104,6 +106,7 @@ class SafetyEngine:
         if not isinstance(quote, MarketQuote):
             raise IllegalExecutionStateError("quote must be a MarketQuote")
 
+        reasons: tuple[str, ...]
         evaluation_id = self._next_evaluation_id()
         now = self._clock.now()
         snapshot = self._portfolio.snapshot()
@@ -259,6 +262,7 @@ class SafetyEngine:
         if now > expires_at:
             raise ApprovalExpiredError("approval has expired")
 
+        reasons: tuple[str, ...]
         if approval.approved:
             status = DecisionStatus.APPROVED
             reasons = ()

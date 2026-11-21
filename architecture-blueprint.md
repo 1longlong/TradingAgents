@@ -1027,3 +1027,18 @@ existing read-only progress observer are retained. No safety/trading/CLI source,
 Web interface contract, runtime prompt or dependency change is added by conflict
 resolution. Evidence on previous heads remains historical; merged-tree results
 are recorded separately in the evaluation logbook.
+
+
+## CI type/security contract maintenance — 2026-11-21
+
+ADR-012-error-handling-merge-integration.md records the user-authorized complete
+type/security repair and its negative-test strategy. Existing modules retain
+ownership; dataflows/utils.py additionally owns the shared HTTPS feed opener,
+and dataflows/reddit.py owns hardened bounded Atom XML parsing via declared
+defusedxml. Safety/portfolio/audit edits are annotations only. Existing graph,
+provider, evidence, budget, rating, memory, checkpoint and CLI behavior remains
+covered by the complete regressions. The conflict-state adapter now obeys the
+existing two-value core/denials-output contract instead of unpacking three values.
+No new core implementation, framework, dependency policy exemption, permission,
+trading policy or deterministic acceptance threshold is introduced. All CI gates
+remain active and genuine review/semantic evidence is still required.

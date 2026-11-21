@@ -49,6 +49,8 @@ state for one deployment/configuration; it must carry no credentials (this
 module stores it as a plain dict key and logs it).
 """
 
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+
 from __future__ import annotations
 
 import logging
@@ -57,6 +59,7 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Literal
 
 logger = logging.getLogger(__name__)
 
@@ -260,7 +263,7 @@ class Ticket:
     def __enter__(self) -> Ticket:
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> bool:
+    def __exit__(self, exc_type, exc, tb) -> Literal[False]:
         if not self.done:
             # Not a verdict: an exception on the way out says nothing about the
             # vendor, and must not become a transient failure by accident.

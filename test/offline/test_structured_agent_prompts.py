@@ -146,3 +146,29 @@ def test_constraint_text_is_unambiguous():
     # No template braces: it is embedded in ChatPromptTemplate strings, where
     # braces would be parsed as input variables.
     assert "{" not in NO_EXTERNAL_TOOLS and "}" not in NO_EXTERNAL_TOOLS
+
+
+
+def test_market_prompt_literal_content_remains_release_identical():
+    """ADR-012 / NFR-BC-001: SQL false-positive cleanup must not change prompts."""
+    import ast
+    import hashlib
+
+    import tradingagents.agents.analysts.market_analyst as market
+
+    root = ast.parse(inspect.getsource(market))
+    assignment = next(node for node in ast.walk(root) if isinstance(node, ast.Assign)
+                      and any(isinstance(target, ast.Name) and target.id == "system_message"
+                              for target in node.targets))
+    fragments = assignment.value.args[0].elts
+    literals = []
+    calls = []
+    for fragment in fragments:
+        if isinstance(fragment, ast.Constant):
+            literals.append(fragment.value)
+        else:
+            calls.append(fragment.func.id)
+    assert calls == ["get_language_instruction"]
+    assert hashlib.sha256("".join(literals).encode()).hexdigest() == (
+        "ac74b8da3e9eff9ae81cadd4e82f5f92265d15c19f8b953a189085bb2bacd806"
+    )

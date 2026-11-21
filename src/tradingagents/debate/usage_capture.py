@@ -26,6 +26,8 @@ Design rules (see ``docs/architecture/adr/009-durable-run-usage-ledger.md``):
 - **No content leakage.** Only allow-listed scalars reach the ledger.
 """
 
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+
 from __future__ import annotations
 
 import contextlib
@@ -46,6 +48,7 @@ from tradingagents.debate.budget import (
     estimate_tokens_from_chars,
     extract_provider_usage,
 )
+from tradingagents.debate.config import DebateTerminationConfig
 from tradingagents.debate.usage_ledger import (
     STATUS_CANCELLED,
     STATUS_FAILED,
@@ -74,6 +77,8 @@ class UsageCapture:
     The counter is per-capture, but it is combined with a fresh per-capture token
     so a restarted capture (resume) never reuses an index another capture used.
     """
+
+    debate_config: DebateTerminationConfig
 
     def __init__(
         self,

@@ -548,3 +548,44 @@ optional-float arithmetic/sum errors in the existing summarize implementation.
 The progress change adds only observer hooks/imports; summarize is unmodified.
 The offline runtime suite passes, but type-checking that core file is not green.
 No suppression or unrelated calculation change was made for this progress task.
+
+
+## CI-20261121-WEB-EXTRAS — repaired locally, remote verification pending
+
+PR #7 / run 44867605790: Python 3.10–3.13 fail collection with missing fastapi
+because CI installs dev without the declared web extra. Existing local web
+installation masked this environment mismatch. Repair: install dev,web in the
+three WebUI source-verification jobs, retaining lean core clean-install.
+Local complete socket-denied suite: 4212 passed, 3 skipped, 92 subtests.
+No new dependency declaration or skipped test is introduced.
+
+## CI-20261121-LIVE-IDENTITY — repaired locally, remote verification pending
+
+AI-use gate invented test/offline/trading/live paths from release's former
+layout. Map that exact prefix to existing test/live/trading. Changes to fixture
+content still require evidence, and duplicate old/new logical copies still
+block. Coverage for actual PR head 095fa59 now passes. Regression and negative
+checker tests pass in the complete suite; no log entries or approvals fabricated.
+
+
+## CI-20261121-TYPES-SECURITY — repaired locally, remote review pending
+
+The newly enforced full-source jobs exposed 322 existing mypy errors in 60 files
+and 10 medium/high Bandit findings. Repaired accurate optional/union/SDK/state
+annotations and validated-value narrowing; no global suppression, skipped rule,
+test weakening or business policy change. Hardened public feed URLs/redirects
+and XML with explicit defusedxml dependency; retained parameterized SQL, literal
+checkpoint statements and stable non-security hashes. Full mypy is clean in
+194 files; configured Bandit has zero medium/high findings, no skipped/nosec
+checks. Complete Python 4240 passed/3 skips/92 subtests and frontend 71 passed.
+Full vulnerability audit passes for 127 versions after one proxy-failed attempt.
+No new remote CI pass is claimed before publication and execution.
+
+## CORE-20261121-CONFLICT-STATE-RETURN — repaired locally
+
+track_round_conflicts expected three returns from derive_conflicts, whose public
+contract returns two and populates optional denials. The state adapter now uses
+that existing output list and returns conflicts/notes/denials as documented.
+The new real adapter test covers creation and negative invalid-evidence
+re-observation retaining the open conflict and recording a denial. No conflict
+lifecycle or evidence eligibility rule changes.

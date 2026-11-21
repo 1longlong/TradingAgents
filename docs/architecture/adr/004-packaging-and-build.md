@@ -55,3 +55,13 @@ Adding a web package inside `src/tradingagents/` would violate the structural ru
 3. Commit built assets — rejected; generated artifacts drift and bloat history.
 4. Build the frontend from a setuptools hook — rejected; hidden network/toolchain dependency.
 5. Separate frontend service — rejected; adds a second process and origin/CORS complexity.
+
+
+### PR #7 CI dependency correction — 2026-11-21
+
+Under the existing optional-dependency decision, regression, full-source static
+analysis and architecture/security jobs install `.[dev,web]`. The previous
+`.[dev]` omitted FastAPI and stopped the four regression matrices at collection.
+No dependency is added or upgraded. The core-only clean-install job remains
+`pip install .` and retains its import/resource/CLI checks. No gate or threshold
+is disabled. Human governance review of workflow changes remains required.

@@ -1,3 +1,4 @@
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
 import os
 import re
 from dataclasses import dataclass
@@ -35,7 +36,7 @@ class NormalizedChatOpenAI(ChatOpenAI):
     def invoke(self, input, config=None, **kwargs):
         return normalize_content(super().invoke(input, config, **kwargs))
 
-    def with_structured_output(self, schema, *, method=None, **kwargs):
+    def with_structured_output(self, schema=None, *, method=None, **kwargs):
         caps = get_capabilities(self.model_name)
         if caps.preferred_structured_method == "none":
             raise NotImplementedError(
@@ -61,7 +62,7 @@ class LocalCompatibleChatOpenAI(NormalizedChatOpenAI):
     across local servers regardless of the model ID's capabilities (#1057).
     """
 
-    def with_structured_output(self, schema, *, method=None, **kwargs):
+    def with_structured_output(self, schema=None, *, method=None, **kwargs):
         resolved = method or get_capabilities(self.model_name).preferred_structured_method
         if resolved == "function_calling":
             kwargs.setdefault("tool_choice", None)
@@ -277,9 +278,9 @@ class OpenAIClient(BaseLLMClient):
     def get_llm(self) -> Any:
         """Return a configured ChatOpenAI instance, driven by the provider registry."""
         self.warn_if_unknown_model()
-        llm_kwargs = {"model": self.model}
+        llm_kwargs: dict[str, Any] = {"model": self.model}
         spec = OPENAI_COMPATIBLE_PROVIDERS.get(self.provider)
-        chat_cls = NormalizedChatOpenAI
+        chat_cls: type[ChatOpenAI] = NormalizedChatOpenAI
 
         if spec is not None:
             chat_cls = spec.chat_class

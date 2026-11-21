@@ -27,9 +27,12 @@ Design rules (authoritative):
   (the legacy free-text path); it can never be treated as verified exact evidence.
 """
 
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+
 from __future__ import annotations
 
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
@@ -192,7 +195,7 @@ def validate_claim(
     claim: ClaimRecord,
     *,
     origin_by_id: dict[str, OriginMetadata],
-    records_by_id: dict[str, dict[str, Any]],
+    records_by_id: Mapping[str, Mapping[str, Any]],
     target_date: str | None,
     expected_symbol: str | None = None,
     expected_run_id: str | None = None,
@@ -258,7 +261,7 @@ def validate_claim(
     if target is None:
         return ClaimValidation(STATUS_UNVERIFIED, REASON_TARGET_UNKNOWN, evidence_ids, provenance)
 
-    verified_origins: list[tuple[str, OriginMetadata, dict[str, Any]]] = []
+    verified_origins: list[tuple[str, OriginMetadata, Mapping[str, Any]]] = []
     for evidence_id in evidence_ids:
         if evidence_id in duplicate_origin_ids:
             return ClaimValidation(
@@ -354,7 +357,7 @@ def validate_claim(
 
 
 def _origin_record_consistency(
-    origin: OriginMetadata, record: dict[str, Any], target=None
+    origin: OriginMetadata, record: Mapping[str, Any], target=None
 ) -> str | None:
     """Return a short inconsistency reason when the origin contradicts the record.
 
@@ -419,7 +422,7 @@ def _origin_record_consistency(
 def _validate_one(
     claim: ClaimRecord,
     origin: OriginMetadata,
-    record: dict[str, Any],
+    record: Mapping[str, Any],
     target,
 ) -> tuple[str, str] | None:
     """Return ``None`` when this record verifies every asserted fact, else a
@@ -520,7 +523,7 @@ def _validate_one(
             # single units — never guess.
             if not origin.scale_known:
                 return (STATUS_UNVERIFIED, REASON_SCALE_UNKNOWN)
-            claim_scale = _decimal("1")
+            claim_scale = Decimal("1")
         if _decimal(claimed_scaled(asserted, claim_scale)) != record_value:
             return (STATUS_REJECTED, REASON_VALUE_MISMATCH)
     return None
@@ -535,7 +538,7 @@ def validated_evidence_ids(
     turns: list[Any],
     *,
     origin_by_id: dict[str, OriginMetadata],
-    records_by_id: dict[str, dict[str, Any]],
+    records_by_id: Mapping[str, Mapping[str, Any]],
     target_date: str | None,
     expected_symbol: str | None = None,
     expected_run_id: str | None = None,
@@ -579,7 +582,7 @@ def claimed_ids_with_failed_claims(
     turns: list[Any],
     *,
     origin_by_id: dict[str, OriginMetadata],
-    records_by_id: dict[str, dict[str, Any]],
+    records_by_id: Mapping[str, Mapping[str, Any]],
     target_date: str | None,
     expected_symbol: str | None = None,
     expected_run_id: str | None = None,
@@ -613,7 +616,7 @@ def summarize_claim_validations(
     turns: list[Any],
     *,
     origin_by_id: dict[str, OriginMetadata],
-    records_by_id: dict[str, dict[str, Any]],
+    records_by_id: Mapping[str, Mapping[str, Any]],
     target_date: str | None,
     expected_symbol: str | None = None,
     expected_run_id: str | None = None,

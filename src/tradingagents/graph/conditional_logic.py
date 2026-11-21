@@ -1,6 +1,9 @@
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
 # TradingAgents/graph/conditional_logic.py
 
 from typing import Any
+
+from langchain_core.messages import AIMessage
 
 from tradingagents.agents.utils.agent_states import AgentState
 from tradingagents.agents.utils.tool_governance import round_limit_reached
@@ -35,7 +38,7 @@ class ConditionalLogic:
         """Determine if market analysis should continue."""
         messages = state["messages"]
         last_message = messages[-1]
-        if last_message.tool_calls:
+        if isinstance(last_message, AIMessage) and last_message.tool_calls:
             return "tools_market"
         return "Msg Clear Market"
 
@@ -255,7 +258,7 @@ class ConditionalLogic:
         """
         messages = state["messages"]
         last_message = messages[-1]
-        if last_message.tool_calls:
+        if isinstance(last_message, AIMessage) and last_message.tool_calls:
             return "tools_social"
         return "Msg Clear Sentiment"
 
@@ -263,7 +266,7 @@ class ConditionalLogic:
         """Determine if news analysis should continue."""
         messages = state["messages"]
         last_message = messages[-1]
-        if last_message.tool_calls:
+        if isinstance(last_message, AIMessage) and last_message.tool_calls:
             return "tools_news"
         return "Msg Clear News"
 
@@ -271,7 +274,7 @@ class ConditionalLogic:
         """Determine if fundamentals analysis should continue."""
         messages = state["messages"]
         last_message = messages[-1]
-        if last_message.tool_calls:
+        if isinstance(last_message, AIMessage) and last_message.tool_calls:
             return "tools_fundamentals"
         return "Msg Clear Fundamentals"
 

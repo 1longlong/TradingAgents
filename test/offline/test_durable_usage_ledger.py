@@ -1084,3 +1084,47 @@ class TestProviderTelemetryProvenance:
         assert whole["reserved_unconfirmed_calls"] >= 1
         assert whole["reserved_unconfirmed"][0]["phase"] == "research_manager"
         assert whole["completeness"] != "complete"
+
+
+
+@pytest.mark.parametrize("run_id,phases", [
+    ("run' OR 1=1 --", ("debate",)),
+    ("safe", ("debate') OR 1=1 --",)),
+    ("safe", ()),
+])
+def test_scope_sql_cannot_admit_other_runs_or_phases(tmp_path, run_id, phases):
+    """ADR-012 / INV-7: hostile values remain bound data, not SQL syntax."""
+    ledger = UsageLedger(tmp_path / "scope.db")
+    ledger.begin_run("safe")
+    ledger.reserve(run_id="safe", invocation_id="pending", phase="debate", speaker="Bull",
+                   reserved_tokens=100, reserved_seconds=2.0)
+    connection = ledger._connect()
+    try:
+        connection.execute("BEGIN IMMEDIATE")
+        scope = ledger._scope_usage_in_txn(connection, run_id, phases)
+        assert scope["calls"] == 0
+        # The hostile query neither reads the unrelated reservation nor deletes it.
+        assert connection.execute("SELECT COUNT(*) FROM reservations").fetchone()[0] == 1
+        connection.rollback()
+    finally:
+        connection.close()
+    assert len(ledger.read_run_spend("safe").unresolved) == 1
+
+
+def test_hostile_run_id_in_admission_preserves_another_runs_capacity(tmp_path):
+    """ADR-012 / INV-7: count-only admission binds identity in both count queries."""
+    ledger = UsageLedger(tmp_path / "admit.db")
+    hostile = "run' OR 1=1 --"
+    ledger.begin_run("safe")
+    ledger.begin_run(hostile)
+    for run_id in ("safe", hostile):
+        assert ledger.admit_debate_call(
+            run_id=run_id, invocation_id="one", max_calls=1,
+            reserved_tokens=10, reserved_seconds=1.0,
+        )
+        assert not ledger.admit_debate_call(
+            run_id=run_id, invocation_id="two", max_calls=1,
+            reserved_tokens=10, reserved_seconds=1.0,
+        )
+    assert len(ledger.read_run_spend("safe").unresolved) == 1
+    assert len(ledger.read_run_spend(hostile).unresolved) == 1

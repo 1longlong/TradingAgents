@@ -599,3 +599,39 @@ REQ-WEB-013 / INV-WEB-010 / NFR-BC-001 retain the eleven custom-policy isolation
 cases in `test/offline/test_web_debate_config.py` against the v2 core digest and
 existing Web suffix. The Yahoo backend floor assertion uses the migrated repo
 root in `test/offline/test_yahoo_error_classifier.py`. No IDs or status change.
+
+
+PR #7 CI repair, web-ci-repair-20261121-v1: REQ-WEB-026 / INV-WEB-001 /
+NFR-OFF-001 retain optional Web runtime installation in verification jobs.
+`test/offline/test_ci_gates.py::test_web_verification_installs_optional_web_runtime`
+checks that contract and the lean core smoke install. Live relocation is covered
+by test_trading_live_relocation_retains_live_identity,
+test_relocated_live_content_changes_still_require_evidence and the negative
+test_duplicate_old_and_new_live_paths_are_rejected. No approval/semantic/security
+policy or runtime behavior is changed by this bounded correction.
+
+
+web-ci-types-security-20261121-v1 (ADR-012-error-handling-merge-integration.md):
+NFR-BC-001 / INV-1 preserve original business acceptance while module annotations
+express actual optional/union/callback contracts. FR-TRD-* / INV-TRD-001/002
+safety/portfolio/audit edits are annotations only and retain the complete trading
+suite. Full mypy and Bandit scan the same complete src tree with unchanged rules.
+
+- NFR-PIT-001 / NFR-OFF-001 / INV-8: test_reddit_fallback.py covers UTF-8/UTF-16
+  DTD/entity refusal, normal namespaced/escaped Atom data, forbidden initial
+  URL schemes/authorities, off-origin/downgrade redirects and retained headers/
+  timeouts; test_stocktwits_resilience.py verifies unsafe schemes are unavailable,
+  never absence, before I/O.
+- NFR-BUD-001 / INV-7: test_durable_usage_ledger.py::
+  test_scope_sql_cannot_admit_other_runs_or_phases and
+  test_hostile_run_id_in_admission_preserves_another_runs_capacity preserve SQL
+  identity/phase boundaries and reservations with hostile parameter values.
+- FR-DDT-005 / INV-5 / INV-13: test_debate_conflicts.py::
+  test_conflict_id_keeps_legacy_bytes_without_a_security_hash and
+  test_state_adapter_returns_conflicts_notes_and_denials preserve IDs and
+  invalid-evidence denial/retention through the actual state adapter.
+- NFR-BC-001: test_structured_agent_prompts.py::
+  test_market_prompt_literal_content_remains_release_identical pins the release
+  literal SHA-256 while retaining the language-instruction call.
+
+No requirement ID/status or invariant threshold is changed by this maintenance.

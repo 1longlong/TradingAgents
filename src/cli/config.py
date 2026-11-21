@@ -1,4 +1,7 @@
-CLI_CONFIG = {
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+from typing import Any
+
+CLI_CONFIG: dict[str, Any] = {
     # Announcements
     "announcements_url": "https://api.tauric.ai/v1/announcements",
     "announcements_timeout": 1.0,

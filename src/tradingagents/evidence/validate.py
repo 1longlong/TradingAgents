@@ -26,6 +26,8 @@ This layer is pure and LLM-free: it only inspects ``EvidenceRecord`` values and
 the deterministic :class:`~tradingagents.evidence.policy.MarketPolicy`.
 """
 
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -559,6 +561,7 @@ def _ohlc_relationship_for_row(row_records: list[EvidenceRecord]) -> list[Valida
     high_v = values["high"]
     low_v = values["low"]
     close_v = values["close"]
+    assert open_v is not None and high_v is not None and low_v is not None and close_v is not None
     mid_high = max(open_v, close_v)
     mid_low = min(open_v, close_v)
     ok = high_v >= mid_high and low_v <= mid_low and high_v >= low_v
@@ -694,21 +697,24 @@ def cross_source_consistency_results(
         # difference once and assign that SAME deviation/status to both credible
         # records. Comparing each value to the midpoint would halve the spread.
         if len(credible) == 2:
+            left, right = credible[0].value_normalized, credible[1].value_normalized
+            assert left is not None and right is not None
             symmetric_dev, zero_midpoint_fail = _two_source_symmetric_deviation(
-                credible[0].value_normalized, credible[1].value_normalized
+                left, right
             )
-            tolerance = policy.tolerance_for(key[1])
+            tolerance: MetricTolerance = policy.tolerance_for(key[1])
+            assert zero_midpoint_fail or symmetric_dev is not None
             if zero_midpoint_fail:
                 symmetric_status = ValidationStatus.FAIL
                 symmetric_message = (
                     "Zero midpoint with unequal values; not comparable (fail closed)."
                 )
-            elif symmetric_dev >= tolerance.severe_conflict_fraction:
+            elif symmetric_dev is not None and symmetric_dev >= tolerance.severe_conflict_fraction:
                 symmetric_status = ValidationStatus.FAIL
                 symmetric_message = (
                     "Severe cross-source conflict at or above severe tolerance."
                 )
-            elif symmetric_dev > tolerance.normal_conflict_fraction:
+            elif symmetric_dev is not None and symmetric_dev > tolerance.normal_conflict_fraction:
                 symmetric_status = ValidationStatus.WARNING
                 symmetric_message = (
                     "Material cross-source inconsistency (above normal)."
@@ -746,7 +752,7 @@ def cross_source_consistency_results(
             continue
 
         reference = _reference_value(credible)
-        tolerance: MetricTolerance = policy.tolerance_for(key[1])
+        tolerance = policy.tolerance_for(key[1])
         for record in group:
             # A credible reference is required; if it cannot be formed we fail
             # closed rather than silently passing.

@@ -15,6 +15,8 @@ SEC requires and refuses requests without. US filers only: anything absent from
 EDGAR's ticker map falls through to the next configured vendor.
 """
 
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+
 from __future__ import annotations
 
 import json
@@ -320,7 +322,7 @@ def structured_statement_facts(
     return {kind: out}
 
 
-def _statement(kind: str, ticker: str, freq: str, curr_date: str, title: str) -> str:
+def _statement(kind: str, ticker: str, freq: str, curr_date: str | None, title: str) -> str:
     curr_date = curr_date or datetime.now().strftime("%Y-%m-%d")
     cik = cik_for(ticker)
     if cik is None:

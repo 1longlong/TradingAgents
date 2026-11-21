@@ -66,6 +66,8 @@ the defaults the schema declares and the run date in place of an omitted
 the tool would reject can never match the fingerprint of one that ran.
 """
 
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+
 from __future__ import annotations
 
 import hashlib
@@ -74,7 +76,10 @@ import json
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from inspect import get_annotations
-from typing import Any, TypedDict
+from types import EllipsisType
+from typing import Any, TypedDict, cast
+
+from typing_extensions import Required
 
 from tradingagents.agents.utils.agent_states import AgentState
 from tradingagents.dataflows.date_window import as_of, as_of_window
@@ -280,9 +285,9 @@ def register_tool_schema(name: str, schema: Mapping[str, Any]) -> None:
     _schemas()[name] = schema
 
 
-def tool_schema(name: str) -> Mapping[str, Any] | None:
+def tool_schema(name: str | None) -> Mapping[str, Any] | None:
     """The registered argument schema for ``name``, or None if not governed."""
-    return _schemas().get(name)
+    return _schemas().get(name) if name is not None else None
 
 
 # Arguments the model does not supply: ``InjectedState`` fields the framework
@@ -423,7 +428,7 @@ def _entry_id(call: Any) -> str | None:
 def validate_call(
     call: Any,
     *,
-    schema: Mapping[str, Any] | None | object = ...,
+    schema: Mapping[str, Any] | None | EllipsisType = ...,
     trade_date: str | None = None,
 ) -> str:
     """Raise :class:`MalformedCallError` when ``call`` is not a usable request.
@@ -445,7 +450,7 @@ def validate_call(
         args = {}
     if not isinstance(args, Mapping):
         raise MalformedCallError(call_id, INVALID_CALL_ARGS)
-    resolved = tool_schema(name) if schema is ... else schema
+    resolved = tool_schema(name) if isinstance(schema, EllipsisType) else schema
     if resolved is None:
         raise MalformedCallError(call_id, INVALID_CALL_UNKNOWN_TOOL)
     reason = _validate_args(resolved, args, trade_date)
@@ -777,7 +782,7 @@ def _digest(payload: Mapping[str, Any]) -> str:
 def request_fingerprint(
     call: Mapping[str, Any],
     *,
-    schema: Mapping[str, Any] | None | object = ...,
+    schema: Mapping[str, Any] | None | EllipsisType = ...,
     analyst: str,
     run_id: str | None,
     instrument: str | None = None,
@@ -797,7 +802,8 @@ def request_fingerprint(
     if vendor_chain is None:
         name = call.get("name") if isinstance(call, Mapping) else None
         vendor_chain = _vendor_chain(name) if isinstance(name, str) else None
-    resolved = tool_schema(call.get("name")) if schema is ... else schema
+    name = call.get("name")
+    resolved = tool_schema(name) if isinstance(schema, EllipsisType) else schema
     validate_call(call, schema=resolved, trade_date=trade_date)
     payload = _fingerprint_payload(
         call,
@@ -1513,7 +1519,7 @@ def record_round_start(
     scope: Mapping[str, Any],
     plan: ToolPlan,
     limits: ToolLimits | None = None,
-) -> dict[str, Any]:
+) -> Mapping[str, Any]:
     """Spend the round (and the execution allowance) of a new plan.
 
     Returns a **new** record; a plan that has nothing left to charge (a resume,
@@ -1537,7 +1543,7 @@ def record_round_start(
 
     new = dict(scope)
     planned = dict(new.get("planned_rounds") or {})
-    decisions = {
+    decisions: dict[str, Any] = {
         entry["id"]: _decision_record(entry) for entry in (*plan.execute, *plan.reuse, *plan.block)
     }
     # The dispatch ledger starts empty: a call is written there only once the
@@ -1559,7 +1565,7 @@ def record_round_start(
 
 def record_dispatch(
     scope: Mapping[str, Any], batch: str | None, call_ids: Iterable[str]
-) -> dict[str, Any]:
+) -> Mapping[str, Any]:
     """Remember that ``call_ids`` of ``batch`` were handed to the node.
 
     Written by the execution adapter *after* the node returned; it answers "can
@@ -1581,7 +1587,7 @@ def record_dispatch(
     return new
 
 
-def record_malformed(scope: Mapping[str, Any], count: int = 1) -> dict[str, Any]:
+def record_malformed(scope: Mapping[str, Any], count: int = 1) -> Mapping[str, Any]:
     """Count calls that were not a usable request (see the module docstring).
 
     They are blocked, but not requested: ``requested`` counts only calls the
@@ -1605,7 +1611,7 @@ def record_tool_result(
     raised: bool = False,
     cacheable_success: bool | None = None,
     reason: str | None = None,
-) -> dict[str, Any]:
+) -> Mapping[str, Any]:
     """Record one finished (or never-started) call. Returns a **new** record.
 
     * the outcome comes from :func:`classify_tool_result`; with ``raised=False``
@@ -1790,7 +1796,7 @@ class _AnalystHostState(AgentState, total=False):
     the place an analyst's ``ToolNode`` runs for one round.)
     """
 
-    messages: list
+    messages: Required[list]
     result: Any
 
 
@@ -1829,8 +1835,8 @@ def run_tool_node_in_graph(
     # graph state (``InjectedState``) and the host runtime from langgraph.
     ai_message = AIMessage(content="", tool_calls=[dict(call) for call in calls])
 
-    def finish(graph_state: Mapping[str, Any]) -> dict[str, Any]:
-        return {"result": {"messages": graph_state["messages"]}}
+    def finish(state: _NodeHostState) -> dict[str, Any]:
+        return {"result": {"messages": state["messages"]}}
 
     initial: dict[str, Any] = dict(state or {})
     initial["messages"] = [ai_message]
@@ -1841,7 +1847,7 @@ def run_tool_node_in_graph(
     graph.add_edge("tools", "finish")
     graph.add_edge("finish", END)
     kwargs: dict[str, Any] = {"config": config} if config is not None else {}
-    return graph.compile().invoke(initial, **kwargs)["result"]
+    return graph.compile().invoke(cast(_NodeHostState, initial), **kwargs)["result"]
 
 
 def run_market_tool_node(
@@ -1889,8 +1895,8 @@ def run_analyst_tool_node(
     # one message per call.
     ai_message = AIMessage(content="", tool_calls=[dict(call) for call in calls])
 
-    def finish(graph_state: Mapping[str, Any]) -> dict[str, Any]:
-        return {"result": {"messages": graph_state["messages"]}}
+    def finish(state: _AnalystHostState) -> dict[str, Any]:
+        return {"result": {"messages": state["messages"]}}
 
     initial: dict[str, Any] = dict(state or {})
     initial["messages"] = [ai_message]
@@ -1901,7 +1907,7 @@ def run_analyst_tool_node(
     graph.add_edge("tools", "finish")
     graph.add_edge("finish", END)
     kwargs: dict[str, Any] = {"config": config} if config is not None else {}
-    return graph.compile().invoke(initial, **kwargs)["result"]
+    return graph.compile().invoke(cast(_AnalystHostState, initial), **kwargs)["result"]
 
 
 def _tool_node_class() -> Any:
@@ -2213,7 +2219,9 @@ class ToolExecutor:
         # decisions by action (on a resume a replay can come before a call that
         # still has to run), so the order comes from the caller's batch.
         order = [_entry_id(call) for call in items]
-        self._check_one_message_per_call(plan, order)
+        assert all(call_id is not None for call_id in order)
+        validated_order = [call_id for call_id in order if call_id is not None]
+        self._check_one_message_per_call(plan, validated_order)
         # Charging is idempotent: a resume/replay plan has nothing left to
         # charge, so registering it again spends no round.
         scope = record_round_start(self._scope_of(state), plan, self.limits)
@@ -2306,10 +2314,11 @@ class ToolExecutor:
                 + ", ".join(missing)
             )
 
-        scope = dict(get_scope(state, self.analyst, self.run_id))
+        scope: Mapping[str, Any] = dict(get_scope(state, self.analyst, self.run_id))
         messages: list[dict[str, Any]] = []
         dispatched_ids: list[str] = []
         for call_id in order:
+            assert call_id is not None  # prepare validated every call ID.
             entry = by_id[call_id]
             message = ran.pop(call_id, None) if entry["action"] == "execute" else None
             if message is None:

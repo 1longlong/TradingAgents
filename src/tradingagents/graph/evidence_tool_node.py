@@ -24,6 +24,8 @@ The merge never changes tool messages or prose; with no active collector or no
 captured data it returns the inner output unchanged.
 """
 
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -32,6 +34,7 @@ from typing import Any
 from langchain_core.runnables import RunnableConfig
 from langgraph.prebuilt import ToolNode
 
+from tradingagents.agents.utils.agent_states import AgentState
 from tradingagents.evidence.ingest import (
     INGEST_ATTEMPTS_STATE_KEY,
     INGEST_METADATA_STATE_KEY,
@@ -96,7 +99,7 @@ class EvidenceCapturingToolNode:
         self._tool_node = tool_node
         self._name = name
 
-    def __call__(self, state: Mapping[str, Any], config: RunnableConfig, runtime: Any):
+    def __call__(self, state: AgentState, config: RunnableConfig, runtime: Any = None):
         output = self._tool_node.invoke(state, config, runtime=runtime)
         captured = capture_into_state(state if isinstance(state, Mapping) else None)
         if not captured:
@@ -136,7 +139,7 @@ class EvidenceCapturingAnalystNode:
         self._analyst_node = analyst_node
         self._name = name
 
-    def __call__(self, state: Mapping[str, Any], config: RunnableConfig, runtime: Any):
+    def __call__(self, state: AgentState, config: RunnableConfig, runtime: Any = None):
         output = self._analyst_node(state)
         captured = capture_into_state(state if isinstance(state, Mapping) else None)
         if captured and isinstance(output, Mapping):

@@ -17,6 +17,8 @@ REQ-WEB-011/026, INV-WEB-014, ADR-007-run-controls.md: optional progress
 observation preserves the existing serial execution and public run contract.
 """
 
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+
 from __future__ import annotations
 
 import logging
@@ -224,10 +226,10 @@ def summarize(memory_log: TradingMemoryLog) -> BacktestSummary:
     # count for nor against the system; it is reported as unscored instead.
     resolved = [(e, _alpha(e)) for e in entries
                 if not e["pending"] and e["rating"] != RATING_REVIEW]
-    resolved = [(e, a) for e, a in resolved if a is not None]
+    resolved_known = [(e, a) for e, a in resolved if a is not None]
     by_rating: dict[str, RatingScore] = {}
-    for rating in dict.fromkeys(e["rating"] for e, _ in resolved):
-        alphas = [a for e, a in resolved if e["rating"] == rating]
+    for rating in dict.fromkeys(e["rating"] for e, _ in resolved_known):
+        alphas = [a for e, a in resolved_known if e["rating"] == rating]
         direction = _DIRECTION.get(rating, 0)
         by_rating[rating] = RatingScore(
             count=len(alphas),

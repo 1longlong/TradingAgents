@@ -1,3 +1,4 @@
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
 import getpass
 
 import requests
@@ -7,7 +8,7 @@ from rich.panel import Panel
 from cli.config import CLI_CONFIG
 
 
-def fetch_announcements(url: str = None, timeout: float = None) -> dict:
+def fetch_announcements(url: str | None = None, timeout: float | None = None) -> dict:
     """Fetch announcements from endpoint. Returns dict with announcements and settings."""
     endpoint = url or CLI_CONFIG["announcements_url"]
     timeout = timeout or CLI_CONFIG["announcements_timeout"]

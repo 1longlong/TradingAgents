@@ -43,6 +43,8 @@ serialized ``ConflictRecord`` forms) so the result survives LangGraph
 checkpointing, and it never touches the network, a clock, or an LLM.
 """
 
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+
 from __future__ import annotations
 
 import hashlib
@@ -82,7 +84,7 @@ def conflict_id_for(topic: str, kind: ConflictKind) -> str:
     to 16 hex chars for a compact, human-readable, stable identifier.
     """
     key = f"{_normalized_topic(topic)}::{ConflictKind(kind).value}"
-    digest = hashlib.sha1(key.encode("utf-8")).hexdigest()
+    digest = hashlib.sha1(key.encode("utf-8"), usedforsecurity=False).hexdigest()
     return f"conflict-{digest[:16]}"
 
 
@@ -109,7 +111,7 @@ def _validate_evidence(
     manifest: EvidenceManifest,
     target_date: str | None,
     invalid_claimed_ids: set[str] | None = None,
-) -> tuple[list[str], bool]:
+) -> tuple[list[str], list[str]]:
     """Partition ``evidence_ids`` into valid and invalid, and report validity.
 
     A cited ID is valid only when it is known, High/Medium, and observed on or
@@ -576,12 +578,14 @@ def track_round_conflicts(
         target_date=target_date,
         expected_symbol=str(state.get("company_of_interest", "") or ""),
     )
-    updated, notes, denials = derive_conflicts(
+    denials: list[str] = []
+    updated, notes = derive_conflicts(
         round_index=round_index,
         turns=round_turns,
         manifest=manifest,
         target_date=target_date,
         tracked=tracked_raw,
         invalid_claimed_ids=invalid_claimed_ids,
+        denials=denials,
     )
     return [c.to_dict() for c in updated], notes, denials

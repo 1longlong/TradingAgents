@@ -121,6 +121,45 @@ def test_mechanical_source_relocation_preserves_logical_identity():
     assert gates.canonical_name("tests/test_backtest.py") == "test/offline/test_backtest.py"
 
 
+@pytest.mark.parametrize("name", ["__init__.py", "conftest.py", "test_live_backtest.py"])
+def test_trading_live_relocation_retains_live_identity(name):
+    """REQ-WEB-026 / NFR-OFF-001: relocation must not invent offline files."""
+    assert gates.canonical_name(f"tests/trading/live/{name}") == f"test/live/trading/{name}"
+    assert gates.canonical_name(f"test/live/trading/{name}") == f"test/live/trading/{name}"
+    assert gates.canonical_name(f"tests/trading/{name}") == f"test/offline/trading/{name}"
+
+
+def test_relocated_live_content_changes_still_require_evidence(tmp_path, monkeypatch):
+    """REQ-WEB-026: equal relocated content is unchanged, a changed fixture is not."""
+    snapshots = {
+        "base": "100644 blob same\ttests/trading/live/conftest.py\0",
+        "head": "100644 blob same\ttest/live/trading/conftest.py\0",
+    }
+    monkeypatch.setattr(gates, "git", lambda root, *args: snapshots[args[-1]])
+    assert gates.changes(tmp_path, "base", "head") == set()
+    snapshots["head"] = "100644 blob changed\ttest/live/trading/conftest.py\0"
+    assert gates.changes(tmp_path, "base", "head") == {"test/live/trading/conftest.py"}
+
+
+def test_duplicate_old_and_new_live_paths_are_rejected(tmp_path, monkeypatch):
+    """REQ-WEB-026: a duplicate relocated module cannot hide in a logical tree."""
+    snapshot = ("100644 blob same\ttests/trading/live/conftest.py\0"
+                "100644 blob same\ttest/live/trading/conftest.py\0")
+    monkeypatch.setattr(gates, "git", lambda *args: snapshot)
+    with pytest.raises(gates.GateError, match="Duplicate logical source"):
+        gates.tree(tmp_path, "fixture")
+
+
+def test_web_verification_installs_optional_web_runtime():
+    """REQ-WEB-026 / INV-WEB-001: verify WebUI without enlarging the core install."""
+    jobs = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())["jobs"]
+    for name in ["regression", "static-analysis", "architecture-security"]:
+        commands = [step.get("run", "") for step in jobs[name]["steps"]]
+        assert "python -m pip install -e '.[dev,web]'" in commands
+    smoke = [step.get("run", "") for step in jobs["smoke-install"]["steps"]]
+    assert "python -m pip install ." in smoke
+
+
 def test_core_must_not_import_presentation_layer(tmp_path, monkeypatch):
     for path in ["src/tradingagents", "src/cli", "test/offline", "test/live"]:
         (tmp_path / path).mkdir(parents=True)

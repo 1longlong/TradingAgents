@@ -2539,3 +2539,73 @@ assert the new v2 core policy identity together with the existing Web digest;
 and correct a newly imported test's repository-root path. Product implementation
 conflict resolution introduces no changes beyond the imported release source.
 Exact verification and failed intermediate attempts belong in the logbook.
+
+
+## PR #7 CI diagnosis and bounded repair — 2026-11-21
+
+Scope version: web-ci-repair-20261121-v1. The user reported multiple failing
+checks on PR #7. Current local/remote feature head is 095fa59, base release
+9a08e08; working tree was clean. Actions run 44867605790 is the actual source
+of CI evidence. This record is not a human test-plan review or final approval.
+
+Bounded maintenance plan: install the existing web extra alongside dev in the
+regression, full-source type/audit and architecture/security jobs that verify
+WebUI code. Keep the lean core clean-install job and every other gate. Map the
+approved tests/trading/live relocation to test/live/trading in the diff checker;
+do not invent entries for nonexistent test/offline/trading/live files. Preserve
+actual content changes and reject duplicate logical paths. Allowlist is
+.github/workflows/ci.yml, test/ci_gates.py, test/offline/test_ci_gates.py and
+existing architecture/governance evidence documents. No runtime implementation,
+dependency declaration, permission or approval/semantic decision changes.
+
+Verification design: map each live/offline/root test independently; assert a
+modified live fixture still appears in changes; reject a tree containing both
+old and new copies of the same logical file; verify WebUI-checking jobs install
+the declared optional web extra while the core smoke install stays lean. Run
+the complete offline regression and the full test tree with credentials absent,
+dotenv disabled and sockets denied, plus Ruff/schema/requirements checks. Do not
+skip failed tests or treat blocked sockets as live proof.
+
+Larger findings remain separately gated: mypy reports 322 errors in 60 existing
+source files, including core/CLI/safety; Bandit reports 10 medium/high findings.
+The review gate lacks a verifiable prior [test-plan-approved] event. Semantic
+evaluation currently triggers only on the four development governance prompt
+files with name-normalization edits and lacks a base-approved evaluator. Do
+not weaken these gates or fabricate approvals/evaluation evidence. The current
+user has been asked whether to authorize broader core type/security repair;
+continue only the bounded CI installation/identity repair while that is pending.
+
+
+### Expanded scope explicitly authorized — 2026-11-21
+
+The user answered the CI scope question: repair all type and security issues
+while preserving business behavior. This is direct authorization for
+web-ci-types-security-20261121-v1 (ADR-012), including protected core/CLI/trading/
+safety paths where necessary. The prior question identified those paths and
+retained every check. The ADR records the bounded design and positive/negative
+test strategy before implementation. No separate test-file review, platform
+prior-test approval, final acceptance or commit/push authorization is invented.
+Preserve the existing uncommitted bounded CI fixes and every previous test.
+
+
+Closing evidence for web-ci-types-security-20261121-v1: complete mypy reports
+zero errors in 194 files and Bandit reports zero medium/high findings with no
+excluded tests/nosec. Full isolated Python tree: 4240 passed, 3 skipped,
+92 subtests; frontend: 71 passed. Detailed commands, the dependency-audit proxy
+failure/retry, and verification limits are in the logbook. Rules and assertions
+are not weakened. The actual tuple-return defect is repaired according to the
+existing denials contract, and normal prompt/ID bytes are regression-pinned.
+No policy/strategy/threshold, broker, execution authorization or audit hash
+changes. Final typing/import-only refinements received static/import/CLI smoke
+checks after the full suite; a repeated full suite is not claimed. The user
+requested source fixes, so they remain uncommitted/unpushed. Separate platform
+prior-test/current-head reviews and a base-approved evaluator remain missing.
+
+
+Publication authorization — 2026-11-21: the user explicitly requested committing,
+pushing and submitting a PR after the complete type/security repair report.
+Existing PR #7 remains open from feature/webui to release; update it with the
+normal push and current scope/evidence. This authorizes publication of the
+completed working tree, not a force push, gate bypass, approval, merge or
+fabricated CI result. The earlier no-publication statements describe their
+original implementation phases and are superseded only for this Git action.

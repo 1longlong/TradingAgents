@@ -1,3 +1,4 @@
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
 import re
 from typing import Any
 
@@ -15,7 +16,7 @@ def _accepts_minimal_thinking(model: str) -> bool:
     generations) are treated as rejecting it."""
     model_lc = model.lower()
     match = _GEMINI_VERSION.match(model_lc)
-    return bool(match) and "pro" not in model_lc and (
+    return match is not None and "pro" not in model_lc and (
         (int(match.group(1)), int(match.group(2))) < (3, 8)
     )
 
@@ -40,7 +41,7 @@ class GoogleClient(BaseLLMClient):
     def get_llm(self) -> Any:
         """Return configured ChatGoogleGenerativeAI instance."""
         self.warn_if_unknown_model()
-        llm_kwargs = {"model": self.model}
+        llm_kwargs: dict[str, Any] = {"model": self.model}
 
         if self.base_url:
             llm_kwargs["base_url"] = self.base_url

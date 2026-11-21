@@ -27,6 +27,8 @@ Rendering stays outside the model/parse guard: a broken renderer is a bug in
 our code, not a reason to spend another generation or to hide its error.
 """
 
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+
 from __future__ import annotations
 
 import inspect
@@ -362,7 +364,12 @@ def _json_payloads(text: str) -> list[str]:
     if body.startswith("{") and body.endswith("}"):
         candidates.append(body)
     seen: set[str] = set()
-    return [c for c in candidates if c and not (c in seen or seen.add(c))]
+    unique = []
+    for candidate in candidates:
+        if candidate and candidate not in seen:
+            seen.add(candidate)
+            unique.append(candidate)
+    return unique
 
 
 def _recover_locally(raw: Any, schema: type[T], agent_name: str) -> T | None:
@@ -455,6 +462,7 @@ def invoke_structured_or_freetext(
         except Exception as exc:
             if not _is_parse_failure(exc):
                 raise
+            parsing_error: BaseException | None
             raw, parsed, parsing_error = None, None, exc
         else:
             raw, parsed, parsing_error = _unwrap(result)

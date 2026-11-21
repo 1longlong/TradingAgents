@@ -21,6 +21,8 @@ result). Only the shape is checked; a well-shaped response that is empty or
 out of window keeps the previous behaviour.
 """
 
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+
 from __future__ import annotations
 
 import contextlib
@@ -28,11 +30,12 @@ import http.client
 import json
 import logging
 from datetime import datetime
-from urllib.request import Request, urlopen
+from urllib.request import Request
 
 from .date_window import coverage_gap, in_window
 from .evidence_capture import capture_sentiment_source_failure, capture_stocktwits_messages
 from .symbol_utils import crypto_base
+from .utils import open_https_feed as urlopen
 
 logger = logging.getLogger(__name__)
 

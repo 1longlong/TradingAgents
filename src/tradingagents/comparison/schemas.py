@@ -23,6 +23,8 @@ Design rules (authoritative):
   behavior (``None``), enforced by the formula functions in ``metric_formulas``.
 """
 
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
@@ -273,10 +275,10 @@ class CaseResult:
             if score is None:
                 clean.append(None)
                 continue
-            value = float(score)
-            if value < 0.0 or value > 1.0:
+            score_value = float(score)
+            if score_value < 0.0 or score_value > 1.0:
                 raise ValueError(f"traceability score must be in [0, 1], got {score!r}")
-            clean.append(value)
+            clean.append(score_value)
         if self.traceability_status == TraceabilityStatus.SCORED:
             # A scored result must have exactly one non-null score per
             # TRACEABILITY_DIMENSION, in that positional order. Missing, extra,

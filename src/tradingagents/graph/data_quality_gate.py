@@ -43,13 +43,16 @@ decides whether to proceed to ``Bull Researcher`` (normal/degraded) or route
 straight to ``Research Manager`` (blocked / missing / malformed gate state).
 """
 
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+
 from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Protocol
 
+from tradingagents.agents.utils.agent_states import AgentState
 from tradingagents.dataflows.market_data_validator import (
     StructuredSnapshot,
     build_verified_market_snapshot_data,
@@ -258,6 +261,12 @@ def build_blocked_decision(
     )
 
 
+class DataQualityGateNode(Protocol):
+    """ADR-012: the graph's named state callback, without an inferred new schema."""
+
+    def __call__(self, state: AgentState) -> dict[str, Any]: ...
+
+
 def create_data_quality_gate_node(
     *,
     snapshot_builder: Callable[..., StructuredSnapshot] = build_verified_market_snapshot_data,
@@ -272,9 +281,9 @@ def create_data_quality_gate_node(
     market_policy: Any | None = None,
     asset_type: str = _DEFAULT_ASSET_TYPE,
     look_back_days: int = 30,
-    optional_evidence_reader: Callable[[Mapping[str, Any]], Mapping[str, Any]] | None = None,
+    optional_evidence_reader: Callable[[Mapping[str, Any], MultiCategoryPolicy], Mapping[str, Any]] | None = None,
     captured_evidence_reader: Callable[[Mapping[str, Any]], tuple[dict, list]] | None = None,
-) -> Callable[[Mapping[str, Any]], dict[str, Any]]:
+) -> DataQualityGateNode:
     """Build the Data Quality Gate LangGraph node with injectable components.
 
     Defaults are the real deterministic production components. Tests pass fixed

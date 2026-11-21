@@ -18,6 +18,8 @@ Tests inject the clock/usage via :class:`UsageTracker` so accounting is fully
 deterministic offline.
 """
 
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+
 from __future__ import annotations
 
 import math
@@ -676,7 +678,9 @@ def record_call_usage(
                 missing_estimate = char_estimator(max(0, int(response_chars)))
             else:
                 missing_estimate = char_estimator(max(0, int(prompt_chars)))
-            known = int(in_tok) if in_tok is not None else int(out_tok)
+            known_side = in_tok if in_tok is not None else out_tok
+            assert known_side is not None
+            known = int(known_side)
             token_value = known + missing_estimate
             token_source = SOURCE_ESTIMATED
             usage["estimated"] = True

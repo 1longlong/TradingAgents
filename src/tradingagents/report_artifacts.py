@@ -22,6 +22,8 @@ availability is derived deterministically from the gate state and the
 multi-category policy (never parsed from analyst prose).
 """
 
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+
 from __future__ import annotations
 
 import json
@@ -302,7 +304,7 @@ def _redacted_claim_validation(summary: dict[str, Any]) -> dict[str, Any]:
     date/value/unit/ids) the evaluator already produced — never raw model prose.
     Malformed entries are skipped (fail safe), never coerced.
     """
-    out: dict[str, list[dict[str, Any]]] = {"verified": [], "rejected": [], "unverified": []}
+    out: dict[str, Any] = {"verified": [], "rejected": [], "unverified": []}
     for key in ("verified", "rejected", "unverified"):
         entries = summary.get(key) if isinstance(summary, dict) else None
         if not isinstance(entries, list):
@@ -462,6 +464,7 @@ def _run_identity(final_state: dict[str, Any], ticker: str) -> dict[str, Any]:
 
     # An explicit top-level asset_type is authoritative and never ambiguous; a
     # record-level disagreement only matters when we must rely on the records.
+    asset_type: str | None
     explicit_asset = final_state.get("asset_type")
     if explicit_asset:
         asset_type, asset_ambiguous = str(explicit_asset), False

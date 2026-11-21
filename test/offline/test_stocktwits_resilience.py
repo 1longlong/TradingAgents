@@ -75,3 +75,17 @@ class TestStockTwitsCryptoSymbols:
         with patch.object(stocktwits, "urlopen", side_effect=fake_urlopen):
             stocktwits.fetch_stocktwits_messages("BTC-USD")
         assert "/symbol/BTC.X.json" in seen["url"]
+
+
+
+def test_stocktwits_refuses_non_https_feed_before_io(monkeypatch):
+    """ADR-012 / NFR-OFF-001: unsafe scheme is an outage, never empty sentiment."""
+    from tradingagents.dataflows import stocktwits, utils
+
+    opened = []
+    monkeypatch.setattr(stocktwits, "_API", "file:///never-opened/{ticker}")
+    monkeypatch.setattr(utils, "build_opener", lambda *args: opened.append(args))
+    result = stocktwits.fetch_stocktwits_messages("NVDA")
+    assert "unavailable" in result.lower()
+    assert "no messages" not in result.lower()
+    assert opened == []

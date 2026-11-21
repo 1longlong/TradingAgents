@@ -1,3 +1,4 @@
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
 import os
 from pathlib import Path
 
@@ -422,7 +423,7 @@ def select_llm_provider(default=None) -> tuple[str, str | None]:
     # lists the base provider.
     base = (default or "").split("-cn")[0]
     preselected = next(
-        ((key, url) for _, key, url in PROVIDERS if key == base), None
+        (questionary.Choice(display, value=(key, url)) for display, key, url in PROVIDERS if key == base), None
     )
 
     choice = questionary.select(

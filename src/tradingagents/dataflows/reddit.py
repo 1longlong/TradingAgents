@@ -14,6 +14,8 @@ injection and degrades gracefully — returns a placeholder string rather than
 raising, so callers never special-case missing data.
 """
 
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+
 from __future__ import annotations
 
 import html
@@ -22,16 +24,19 @@ import logging
 import random
 import re
 import time
-import xml.etree.ElementTree as ET
 from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
 from urllib.error import HTTPError
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
+from urllib.request import Request
+
+from defusedxml import ElementTree as ET
+from defusedxml.common import DefusedXmlException
 
 from .date_window import coverage_gap, in_window
 from .evidence_capture import capture_reddit_posts, capture_sentiment_source_failure
 from .symbol_utils import crypto_base
+from .utils import open_https_feed as urlopen
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +113,7 @@ def _iso_to_timestamp(iso_str: str | None) -> float | None:
         return None
 
 
-def _strip_html(content: str) -> str:
+def _strip_html(content: str | None) -> str:
     """Reduce the HTML body Reddit embeds in an Atom entry to plain text."""
     if not content:
         return ""
@@ -167,6 +172,11 @@ def _read_capped(resp) -> bytes:
     return data
 
 
+def _parse_feed(data: bytes):
+    """ADR-012: parse bounded Atom XML with DTDs and external entities disabled."""
+    return ET.fromstring(data, forbid_dtd=True, forbid_entities=True, forbid_external=True)
+
+
 def _fetch_subreddit_rss(
     ticker: str,
     sub: str,
@@ -189,7 +199,7 @@ def _fetch_subreddit_rss(
     req = Request(url, headers={"User-Agent": _UA})
     try:
         with urlopen(req, timeout=timeout) as resp:
-            root = ET.fromstring(_read_capped(resp))
+            root = _parse_feed(_read_capped(resp))
     except HTTPError as exc:
         if exc.code == 429 and _retry:
             # Honour a server-supplied Retry-After exactly (including 0); jitter
@@ -204,7 +214,7 @@ def _fetch_subreddit_rss(
             return _fetch_subreddit_rss(ticker, sub, limit, timeout, _retry=False)
         logger.warning("Reddit RSS fetch failed for r/%s · %s: %s", sub, ticker, exc)
         return None
-    except (OSError, http.client.HTTPException, ET.ParseError) as exc:
+    except (OSError, http.client.HTTPException, ET.ParseError, DefusedXmlException) as exc:
         # OSError covers URLError/TimeoutError/connection resets; HTTPException
         # covers chunked-transfer errors (IncompleteRead/BadStatusLine, #1024).
         logger.warning("Reddit RSS fetch failed for r/%s · %s: %s", sub, ticker, exc)
@@ -267,7 +277,7 @@ def fetch_reddit_posts(
     # sentiment evidence before grouping into prose. No-op outside a run.
     capture_reddit_posts(ticker, posts)
     if not posts:
-        gap = window and coverage_gap(
+        gap = (start_date and end_date) and coverage_gap(
             _coverage_dates(fetched), start_date, end_date,
             "Reddit search", f"discussion of {ticker.upper()}",
         )
@@ -277,7 +287,7 @@ def fetch_reddit_posts(
     # Group by the subreddit each entry names, in the requested order. Nothing
     # is dropped: an unlabelled post from a one-subreddit request belongs to it,
     # and any other name gets its own block.
-    by_sub = {s.lower(): (s, []) for s in subreddits}
+    by_sub: dict[str, tuple[str, list[dict]]] = {s.lower(): (s, []) for s in subreddits}
     for p in posts:
         name = p.get("subreddit") or (subreddits[0] if len(subreddits) == 1 else "unknown")
         by_sub.setdefault(name.lower(), (name, []))[1].append(p)

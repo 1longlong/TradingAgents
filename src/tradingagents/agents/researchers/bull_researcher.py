@@ -1,4 +1,6 @@
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
 import time
+from typing import Any
 
 from tradingagents.agents.utils.agent_utils import (
     get_data_quality_context_from_state,
@@ -239,7 +241,7 @@ Use this information to deliver a compelling bull argument, refute the bear's co
                 measured_seconds=clock_check["seconds"],
             )
 
-        result = {
+        result: dict[str, Any] = {
             "investment_debate_state": new_investment_debate_state,
             "debate_usage": usage,
         }

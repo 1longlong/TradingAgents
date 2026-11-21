@@ -28,9 +28,12 @@ Two distinctions the types above deliberately keep apart:
   can name which sources failed without every vendor module hardcoding itself.
 """
 
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+
 from __future__ import annotations
 
 from requests.models import Response
+from typing_extensions import Self
 
 
 class VendorError(Exception):
@@ -82,13 +85,13 @@ class VendorError(Exception):
             parts.append(f"Retry-After {self.retry_after:g}s")
         return ", ".join(parts)
 
-    def with_vendor(self, vendor: str) -> VendorError:
+    def with_vendor(self, vendor: str) -> Self:
         """Attach the routing layer's vendor label unless one is already set."""
         if self.vendor is None:
             self.vendor = vendor
         return self
 
-    def with_chain_failures(self, failures) -> VendorError:
+    def with_chain_failures(self, failures) -> Self:
         """Record the other failures of the chain this error was raised from."""
         self.chain_failures = tuple(failures)
         return self
@@ -99,7 +102,7 @@ class VendorError(Exception):
         status: int | None = None,
         retry_after: float | None = None,
         retry: bool | None = None,
-    ) -> VendorError:
+    ) -> Self:
         """Attach the facts a retry decision needs, without touching the message."""
         if status is not None:
             self.status = status

@@ -12,6 +12,8 @@ vendor field. Kept separate from the dataflows themselves so a bare tool test
 (no active run) has no capture side effect and no import cycle.
 """
 
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+
 from __future__ import annotations
 
 import json
@@ -108,7 +110,7 @@ def capture_news_articles(
         if not title:
             continue
         published = article.get("published") or article.get("pub_date")
-        if hasattr(published, "isoformat"):
+        if published is not None and hasattr(published, "isoformat"):
             published = published.isoformat()
         record = build_news_record(
             run_id=run_id,
@@ -588,7 +590,8 @@ def capture_yfinance_statement(
     from tradingagents.evidence.policy import to_date
     from tradingagents.evidence.vendor_adapters import build_alpha_vantage_fundamentals_record
 
-    columns = list(getattr(data, "columns", None) if getattr(data, "columns", None) is not None else [])
+    column_values = getattr(data, "columns", None)
+    columns = list(column_values) if column_values is not None else []
     eligible = []
     target = to_date(target_date)
     for col in columns:
@@ -630,6 +633,7 @@ def capture_yfinance_statement(
         capture_record(record)
         # ADR-010: yfinance carries a period end but no filing date; availability
         # stays None (never invented from the target/fetch time).
+        assert end is not None
         capture_origin(
             record.evidence_id,
             build_alpha_vantage_origin(

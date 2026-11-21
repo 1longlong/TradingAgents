@@ -3,6 +3,8 @@
 Per-ticker SQLite databases so concurrent tickers don't contend.
 """
 
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+
 from __future__ import annotations
 
 import hashlib
@@ -11,6 +13,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.sqlite import SqliteSaver
 
 from tradingagents.dataflows.utils import safe_ticker_component
@@ -63,7 +66,7 @@ def checkpoint_step(data_dir: str | Path, ticker: str, date: str, signature: str
         return None
     tid = thread_id(ticker, date, signature)
     with get_checkpointer(data_dir, ticker) as saver:
-        config = {"configurable": {"thread_id": tid}}
+        config: RunnableConfig = {"configurable": {"thread_id": tid}}
         cp = saver.get_tuple(config)
         if cp is None:
             return None
@@ -95,8 +98,8 @@ def clear_checkpoint(data_dir: str | Path, ticker: str, date: str, signature: st
     tid = thread_id(ticker, date, signature)
     conn = sqlite3.connect(str(db))
     try:
-        for table in ("writes", "checkpoints"):
-            conn.execute(f"DELETE FROM {table} WHERE thread_id = ?", (tid,))
+        conn.execute("DELETE FROM writes WHERE thread_id = ?", (tid,))
+        conn.execute("DELETE FROM checkpoints WHERE thread_id = ?", (tid,))
         conn.commit()
     except sqlite3.OperationalError:
         pass

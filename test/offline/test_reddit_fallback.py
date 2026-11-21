@@ -272,3 +272,88 @@ def test_empty_subreddit_on_a_full_page_is_not_called_empty():
         out = reddit.fetch_reddit_posts("NVDA", subreddits=("a", "b"))
     assert "r/b: <no posts found" not in out
     assert f"newest {reddit._FEED_PAGE}" in out
+
+
+@pytest.mark.parametrize("encoding", ["utf-8", "utf-16"])
+@pytest.mark.parametrize("declaration", [
+    '<!DOCTYPE feed [<!ENTITY injected "fabricated">]>',
+    '<!DOCTYPE feed [<!ENTITY injected SYSTEM "file:///never-opened">]>',
+    '<!DOCTYPE feed SYSTEM "https://untrusted.invalid/feed.dtd">',
+])
+def test_dtd_feed_is_unavailable_instead_of_expanded(encoding, declaration):
+    """ADR-012 / NFR-PIT-001: unsafe XML cannot become observed sentiment."""
+    text = (f'<?xml version="1.0" encoding="{encoding}"?>{declaration}'
+            '<feed xmlns="http://www.w3.org/2005/Atom"><entry>'
+            '<title>&injected;</title></entry></feed>')
+    with patch.object(reddit, "urlopen", return_value=_resp(lambda: text.encode(encoding))):
+        assert reddit._fetch_subreddit_rss("NVDA", "stocks", 5, 5.0) is None
+
+
+def test_predefined_entities_and_namespaces_still_parse():
+    """ADR-012 / NFR-BC-001: ordinary Atom feeds keep their source text."""
+    text = ('<feed xmlns="http://www.w3.org/2005/Atom"><entry>'
+            '<title>Growth &amp; margins</title><content>&lt;p&gt;Evidence&lt;/p&gt;</content>'
+            '<published>2026-05-19T09:00:00Z</published></entry></feed>')
+    with patch.object(reddit, "urlopen", return_value=_resp(lambda: text.encode())):
+        posts = reddit._fetch_subreddit_rss("NVDA", "stocks", 5, 5.0)
+    assert posts[0]["title"] == "Growth & margins"
+    assert posts[0]["selftext"] == "Evidence"
+
+
+@pytest.mark.parametrize("url", [
+    "file:///never-opened", "http://example.com/feed", "ftp://example.com/feed",
+    "https:///feed", "https://user:password@example.com/feed",
+    "https://example.com:invalid/feed", "https://example.com/line\nfeed",
+])
+def test_feed_transport_rejects_unsafe_initial_urls_before_io(url, monkeypatch):
+    """ADR-012 / INV-8: public feed access never authorizes local file access."""
+    from urllib.error import URLError
+    from urllib.request import Request
+
+    from tradingagents.dataflows import utils
+
+    opened = []
+    monkeypatch.setattr(utils, "build_opener", lambda *args: opened.append(args))
+    with pytest.raises(URLError):
+        utils.open_https_feed(Request(url), timeout=5.0)
+    assert opened == []
+
+
+@pytest.mark.parametrize("target", [
+    "file:///never-opened", "http://example.com/feed", "https://other.invalid/feed",
+    "https://example.com:444/feed", "https://user@example.com/feed",
+])
+def test_feed_redirect_rejects_scheme_or_authority_changes(target):
+    """ADR-012: validate redirects before any follow-up request is created."""
+    from urllib.error import URLError
+    from urllib.request import Request
+
+    from tradingagents.dataflows.utils import _FeedRedirectHandler
+
+    handler = _FeedRedirectHandler()
+    with pytest.raises(URLError):
+        handler.redirect_request(Request("https://example.com/feed"), None, 302, "", {}, target)
+
+
+def test_https_feed_transport_retains_headers_timeout_and_safe_redirect(monkeypatch):
+    """ADR-012 / NFR-BC-001: valid HTTPS requests retain urllib behavior."""
+    from urllib.request import Request
+
+    from tradingagents.dataflows import utils
+
+    calls = []
+    response = object()
+
+    class Opener:
+        def open(self, request, timeout):
+            calls.append((request, timeout))
+            return response
+
+    handlers = []
+    monkeypatch.setattr(utils, "build_opener", lambda handler: handlers.append(handler) or Opener())
+    request = Request("https://example.com/feed", headers={"User-Agent": "fixture"})
+    assert utils.open_https_feed(request, timeout=7.0) is response
+    assert calls == [(request, 7.0)]
+    redirected = handlers[0].redirect_request(request, None, 302, "", {}, "https://example.com/new")
+    assert redirected.full_url == "https://example.com/new"
+    assert redirected.get_header("User-agent") == "fixture"

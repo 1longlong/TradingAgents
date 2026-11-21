@@ -39,6 +39,8 @@ Design rules (authoritative, see ``docs/architecture/adr/009-durable-run-usage-l
   lock, so concurrent invocations cannot collide or lose an event.
 """
 
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+
 from __future__ import annotations
 
 import json
@@ -333,7 +335,7 @@ class RunSpend:
         """Sum of KNOWN token costs only (unknown events are excluded, never zeroed)."""
         return sum(
             int(ev.total_tokens)
-            for ev in self.known_token_events()
+            for ev in self.known_token_events() if ev.total_tokens is not None
         )
 
     def settled_seconds(self) -> float:
@@ -642,23 +644,27 @@ class UsageLedger:
         from tradingagents.debate.budget import derive_debate_usage_from_events
 
         placeholders = ",".join("?" for _ in phases)
-        event_rows = conn.execute(
+        # SQL structure uses only fixed tokens and one placeholder per phase;
+        # all run/phase data stays in the bound parameter tuple (ADR-012).
+        event_query = "".join((
             "SELECT run_id, invocation_id, phase, speaker, status, "
             "input_tokens, output_tokens, total_tokens, tokens_source, "
             "seconds, seconds_source, token_source_partial, "
             "provider_conflict, transport_attempts, unresolved, created_at, "
             "input_tokens_source, output_tokens_source, conflict_originals "
-            f"FROM usage_events WHERE run_id = ? AND phase IN ({placeholders}) "
-            "ORDER BY created_at, invocation_id",
-            (run_id, *phases),
-        ).fetchall()
+            "FROM usage_events WHERE run_id = ? AND phase IN (",
+            placeholders, ") ORDER BY created_at, invocation_id",
+        ))
+        event_rows = conn.execute(event_query, (run_id, *phases)).fetchall()
         events = [self._row_to_event(row) for row in event_rows]
-        reservation_rows = conn.execute(
+        reservation_query = "".join((
             "SELECT invocation_id, phase, speaker, reserved_tokens, "
             "reserved_seconds, state, created_at FROM reservations "
-            f"WHERE run_id = ? AND state = ? AND phase IN ({placeholders}) "
-            "ORDER BY created_at, invocation_id",
-            (run_id, STATE_IN_FLIGHT, *phases),
+            "WHERE run_id = ? AND state = ? AND phase IN (",
+            placeholders, ") ORDER BY created_at, invocation_id",
+        ))
+        reservation_rows = conn.execute(
+            reservation_query, (run_id, STATE_IN_FLIGHT, *phases)
         ).fetchall()
         unresolved = [
             Reservation(
@@ -811,15 +817,20 @@ class UsageLedger:
                         seconds = float(est_seconds)
                     else:
                         # Call-count-only fallback (legacy callers).
-                        existing = conn.execute(
+                        placeholders = ",".join("?" for _ in phases)
+                        reservation_query = "".join((
                             "SELECT COUNT(*) FROM reservations "
-                            f"WHERE run_id = ? AND phase IN ({','.join('?' for _ in phases)})",
-                            (run_id, *phases),
+                            "WHERE run_id = ? AND phase IN (", placeholders, ")",
+                        ))
+                        event_query = "".join((
+                            "SELECT COUNT(*) FROM usage_events "
+                            "WHERE run_id = ? AND phase IN (", placeholders, ")",
+                        ))
+                        existing = conn.execute(
+                            reservation_query, (run_id, *phases)
                         ).fetchone()[0]
                         settled = conn.execute(
-                            "SELECT COUNT(*) FROM usage_events "
-                            f"WHERE run_id = ? AND phase IN ({','.join('?' for _ in phases)})",
-                            (run_id, *phases),
+                            event_query, (run_id, *phases)
                         ).fetchone()[0]
                         if int(max_calls) > 0 and max(int(existing), int(settled)) >= int(max_calls):
                             conn.execute("ROLLBACK")

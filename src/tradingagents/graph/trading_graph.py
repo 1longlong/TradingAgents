@@ -1,15 +1,17 @@
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
 # TradingAgents/graph/trading_graph.py
 
 import json
 import logging
 import os
 import uuid
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import yfinance as yf
+from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.prebuilt import ToolNode
 
 # Import the abstract tool methods from agent_utils
@@ -158,7 +160,7 @@ class TradingAgentsGraph:
         self,
         selected_analysts=("market", "social", "news", "fundamentals"),
         debug=False,
-        config: dict[str, Any] = None,
+        config: dict[str, Any] | None = None,
         callbacks: list | None = None,
     ):
         """Initialize the trading agents graph and components.
@@ -229,9 +231,9 @@ class TradingAgentsGraph:
         self.signal_processor = SignalProcessor(self.quick_thinking_llm)
 
         # State tracking
-        self.curr_state = None
-        self.ticker = None
-        self.log_states_dict = {}  # date to full state dict
+        self.curr_state: dict[str, Any] | None = None
+        self.ticker: str | None = None
+        self.log_states_dict: dict[str, dict[str, Any]] = {}  # date to full state dict
 
         # Graph-shape-affecting run choices, kept for the checkpoint signature.
         self.selected_analysts = tuple(selected_analysts)
@@ -239,7 +241,7 @@ class TradingAgentsGraph:
         # Set up the graph: keep the workflow for recompilation with a checkpointer.
         self.workflow = self.graph_setup.setup_graph(selected_analysts)
         self.graph = self.workflow.compile()
-        self._checkpointer_ctx = None
+        self._checkpointer_ctx: AbstractContextManager[SqliteSaver] | None = None
         self._resuming = False
 
     def _get_provider_kwargs(self) -> dict[str, Any]:
@@ -430,6 +432,7 @@ class TradingAgentsGraph:
             if raw is None:
                 continue  # price not available yet — try again next run
             try:
+                assert alpha is not None and days is not None
                 reflection = self.reflector.reflect_on_final_decision(
                     final_decision=entry.get("decision", ""),
                     raw_return=raw,
@@ -1100,6 +1103,7 @@ class TradingAgentsGraph:
 
         # Save to file. Reject ticker values that would escape the
         # results directory when joined as a path component.
+        assert self.ticker is not None
         safe_ticker = safe_ticker_component(self.ticker)
         directory = Path(self.config["results_dir"]) / safe_ticker / "TradingAgentsStrategy_logs"
         directory.mkdir(parents=True, exist_ok=True)

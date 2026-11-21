@@ -36,6 +36,8 @@ way to share one budget safely between concurrent writers. A new thread starts
 with no session at all; the budget is never guessed or copied into it.
 """
 
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+
 from __future__ import annotations
 
 import contextlib
@@ -47,6 +49,7 @@ import random
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import NoReturn
 
 from .errors import VendorRateLimitError
 
@@ -149,7 +152,7 @@ def _stop_before_request(what: str, remaining: float, exc_type) -> BaseException
     return error.with_retry_evidence(retry=False)
 
 
-def stop_before_request(what: str, exc_type=None):
+def stop_before_request(what: str, exc_type=None) -> NoReturn:
     """Fail with a typed, non-retryable error: ``what`` was not started.
 
     Used by a vendor whose remaining work (a second HTTP request in one call)

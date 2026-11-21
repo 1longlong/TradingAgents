@@ -1,3 +1,4 @@
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
 import contextvars
 from collections.abc import Mapping
 from contextlib import contextmanager
@@ -59,6 +60,7 @@ def set_config(config: dict):
     """
     global _config
     initialize_config()
+    assert _config is not None
     incoming = deepcopy(config)
     for key, value in incoming.items():
         if isinstance(value, dict) and isinstance(_config.get(key), dict):
@@ -79,6 +81,7 @@ def get_config() -> dict:
         return deepcopy(snapshot)
     if _config is None:
         initialize_config()
+    assert _config is not None
     return deepcopy(_config)
 
 

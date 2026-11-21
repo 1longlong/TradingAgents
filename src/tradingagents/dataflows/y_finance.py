@@ -1,3 +1,4 @@
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
 import logging
 from datetime import datetime
 from typing import Annotated
@@ -296,7 +297,7 @@ def get_stockstats_indicator(
 
 def get_fundamentals(
     ticker: Annotated[str, "ticker symbol of the company"],
-    curr_date: Annotated[str, "analysis date in YYYY-MM-DD format"] = None
+    curr_date: Annotated[str | None, "analysis date in YYYY-MM-DD format"] = None
 ):
     """Get company fundamentals overview from yfinance.
 
@@ -382,7 +383,7 @@ def get_fundamentals(
 def get_balance_sheet(
     ticker: Annotated[str, "ticker symbol of the company"],
     freq: Annotated[str, "frequency of data: 'annual' or 'quarterly'"] = "quarterly",
-    curr_date: Annotated[str, "current date in YYYY-MM-DD format"] = None
+    curr_date: Annotated[str | None, "current date in YYYY-MM-DD format"] = None
 ):
     """Get balance sheet data from yfinance."""
     canonical = normalize_symbol(ticker)
@@ -430,7 +431,7 @@ def get_balance_sheet(
 def get_cashflow(
     ticker: Annotated[str, "ticker symbol of the company"],
     freq: Annotated[str, "frequency of data: 'annual' or 'quarterly'"] = "quarterly",
-    curr_date: Annotated[str, "current date in YYYY-MM-DD format"] = None
+    curr_date: Annotated[str | None, "current date in YYYY-MM-DD format"] = None
 ):
     """Get cash flow data from yfinance."""
     canonical = normalize_symbol(ticker)
@@ -475,7 +476,7 @@ def get_cashflow(
 def get_income_statement(
     ticker: Annotated[str, "ticker symbol of the company"],
     freq: Annotated[str, "frequency of data: 'annual' or 'quarterly'"] = "quarterly",
-    curr_date: Annotated[str, "current date in YYYY-MM-DD format"] = None
+    curr_date: Annotated[str | None, "current date in YYYY-MM-DD format"] = None
 ):
     """Get income statement data from yfinance."""
     canonical = normalize_symbol(ticker)

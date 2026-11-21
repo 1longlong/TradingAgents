@@ -79,3 +79,63 @@ completion clears checkpoint rows. Authentication/internal failures retain their
 separate failure tests. These are merge compatibility checks, not new vendor,
 Gate, model, trading or budget policies. Historical PR approval/verification
 records above retain their original scope and do not approve this local merge.
+
+
+## Authorized CI type/security repair — 2026-11-21
+
+Scope: web-ci-types-security-20261121-v1. After the CI diagnosis and explicit
+scope question, the user authorized repairing all type/security issues while
+preserving business behavior. This covers existing core, CLI, simulated trading,
+safety and WebUI source as necessary; it does not fabricate the separate GitHub
+prior-test/safety/governance approvals or a base semantic evaluator.
+
+Context: mypy reports 322 errors in 60 files and Bandit reports 10 medium/high
+findings. Existing core logic is not replaced. Keep ratings, confidence caps,
+evidence/time validation, usage budgets, execution authorizations, audit hashes,
+checkpoint signatures, provider settings and retry behavior unchanged.
+
+Decisions: express real optional/union values and heterogeneous SDK keyword
+contracts; narrow already-validated values at their existing boundaries;
+correct inaccurate return annotations and callback signatures; keep graph state
+and runtime protocols explicit. Do not add ignore_errors, broad Any casts,
+type-ignore/nosec exclusions, suppressions, dependency upgrades or disabled jobs.
+SDK option dictionaries may use Any values because SDKs accept heterogeneous
+provider-specific keyword values; their existing runtime validation remains.
+
+Security: keep SHA1 conflict IDs byte-compatible and mark their non-security
+purpose explicitly; replace fixed-name checkpoint SQL with literal statements;
+assemble ledger placeholder clauses from fixed tokens only, binding every data
+value separately. Rewrite the prompt's string assembly without changing its
+rendered bytes. Add an HTTPS-only opener using existing urllib handlers that
+validates the initial URL and redirects, preserving patchable transport seams.
+In the existing Reddit fetcher, use an XMLParser/TreeBuilder that rejects all
+DOCTYPE declarations before accepting untrusted XML. Preserve valid bounded
+Atom feeds, predefined entities, response/error contracts and existing retries.
+The shared HTTPS helper belongs in existing dataflows/utils.py. No new package,
+framework, network service or dependency is introduced.
+
+Prior test strategy: keep all existing regression/contract/safety tests; add
+negative initial/redirect URL schemes and authorities, normal HTTPS behavior,
+DTD/internal/external entity rejection and valid namespace/escaped feed data;
+assert literal/parameterized SQL cannot broaden scopes with hostile IDs/phases;
+assert stable conflict ID bytes. Run full mypy and Bandit over src, full Ruff,
+registry validators, and then the complete socket-denied credential-free suite
+plus frontend tests once changes are complete. Repeat only failed/affected
+checks after repairs. No live provider, broker, user-state or credential access.
+
+Consequences: source annotations become faithful to existing contracts; only
+unsafe URL/XML inputs gain explicit rejection. No trading safety policy,
+normal provider transport, business threshold or approval is relaxed. Actual
+failures, checks and any remaining limitations are recorded separately.
+
+
+Security implementation refinement: the installed defusedxml 0.7.1 provides the
+standard hardened ElementTree API. Declare defusedxml>=0.7.1,<1 as a direct
+runtime dependency (and in the existing requirements install path), using
+forbid_dtd, forbid_entities and forbid_external. This replaces the proposed
+stdlib custom parser, whose presence remains flagged by the complete security
+scanner even with a rejecting TreeBuilder. No install/upgrade is needed in the
+current environment. Explicit hardened parsing avoids suppressing B314 or
+building another XML parser. The user-authorized complete security repair
+covers this necessary dependency declaration; no separate release or platform
+approval is inferred. Existing API/data semantics and tests stay authoritative.

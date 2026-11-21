@@ -1,6 +1,9 @@
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
 import contextlib
 import logging
 import threading
+from collections.abc import Callable
+from typing import Any
 
 from tradingagents.evidence.models import SourceResultStatus
 
@@ -127,7 +130,7 @@ VENDOR_LIST = [
 OPTIONAL_CATEGORIES = {"macro_data", "prediction_markets"}
 
 # Mapping of methods to their vendor-specific implementations
-VENDOR_METHODS = {
+VENDOR_METHODS: dict[str, dict[str, Callable[..., Any] | list[Callable[..., Any]]]] = {
     # core_stock_apis
     "get_stock_data": {
         "alpha_vantage": get_alpha_vantage_stock,
@@ -225,7 +228,7 @@ def get_category_for_method(method: str) -> str:
             return category
     raise ValueError(f"Method '{method}' not found in any category")
 
-def get_vendor(category: str, method: str = None) -> str:
+def get_vendor(category: str, method: str | None = None) -> str:
     """Get the configured vendor for a data category or specific tool method.
     Tool-level configuration takes precedence over category-level.
     """
@@ -749,7 +752,7 @@ def route_to_vendor(method: str, *args, **kwargs):
             status, kind = SourceResultStatus.FAILED, type(error).__name__
         _record_router_attempt(method, vendor, status, error_type=kind)
 
-    def retry_verdict(vendor: str, exc: BaseException) -> tuple[bool, str]:
+    def retry_verdict(vendor: str, exc: BaseException) -> tuple[bool, str | float]:
         """Whether one more invocation of ``vendor`` may fix ``exc``, and the wait.
 
         Unclassified exceptions never qualify: an internal bug is not a
@@ -860,6 +863,7 @@ def route_to_vendor(method: str, *args, **kwargs):
                 # a spent budget is never reported as a breaker skip and a
                 # breaker skip never consumes an attempt or a request.
                 if ticket is None and breakers is not None:
+                    assert breaker_policy is not None
                     skip_reason: list[str] = []
                     acquired = breakers.try_acquire(
                         vendor,
@@ -918,6 +922,7 @@ def route_to_vendor(method: str, *args, **kwargs):
                     # The failed attempt is superseded by the retry: drop it from the
                     # failure picture so the final verdict names what is still true.
                     failures[:] = [entry for entry in failures if entry[1] is not error]
+                    assert isinstance(wait, (int, float))
                     if not session.pause(wait):
                         # The wait did not fit. The vendor *did* say the condition
                         # was momentary, so this is a real vendor failure (the

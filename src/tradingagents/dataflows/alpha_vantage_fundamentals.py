@@ -1,3 +1,4 @@
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
 import json
 
 from .alpha_vantage_common import _make_api_request
@@ -5,7 +6,7 @@ from .date_window import withhold_live_profile
 from .evidence_capture import capture_alpha_vantage_statement
 
 
-def _filter_reports_by_date(result, curr_date: str):
+def _filter_reports_by_date(result, curr_date: str | None):
     """Drop annual/quarterly reports dated after curr_date to prevent look-ahead.
 
     ``_make_api_request`` returns the fundamentals payload as a JSON string, so
@@ -29,7 +30,7 @@ def _filter_reports_by_date(result, curr_date: str):
     return json.dumps(payload)
 
 
-def get_fundamentals(ticker: str, curr_date: str = None) -> str:
+def get_fundamentals(ticker: str, curr_date: str | None = None) -> str:
     """
     Retrieve comprehensive fundamental data for a given ticker symbol using Alpha Vantage.
 
@@ -56,7 +57,7 @@ def get_fundamentals(ticker: str, curr_date: str = None) -> str:
     return _make_api_request("OVERVIEW", params)
 
 
-def get_balance_sheet(ticker: str, freq: str = "quarterly", curr_date: str = None):
+def get_balance_sheet(ticker: str, freq: str = "quarterly", curr_date: str | None = None):
     """Retrieve balance sheet data for a given ticker symbol using Alpha Vantage."""
     result = _make_api_request("BALANCE_SHEET", {"symbol": ticker})
     filtered = _filter_reports_by_date(result, curr_date)
@@ -64,7 +65,7 @@ def get_balance_sheet(ticker: str, freq: str = "quarterly", curr_date: str = Non
     return filtered
 
 
-def get_cashflow(ticker: str, freq: str = "quarterly", curr_date: str = None):
+def get_cashflow(ticker: str, freq: str = "quarterly", curr_date: str | None = None):
     """Retrieve cash flow statement data for a given ticker symbol using Alpha Vantage."""
     result = _make_api_request("CASH_FLOW", {"symbol": ticker})
     filtered = _filter_reports_by_date(result, curr_date)
@@ -72,7 +73,7 @@ def get_cashflow(ticker: str, freq: str = "quarterly", curr_date: str = None):
     return filtered
 
 
-def get_income_statement(ticker: str, freq: str = "quarterly", curr_date: str = None):
+def get_income_statement(ticker: str, freq: str = "quarterly", curr_date: str | None = None):
     """Retrieve income statement data for a given ticker symbol using Alpha Vantage."""
     result = _make_api_request("INCOME_STATEMENT", {"symbol": ticker})
     filtered = _filter_reports_by_date(result, curr_date)

@@ -1,8 +1,45 @@
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
 import re
 from datetime import date, datetime, timezone
 from email.utils import parsedate_to_datetime
+from urllib.error import URLError
+from urllib.parse import urlsplit
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 import requests
+
+
+def _https_origin(url: str) -> tuple[str, int]:
+    """ADR-012 / NFR-PIT-001: reject non-HTTPS and ambiguous feed authorities."""
+    try:
+        parts = urlsplit(url)
+        if (parts.scheme != "https" or not parts.hostname
+                or parts.username is not None or parts.password is not None
+                or any(char.isspace() or ord(char) < 32 for char in url)):
+            raise ValueError("invalid HTTPS authority")
+        return parts.hostname.lower(), parts.port or 443
+    except ValueError as exc:
+        raise URLError("Feed transport requires an HTTPS URL without credentials") from exc
+
+
+class _FeedRedirectHandler(HTTPRedirectHandler):
+    """Keep feed redirects on the validated HTTPS origin (ADR-012)."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        if _https_origin(newurl) != _https_origin(req.full_url):
+            raise URLError("Cross-origin feed redirect refused")
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def open_https_feed(request: Request, *, timeout: float):
+    """Open a public feed with scheme checks on both initial and redirect URLs.
+
+    ADR-012: retain urllib's HTTP errors, response context manager and timeout;
+    file/custom schemes, credentialed authorities and off-origin redirects
+    never reach a transport handler. Callers keep their existing offline seam.
+    """
+    _https_origin(request.full_url)
+    return build_opener(_FeedRedirectHandler()).open(request, timeout=timeout)
 
 # Tickers can contain letters, digits, dot, dash, underscore, caret
 # (index symbols like ^GSPC), equals (futures like GC=F), and plus

@@ -3700,3 +3700,92 @@ explicitly authorized this local merge; no remote push is part of this request.
 Import smoke (`import tradingagents, cli.main, tradingagents_web.app`) and
 `tradingagents --help` both passed with dotenv disabled and no credential
 environment. Neither check invoked an analysis or trading operation.
+
+
+## PR #7 CI diagnosis / bounded repair — 2026-11-21
+
+Actual remote evidence: PR #7, head 095fa59, base 9a08e08, Actions run
+44867605790. All four regression matrices failed collection, missing FastAPI.
+AI-use coverage failed on three nonexistent offline/trading/live aliases.
+Mypy reported 322 errors in 60 files (58 files identical to release); Bandit
+reported 9 medium and 1 high finding. Review lacked prior human test-plan
+approval; semantic lacked base-approved evaluation and was triggered by four
+development-prompt name edits. The aggregate failure follows these failures.
+Schema, governance validator, clean install and context jobs were green; no
+claim that earlier local offline results implied a fully green remote CI.
+
+Repair is limited to the existing web extra in three CI jobs and exact live
+relocation recognition, plus positive/negative regression cases. Core smoke,
+all jobs, static/security rules, approval and semantic requirements remain.
+No product source or dependency declaration changed.
+
+`env -i PATH="$PATH" PYTHON_DOTENV_DISABLED=1 PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q --disable-socket --allow-unix-socket -p no:cacheprovider --tb=short`:
+**4212 passed, 3 skipped, 52 warnings, 92 subtests**, 42.92s, macOS/Python 3.14.
+This is the complete test tree, including offline and live-directory test
+collection under denied sockets and no credentials; no live service was called.
+Skips: real DeepSeek credentials absent/placeholder, opt-in live trading, and
+optional langchain_aws absent. Socket warnings are intercepted attempts, not
+zero-attempt proof. Full Ruff, schema and whitespace checks PASS.
+
+Using the corrected checker, actual committed PR head versus base AI-use
+coverage passes. Both equal relocated content and edited fixture content are
+checked; duplicate aliases fail closed. New working-tree changes have not been
+committed/pushed or verified in a new GitHub run. Existing broader blockers,
+missing reviews and prior-test chronology remain unresolved and unwaived.
+
+
+## PR #7 complete type/security repair — 2026-11-21
+
+Scope: web-ci-types-security-20261121-v1, user explicitly authorized all type and
+security fixes while preserving business behavior. Prior bounded CI fixes remain.
+ADR-012 and the review memo record scope and positive/negative strategy before
+source changes. Exact source/test paths are in the new AI-use record.
+
+Environment: macOS, Python 3.14 existing .venv; no packages installed/upgraded.
+defusedxml 0.7.1 was already installed and is now declared as a direct dependency.
+Mypy uses the unchanged configured Python 3.10 target, check_untyped_defs and
+complete src coverage. Static diagnostics reduced 322 -> 164 -> 107 -> 46 -> 6
+-> 1 -> 0 as genuine annotations/protocols/control-flow guarantees were fixed.
+These intermediate static failures are not reported as passes or hidden.
+The custom stdlib XML parser still triggered B314 and was replaced by hardened
+defusedxml with all DTD/entity/external features forbidden, without suppression.
+
+- `env -i PATH="$PATH" PYTHON_DOTENV_DISABLED=1 PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q --disable-socket --allow-unix-socket -p no:cacheprovider --tb=short`:
+  **4240 passed, 3 skipped, 52 warnings, 92 subtests**, 44.03s. Complete test tree,
+  denied sockets and temporary state, no credentials. Skips: real DeepSeek key
+  absent/placeholder, opt-in live trading, optional langchain_aws absent. Existing
+  socket-attempt/model/zero-division warnings remain visible, not zero-attempt or
+  live-proof claims. No test assertion removed or threshold relaxed.
+- Frontend `npm run test -- --reporter=dot`: **71 passed**, 16 files, 2.69s.
+- `python -m mypy --cache-dir=/tmp/tradingagents-ci-mypy src`: **PASS**, 194 files.
+- `python -m bandit -r src -ll`: **PASS**, zero medium/high findings; 47 low
+  findings remain visible, no tests skipped/nosec exclusions. This is a pass
+  of the configured CI severity scope, not a claim of universal security.
+- `python -m ruff check .`: **PASS** with unchanged rule selections. Import-sort
+  corrections and removal of introduced unused imports were scoped to edited
+  files; no mass formatting or added lint exclusions.
+- `python -m pip check`: **PASS**, no broken installed requirements.
+- `python -m test.ci_gates dependencies`: first attempt **BLOCKED** by a proxy
+  disconnection querying public PyPI metadata, not a passing audit. An unchanged
+  retry **PASS**, audited **127 exact installed versions**; no install, upgrade,
+  proxy change or advisory suppression.
+- `python -m test.ci_gates schema` and the independent requirements validator:
+  **PASS**, 43/43 required artifacts valid and no likely governance-file secrets.
+- `python -m test.ci_gates structure` on a temporary export of tracked deliverable
+  paths/current file contents: **PASS**. Local ignored demo/dependencies were not
+  exported or deleted to manufacture that result; no gate was changed to waive
+  obsolete tracked packages.
+- Import and CLI help smoke ran with dotenv disabled and no credential environment.
+  Full tests preceded final type-only policy-field/import-order refinements;
+  mypy/Ruff/import/CLI smoke cover those final changes, not a second full run.
+
+Positive/negative tests cover safe HTTPS timeouts/headers/redirects, dangerous
+initial/redirect schemes/authorities before I/O, UTF-8/UTF-16 DTD/entity refusal,
+normal Atom escapes/namespaces, hostile bound run/phase SQL values, stable IDs,
+the conflict adapter's creation/denial outputs, and release-identical market
+prompt literals. Existing core/trading/safety/CLI contracts stay in the suite.
+
+No live/provider/broker calls, browser rerun, separate clean-install rerun,
+Python 3.10–3.13 runtime rerun, new GitHub run or independent/human final review
+is claimed. Human prior-test/current-head and base semantic evidence remain
+open. No commit, push, merge, workflow rerun or external comment was performed.
