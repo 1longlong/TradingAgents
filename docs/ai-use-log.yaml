@@ -597,3 +597,11 @@
   scope: 'PR 5 remote CI diagnosis and deterministic test-only portability repair within the approved integration/test plan.'
   outcome: 'First Linux CI exposed real-clock tolerance, Python 3.10 asyncio API, nullable-schema version, snapshot-clock and parallel completion-order assumptions. Kept exact numeric/call/ID assertions; 316 focused tests pass locally. Remote rerun pending; no product or workflow change.'
   human_review: requested
+
+- id: AUL-073
+  date: '2026-11-21'
+  tool: Codex
+  phase: verification
+  scope: 'PR 5 remote Linux CI results for c7ba992, run 44859668089.'
+  outcome: 'All 7 jobs PASS; Python 3.10/3.11/3.12/3.13 each 3799 passed, 9 skipped, 92 subtests. Complete offline tree includes simulated trading; no live test. Separate collaborator approval and final merge remain pending.'
+  human_review: requested

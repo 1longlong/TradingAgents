@@ -2611,3 +2611,23 @@ clock, timeout, Gate logic, permission or CI workflow was changed.
 
 `python -m pytest tests/test_vendor_retry_budget.py tests/test_retry_session_context.py tests/test_tool_governance.py tests/test_stage2_multicategory_gate.py -q -p no:cacheprovider --tb=short`:
 **316 passed** (4.15s, Windows). Remote rerun remains pending at this entry.
+
+
+### Remote Linux verification completed on c7ba992
+
+GitHub Actions CI run **44859668089** completed successfully for
+`c7ba992b330279c30b145363879b3fb463d23833` (test-only deterministic repair).
+All **7 jobs passed**: tests on Python 3.10, 3.11, 3.12 and 3.13, clean-install
+smoke, strict Ruff and governance/schema validation. Each Linux test job reports
+**3799 passed, 9 skipped, 22 warnings, 92 subtests passed**. This is the complete
+Linux test tree, including the simulated-trading tests that Windows could not
+collect. The nine skips are six optional-jsonschema test cases (the separate
+schema job installs it and passes), missing optional langchain_aws, missing live
+DeepSeek credentials and the explicitly opt-in live trading test. Live tests
+were not run and these results remain offline evidence.
+
+The Windows fcntl restriction remains a platform fact, not a blocker to the
+now-successful Linux evidence. No simulated-trading source, CI workflow or
+permission file differs from release. PR #5 still needs at least one separate
+approving review by a collaborator with write access; the user/chat approval
+must not be presented as that GitHub review. Shared dev was not updated.
