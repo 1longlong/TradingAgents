@@ -589,3 +589,20 @@ that existing output list and returns conflicts/notes/denials as documented.
 The new real adapter test covers creation and negative invalid-evidence
 re-observation retaining the open conflict and recording a denial. No conflict
 lifecycle or evidence eligibility rule changes.
+
+## CI-20261121-REPORT-CLOCK — test-only repair
+
+PR run 44879223281, Python 3.12, head 38279ae: the sole regression failure was
+TestPublicReportAndMemory.test_report_export_idempotent. Two real report writes
+straddled a second boundary: Generated 07:14:16 versus 07:14:17. The test compared
+the complete files, including the intentional production timestamp. Consequently
+the aggregate blocking-gate also failed. The same-head push Python 3.12 job
+passed; this evidence supports a clock-dependent intermittent test failure.
+
+Human-authorized scope ci-report-clock-20261121-v1 fixes only the reporting
+module clock within this test, with pytest restoring it afterward. The exact
+fixed header, complete report equality and confidence-cap audit equality are
+checked. No timestamp is stripped from reports or comparisons, no test is
+skipped/retried, and production source, business rules and CI remain unchanged.
+Actual local results are recorded in the evaluation logbook after execution;
+no remote passing run is claimed by this local repair.

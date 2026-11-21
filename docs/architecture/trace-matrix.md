@@ -660,3 +660,13 @@ merge review. No runtime acceptance criterion or invariant threshold changes.
 Obsolete tests for the retired custom review-marker/chronology protocol are
 replaced under explicit human policy-change authorization. Existing schema,
 permission, structure, AI-log, transcript and dependency checks are retained.
+
+
+ci-report-clock-20261121-v1: NFR-DET-001 / FR-DQG-006 / NFR-AUD-001,
+ADR-011-deterministic-degraded-confidence-cap.md. The existing
+`test/offline/test_confidence_cap_runtime.py::TestPublicReportAndMemory::test_report_export_idempotent`
+now fixes the report clock with test-local monkeypatch, asserts the exact
+Generated header and retains full report and confidence-cap audit equality.
+This controls the known volatile input instead of removing content assertions.
+Production timestamps, confidence handling and public writer contracts remain
+unchanged; no new requirement, invariant or status is introduced.

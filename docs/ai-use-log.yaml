@@ -4282,3 +4282,36 @@ entries:
   notes:
   - Reuse open PR 7 from feature/webui to release, preserving its complete feature scope and updating the review/evaluation policy and actual validation evidence.
   - No new product code, dependency, repeated full suite, force push, merge, review approval or remote protection change is introduced for publication.
+
+- id: AI-20261121-REPORT-CLOCK-001
+  date: '2026-11-21'
+  tool: OpenCode
+  purpose: Stabilize the report idempotency regression by fixing its test-local generation clock.
+  source: Current human approval of the proposed test-only repair after the GitHub failure diagnosis.
+  human_review: Human owner authorized this scoped repair; independent final review and platform approval are not claimed.
+  paths:
+  - test/offline/test_confidence_cap_runtime.py
+  - docs/ai-use-log.yaml
+  - docs/review-memo.md
+  - docs/bug-diary.md
+  - docs/architecture/trace-matrix.md
+  - docs/architecture/evaluation-logbook.md
+  notes:
+  - CI run 44879223281 recorded report generation times one second apart; the existing complete-file equality assertion depended on wall-clock timing.
+  - Patch only tradingagents.reporting.datetime within this test. Assert a fixed Generated header and retain original full-report and confidence-cap comparisons. Pytest restores the module clock automatically.
+  - No production source, safety threshold, workflow, skip policy, dependency, real credential or runtime data change. Preserve negative cap and financial-figure tests in the full suite.
+  - Final verification results belong in the evaluation logbook after execution. This implementation scope does not include commit, push, merge or remote settings.
+  - 'Final full isolated suite: 4240 passed, 3 skipped, 22 warnings, 92 subtests, 42.80s. Ruff, both requirements validators and whitespace checks pass. No hosted rerun or live API result is claimed.'
+
+- id: AI-20261121-REPORT-CLOCK-PUBLISH-001
+  date: '2026-11-21'
+  tool: OpenCode
+  purpose: Publish the verified report-clock test repair and update existing PR 7.
+  source: Current human instruction to commit, push and submit a PR.
+  human_review: Publication authorized; no final merge approval or hosted CI pass is claimed.
+  paths:
+  - docs/ai-use-log.yaml
+  - docs/review-memo.md
+  notes:
+  - Publish only the completed test repair and its authentic records, preserving the original full report and confidence-cap assertions and production behavior.
+  - Reuse the feature/webui-to-release PR with a normal push; no new product changes, repeated full regression, force push, merge or remote-protection change.

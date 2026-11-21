@@ -29,6 +29,7 @@ INV-1/INV-2/INV-6/INV-8.
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from unittest.mock import MagicMock
 
 import pandas as pd
@@ -561,12 +562,19 @@ class TestPublicReportAndMemory:
         # The caller's original state is not mutated.
         assert json.dumps(state, sort_keys=True, default=str) == original
 
-    def test_report_export_idempotent(self, tmp_path):
+    def test_report_export_idempotent(self, tmp_path, monkeypatch):
+        """ADR-011 / NFR-DET-001: compare identical inputs with a fixed clock."""
         from tradingagents.reporting import write_report_tree
+
+        generated_at = datetime(2026, 5, 13, 12, 0, 0)
+        clock = MagicMock()
+        clock.now.return_value = generated_at
+        monkeypatch.setattr("tradingagents.reporting.datetime", clock)
 
         state = self._legacy_degraded_state()
         p1 = write_report_tree(state, SYMBOL, tmp_path / "r1")
         p2 = write_report_tree(state, SYMBOL, tmp_path / "r2")
+        assert "Generated: 2026-05-13 12:00:00" in p1.read_text(encoding="utf-8")
         assert p1.read_text(encoding="utf-8") == p2.read_text(encoding="utf-8")
         s1 = json.loads((tmp_path / "r1" / "run_summary.json").read_text())
         s2 = json.loads((tmp_path / "r2" / "run_summary.json").read_text())

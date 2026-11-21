@@ -2646,3 +2646,38 @@ the implementation phase; this instruction supersedes them for publication
 only. No force push, merge, reviewer approval or branch-protection change is
 authorized. Verification remains the results recorded above; remote CI outcomes
 will be reported separately after publication.
+
+### Report idempotency test clock repair — 2026-11-21
+
+Scope ci-report-clock-20261121-v1. The human owner explicitly accepted the
+proposed test-only repair after reviewing the CI failure: freeze report
+generation time in test_report_export_idempotent, preserve complete report and
+confidence-cap equality, and leave production behavior and blocking gates
+unchanged. This is current conversation authorization for this repair, not an
+independent final review or GitHub approval.
+
+CI PR run 44879223281 at 38279ae failed only this test: report headers were
+generated at 07:14:16 and 07:14:17. The dependent blocking-gate failed because
+regression failed. The same-head push Python 3.12 job passed, supporting the
+observed real-clock boundary cause rather than a demonstrated version defect.
+
+Allowlist: test/offline/test_confidence_cap_runtime.py and existing AI-use,
+bug, evaluation, traceability and review records. Use pytest monkeypatch for
+the reporting module's clock; assert the fixed Generated header and retain
+all complete-report and confidence-cap comparisons. Run one complete
+credential-free/socket-denied suite after edits plus Ruff and document
+validation. No source/runtime, dependencies, schema, threshold, skip policy,
+workflow, remote setting or publication change is included.
+
+Verification completed once after the test edit: complete socket-denied suite
+4240 passed, 3 skipped, 22 warnings, 92 subtests in 42.80s. Ruff, both requirements
+validators and whitespace checks pass. No source or original assertion was
+removed; the exact fixed Generated header is an additional assertion. These are
+local results, not independent human acceptance or a passing hosted 3.12 run.
+The repair remains uncommitted and unpushed under the current instruction.
+
+Publication authorization — 2026-11-21: the user subsequently requested
+committing, pushing and submitting this repair. Publish the verified candidate
+on feature/webui with a normal push and update existing PR #7 to release.
+This supersedes the preceding implementation-phase publication limit only;
+no force push, merge, review approval or remote-protection change is authorized.

@@ -3830,3 +3830,30 @@ review decision or remote CI run was changed. No dependency installation,
 frontend/product test change, credential access, live API call, commit or push.
 Historical failure records retain their original meaning; the two policy
 blockers are retired/redefined rather than falsely reported as previously met.
+
+
+## Report idempotency test clock repair — 2026-11-21
+
+Scope ci-report-clock-20261121-v1, authorized by the human owner after the
+specific CI diagnosis. In PR run 44879223281 at 38279ae the report equality
+test compared real timestamps 07:14:16 and 07:14:17. Test-local monkeypatch now
+fixes only tradingagents.reporting.datetime. The fixed header is asserted and
+the original complete-report and confidence-cap equality assertions remain.
+Production source and all business/safety acceptance are unchanged.
+
+- One final full suite with credentials absent, dotenv disabled, temporary
+  state and Python sockets denied:
+  `env -i PATH="$PATH" PYTHON_DOTENV_DISABLED=1 PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -m pytest -q --disable-socket --allow-unix-socket -p no:cacheprovider --tb=short`:
+  **4240 passed, 3 skipped, 22 warnings, 92 subtests passed**, 42.80s.
+  Skips remain no real DeepSeek key, disabled opt-in live trading and missing
+  optional langchain_aws. No live API or Python 3.12 hosted rerun is claimed.
+- Whole-repository Ruff: **PASS**.
+- `python -m test.ci_gates schema`: **PASS**.
+- Independent `scripts/validate/validate_requirements.py`: **PASS**, 43/43
+  required artifacts valid and no likely governance-file secrets.
+- `git diff --check`: **PASS**.
+
+No new product code, threshold, dependency, workflow, skip/retry, commit, push
+or remote setting change. No repeated suite or new GitHub passing result is
+claimed. The hosted regression remains failed until a later authorized
+publication and CI run verifies this candidate.
