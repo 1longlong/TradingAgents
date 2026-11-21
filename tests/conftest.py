@@ -65,3 +65,106 @@ def mock_llm_client():
         return_value=client,
     ):
         yield client
+
+
+# --- Yahoo error-classification helpers ------------------------------------
+# Shared by test_yahoo_error_classifier.py, test_yahoo_error_paths.py and
+# test_yahoo_empty_and_internal.py. Exposed as a fixture so those modules do not
+# need the tests directory to be importable as a package.
+
+
+class _YahooHelpers:
+    """Network-free builders for Yahoo failure scenarios."""
+
+    @staticmethod
+    def status_error(client, status):
+        """An ``HTTPError`` as ``client`` raises it, carrying ``status``.
+
+        ``requests`` computes the status from ``status_code``; curl_cffi also
+        consults a plain ``ok`` attribute, which defaults to True on an empty
+        response object, so it is set explicitly there.
+        """
+        response = client.models.Response()
+        response.status_code = status
+        response.url = "https://query2.finance.yahoo.com/v8/finance/chart/AAPL"
+        if hasattr(response, "ok") and not hasattr(type(response), "ok"):
+            response.ok = status < 400
+        try:
+            response.raise_for_status()
+        except client.exceptions.HTTPError as exc:
+            return exc
+        raise AssertionError(f"client {client.__name__} did not raise for {status}")
+
+    @staticmethod
+    def ticker_raising(exc):
+        """A yfinance.Ticker stand-in whose every data attribute raises ``exc``."""
+
+        class RaisingTicker:
+            def __init__(self, symbol):
+                pass
+
+            def __getattr__(self, name):
+                if name.startswith("__"):
+                    raise AttributeError(name)
+                raise exc
+        return RaisingTicker
+
+    @staticmethod
+    def ticker_returning(frame, news=None):
+        """A ticker stand-in returning ``frame`` from every data attribute."""
+
+        class StubTicker:
+            def __init__(self, symbol):
+                self.symbol = symbol
+
+            def __getattr__(self, name):
+                if name.startswith("__"):
+                    raise AttributeError(name)
+                if name == "get_news":
+                    return lambda count: news if news is not None else []
+                return frame
+
+        return StubTicker(None)
+
+    @staticmethod
+    def search_raising(exc):
+        def factory(*a, **k):
+            raise exc
+
+        return factory
+
+    @staticmethod
+    def curl_requests():
+        from curl_cffi import requests as curl_client
+
+        return curl_client
+
+
+@pytest.fixture()
+def yahoo():
+    return _YahooHelpers()
+
+
+@pytest.fixture()
+def no_retry(monkeypatch):
+    """Run the wrapped call once so the injected exception is what surfaces."""
+    import tradingagents.dataflows.y_finance as y_finance
+    import tradingagents.dataflows.yfinance_news as yfinance_news
+
+    monkeypatch.setattr(y_finance, "yf_retry", lambda fn: fn())
+    monkeypatch.setattr(yfinance_news, "yf_retry", lambda fn: fn())
+
+
+@pytest.fixture()
+def real_retry_no_sleep(monkeypatch):
+    """Keep yfinance's real ``yf_retry`` but make its backoff instant.
+
+    Covers the "backoff exhausted -> raw YFRateLimitError re-raised" path.
+    """
+    import tradingagents.dataflows.stockstats_utils as su
+    import tradingagents.dataflows.y_finance as y_finance
+    import tradingagents.dataflows.yfinance_news as yfinance_news
+
+    monkeypatch.setattr(y_finance, "yf_retry", su.yf_retry)
+    monkeypatch.setattr(yfinance_news, "yf_retry", su.yf_retry)
+    monkeypatch.setattr(su.time, "sleep", lambda seconds: None)

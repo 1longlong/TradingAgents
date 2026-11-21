@@ -208,3 +208,21 @@ enforcement.
 | **INV-TRD-002** — engine-only executor entry | `src/safety/engine.py`, `src/trading/executor.py` | `tests/trading/test_structure.py`, `tests/trading/test_invariants.py`, `tests/trading/test_executor.py` |
 | **INV-TRD-003** — append-only audit | `src/trading/audit.py` | `tests/trading/test_audit.py`, `tests/trading/test_invariants.py`, `tests/trading/test_negative.py` |
 | **NFR-TRD-001** — 100% hard-rule rejection | `src/safety/rules.py`, `src/safety/engine.py` | `tests/trading/test_rules.py`, `tests/trading/test_engine.py` |
+
+
+## PR #5 integration maintenance (2026-11-21)
+
+ADR-012 preserves existing requirements rather than defining new Gate or budget
+policies. NFR-AUD-001 / NFR-BUD-001 map to `agents/utils/structured.py`,
+`graph/setup.py`, the three `graph/*_tool_governance.py` wrap-ups and
+`tests/test_merge_execution_boundaries.py` (real SQLite evidence retention and
+ledger events); `tests/test_structured_raw_usage.py` and
+`tests/test_durable_usage_ledger.py` retain raw usage/admission assertions.
+NFR-BC-001 maps to `graph/run_identity.py` v2 and the effective debate policy,
+`tests/test_checkpoint_config_compat.py` and the new integration tests.
+NFR-PIT-001 / NFR-OFF-001 map to the combined cache/no-data tests, including the
+summer/winter UTC/Hong Kong/New York matrix without process-global tzset.
+FR-DQG-006 maps to the retained Gate/Confidence Sanitizer/evaluator edges and
+trusted-report transformations, with the existing confidence/output-guard tests.
+Verification is offline only; complete Windows collection remains blocked by
+`src/trading/audit.py` importing POSIX `fcntl` (see evaluation logbook).

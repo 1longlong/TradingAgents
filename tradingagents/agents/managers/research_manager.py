@@ -398,6 +398,7 @@ Write these sections, in this order, starting with the recommendation on its own
                 # Atomically consume ONE call slot per actual summary attempt, so a
                 # structured→free-text fallback cannot exceed the configured cap.
                 admit_attempt=lambda: admit_summary_attempt(state, summary_config),
+                schema=ResearchPlan,
                 sanitize_result=_cap_typed,
             )
         except BudgetDeniedError:

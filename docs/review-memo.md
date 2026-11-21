@@ -1284,3 +1284,16 @@ Git mutations.
   `python310-native39-date-checks.json`, `python310-native312-date-checks.json`.
 - **Still pending:** explicit final **HUMAN acceptance** and the **actual new remote
   Python 3.10 CI** (no push authorized). No commit/push/new PR/merge/product live call.
+
+
+## 2026-11-21 — PR #5 merge integration
+
+The repository user approved the concrete merge/conflict/test plan in chat with
+an explicit confirmation, then instructed Codex to continue after an
+interruption. This authorizes implementation, corresponding test adjustments,
+verification, commit/push and continuation of the requested PR merge.
+It is NOT another contributor's GitHub approval and NOT final acceptance of the
+result. Preserve release Gate/SourceAttempt, debate/run-budget, confidence cap,
+trusted-output and simulated-trading semantics. ADR-012 records the integration
+choices. Another contributor's review and Linux CI remain required before final
+merge; no human review is impersonated or backfilled.

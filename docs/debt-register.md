@@ -93,3 +93,15 @@ supersedes the earlier "no src/test code tree" description for this subsystem;
 the main system remains `tradingagents/` + `cli/` + `tests/`. The old
 `test/offline/` and `test/live/` directories are pointer READMEs only. No real
 broker execution or unattended live trading is implemented.
+
+
+## PR #5 verification follow-up (2026-11-21)
+
+TODO (repository maintainers): verify the integrated full tree on Linux CI.
+Windows cannot collect 13 simulated-trading modules because `fcntl` is absent;
+that subtree was not modified or stubbed. The strict socket harness also blocks
+Windows asyncio's local socketpair setup (two context-isolation tests), while
+those tests pass in ordinary offline mocked execution. These are explicit
+verification limits, not waived failures or evidence of a complete green suite.
+TODO (another contributor): review PR #5 before final merge. See ADR-012 and the
+integration entry in the evaluation logbook for exact results.

@@ -581,3 +581,27 @@
   scope: 'Merge release into feature/trading-system: unified 32-ID registry with FR-TRD/INV-TRD/NFR-TRD, independent simulated-trading source in src/trading + src/safety, tests migrated to tests/trading, path-based permissions with src/safety approval guard, and fixture-isolated live test.'
   outcome: Conflict resolution completed. Full suite 2650 passed, 3 skipped; live 3-day test 1 passed; validate_requirements PASS; ruff clean.
   human_review: requested
+
+- id: AUL-071
+  date: '2026-11-21'
+  tool: Codex
+  phase: implementation
+  scope: 'PR 5 conflict integration: bounded execution protection with release Gate, evidence checkpoints, usage ledger and trusted outputs; ADR-012.'
+  outcome: 'User approved the concrete conflict/test plan in chat (confirmation followed by an instruction to continue). Integration and offline verification performed; platform restrictions and exact results recorded in the evaluation logbook. No live API or trading call; final PR review/acceptance not fabricated.'
+  human_review: requested
+
+- id: AUL-072
+  date: '2026-11-21'
+  tool: Codex
+  phase: verification
+  scope: 'PR 5 remote CI diagnosis and deterministic test-only portability repair within the approved integration/test plan.'
+  outcome: 'First Linux CI exposed real-clock tolerance, Python 3.10 asyncio API, nullable-schema version, snapshot-clock and parallel completion-order assumptions. Kept exact numeric/call/ID assertions; 316 focused tests pass locally. Remote rerun pending; no product or workflow change.'
+  human_review: requested
+
+- id: AUL-073
+  date: '2026-11-21'
+  tool: Codex
+  phase: verification
+  scope: 'PR 5 remote Linux CI results for c7ba992, run 44859668089.'
+  outcome: 'All 7 jobs PASS; Python 3.10/3.11/3.12/3.13 each 3799 passed, 9 skipped, 92 subtests. Complete offline tree includes simulated trading; no live test. Separate collaborator approval and final merge remain pending.'
+  human_review: requested

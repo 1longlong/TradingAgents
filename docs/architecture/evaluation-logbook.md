@@ -2525,3 +2525,109 @@ re-guessed):
   remains **implementation-only**; **explicit final HUMAN acceptance and the actual new
   remote Python 3.10 CI remain PENDING** (no push authorized). This is offline technical
   evidence only — not a live/3.10 CI proof and not human acceptance.
+
+
+## 2026-11-21 — PR #5 release integration (ADR-012)
+
+Environment: Windows, Python 3.12 project `.venv`; mocked vendors/models only.
+Integration parents: feature `1938965`, release `24adf97`. The user approved
+conflict resolution and the corresponding tests in chat. Preserve all release
+Gate/evaluator/confidence/usage safeguards and all feature execution protections.
+
+- `python -m pytest tests --ignore=tests/trading -q -p no:cacheprovider -m "not integration and not smoke" --tb=short`:
+  **3544 passed, 4 skipped, 14 deselected, 22 warnings, 92 subtests passed**
+  (65.39s). Includes the two Windows asyncio context tests.
+- `python -c "from scripts.validate.strict_offline_harness import run; raise SystemExit(run(['tests','--ignore=tests/trading','-q','-p','no:cacheprovider','-m','not integration and not smoke','-k','not test_asyncio_tasks_in_one_loop_are_isolated and not test_a_new_context_is_not_given_the_session_unless_it_is_copied','--tb=short']))"`:
+  **3542 passed, 4 skipped, 16 deselected, 22 warnings, 92 subtests passed**
+  (64.65s), **0 forbidden socket attempts**. The additional two deselections
+  explicitly avoid the Windows event loop's local TCP socketpair initialization;
+  they are not waived from the ordinary regression above.
+- Focused SQLite/ledger/checkpoint/report/context tests: **134 passed** before
+  the final six summer/winter cache cases were added; do not conflate subsets.
+- `python -m ruff check .`: PASS.
+- `python scripts/validate/validate_requirements.py`: **43/43 PASS**, real
+  draft-2020-12 JSON Schema after installing jsonschema 4.26.0 in `.venv` only;
+  secret scan found no likely secrets. No dependency file changed.
+- `git diff --check`: PASS.
+
+The four skipped tests are three POSIX permission checks on Windows and absent
+optional `langchain_aws`. Integration/smoke tests were not run. Warnings are the
+existing model-name/zero-division warnings, not hidden failures.
+
+### Recorded failed attempts and boundaries
+
+The complete `tests` tree cannot collect on Windows: **13 collection errors**
+from the unchanged simulated-trading subtree importing POSIX `fcntl`. No lock
+stub or trading-source edit was made. A strict-denial main-system run initially
+also failed the two Windows asyncio tests because their event loop creates a
+local socketpair (two intercepted local connection attempts). Those limitations
+are explicit; neither failed attempt is relabelled as a green full suite.
+The initial integration failures caused by incompatible old test assumptions
+were corrected with real parser exception fixtures, explicit normal Gate inputs,
+Gate-aware graph edges, and exact usage assertions with no forbidden fallback.
+Report-path exports now use POSIX relative separators on Windows too.
+
+### Behavioral integration evidence
+
+`tests/test_merge_execution_boundaries.py` uses the production GraphSetup,
+real ToolNode and SQLite saver, original tools with vendor transport replaced,
+and the real usage ledger. It proves evidence is saved at news_tool_execute and
+Sentiment Prefetch boundaries; the bounded news wrap-up is one separately
+accounted model call; IDs remain paired; and an effective debate-policy change
+changes the v2 checkpoint identity. The release summer/winter UTC/Hong Kong/
+New York cache matrix is retained using injected absolute mtime reads, without
+process-wide tzset or Windows future-mtime clamping.
+
+No live API, paid LLM, broker or trading run was executed. Main-system offline
+success is not proof of Linux subsystem success or live behavior. Linux CI and
+another contributor's PR review/final human acceptance remain pending.
+
+
+Whitespace scope: `git diff --cached team/release --check` is clean after
+removing two inherited extra EOF blank lines from the feature files. A full
+first-parent staged check also reports one existing trailing-space line in
+`.github/workflows/ci.yml:8` brought in verbatim from release. The CI file is
+unchanged relative to release and was not reformatted or otherwise edited.
+
+
+### PR #5 first remote CI and deterministic test repair
+
+Remote run 44857673774 on merge integration b9efb13 completed: Ruff, clean
+install and governance validation PASS; Python 3.10/3.11/3.12/3.13 test jobs FAIL.
+The Linux 3.12 job ran the complete tree (including simulated trading):
+**3796 passed, 2 failed, 9 skipped**, 22 warnings, 92 subtests. The two failures
+were budget tests using real monotonic time while expecting exact 4/5 seconds
+within microsecond tolerance. Python 3.10 additionally exposed asyncio.Barrier
+(added in 3.11) and a LangChain nullable-schema assumption. Python 3.11 exposed
+an unpinned snapshot fetched_at crossing a UTC second; Python 3.13 exposed a
+test's assumption that parallel tools complete in dispatch order.
+
+The repair changes TESTS ONLY: inject the existing fake Clock without widening
+numeric tolerance; use a two-phase asyncio.Event rendezvous with a timeout;
+explicitly test nullable AND non-nullable schemas; compare the exact executed
+name/symbol/argument multiset while keeping strict dispatch/message ID order;
+pin the existing snapshot clock in the fixed-snapshot fixture. No production
+clock, timeout, Gate logic, permission or CI workflow was changed.
+
+`python -m pytest tests/test_vendor_retry_budget.py tests/test_retry_session_context.py tests/test_tool_governance.py tests/test_stage2_multicategory_gate.py -q -p no:cacheprovider --tb=short`:
+**316 passed** (4.15s, Windows). Remote rerun remains pending at this entry.
+
+
+### Remote Linux verification completed on c7ba992
+
+GitHub Actions CI run **44859668089** completed successfully for
+`c7ba992b330279c30b145363879b3fb463d23833` (test-only deterministic repair).
+All **7 jobs passed**: tests on Python 3.10, 3.11, 3.12 and 3.13, clean-install
+smoke, strict Ruff and governance/schema validation. Each Linux test job reports
+**3799 passed, 9 skipped, 22 warnings, 92 subtests passed**. This is the complete
+Linux test tree, including the simulated-trading tests that Windows could not
+collect. The nine skips are six optional-jsonschema test cases (the separate
+schema job installs it and passes), missing optional langchain_aws, missing live
+DeepSeek credentials and the explicitly opt-in live trading test. Live tests
+were not run and these results remain offline evidence.
+
+The Windows fcntl restriction remains a platform fact, not a blocker to the
+now-successful Linux evidence. No simulated-trading source, CI workflow or
+permission file differs from release. PR #5 still needs at least one separate
+approving review by a collaborator with write access; the user/chat approval
+must not be presented as that GitHub review. Shared dev was not updated.
