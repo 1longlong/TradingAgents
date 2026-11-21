@@ -687,10 +687,10 @@ def write_report_artifacts(
     run_summary_path.write_text(_json_dumps(run_summary), encoding="utf-8")
 
     return {
-        "evidence_manifest": str(manifest_path.relative_to(save_path)),
-        "gate_summary": str(summary_path.relative_to(save_path)),
-        "debate_trace": str(trace_path.relative_to(save_path)),
-        "run_summary": str(run_summary_path.relative_to(save_path)),
+        "evidence_manifest": manifest_path.relative_to(save_path).as_posix(),
+        "gate_summary": summary_path.relative_to(save_path).as_posix(),
+        "debate_trace": trace_path.relative_to(save_path).as_posix(),
+        "run_summary": run_summary_path.relative_to(save_path).as_posix(),
     }
 
 

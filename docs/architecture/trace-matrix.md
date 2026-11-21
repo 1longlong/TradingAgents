@@ -571,3 +571,31 @@ backtest-progress.test.tsx observed/settlement, paging and legacy cases;
 backtest.spec.ts per-date progress/refresh/settlement/mobile/bilingual case.
 Existing core signature, CLI, memory, failure, slot and negative request tests
 remain required. Optional observation adds no UI dependency to the core.
+
+## PR #5 integration maintenance (2026-11-21)
+
+ADR-012 preserves existing requirements rather than defining new Gate or budget
+policies. NFR-AUD-001 / NFR-BUD-001 map to `src/tradingagents/agents/utils/structured.py`,
+`src/tradingagents/graph/setup.py`, the three `src/tradingagents/graph/*_tool_governance.py` wrap-ups and
+`test/offline/test_merge_execution_boundaries.py` (real SQLite evidence retention and
+ledger events); `test/offline/test_structured_raw_usage.py` and
+`test/offline/test_durable_usage_ledger.py` retain raw usage/admission assertions.
+NFR-BC-001 maps to `src/tradingagents/graph/run_identity.py` v2 and the effective debate policy,
+`test/offline/test_checkpoint_config_compat.py` and the new integration tests.
+NFR-PIT-001 / NFR-OFF-001 map to the combined cache/no-data tests, including the
+summer/winter UTC/Hong Kong/New York matrix without process-global tzset.
+FR-DQG-006 maps to the retained Gate/Confidence Sanitizer/evaluator edges and
+trusted-report transformations, with the existing confidence/output-guard tests.
+Verification is offline only; complete Windows collection remains blocked by
+`src/trading/audit.py` importing POSIX `fcntl` (see evaluation logbook).
+
+
+Local release/WebUI integration, 2026-11-21 (release 9a08e08, WebUI 977a22b):
+REQ-WEB-002/005, INV-WEB-003/010 and NFR-OFF-001 are covered by
+`test/offline/test_web_analysis_flow.py::test_real_market_tool_rate_limit_degrades_without_llm_failure`
+(real router and graph, bounded offline vendor failure, unavailable tool data,
+blocked Hold, memory and checkpoint cleanup).
+REQ-WEB-013 / INV-WEB-010 / NFR-BC-001 retain the eleven custom-policy isolation
+cases in `test/offline/test_web_debate_config.py` against the v2 core digest and
+existing Web suffix. The Yahoo backend floor assertion uses the migrated repo
+root in `test/offline/test_yahoo_error_classifier.py`. No IDs or status change.

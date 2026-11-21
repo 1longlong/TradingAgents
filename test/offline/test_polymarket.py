@@ -92,14 +92,41 @@ class PolymarketFormatTests(unittest.TestCase):
 
 @pytest.mark.unit
 class PolymarketResilienceTests(unittest.TestCase):
-    def test_network_error_degrades_gracefully(self):
-        # An external-service hiccup must not raise into the analyst.
+    def test_a_vendor_fault_is_raised_not_returned_as_prose(self):
+        # A failure must not read as a successful answer: prose would end the
+        # chain at the vendor that failed. The router -- not the vendor --
+        # decides how an optional category's failure is reported.
         with mock.patch.object(
             polymarket, "_request", side_effect=requests.RequestException("boom")
-        ):
-            out = polymarket.get_prediction_markets("Fed rate cut")
+        ), self.assertRaises(polymarket.VendorRateLimitError):
+            polymarket.get_prediction_markets("Fed rate cut")
+
+    def test_the_router_reports_the_failure_instead_of_raising(self):
+        # What the analyst sees for an optional category is unchanged: a no-data
+        # answer, never an exception. (The verdict text names the vendor and the
+        # method, not the caller's arguments; that has not changed.)
+        config_module._config = copy.deepcopy(default_config.DEFAULT_CONFIG)
+        try:
+            set_config({"data_vendors": {"prediction_markets": "polymarket"}})
+            with mock.patch.dict(
+                interface.VENDOR_METHODS,
+                {
+                    "get_prediction_markets": {
+                        "polymarket": mock.Mock(
+                            side_effect=polymarket.VendorRateLimitError(
+                                "Polymarket request failed"
+                            )
+                        )
+                    }
+                },
+                clear=False,
+            ):
+                out = interface.route_to_vendor(
+                    "get_prediction_markets", "Fed rate cut", None, None
+                )
+        finally:
+            config_module._config = copy.deepcopy(default_config.DEFAULT_CONFIG)
         self.assertIn("unavailable", out.lower())
-        self.assertIn("Fed rate cut", out)
 
 
 @pytest.mark.unit

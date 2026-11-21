@@ -1,3 +1,4 @@
+import math
 import os
 
 _TRADINGAGENTS_HOME = os.path.join(os.path.expanduser("~"), ".tradingagents")
@@ -20,6 +21,54 @@ _ENV_OVERRIDES = {
     "TRADINGAGENTS_TEMPERATURE":          "temperature",
     "TRADINGAGENTS_LLM_MAX_RETRIES":      "llm_max_retries",
     "TRADINGAGENTS_MAX_TOKENS":           "max_tokens",
+    # Market-analyst tool governance (opt-in). An analyst tool allowance, not a
+    # run budget or a vendor retry count: it bounds how many tool rounds/calls
+    # the market analyst may cycle through. Off unless explicitly enabled.
+    "TRADINGAGENTS_MARKET_TOOL_GOVERNANCE_ENABLED": "market_tool_governance.enabled",
+    "TRADINGAGENTS_MARKET_TOOL_GOVERNANCE_MAX_ROUNDS": "market_tool_governance.max_rounds",
+    "TRADINGAGENTS_MARKET_TOOL_GOVERNANCE_MAX_CALLS": "market_tool_governance.max_calls",
+    # Fundamentals-analyst tool governance (opt-in, independent of the market
+    # section). Same allowance rules; off unless explicitly enabled.
+    "TRADINGAGENTS_FUNDAMENTALS_TOOL_GOVERNANCE_ENABLED":
+        "fundamentals_tool_governance.enabled",
+    "TRADINGAGENTS_FUNDAMENTALS_TOOL_GOVERNANCE_MAX_ROUNDS":
+        "fundamentals_tool_governance.max_rounds",
+    "TRADINGAGENTS_FUNDAMENTALS_TOOL_GOVERNANCE_MAX_CALLS":
+        "fundamentals_tool_governance.max_calls",
+    # News-analyst tool governance (opt-in, independent of the market and
+    # fundamentals sections). Same allowance rules; off unless explicitly
+    # enabled.
+    "TRADINGAGENTS_NEWS_TOOL_GOVERNANCE_ENABLED": "news_tool_governance.enabled",
+    "TRADINGAGENTS_NEWS_TOOL_GOVERNANCE_MAX_ROUNDS":
+        "news_tool_governance.max_rounds",
+    "TRADINGAGENTS_NEWS_TOOL_GOVERNANCE_MAX_CALLS":
+        "news_tool_governance.max_calls",
+    # Sentiment prefetch split (opt-in): adds the prefetch node before the
+    # sentiment analyst. Off unless explicitly enabled.
+    "TRADINGAGENTS_SENTIMENT_PREFETCH_ENABLED": "sentiment_prefetch.enabled",
+    # Vendor-retry budget, merged into the nested dict. Every value is checked by
+    # dataflows.retry_session when a tool call routes: negatives, booleans,
+    # NaN/Infinity and fractional attempts are refused, never clamped.
+    "TRADINGAGENTS_VENDOR_RETRY_MAX_SECONDS": "data_vendor_retry.max_total_seconds",
+    "TRADINGAGENTS_VENDOR_RETRY_MAX_REQUEST_SECONDS": "data_vendor_retry.max_request_seconds",
+    "TRADINGAGENTS_VENDOR_RETRY_MAX_WAIT_SECONDS":
+        "data_vendor_retry.max_cumulative_wait_seconds",
+    "TRADINGAGENTS_VENDOR_RETRY_MAX_ATTEMPTS": "data_vendor_retry.max_attempts",
+    "TRADINGAGENTS_VENDOR_RETRY_MAX_TOTAL_ATTEMPTS": "data_vendor_retry.max_total_attempts",
+    "TRADINGAGENTS_VENDOR_RETRY_BASE_DELAY_SECONDS": "data_vendor_retry.base_delay_seconds",
+    "TRADINGAGENTS_VENDOR_RETRY_MAX_RETRY_AFTER_SECONDS":
+        "data_vendor_retry.max_retry_after_seconds",
+    "TRADINGAGENTS_VENDOR_RETRY_JITTER_FRACTION": "data_vendor_retry.jitter_fraction",
+    # Vendor circuit breaker. The section is validated by
+    # dataflows.vendor_breaker on every route, so an enabled value that is not
+    # a boolean, an unknown key or a non-positive threshold fails loudly there.
+    "TRADINGAGENTS_VENDOR_BREAKER_ENABLED": "data_vendor_breaker.enabled",
+    "TRADINGAGENTS_VENDOR_BREAKER_FAILURE_THRESHOLD": (
+        "data_vendor_breaker.failure_threshold"
+    ),
+    "TRADINGAGENTS_VENDOR_BREAKER_COOLDOWN_SECONDS": (
+        "data_vendor_breaker.cooldown_seconds"
+    ),
     # Provider-specific reasoning/thinking knobs (None = each provider's own
     # default). Settable here for non-interactive runs; the CLI also offers an
     # interactive choice, which is skipped when the matching var is set.
@@ -38,7 +87,10 @@ def _coerce(value: str, reference):
 
     Invalid values raise ``ValueError`` rather than silently falling back to a
     default — a misspelled boolean (e.g. ``treu``) or non-numeric int should fail
-    loudly at startup, not quietly misconfigure an unattended run.
+    loudly at startup, not quietly misconfigure an unattended run. Numeric
+    strings must be finite: ``nan`` and ``inf`` (and a float where an attempt
+    count is expected) are refused here, and again when the retry budget is
+    built.
     """
     if isinstance(reference, bool):
         normalized = value.strip().lower()
@@ -50,22 +102,47 @@ def _coerce(value: str, reference):
             f"expected a boolean ({'/'.join(_BOOL_TRUE + _BOOL_FALSE)}), got {value!r}"
         )
     if isinstance(reference, int) and not isinstance(reference, bool):
-        return int(value)
+        text = value.strip()
+        if not (text.isascii() and text.lstrip("+-").isdigit()):
+            raise ValueError(f"expected a whole number, got {value!r}")
+        return int(text)
     if isinstance(reference, float):
-        return float(value)
+        try:
+            parsed = float(value)
+        except ValueError:
+            raise ValueError(f"expected a number, got {value!r}") from None
+        if not math.isfinite(parsed):
+            raise ValueError(f"expected a finite number, got {value!r}")
+        return parsed
     return value
 
 
 def _apply_env_overrides(config: dict) -> dict:
-    """Apply TRADINGAGENTS_* env vars to the config dict in-place."""
+    """Apply TRADINGAGENTS_* env vars to the config dict in-place.
+
+    A key may address one level of a nested dict ("outer.inner"). An unknown
+    nested key is added rather than rejected, because the overrides run while
+    the very dict that defines those keys is being built; the type is then the
+    one the same setting's flat siblings use.
+    """
     for env_var, key in _ENV_OVERRIDES.items():
         raw = os.environ.get(env_var)
         if raw is None or raw == "":
             continue
+        outer, _, inner = key.partition(".")
+        if inner:
+            section = config.setdefault(outer, {})
+            reference = section.get(inner, 1.0)
+        else:
+            reference = config.get(key)
         try:
-            config[key] = _coerce(raw, config.get(key))
+            value = _coerce(raw, reference)
         except ValueError as exc:
             raise ValueError(f"Invalid value for {env_var}: {exc}") from exc
+        if inner:
+            section[inner] = value
+        else:
+            config[key] = value
     return config
 
 
@@ -144,9 +221,117 @@ DEFAULT_CONFIG = _apply_env_overrides({
         "macro_data": "fred",                # Options: fred (needs FRED_API_KEY)
         "prediction_markets": "polymarket",  # Options: polymarket (keyless)
     },
+    # Bounded retries owned by the routing layer (dataflows.interface). One tool
+    # call shares these across its whole vendor chain; switching vendors does
+    # not reset them. Counts are VENDOR-FUNCTION invocations, not HTTP requests:
+    # one invocation may issue several (e.g. one per global-news query). Every
+    # value is validated strictly -- a negative, boolean, fractional, NaN or
+    # infinite value raises instead of being clamped.
+    "data_vendor_retry": {
+        # Max invocations of one vendor per tool call, first attempt included:
+        # 1 means "never retry this vendor" (the total is exactly 1 request
+        # attempt); 2 means "one retry" (2 attempts in total).
+        "max_attempts": 2,
+        # Optional per-vendor overrides of the above. Alpha Vantage is pinned to
+        # a single attempt by default because its free tier is a narrow quota
+        # and a failed call may still be metered; a retry is opt-in.
+        "vendor_max_attempts": {"alpha_vantage": 1},
+        # Max invocations of ALL vendors combined for one tool call.
+        "max_total_attempts": 4,
+        # Wall-clock budget for the whole chain, shared across vendors. Checked
+        # before every start (first call, retry, vendor switch) and after every
+        # wait; when it is spent no new request is started. Every
+        # timeout-capable request gets the time left, never more. It is a
+        # budget, not a hard promise: a client that accepts no timeout (e.g.
+        # some yfinance attributes) can only be bounded by its own default.
+        "max_total_seconds": 45.0,
+        # Cap on any single HTTP request. A request's timeout is the time left
+        # capped by this, and it never falls below it because of the cap alone;
+        # when less than the minimum for a valid request is left, the request
+        # is not started at all.
+        "max_request_seconds": 15.0,
+        # Cumulative cap on the retry waits the chain may take (sum of every
+        # backoff/Retry-After wait). Distinct from max_retry_after_seconds,
+        # which only decides whether ONE asked-for wait is worth taking.
+        "max_cumulative_wait_seconds": 20.0,
+        # Wait before a retry the vendor gave no Retry-After for, doubled each
+        # attempt and reduced by up to jitter_fraction (never lengthened).
+        "base_delay_seconds": 1.0,
+        # A throttle that asks for a longer pause than this is not waited out:
+        # the chain moves to the next vendor instead of stalling the run.
+        # This is a per-wait threshold, not a cap on the total: the total is
+        # max_cumulative_wait_seconds.
+        "max_retry_after_seconds": 10.0,
+        # Fraction of a self-chosen backoff that may be shaved off at random, to
+        # spread concurrent retries (0 = deterministic). A server's Retry-After
+        # is honoured exactly and is never shortened by jitter.
+        "jitter_fraction": 0.2,
+    },
+    # Per-vendor circuit breaker, owned by the routing layer. Disabled by
+    # default: with ``enabled: false`` nothing is acquired, no state is created
+    # and routing behaves exactly as before. When enabled, a vendor that fails
+    # for a *proven-momentary* reason on ``failure_threshold`` consecutive
+    # logical calls is skipped for ``cooldown_seconds`` (not started, no HTTP
+    # request, no attempt), then one probe decides whether it recovers.
+    #
+    # What counts as a failure is read from error metadata only: a short
+    # throttle (429/502/503/504/timeout within ``max_retry_after_seconds``)
+    # that the call did not recover from. Auth, refused requests, missing keys,
+    # daily/monthly quotas, TLS/URL problems, parse bugs and the local retry
+    # budget running out do *not* count. Keyed by vendor *and* endpoint *and*
+    # these two settings, so all symbols of one endpoint share protection
+    # while a different endpoint or policy keeps separate state. State is
+    # in-process memory: it is kept across tool calls and never shared between
+    # processes, and a restart clears it.
+    "data_vendor_breaker": {
+        "enabled": False,
+        "failure_threshold": 3,
+        "cooldown_seconds": 60.0,
+    },
+    # Market-analyst tool governance (opt-in, default OFF). An **analyst tool
+    # allowance**: it caps how many tool rounds (one per batch the model asks
+    # for) and executed calls the market analyst may spend before a single,
+    # unbound wrap-up call writes ``market_report`` from the evidence already
+    # collected. It is not a run-level budget and it does not count HTTP
+    # requests or vendor attempts (that is the retry/breaker layer above).
+    # Values are validated strictly: an unknown key, a non-boolean ``enabled``,
+    # or a non-positive/non-integer cap raises instead of being clamped.
+    "market_tool_governance": {
+        "enabled": False,
+        "max_rounds": 4,   # model->tools->model cycles for the market analyst
+        "max_calls": 10,   # calls actually executed for the market analyst
+    },
+    # Fundamentals-analyst tool governance (opt-in, default OFF, independent of
+    # the market section above). Same allowance rules; once the allowance is
+    # spent a single unbound wrap-up call writes ``fundamentals_report`` from
+    # the fundamental evidence already collected. Validated strictly.
+    "fundamentals_tool_governance": {
+        "enabled": False,
+        "max_rounds": 4,   # model->tools->model cycles for the fundamentals analyst
+        "max_calls": 8,    # calls actually executed for the fundamentals analyst
+    },
+    # News-analyst tool governance (opt-in, default OFF, independent of the two
+    # sections above). Same allowance rules; once the allowance is spent a
+    # single unbound wrap-up call writes ``news_report`` from the news evidence
+    # already collected. Validated strictly.
+    "news_tool_governance": {
+        "enabled": False,
+        "max_rounds": 4,   # model->tools->model cycles for the news analyst
+        "max_calls": 8,    # calls actually executed for the news analyst
+    },
+    # Sentiment prefetch split (opt-in, default OFF). When on, the graph runs
+    # "Sentiment Prefetch" -> "Sentiment Analyst": the prefetch node saves the
+    # three source blocks (news, StockTwits, Reddit) plus their identity in the
+    # ``sentiment_inputs`` state field, and the analyst builds its prompt from
+    # that saved input instead of fetching. A model failure after the prefetch
+    # node returned can then resume without fetching again; it is not an
+    # exactly-once guarantee (a failure inside the prefetch node itself, or a
+    # crash before it returns, still fetches again on resume).
+    "sentiment_prefetch": {
+        "enabled": False,
+    },
     # Tool-level configuration (takes precedence over category-level)
-    "tool_vendors": {
-        # Example: "get_stock_data": "alpha_vantage",  # Override category default
+    "tool_vendors": {        # Example: "get_stock_data": "alpha_vantage",  # Override category default
     },
     # Benchmark for alpha calculation in the reflection layer.
     # ``benchmark_ticker`` (when set) overrides the suffix map for all

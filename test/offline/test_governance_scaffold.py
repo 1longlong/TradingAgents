@@ -443,7 +443,7 @@ class TestSecretScan:
         assert hits == []
 
     def test_does_not_flag_the_validator_itself(self):
-        text = VALIDATOR.read_text()
+        text = VALIDATOR.read_text(encoding="utf-8")
         # The validator's own scanner must not match its own regex literals as secrets.
         assert validate_requirements.scan_secrets(text) == []
 

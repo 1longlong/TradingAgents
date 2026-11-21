@@ -316,12 +316,15 @@ def test_provider_projection_includes_regions_and_keyless_local_endpoints(tmp_pa
     assert models.json()["models"] == [{"value": "custom", "label": "Custom model ID"}]
 
 
-def test_real_market_tool_rate_limit_is_not_reported_as_llm_failure(tmp_path, monkeypatch, caplog):
-    """REQ-WEB-002/005, INV-WEB-003/010: exercise the actual failing tool-node path."""
+def test_real_market_tool_rate_limit_degrades_without_llm_failure(tmp_path, monkeypatch, caplog):
+    """REQ-WEB-002/005, INV-WEB-003/010: preserve the release unavailable-data path."""
+    import pandas as pd
     from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
     from langchain_core.messages import AIMessage
     from yfinance.exceptions import YFRateLimitError
 
+    import tradingagents.dataflows.market_data_validator as validator
+    import tradingagents.dataflows.retry_session as retry_module
     import tradingagents.dataflows.y_finance as yahoo_module
     import tradingagents.graph.trading_graph as graph_module
 
@@ -332,27 +335,30 @@ def test_real_market_tool_rate_limit_is_not_reported_as_llm_failure(tmp_path, mo
         def with_structured_output(self, schema, **kwargs):
             raise NotImplementedError("offline tool-call model")
 
+    model = ToolCallingModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "name": "get_stock_data",
+                        "args": {
+                            "symbol": "NVDA",
+                            "start_date": "2026-10-01",
+                            "end_date": "2026-11-01",
+                        },
+                        "id": "call_market_data",
+                        "type": "tool_call",
+                    }
+                ],
+            ),
+            *[AIMessage(content="**Rating**: Buy\nOffline analysis with unavailable market data.")
+              for _ in range(30)],
+        ],
+    )
+
     def client_factory(**kwargs):
-        model = ToolCallingModel(
-            responses=[
-                AIMessage(
-                    content="",
-                    tool_calls=[
-                        {
-                            "name": "get_stock_data",
-                            "args": {
-                                "symbol": "NVDA",
-                                "start_date": "2026-10-01",
-                                "end_date": "2026-11-01",
-                            },
-                            "id": "call_market_data",
-                            "type": "tool_call",
-                        }
-                    ],
-                )
-            ],
-            callbacks=kwargs.get("callbacks"),
-        )
+        model.callbacks = kwargs.get("callbacks")
         return SimpleNamespace(get_llm=lambda: model)
 
     def limited_history(**kwargs):
@@ -363,12 +369,14 @@ def test_real_market_tool_rate_limit_is_not_reported_as_llm_failure(tmp_path, mo
         graph_module, "resolve_instrument_identity", lambda ticker: {"name": "Offline NVIDIA"}
     )
     monkeypatch.setattr(
-        yahoo_module.yf, "Ticker", lambda ticker: SimpleNamespace(history=limited_history)
+        yahoo_module.yf, "Ticker", lambda ticker, **kwargs: SimpleNamespace(history=limited_history)
     )
-    # The provider boundary raises the final error after retries; do not sleep or use a real network.
+    # Keep the release router/retry behavior, replacing only transport, sleeps
+    # and the independent Gate's data I/O. Missing evidence must still block Buy.
     monkeypatch.setattr(yahoo_module, "yf_retry", lambda callback: callback())
+    monkeypatch.setattr(retry_module.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr(validator, "load_ohlcv", lambda *args, **kwargs: pd.DataFrame())
     tree = build_fixture_tree(tmp_path)
-    memory_before = tree.memory_log_path.read_bytes()
     client = make_run_client(tree)  # Actual runner, core graph, market tool and vendor router.
     response = client.post(
         "/api/runs",
@@ -381,19 +389,28 @@ def test_real_market_tool_rate_limit_is_not_reported_as_llm_failure(tmp_path, mo
     )
     assert response.status_code == 201, response.text
     snapshot = wait_terminal(client, response.json()["run_id"])
-    assert snapshot["status"] == "failed"
-    assert snapshot["signal"] is None
-    error = snapshot["error"]
-    assert error["category"] == "market_data_rate_limit"
-    assert error["source"] == "yfinance"
-    assert error["retryable"] is True
-    assert "Yahoo Finance" in error["message"]
-    assert "after retries" in error["message"]
-    assert error["correlation_id"] in caplog.text
-    assert "get_stock_data" in caplog.text
-    assert tree.memory_log_path.read_bytes() == memory_before
-    assert list((tree.data_cache_dir / "checkpoints").glob("*.db"))
-    assert "final_trade_decision" not in snapshot["sections"]
+    assert snapshot["status"] == "completed", snapshot
+    assert snapshot["error"] is None
+    assert snapshot["signal"] == "Hold"
+    tools = [message for message in snapshot["messages"] if message["type"] == "Data"]
+    assert any("DATA_UNAVAILABLE" in message["content"] for message in tools)
+    assert any("get_stock_data" in message["content"] for message in tools)
+    assert "failed for get_stock_data" in caplog.text
+    assert "final_trade_decision" in snapshot["sections"]
+    from tradingagents.agents.utils.memory import TradingMemoryLog
+
+    entries = TradingMemoryLog({"memory_log_path": str(tree.memory_log_path)}).load_entries()
+    assert any(entry["ticker"] == "NVDA" and entry["rating"] == "Hold" for entry in entries)
+    # A successful completion clears the checkpoint without presenting an LLM
+    # authentication failure or turning missing evidence into a Buy decision.
+    import sqlite3
+
+    databases = list((tree.data_cache_dir / "checkpoints").glob("*.db"))
+    assert databases
+    for path in databases:
+        with sqlite3.connect(path) as connection:
+            assert connection.execute("SELECT COUNT(*) FROM checkpoints").fetchone()[0] == 0
+            assert connection.execute("SELECT COUNT(*) FROM writes").fetchone()[0] == 0
 
 
 @pytest.mark.parametrize(

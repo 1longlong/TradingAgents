@@ -1009,3 +1009,21 @@ adds bounded progress paging (cells_offset/cells_limit), retaining old fields an
 launch inputs. New frontend pages/Backtest/BacktestProgress.tsx renders truthful
 cell/settlement status and elapsed time. The core stays independent of Web/HTTP;
 public backtest signature/results, CLI, memory and analysis semantics remain.
+
+
+## Release error-handling integration — 2026-11-21
+
+Local release 9a08e08 is integrated under ADR-012-error-handling-merge-integration.md.
+The canonical src/ and test/ layout remains. New release modules keep their
+original ownership: agents/utils/tool_governance.py handles model/tool binding;
+dataflows/retry_session.py and vendor_breaker.py handle bounded vendor attempts
+and breaker state; graph/*_governance.py, *_tool_governance.py and
+sentiment_prefetch.py own opt-in analyst orchestration; graph/run_identity.py
+owns versioned execution digests; tradingagents/file_io.py owns atomic file
+replacement. These paths are relative to src/tradingagents/ and introduce no
+presentation dependency into core. WebUI inherits the release behavior through
+its existing graph adapter. The public run_backtest signature/results and the
+existing read-only progress observer are retained. No safety/trading/CLI source,
+Web interface contract, runtime prompt or dependency change is added by conflict
+resolution. Evidence on previous heads remains historical; merged-tree results
+are recorded separately in the evaluation logbook.

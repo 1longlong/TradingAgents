@@ -28,7 +28,14 @@ from pathlib import Path
 import requests
 
 from .config import get_config
-from .errors import NoMarketDataError, VendorRateLimitError
+from .errors import (
+    NoMarketDataError,
+    VendorRateLimitError,
+    retryable_status,
+    retryable_transport_error,
+)
+from .retry_session import request_timeout, stop_before_request
+from .utils import retry_after_seconds
 
 logger = logging.getLogger(__name__)
 
@@ -99,17 +106,46 @@ def _version() -> str:
 
 def _fetch_json(url: str) -> dict:
     """Read a public EDGAR document, respecting SEC's identification rule."""
+    what = f"an SEC EDGAR request ({url})"
+    timeout = request_timeout(30, what)
+    if timeout is None:
+        stop_before_request(what, VendorRateLimitError)
     try:
-        response = requests.get(url, headers={"User-Agent": _user_agent()}, timeout=30)
+        response = requests.get(
+            url,
+            headers={"User-Agent": _user_agent()},
+            timeout=timeout,
+        )
         response.raise_for_status()
         return response.json()
+    except ValueError as exc:
+        # An unreadable body is a broken response, not a momentary outage:
+        # asking again returns it again. It stays a vendor failure so the router
+        # still moves to the next vendor, but it is explicitly not retryable.
+        error = VendorRateLimitError("SEC EDGAR returned an unreadable response")
+        error.retry = False
+        raise error from exc
     except requests.RequestException as exc:
         status = getattr(getattr(exc, "response", None), "status_code", None)
+        retry_after = retry_after_seconds(getattr(getattr(exc, "response", None), "headers", None))
         # Every failure here is "this vendor cannot serve it now", so the router
         # moves on instead of seeing a transport exception it has no rule for.
-        raise VendorRateLimitError(f"SEC EDGAR request failed ({status or type(exc).__name__})") from exc
-    except ValueError as exc:
-        raise VendorRateLimitError("SEC EDGAR returned an unreadable response") from exc
+        error = VendorRateLimitError(
+            f"SEC EDGAR request failed ({status or type(exc).__name__})"
+        )
+        error.with_retry_evidence(
+            status=status,
+            retry_after=retry_after,
+            # A transport failure has no status; retryable_status says None and
+            # the client's own class decides (a timeout/refused connection is,
+            # a certificate failure is not).
+            retry=(
+                retryable_status(status, retry_after)
+                if status is not None
+                else retryable_transport_error(exc)
+            ),
+        )
+        raise error from exc
 
 
 def _cached_json(url: str, name: str) -> dict:

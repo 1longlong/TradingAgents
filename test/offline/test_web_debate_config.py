@@ -208,9 +208,15 @@ def test_custom_checkpoint_policies_cannot_resume_each_other_or_defaults(changes
     changed = graph._run_signature("stock")
     assert changed != default
     assert changed == graph_for_signature(**changes)._run_signature("stock")
-    assert changed.startswith(default + "|web_debate_policy=")
+    # ADR-012 now includes the effective debate policy in the core execution
+    # digest. Preserve that identity and the existing Web-specific suffix.
+    core = CoreGraph._run_signature(graph, "stock")
+    assert core != CoreGraph._run_signature(graph_for_signature(), "stock")
+    assert changed.startswith(core + "|web_debate_policy=")
+    suffix = changed.removeprefix(core + "|web_debate_policy=")
+    assert len(suffix) == 64 and all(char in "0123456789abcdef" for char in suffix)
     assert all(
-        str(value) not in changed[len(default) :]
+        str(value) not in suffix
         for value in changes.values()
         if isinstance(value, str)
     )

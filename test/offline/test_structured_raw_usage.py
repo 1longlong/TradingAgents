@@ -33,6 +33,7 @@ from __future__ import annotations
 import json
 
 import pytest
+from langchain_core.exceptions import OutputParserException
 from langchain_core.messages import AIMessage
 
 from tradingagents.agents.schemas import (
@@ -188,7 +189,7 @@ class _Unsupported:
 
 class TestBindingFallback:
     @pytest.mark.parametrize(
-        "exc", [NotImplementedError("include_raw rejected"), TypeError("bad kw")]
+        "exc", [NotImplementedError("include_raw rejected"), TypeError("unexpected keyword argument include_raw")]
     )
     def test_include_raw_rejection_rebinds_without_it_no_freetext(self, tmp_path, exc):
         cap, ledger, rid = _capture(tmp_path, "bindfb")
@@ -219,7 +220,7 @@ class TestBindingFallback:
 class TestParserErrorWithKnownUsage:
     def test_parsing_error_known_usage_settled_before_fallback(self, tmp_path):
         cap, ledger, rid = _capture(tmp_path, "parseerr")
-        structured = _RawStructured(parsed=None, tokens=(150, 50), parsing_error="bad json")
+        structured = _RawStructured(parsed=None, tokens=(150, 50), parsing_error=OutputParserException("bad json"))
         plain = _Plain((21, 9))
         with use_usage_capture(cap):
             text = invoke_structured_or_freetext(
@@ -244,7 +245,7 @@ class TestParserErrorWithKnownUsage:
 
 
 class TestDownstreamErrorKeepsKnownUsage:
-    def test_sanitizer_error_known_usage_settled_exact_then_fallback(self, tmp_path):
+    def test_sanitizer_error_keeps_known_usage_and_propagates(self, tmp_path):
         cap, ledger, rid = _capture(tmp_path, "sanerr")
         structured = _RawStructured(
             TraderProposal(action="Hold", reasoning="r"), tokens=(100, 20)
@@ -254,13 +255,13 @@ class TestDownstreamErrorKeepsKnownUsage:
         def _boom(_result):
             raise RuntimeError("sanitizer exploded")
 
-        with use_usage_capture(cap):
-            text = invoke_structured_or_freetext(
+        with use_usage_capture(cap), pytest.raises(RuntimeError, match="sanitizer exploded"):
+            invoke_structured_or_freetext(
                 structured, plain, "p", render_trader_proposal, "Trader", sanitize_result=_boom
             )
-        assert text == "plain fallback"
+        assert plain.calls == 0
         events = ledger.read_run_spend(rid).events
-        assert len(events) == 2  # settled once each; no doubled count
+        assert len(events) == 1  # one transport, settled before the code error
         first = events[0]
         # Known raw usage: the sanitizer failure did NOT turn it into unknown-cost.
         assert first.status == "success"
@@ -268,7 +269,7 @@ class TestDownstreamErrorKeepsKnownUsage:
         assert first.total_tokens == 120
         assert first.unresolved is False
 
-    def test_render_error_known_usage_settled_exact_then_fallback(self, tmp_path):
+    def test_render_error_keeps_known_usage_and_propagates(self, tmp_path):
         cap, ledger, rid = _capture(tmp_path, "rnderr")
         structured = _RawStructured(
             TraderProposal(action="Hold", reasoning="r"), tokens=(80, 20)
@@ -278,13 +279,13 @@ class TestDownstreamErrorKeepsKnownUsage:
         def _render_boom(_result):
             raise RuntimeError("render exploded")
 
-        with use_usage_capture(cap):
-            text = invoke_structured_or_freetext(
+        with use_usage_capture(cap), pytest.raises(RuntimeError, match="render exploded"):
+            invoke_structured_or_freetext(
                 structured, plain, "p", _render_boom, "Trader"
             )
-        assert text == "plain fallback"
+        assert plain.calls == 0
         events = ledger.read_run_spend(rid).events
-        assert len(events) == 2
+        assert len(events) == 1
         assert events[0].status == "success"
         assert events[0].tokens_source == "provider"
         assert events[0].total_tokens == 100
@@ -296,7 +297,7 @@ class TestDownstreamErrorKeepsKnownUsage:
 
 
 class TestUnknownTransportFailure:
-    def test_transport_exception_is_failed_unknown_and_fallback_counted(self, tmp_path):
+    def test_transport_exception_is_failed_unknown_without_fallback(self, tmp_path):
         cap, ledger, rid = _capture(tmp_path, "unk")
         plain = _Plain((7, 3))
 
@@ -304,19 +305,18 @@ class TestUnknownTransportFailure:
             def invoke(self, prompt):
                 raise ConnectionError("transport down")  # unknown if it billed
 
-        with use_usage_capture(cap):
-            text = invoke_structured_or_freetext(
+        with use_usage_capture(cap), pytest.raises(ConnectionError, match="transport down"):
+            invoke_structured_or_freetext(
                 _Raising(), plain, "p", render_trader_proposal, "Trader"
             )
-        assert text == "plain fallback"
+        assert plain.calls == 0
         events = ledger.read_run_spend(rid).events
-        assert len(events) == 2
-        first, second = events
+        assert len(events) == 1
+        first = events[0]
         assert first.status == "failed"
         assert first.unresolved is True
         assert first.total_tokens is None  # unknown, NOT zero
         assert first.tokens_source == "unavailable"
-        assert second.tokens_source == "provider"
 
 
 # ---------------------------------------------------------------------------

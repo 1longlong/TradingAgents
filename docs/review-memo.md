@@ -2503,3 +2503,39 @@ Publication scope is all current authorized feature/webui changes, retaining
 ignored .agents/demo, real environment files, dependencies and generated output
 outside Git. The user explicitly requested local commit and remote push; no
 force push, merge, deployment or invented review approval is authorized.
+
+## 2026-11-21 — PR #5 merge integration
+
+The repository user approved the concrete merge/conflict/test plan in chat with
+an explicit confirmation, then instructed OpenCode to continue after an
+interruption. This authorizes implementation, corresponding test adjustments,
+verification, commit/push and continuation of the requested PR merge.
+It is NOT another contributor's GitHub approval and NOT final acceptance of the
+result. Preserve release Gate/SourceAttempt, debate/run-budget, confidence cap,
+trusted-output and simulated-trading semantics. ADR-012 records the integration
+choices. Another contributor's review and Linux CI remain required before final
+merge; no human review is impersonated or backfilled.
+
+
+## Local release merge — 2026-11-21
+
+Human authorization: the current user requested pulling remote release into
+local release, then merging local release into local feature/webui and resolving
+understandable conflicts. This authorizes the local merge commit and necessary
+compatibility resolutions; it does not authorize pushing this merge or represent
+independent review/final acceptance.
+
+Parents: WebUI 977a22b and updated release 9a08e08. Preserve src/ and test/
+layout, both histories, all imported core protections and existing Web features.
+Keep the intentional CHANGELOG.md deletion from the approved layout preparation;
+release changes remain represented in the existing ADR/evaluation/trace records
+and Git history. No new root deliverable is introduced. Imported development-tool
+labels follow the existing user-required OpenCode convention, preserving dates,
+contributions, outcomes and approval scope.
+
+Integration findings required only three test-file changes: accept Yahoo's new
+session constructor argument and validate release's unavailable-data/Hold path;
+assert the new v2 core policy identity together with the existing Web digest;
+and correct a newly imported test's repository-root path. Product implementation
+conflict resolution introduces no changes beyond the imported release source.
+Exact verification and failed intermediate attempts belong in the logbook.
