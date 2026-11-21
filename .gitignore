@@ -235,5 +235,21 @@ __pycache__/
 .pytest_cache/
 trading_audit.jsonl.head
 
-# Phase 4A offline comparison output (derived artifacts; raw inputs stay in /)
+# OpenCode-generated plugin dependencies are runtime artifacts, not project source.
+.opencode/node_modules/
+.opencode/package.json
+.opencode/package-lock.json
+src/tradingagents_web/frontend/node_modules/
+src/tradingagents_web/static/
+src/tradingagents_web/frontend/playwright-report/
+src/tradingagents_web/frontend/test-results/
+.opencode/bun.lock
+.opencode/bun.lockb
+.opencode/.gitignore
+
+# Derived offline comparison output.
 evaluation-output/
+
+# Local skills and standalone design references are not versioned.
+/.agents/
+/demo/

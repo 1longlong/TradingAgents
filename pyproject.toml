@@ -9,6 +9,7 @@ description = "TradingAgents: Multi-Agents LLM Financial Trading Framework"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "defusedxml>=0.7.1,<1",
     "langchain-core>=0.3.81",
     "langchain-anthropic>=0.3.15",
     "langchain-google-genai>=4.0.0",
@@ -32,6 +33,21 @@ dev = [
     "ruff>=0.15",
     "pytest>=8.0",
     "pytest-subtests>=0.13",
+    "PyYAML>=6.0,<7",
+    "jsonschema>=4.23,<5",
+    "json5>=0.9,<1",
+    "mypy>=1.11,<3",
+    "pip-audit>=2.9,<3",
+    "bandit>=1.8,<2",
+    "pytest-socket>=0.7,<1",
+    "tomli>=2.0; python_version < '3.11'",
+    "httpx>=0.27,<1",
+]
+# Read-only WebUI (Iteration 1). Optional so the core install stays lean:
+# pip install "tradingagents[web]".
+web = [
+    "fastapi>=0.115,<1",
+    "uvicorn[standard]>=0.30,<1",
 ]
 # Amazon Bedrock support (AWS SigV4 auth + boto3). Optional so the core install
 # stays lean: pip install "tradingagents[bedrock]".
@@ -41,15 +57,19 @@ bedrock = [
 
 [project.scripts]
 tradingagents = "cli.main:app"
+tradingagents-web = "tradingagents_web.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["tradingagents*", "cli*"]
+where = ["src"]
+include = ["tradingagents*", "cli*", "trading", "safety"]
 
 [tool.setuptools.package-data]
 cli = ["static/*"]
+tradingagents_web = ["static/**"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["test"]
+pythonpath = ["src"]
 addopts = "-ra --strict-markers"
 markers = [
     "unit: fast isolated unit tests",
@@ -80,3 +100,17 @@ ignore = ["E501"]
 # Keep multiple aliased names from one module in a single combined import block
 # (e.g. the vendor re-exports in interface.py) instead of one statement per name.
 combine-as-imports = true
+
+[tool.mypy]
+python_version = "3.10"
+mypy_path = "src"
+explicit_package_bases = true
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = true
+show_error_codes = true
+
+[tool.tradingagents.ci]
+# Runtime evaluation must be approved on the PR base before a prompt/model change.
+# Empty policy reports NOT RUN without blocking; configured failures still block.
+semantic_evaluation = {}

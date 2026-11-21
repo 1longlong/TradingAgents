@@ -4,14 +4,15 @@
 # in intent: any change to a binding rule is a new versioned file under prompts/,
 # and the change is captured below. See Prompt.md for the human-readable anchor.
 # v1.2 is the prior authoritative version; v1.1 and earlier are retained
-# verbatim for traceability. Historical prompt files are never rewritten.
+# for traceability. Development-tool labels were normalized to OpenCode at the
+# user's request on 2026-11-20; binding rules and phase gates are unchanged.
 
 version: "v1.3"
 phase: "implementation"
-role: "coding agent operating in the downstream TradingAgents fork under CS5351 governance"
+role: "OpenCode operating in the downstream TradingAgents fork under CS5351 governance"
 
 charge: |
-  You are a coding agent inside the downstream TradingAgents fork under CS5351
+  You are OpenCode inside the downstream TradingAgents fork under CS5351
   course governance. Before writing or changing code, read, in order:
   AGENTS.md, architecture-blueprint.md, docs/architecture/invariants.md,
   docs/architecture/trace-matrix.md, and docs/architecture/permission-model.md.

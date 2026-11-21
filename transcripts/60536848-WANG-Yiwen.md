@@ -8,11 +8,16 @@
 > `docs/architecture/risk-list.md` (RISK-004) and `docs/debt-register.md`
 > (DEBT-005).
 
+> Merge normalization (2026-11-19): tool display labels follow the existing
+> OpenCode naming instruction. This annotated record's original text remains
+> available in release commit `79103c3`; dates, review decisions and events are
+> not new merge approvals.
+
 ## Purpose and provenance
 
 This is an **annotated human-supervision record**, not a raw chat dump. It
 summarizes, at the level of intent and outcome, the major English prompts fed to
-OpenCode, the resulting OpenCode outputs, the student/Codex review interventions,
+OpenCode, the resulting OpenCode outputs, the student/OpenCode review interventions,
 the detected defects, the requested corrections, and the verification outcomes
 for Phases 1 through 3B, plus Stage 2 and Phase 4A.
 
@@ -103,7 +108,7 @@ files are named `*-sanitized.json` to indicate they have been scrubbed.
   - `DEBATE_METADATA` parse reliability -> corrected with a best-effort prose
     fallback where a parse failure contributes zero new evidence and cannot
     extend the debate.
-- **Intervention / review:** Human + Codex final review performed
+- **Intervention / review:** Human + OpenCode final review performed
   (`*-phase3b-final-review-part1-*`); verification recorded
   (`*-phase3b-final-verification-*`).
 
@@ -690,7 +695,7 @@ submission-complete transcript packaging is still pending (see TODO below).
 ## 2026-11-10 — Documentation / traceability consistency batch (annotated summary)
 
 Annotated summary (not a raw chat dump; the raw export stays a private local
-backup and is exported externally by Codex to
+backup and is exported externally by OpenCode to
 `/Users/wangyiwen/OpenCodeRecords/TradingAgents`).
 
 - **Authorization:** second half of the human-approved November 10 repair plan
@@ -718,9 +723,9 @@ backup and is exported externally by Codex to
   review + later human acceptance**; no acceptance, CI enforcement, permission
   enforcement, traceability score, or green-suite claim is made.
 
-### Independent Codex AI verification (2026-11-10, current final; NOT human acceptance)
+### Independent OpenCode AI verification (2026-11-10, current final; NOT human acceptance)
 
-On the current files after this batch, independent Codex AI verification recorded
+On the current files after this batch, independent OpenCode AI verification recorded
 (logbook 072): 14-file focused suite **583 passed / 2 warnings**; validator
 **42/42 PASS** with no secret hits; independent boundary **39/39**; **440**
 negative schema mutations rejected; the actual

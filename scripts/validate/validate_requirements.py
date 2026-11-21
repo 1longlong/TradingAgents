@@ -10,12 +10,12 @@ This script validates, without network and without paid APIs:
 2. JSON and JSONC files parse (JSONC comments are stripped deterministically
    before parsing; the resulting text is parsed with stdlib ``json``, so no
    third-party JSONC package is required).
-3. YAML files parse (via PyYAML if installed; else a conservative fallback).
+3. YAML files parse with SafeLoader and duplicate-key rejection. Missing PyYAML
+   blocks validation rather than treating unchecked YAML as passing.
 4. ``docs/req/requirements.yaml`` validates against ``docs/req/req-schema.json``
    using the real draft-2020-12 JSON Schema when ``jsonschema`` is installed
    (the governance CI job installs it, so the actual schema is enforced there).
-   When ``jsonschema`` is unavailable (e.g. the Python test jobs, which do not
-   install it), a deterministic subset validator is used as a clearly reported
+   When ``jsonschema`` is unavailable, a deterministic subset validator is used as a clearly reported
    local fallback. The subset validator is NOT a general JSON Schema
    implementation; it checks the per-requirement and ``project`` rules the real
    registry depends on, including ``project.schema_version`` matching the
@@ -33,6 +33,12 @@ This script validates, without network and without paid APIs:
      for the ``product.priorities[].requirement_id`` /
      ``product.tradeoffs[].requirement_id`` contract (a no-op when the registry
      omits those blocks, so minimal schemas stay valid).
+   Unified 1.1 registries additionally enforce criterion-ID uniqueness,
+   dependency integrity, finite thresholds and historical-evidence scope. The
+   fallback covers this repository's explicit schema vocabulary and rejects
+   unsupported validation keywords. Legacy release fixture format remains
+   readable for its historical contract tests; the on-disk registry uses only
+   the canonical WebUI-based format.
 5. Secret scan over the listed documentation/artifact files: any line
    containing a likely secret (``sk-``, ``Bearer`` token, common key=value with
    a long secret-ish value) is reported by file:line WITHOUT printing the
@@ -40,6 +46,8 @@ This script validates, without network and without paid APIs:
 
 Outputs human-readable results and exits non-zero on any failure. Safe to add
 to CI as a deterministic gate.
+
+Traceability: NFR-SEC-001, INV-1/10, core ADR-006 schema fail-closed contract.
 """
 
 from __future__ import annotations
@@ -141,14 +149,59 @@ JSONC_FILES = [
 # ---------------------------------------------------------------------------
 # Deterministic JSONC parsing: strip // and /* */ comments, then json.loads.
 # ---------------------------------------------------------------------------
-_COMMENT_RE = re.compile(r"^[ \t]*//.*$", re.MULTILINE)
-_BLOCK_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
-
-
 def parse_jsonc(text: str) -> object:
-    stripped = _BLOCK_COMMENT_RE.sub("", text)
-    stripped = _COMMENT_RE.sub("", stripped)
-    return json.loads(stripped)
+    # Globs and URLs inside strings may contain /* or //; these are data.
+    output = []
+    index = 0
+    quoted = escaped = False
+    while index < len(text):
+        char = text[index]
+        if quoted:
+            output.append(char)
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                quoted = False
+            index += 1
+        elif char == '"':
+            quoted = True
+            output.append(char)
+            index += 1
+        elif text.startswith("//", index):
+            end = text.find("\n", index)
+            index = len(text) if end == -1 else end
+        elif text.startswith("/*", index):
+            end = text.find("*/", index + 2)
+            if end == -1:
+                raise ValueError("unterminated JSONC block comment")
+            output.extend("\n" if c == "\n" else " " for c in text[index:end + 2])
+            index = end + 2
+        else:
+            output.append(char)
+            index += 1
+    return json.loads("".join(output))
+
+
+def load_registry_yaml(text: str) -> object:
+    """Read data with SafeLoader and reject duplicate mapping keys."""
+    import yaml
+
+    class UniqueLoader(yaml.SafeLoader):
+        pass
+
+    def mapping(loader, node, deep=False):
+        result = {}
+        for key, value in node.value:
+            parsed = loader.construct_object(key, deep=deep)
+            if parsed in result:
+                raise ValueError(f"duplicate YAML key at line {key.start_mark.line + 1}")
+            result[parsed] = loader.construct_object(value, deep=deep)
+        return result
+
+    UniqueLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, mapping)
+    return yaml.load(text, Loader=UniqueLoader)
 
 
 # ---------------------------------------------------------------------------
@@ -240,6 +293,200 @@ def validate_requirement_references(requirements: object) -> list[str]:
     return errors
 
 
+# Canonical 1.1 contract support. This is shared with the second CI entry point.
+# Registry commands are treated as text and never executed by validation.
+_CANONICAL_ID = re.compile(r"^(?:REQ-[A-Z][A-Z0-9]*-?[0-9]{2,4}|FR-(?:DQG|DDT|TRD)-[0-9]{3}|INV-TRD-[0-9]{3}|NFR-[A-Z]+-[0-9]{3})$")
+
+
+def is_canonical_registry(data: object) -> bool:
+    if not isinstance(data, dict):
+        return False
+    rows = data.get("requirements")
+    return "schema_version" in data or (
+        isinstance(rows, list) and any(isinstance(row, dict) and "fit_criteria" in row for row in rows)
+    )
+
+
+def validate_canonical_semantics(data: object) -> list[str]:
+    """Preserve criterion identity, dependency integrity and historical evidence scope."""
+    import math
+
+    if not isinstance(data, dict) or not isinstance(data.get("requirements"), list):
+        return ["requirements must be a list"]
+    errors = validate_unique_requirement_ids(data) + validate_requirement_references(data)
+    rows = data["requirements"]
+    known = {row["id"] for row in rows if isinstance(row, dict) and isinstance(row.get("id"), str)}
+    criteria: set[str] = set()
+    dependencies: dict[str, list[str]] = {}
+    for index, row in enumerate(rows):
+        prefix = f"requirements[{index}]"
+        if not isinstance(row, dict):
+            errors.append(f"{prefix} must be an object")
+            continue
+        rid = row.get("id")
+        if not isinstance(rid, str) or not _CANONICAL_ID.fullmatch(rid):
+            errors.append(f"{prefix}.id is not a valid stable requirement id")
+        deps = row.get("depends_on", [])
+        if not isinstance(deps, list) or any(not isinstance(dep, str) for dep in deps):
+            errors.append(f"{prefix}.depends_on must be a string list")
+        elif isinstance(rid, str):
+            dependencies[rid] = deps
+            errors.extend(f"{prefix} has unknown dependency {dep}" for dep in deps if dep not in known)
+        fits = row.get("fit_criteria")
+        if not isinstance(fits, list) or not fits:
+            errors.append(f"{prefix}.fit_criteria must be a non-empty list")
+            continue
+        for fit in fits:
+            if not isinstance(fit, dict):
+                errors.append(f"{prefix}.fit_criteria item must be an object")
+                continue
+            identifier = fit.get("id")
+            if not isinstance(identifier, str):
+                errors.append(f"{prefix} criterion id must be a string")
+            elif identifier in criteria:
+                errors.append(f"duplicate acceptance criterion id: {identifier}")
+            else:
+                criteria.add(identifier)
+            threshold = fit.get("threshold")
+            values = threshold if isinstance(threshold, list) else [threshold]
+            if any(isinstance(value, float) and not math.isfinite(value) for value in values):
+                errors.append(f"{prefix} threshold must be finite")
+            status = fit.get("status", {})
+            if (row.get("status") == "verified" and isinstance(status, dict)
+                    and status.get("evidence_scope") == "historical-release"):
+                errors.append(f"{prefix}: historical-release evidence cannot certify a newly verified requirement")
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(node: str) -> None:
+        if node in visiting:
+            errors.append(f"requirement dependency cycle at {node}")
+            return
+        if node in visited:
+            return
+        visiting.add(node)
+        for dependency in dependencies.get(node, []):
+            if dependency in dependencies:
+                visit(dependency)
+        visiting.remove(node)
+        visited.add(node)
+
+    for node in dependencies:
+        visit(node)
+    return errors
+
+
+def _canonical_schema_subset(data: object, schema: dict) -> list[str]:
+    """Offline fallback for this repository's explicit schema vocabulary only.
+
+    This is not a general JSON Schema implementation. Unsupported validation
+    keywords fail closed; metadata is ignored. CI still uses jsonschema's real
+    Draft202012Validator. No schema reference may read a file or a URL.
+    """
+    import math
+
+    metadata = {"$schema", "$id", "$comment", "$defs", "title", "description", "default", "examples"}
+    supported = {"$ref", "type", "const", "enum", "required", "properties", "additionalProperties",
+                 "pattern", "minLength", "minimum", "maximum", "minItems", "uniqueItems", "items",
+                 "oneOf", "allOf", "if", "then", "else"}
+
+    def matches_type(value: object, name: str) -> bool:
+        if name == "object":
+            return isinstance(value, dict)
+        if name == "array":
+            return isinstance(value, list)
+        if name == "string":
+            return isinstance(value, str)
+        if name == "boolean":
+            return isinstance(value, bool)
+        if name == "integer":
+            return isinstance(value, int) and not isinstance(value, bool)
+        if name == "number":
+            return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+        if name == "null":
+            return value is None
+        return False
+
+    def same(left: object, right: object) -> bool:
+        # JSON's boolean true is not the numeric value one.
+        return (isinstance(left, bool) == isinstance(right, bool)) and left == right
+
+    def check(value: object, rule: object, path: str, depth: int = 0) -> list[str]:
+        if depth > 80:
+            return [f"{path}: schema nesting limit exceeded"]
+        if rule is True:
+            return []
+        if rule is False:
+            return [f"{path}: schema forbids this value"]
+        if not isinstance(rule, dict):
+            return [f"{path}: invalid schema object"]
+        unknown = set(rule) - supported - metadata
+        if unknown:
+            return [f"{path}: unsupported fallback schema keywords: {sorted(unknown)}"]
+        out = []
+        if "$ref" in rule:
+            ref = rule["$ref"]
+            if not isinstance(ref, str) or not ref.startswith("#/"):
+                return [f"{path}: only local schema references are supported"]
+            target = schema
+            try:
+                for key in ref[2:].split("/"):
+                    target = target[key.replace("~1", "/").replace("~0", "~")]
+            except (KeyError, TypeError):
+                return [f"{path}: unresolved schema reference {ref}"]
+            out += check(value, target, path, depth + 1)
+        if "type" in rule:
+            types = rule["type"] if isinstance(rule["type"], list) else [rule["type"]]
+            if not any(matches_type(value, name) for name in types):
+                return out + [f"{path}: invalid type, expected {types}"]
+        if "const" in rule and not same(value, rule["const"]):
+            out.append(f"{path}: invalid constant")
+        if "enum" in rule and not any(same(value, item) for item in rule["enum"]):
+            out.append(f"{path}: invalid enum value")
+        if isinstance(value, dict):
+            for key in rule.get("required", []):
+                if key not in value:
+                    out.append(f"{path}.{key}: required property missing")
+            properties = rule.get("properties", {})
+            for key, child in value.items():
+                if key in properties:
+                    out += check(child, properties[key], f"{path}.{key}", depth + 1)
+                elif rule.get("additionalProperties") is False:
+                    out.append(f"{path}.{key}: unexpected property")
+        if isinstance(value, str):
+            if len(value) < rule.get("minLength", 0):
+                out.append(f"{path}: string is too short")
+            if "pattern" in rule and re.search(rule["pattern"], value) is None:
+                out.append(f"{path}: does not match pattern {rule['pattern']}")
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            if "minimum" in rule and value < rule["minimum"]:
+                out.append(f"{path}: below minimum")
+            if "maximum" in rule and value > rule["maximum"]:
+                out.append(f"{path}: above maximum")
+        if isinstance(value, list):
+            if len(value) < rule.get("minItems", 0):
+                out.append(f"{path}: too few items")
+            if rule.get("uniqueItems") and any(
+                same(item, earlier) for i, item in enumerate(value) for earlier in value[:i]
+            ):
+                out.append(f"{path}: duplicate array item")
+            if "items" in rule:
+                for i, item in enumerate(value):
+                    out += check(item, rule["items"], f"{path}[{i}]", depth + 1)
+        if "oneOf" in rule and sum(not check(value, branch, path, depth + 1) for branch in rule["oneOf"]) != 1:
+            out.append(f"{path}: must match exactly one schema alternative")
+        for branch in rule.get("allOf", []):
+            out += check(value, branch, path, depth + 1)
+        if "if" in rule:
+            branch = "then" if not check(value, rule["if"], path, depth + 1) else "else"
+            if branch in rule:
+                out += check(value, rule[branch], path, depth + 1)
+        return out
+
+    return check(data, schema, "registry")
+
+
+
 # ---------------------------------------------------------------------------
 # Schema validation dispatcher.
 #
@@ -273,6 +520,7 @@ def validate_against_schema(requirements: object, schema: object) -> list[str]:
                 problems
                 + validate_unique_requirement_ids(requirements)
                 + validate_requirement_references(requirements)
+                + (validate_canonical_semantics(requirements) if is_canonical_registry(requirements) else [])
             )
         except Exception as exc:  # noqa: BLE001
             return [f"jsonschema validation raised: {exc}"]
@@ -313,6 +561,9 @@ def validate_requirements(requirements: object, schema: object) -> list[str]:
         return ["schema is not a JSON object"]
     if not isinstance(requirements, dict):
         return ["requirements is not a JSON/YAML object"]
+
+    if is_canonical_registry(requirements):
+        return _canonical_schema_subset(requirements, schema) + validate_canonical_semantics(requirements)
 
     proj = requirements.get("project")
     if not isinstance(proj, dict):
@@ -502,14 +753,14 @@ def main() -> int:
         import yaml  # type: ignore
     except ImportError:
         yaml = None
-        warnings.append("PyYAML not installed; YAML files are checked for presence only")
+        errors.append("PyYAML is required; YAML/schema validation was not performed")
     if yaml is not None:
         for rel in YAML_FILES:
             path = ROOT / rel
             if not path.exists():
                 continue
             try:
-                yaml.safe_load(path.read_text(encoding="utf-8"))
+                load_registry_yaml(path.read_text(encoding="utf-8"))
             except Exception as exc:  # noqa: BLE001
                 errors.append(f"YAML parse failure {rel}: {exc}")
     else:
@@ -521,7 +772,7 @@ def main() -> int:
     if yaml is not None and req_path.exists() and schema_path.exists():
         try:
             with open(req_path, encoding="utf-8") as f:
-                requirements = yaml.safe_load(f)
+                requirements = load_registry_yaml(f.read())
             with open(schema_path, encoding="utf-8") as f:
                 schema = json.loads(f.read())
             schema_errors = validate_against_schema(requirements, schema)

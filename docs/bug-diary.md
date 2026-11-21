@@ -1,3 +1,89 @@
+# Integrated branch records
+
+Both branch histories are retained below. Dates, result counts, approval scopes,
+and unresolved items belong to the recorded execution, not this merge. Commands
+in release history use the former root-level layout; their current equivalents
+use `src/`, `test/offline/`, and `test/live/`. No historical result is a fresh
+verification of the merged tree.
+
+## WebUI branch records
+
+# Bug Diary
+
+## BASELINE-001 — OHLCV cache freshness tests
+
+- Observed: 2026-10-23, during source-layout verification.
+- Symptoms: three cache-freshness tests fail in both the migrated checkout and untouched release in the same temporary Python environment.
+- Reproduction: `python -m pytest -q test/offline/test_ohlcv_cache_freshness.py`.
+- Failing cases: `test_current_day_cache_past_ttl_is_not_fresh`, `test_a_download_from_an_earlier_day_is_not_fresh`, and `test_load_ohlcv_refetches_stale_same_day_cache`.
+- Classification: inherited baseline behavior or test/environment compatibility; root cause is not yet established.
+- Fix: not attempted as part of environment/CI preparation. No production assertion or test threshold has been relaxed.
+- Boundary exposed: freshness and point-in-time correctness; formal requirement/invariant IDs have not yet been assigned.
+- Status: unresolved; remains a regression/merge blocker where reproduced.
+
+## BASELINE-002 — Empty-download test performs a real reachability probe
+
+- Observed: 2026-10-23, in both the migrated checkout and untouched release.
+- Symptom: the test expects `NoMarketDataError`, while an unreachable Yahoo endpoint causes `VendorRateLimitError`.
+- Reproduction: `python -m pytest -q test/live/test_no_data_handling.py`.
+- Classification: test isolation/environment dependence. The download is mocked but the separate vendor-reachability probe is not.
+- Root cause evidence: `raise_for_empty()` checks `vendor_reachable()` before deciding between outage and absent-data errors.
+- Fix: not attempted; the file was placed under `test/live/` during migration. A subsequent dedicated change should test the two deterministic outcomes independently.
+- Boundary exposed: distinguish vendor failure from absent market data; do not erase that distinction to satisfy the test.
+- Status: unresolved. Network-isolated CI will report the problem rather than enabling real external access.
+
+## Record format
+
+For each significant bug, append the symptom, exact reproduction, classification, evidence-backed root cause, fix, affected requirement/invariant, verification, and status. Mark hypotheses as hypotheses; never invent a repair or approval.
+
+
+## WEB-ANALYSIS-001 — Configuration and provider/model mismatch
+
+- Observed: 2026-11-06, read-only review and isolated reproduction.
+- Cause: browser defaults overwrote environment settings; the wizard did not load server configuration or change models with the provider. An omitted endpoint erased the server endpoint.
+- Repair: preserve omitted values, apply server locks, initialize the wizard from projected configuration and matching preferences, and load provider-specific model options. Include existing regional providers and identify key-optional local endpoints correctly.
+- Coverage: REQ-WEB-001/013; `test_web_analysis_flow.py` configuration cases and frontend `analysis-flow.test.tsx`.
+
+## WEB-ANALYSIS-002 — Reload loses reports and errors
+
+- Cause: the snapshot omitted display state but advanced the cursor past all prior events; terminal pages reopened an empty SSE stream. Failure details were also omitted or not rendered.
+- Repair: atomic complete display snapshots, bounded message history, expired-cursor snapshot fallback, terminal connection closure, and visible safe errors/correlation IDs.
+- Coverage: REQ-WEB-007, INV-WEB-003; backend snapshot/failure cases and frontend store/page cases.
+
+## WEB-ANALYSIS-003 — Startup failure strands the active slot
+
+- Cause: artifact-writer construction ran outside the worker exception/finally boundary.
+- Repair: handle artifact initialization failures, report a terminal storage error, and release the slot after worker cleanup. Correlate redacted diagnostics instead of silently discarding exceptions.
+- Coverage: INV-WEB-009; `test_artifact_initialization_failure_releases_slot`.
+
+## WEB-ANALYSIS-004 — Repeated runs mix old and new results
+
+- Cause: all runs for a ticker/date shared the CLI artifact directory, and history inferred completion from a potentially stale final decision file.
+- Repair: isolate each Web run and persist its lifecycle in an artifact sidecar. Keep legacy CLI artifacts unchanged and readable.
+- Coverage: REQ-WEB-009, INV-WEB-001; `test_repeated_analysis_keeps_each_run_and_legacy_artifacts`.
+
+## WEB-ANALYSIS-005 — Real execution lacks progress and resume status
+
+- Cause: fake runners emitted progress that the real adapter did not; neither state machine handled `run.resumed`.
+- Repair: publish real model/tool counters, infer agent progress from graph state, display preparation phases, and transition resumed tasks to running.
+- Coverage: REQ-WEB-002/007; real-core integration and resumed-run cases.
+
+All five repair groups are implemented. Verification results and outstanding live-validation limitations are recorded in `docs/architecture/evaluation-logbook.md`; final human review remains pending. Existing baseline defects above are unchanged.
+
+
+## WEB-ANALYSIS-006 — Yahoo throttling mislabeled as a model-provider failure
+
+- Reported: 2026-11-06. The user supplied the traceback for correlation `c_6c77fd7723f2`, using DeepSeek with `deepseek-flash` for both roles.
+- Confirmed failure: `YFRateLimitError` from Yahoo Finance, through `get_stock_data` and `tools_market`, after the existing 2/4/8-second backoff retries. This traceback does not establish an LLM authentication or model-selection failure.
+- Root cause of the misleading UI: the Web exception mapper assigned every unrecognized exception the generic provider-contact message. The core vendor router lets the raw Yahoo exception propagate when no configured fallback succeeds.
+- Repair scope: map raw Yahoo throttling, typed market-data unavailability, missing data, and vendor configuration failures to safe distinct messages; use a neutral default for unknown execution failures. Preserve correlation logging and credential redaction.
+- Regression: `test_real_market_tool_rate_limit_is_not_reported_as_llm_failure` uses the actual graph, ToolNode, market tool and vendor router, replacing only the model/identity/Yahoo boundaries. It verifies failure classification, no final decision/memory write, and retained checkpoint artifacts. Additional parameterized cases cover typed data errors and neutral internal failures.
+- External condition: this presentation-layer repair does not remove Yahoo's rate limit or make unavailable data available. No automatic resubmission, extra provider retry, new data source, or fallback-vendor selection is introduced. The existing configured vendor chain remains authoritative.
+- Status: error mapping repaired; actual Yahoo availability remains an external prerequisite for a successful Yahoo-backed run.
+
+
+## Release core records (79103c3)
+
 # Bug Diary
 
 Records defects detected during development and the corrections requested by
@@ -7,7 +93,7 @@ are marked `TODO` rather than invented. Cross-references review in
 
 ## Phase 3B — detected and corrected during review
 
-The following defect classes were raised during the Codex/human review of the
+The following defect classes were raised during the OpenCode/human review of the
 Phase 3B debate work and addressed in the corresponding implementation pass.
 They are recorded at class level because the detailed per-bed stack traces are
 available in the annotated transcript
@@ -44,7 +130,7 @@ available in the annotated transcript
   `final_trade_decision`, and `SignalProcessor` returned Buy. The blocked verdict
   was therefore not authoritative at the output boundary (design sections 3.6 and
   7.3). Reproduced offline by
-  `/Users/wangyiwen/Documents/Codex/2026-10-19/https-github-com-1longlong-tradingagents-https/tradingagents_offline_demo.py`
+  `/Users/wangyiwen/Documents/OpenCode/2026-10-19/https-github-com-1longlong-tradingagents-https/tradingagents_offline_demo.py`
   (`blocked_adversarial_model.final_signal` = `Buy`). This is a synthetic-test
   enforcement defect, not a measured live incident.
 - **Root cause.** Only the Research Manager inlined a blocked-run coercion; the
@@ -328,3 +414,195 @@ the previous guard/budget/audit work intact:
   independent review and later human acceptance; the degraded numeric confidence
   ceiling (DEBT-014) and automatic optional adapters (DEBT-015/RISK-015) remain
   OPEN and were not touched.
+
+## 2026-11-21 — Simulated-trading Web integration verification
+
+- **WEB-SIM-20261121-RESUME (corrected; browser verified).** Resuming a fully
+  completed simulation supplied start > end to the core weekday calendar.
+  The Web adapter now validates the saved cursor and returns a zero-work core
+  result with saved equity; it does not invoke an empty calendar interval or
+  replay fills. The final Chromium test passed actual execution, resume with
+  zero new fills and reload. The offline suite that first found it was not
+  rerun, per the user's verification frequency instruction.
+- **CORE-20261121-DETERMINISM (open).** The single offline run observed
+  TestEngine.test_engine_deterministic_for_fixed_snapshot failing because its
+  two evidence-record collections differed. The gate's injected clock does not
+  appear to pin every market validator fetched_at default; second-boundary
+  timing is a hypothesis from inspection, not a reproduced diagnosis. No
+  tradingagents core or existing core test was changed. A future authorized
+  core investigation should pin all evidence timestamps and reproduce the
+  discrepancy before changing behavior. No claim of an already-known baseline
+  failure or passing regression is made.
+- **Verification fixture corrections.** The new unsupported-cancel test now
+  checks OpenAPI absence and rejected POST (404/405), matching existing SPA
+  method routing. New jsdom dialog tests use the established showModal/close
+  polyfill. Three translation keys were filled in both catalogues. Unit suites
+  were not rerun after those corrections; actual counts remain in the logbook.
+
+
+## 2026-11-21 — Backtest errors discarded before logging
+
+**WEB-BT-20261121-DIAGNOSTICS (fixed; runtime cause still unconfirmed).** The user
+reported a failed NVDA sweep for 2026-10-21 through 2026-11-20 with a 7-day
+interval and no server traceback. The grid has five valid dates. Coordinator
+inspection confirmed its exception handler discarded the error and returned
+`backtest failed; check the server log` without emitting any log. The exception
+from that previous invocation cannot be recovered from the screenshot.
+
+The Web coordinator now uses existing redacted traceback logging and categorized
+safe errors with a correlation ID. Missing default-provider API-key configuration
+has a specific safe message. The failure banner includes the reference and does
+not simultaneously claim there are no sweeps. Six injected failure variants
+verify logs, redaction, unchanged live memory, slot release and a subsequent
+successful run. Core/CLI and model-selection semantics remain unchanged. A
+provider-default mismatch is a possible cause, not an established diagnosis of
+the user's run; the user must restart and reproduce to obtain actual evidence.
+
+
+Follow-up evidence for WEB-BT-20261121-DIAGNOSTICS: the user supplied the new
+trace for c_5c2b08079638. Core run_backtest fails while constructing the deep
+model client, which is configured for openai and has no OPENAI_API_KEY. This
+establishes provider configuration as the cause of that invocation; it is not
+Yahoo throttling. Source inspection confirms package startup loads dotenv
+before DEFAULT_CONFIG and the backtest consumes server defaults independently
+of analysis-wizard choices. The user's actual environment file was not read.
+DeepSeek use requires matching server provider/model settings (and endpoint if
+applicable), followed by restart. No automatic provider switch or new core fix
+was made, and successful real-provider backtesting remains unverified.
+
+
+## 2026-11-21 — Editable model defaults in Web analysis
+
+**WEB-MODEL-20261121-DEFAULTS (implemented).** User configuration of provider
+and quick/deep model environment variables disabled the analysis selectors and
+forced those values back over explicit requests. The user clarified that these
+fields are defaults: preselect them, permit analysis changes, and keep backtests
+on server defaults. The user also confirmed official DeepSeek usage in the
+provider console, so the earlier routing concern is not treated as a continuing
+failure.
+
+Web config now distinguishes model defaults from execution locks. Analysis
+selection is restored after policy resolution, whose existing environment
+application would otherwise reapply model values. Budget/round and other locks
+remain effective. Provider switching requires explicit new models and cannot
+inherit another provider's endpoint or thinking options. Matching drafts retain
+intentional selections; a changed provider/model baseline invalidates stale
+selection fields. Existing retry setup remains explicit. Backtests copy current
+server defaults. No credential, core/CLI, trading or safety source changes.
+
+
+## 2026-11-21 — DeepSeek Flash forced-tool compatibility gap
+
+**CORE-DS-20261121-FLASH-CAPABILITIES (open; diagnosis only).** The user reported
+slow backtests with Research Manager and Trader HTTP 400 warnings stating that
+thinking mode does not support the submitted tool_choice, followed by a free-text
+fallback attempt. The current model catalogue exposes deepseek-flash, but
+llm_clients/capabilities.py has no exact match for that ID. Its patterns match
+deepseek-v followed by a digit or deepseek-reasoner, so deepseek-flash falls back
+to supports_tool_choice=True. NormalizedChatOpenAI then allows LangChain to force
+the ResearchPlan/TraderProposal tool. DeepSeek's current official Chat
+Completions documentation forbids required/named tool choices in thinking mode;
+thinking is enabled by default.
+
+An isolated offline probe, with a temporary dummy credential and dotenv disabled,
+constructed actual DeepSeekChatOpenAI structured bindings and request payloads.
+For deepseek-flash both schemas emitted a named tool_choice and one tool. The
+already-supported deepseek-v4-flash emitted one tool with no tool_choice. Four
+payloads were inspected; no invocation or network request occurred. This proves
+the local capability mismatch independently of the real provider logs.
+
+Recommended bounded repair: map deepseek-flash to the existing DeepSeek thinking
+capabilities and add alias/namespace payload regressions, preserving tools,
+reasoning-content roundtrip, fallback and budget accounting. This is a shared
+core client change that would also affect CLI; it was not implemented during the
+user's diagnostic request. Do not automatically disable thinking, replace models,
+raise retries or parallelize the backtest as part of this compatibility fix.
+
+Other contributing mechanisms: core backtests run ticker/date cells serially;
+each cell invokes the full multi-agent analysis and later settlement. The prior
+NVDA grid contained five dates. Quick/deep are role names and do not themselves
+turn off DeepSeek thinking. Structured failures may add a second free-text
+attempt, subject to affordability/admission checks; the logs cannot establish
+their share of total runtime or actual billing. The Web backtest API polls status
+but does not report per-cell stages. GET 200 status responses do not prove that
+the model has completed. Unknown total-duration attribution remains unverified.
+
+Primary references inspected on 2026-11-21:
+https://api-docs.deepseek.com/api/create-chat-completion/
+https://api-docs.deepseek.com/guides/thinking_mode/
+
+
+## 2026-11-21 — Per-date backtest progress verification findings
+
+**WEB-BT-20261121-MOBILE-GRID (fixed; focused browser verified).** The new progress
+table inherited history-table mobile card rules and its minimum content width
+expanded the parent single-column grid. Three responsive checks failed; the
+progress test's early failure also left a fixture task active for the next case.
+Scoped table semantics/local overflow plus min-width:0 on the results-grid child
+correct the layout without hiding date/status cells. All four affected browser
+cases passed after repair. Full offline/frontend suites passed before this CSS
+repair and were not repeated; the focused layout check covers the changed CSS.
+
+**CORE-BT-20261121-TYPES (open).** Explicit mypy of core backtest.py reports two
+optional-float arithmetic/sum errors in the existing summarize implementation.
+The progress change adds only observer hooks/imports; summarize is unmodified.
+The offline runtime suite passes, but type-checking that core file is not green.
+No suppression or unrelated calculation change was made for this progress task.
+
+
+## CI-20261121-WEB-EXTRAS — repaired locally, remote verification pending
+
+PR #7 / run 44867605790: Python 3.10–3.13 fail collection with missing fastapi
+because CI installs dev without the declared web extra. Existing local web
+installation masked this environment mismatch. Repair: install dev,web in the
+three WebUI source-verification jobs, retaining lean core clean-install.
+Local complete socket-denied suite: 4212 passed, 3 skipped, 92 subtests.
+No new dependency declaration or skipped test is introduced.
+
+## CI-20261121-LIVE-IDENTITY — repaired locally, remote verification pending
+
+AI-use gate invented test/offline/trading/live paths from release's former
+layout. Map that exact prefix to existing test/live/trading. Changes to fixture
+content still require evidence, and duplicate old/new logical copies still
+block. Coverage for actual PR head 095fa59 now passes. Regression and negative
+checker tests pass in the complete suite; no log entries or approvals fabricated.
+
+
+## CI-20261121-TYPES-SECURITY — repaired locally, remote review pending
+
+The newly enforced full-source jobs exposed 322 existing mypy errors in 60 files
+and 10 medium/high Bandit findings. Repaired accurate optional/union/SDK/state
+annotations and validated-value narrowing; no global suppression, skipped rule,
+test weakening or business policy change. Hardened public feed URLs/redirects
+and XML with explicit defusedxml dependency; retained parameterized SQL, literal
+checkpoint statements and stable non-security hashes. Full mypy is clean in
+194 files; configured Bandit has zero medium/high findings, no skipped/nosec
+checks. Complete Python 4240 passed/3 skips/92 subtests and frontend 71 passed.
+Full vulnerability audit passes for 127 versions after one proxy-failed attempt.
+No new remote CI pass is claimed before publication and execution.
+
+## CORE-20261121-CONFLICT-STATE-RETURN — repaired locally
+
+track_round_conflicts expected three returns from derive_conflicts, whose public
+contract returns two and populates optional denials. The state adapter now uses
+that existing output list and returns conflicts/notes/denials as documented.
+The new real adapter test covers creation and negative invalid-evidence
+re-observation retaining the open conflict and recording a denial. No conflict
+lifecycle or evidence eligibility rule changes.
+
+## CI-20261121-REPORT-CLOCK — test-only repair
+
+PR run 44879223281, Python 3.12, head 38279ae: the sole regression failure was
+TestPublicReportAndMemory.test_report_export_idempotent. Two real report writes
+straddled a second boundary: Generated 07:14:16 versus 07:14:17. The test compared
+the complete files, including the intentional production timestamp. Consequently
+the aggregate blocking-gate also failed. The same-head push Python 3.12 job
+passed; this evidence supports a clock-dependent intermittent test failure.
+
+Human-authorized scope ci-report-clock-20261121-v1 fixes only the reporting
+module clock within this test, with pytest restoring it afterward. The exact
+fixed header, complete report equality and confidence-cap audit equality are
+checked. No timestamp is stripped from reports or comparisons, no test is
+skipped/retried, and production source, business rules and CI remain unchanged.
+Actual local results are recorded in the evaluation logbook after execution;
+no remote passing run is claimed by this local repair.

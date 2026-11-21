@@ -1,7 +1,7 @@
 # ADR-011 — Deterministic Degraded-Run Confidence Cap (0.60)
 
 - **Status:** Proposed — **implementation complete in the working tree; independent
-  Codex offline verification CONFIRMED; human acceptance PENDING (NOT claimed
+  OpenCode offline verification CONFIRMED; human acceptance PENDING (NOT claimed
   complete)**. The policy
   module, runtime wiring (debate turns/stances, evaluator, RM/Trader/PM typed +
   prose, report writer, memory), the shared post-gate state-input sanitizer
@@ -11,7 +11,7 @@
   and offline-verified (fresh 2026-11-11 Stage 4b run: focused 110 passed / 0
   sockets; full strict-offline 2154 passed / 1 skipped / 1 deselected / 22
   warnings / 88 subtests / 0 sockets; Ruff clean; validate_requirements 43/43;
-  `git diff --check` clean; logbook 082; independent Codex offline verification
+  `git diff --check` clean; logbook 082; independent OpenCode offline verification
   CONFIRMED same counts, HEAD 5ecea91 unchanged, frozen files unchanged). This line
   records ACTUAL evidence only and is not a completion or signoff claim. Plan +
   test cases for the four-item repair were explicitly approved by WANG Yiwen
@@ -22,7 +22,7 @@
   working tree.
 - **Date:** 2026-11-11
 - **Deciders:** CS5351 project (student); coding-agent (OpenCode Builder);
-  independent reviewer (Codex); human review required before acceptance
+  independent reviewer (OpenCode); human review required before acceptance
 - **Trace:** `FR-DQG-006` (degraded-run restriction / confidence ceiling),
   `NFR-AUD-001` (auditability), `NFR-DET-001` (determinism), `NFR-BC-001`
   (backward compatibility), `FR-DQG-005` (report artifacts), `FR-DDT-001`,
@@ -319,7 +319,7 @@ in the Trader plan and the exported `report/3_trading/trader.md` /
 - **Scope/limits:** offline, deterministic, LLM-free verification only. This is an
   ADR-011 amendment for in-scope maintenance of the approved Stage 4 cap; it is NOT
   a live retest and does NOT relabel the preserved live evidence.
-- **Status (2026-11-12):** independent Codex technical review **COMPLETE**
+- **Status (2026-11-12):** independent OpenCode technical review **COMPLETE**
   (full strict-offline 2290 passed / 0 sockets; historical `$204.38.` case, LF/CRLF
   soft-wraps, dates/currency preserved, genuine 0.95 capped at REAL Trader/report/
   record_decision boundaries). Explicit **human acceptance remains pending**; the

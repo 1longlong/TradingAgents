@@ -10,7 +10,7 @@ human review. **Decision owner:** WANG Yiwen (human) — approval pending.
 
 ## Context
 
-Coding agents (OpenCode/Codex/others) operate under a course-governance scaffold
+OpenCode operates under a course-governance scaffold
 (`AGENTS.md`, `Prompt.md`, `prompts/`, `docs/architecture/*`). The scaffold
 records rules, invariants, requirement and trace data, live evidence, review
 history, and the working session's task plan. Today these are prose documents

@@ -1,12 +1,20 @@
-# test/live/ — moved
+# Live and external-service tests
 
-The simulated trading subsystem's opt-in live smoke test now lives at
-`tests/trading/live/`.
-
-Run it only with explicit opt-in:
+External-service tests live here and require explicit network, credential and
+cost authorization before execution. Offline runs must not be reported as live
+verification. From the repository root, when separately authorized:
 
 ```bash
-RUN_LIVE_TRADING_TESTS=1 pytest tests/trading/live -q -s
+python -m pytest -q test/live
 ```
 
-This directory is retained only as a pointer; it contains no test code.
+## Simulated-trading smoke test
+
+After separate external-service and cost authorization, the imported three-day
+simulated-execution smoke test is explicitly enabled with:
+
+```bash
+RUN_LIVE_TRADING_TESTS=1 python -m pytest -q test/live/trading -s
+```
+
+It remains opt-in and is not part of the default offline regression.

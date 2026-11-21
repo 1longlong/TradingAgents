@@ -1,5 +1,7 @@
 """Simulated portfolio ledger: cash, positions, cost basis, and PnL."""
 
+# ADR-012-error-handling-merge-integration.md: preserve INV-TRD-001/002 and NFR-TRD-001.
+
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
@@ -272,7 +274,7 @@ class Portfolio:
                 if holding.average_cost is not None
                 else Decimal("0.00")
             )
-            new_average = _quantize_average(
+            new_average: Decimal | None = _quantize_average(
                 (previous_cost + total_cost) / new_quantity
             )
             new_cash = quantize_money(self._cash - total_cost)

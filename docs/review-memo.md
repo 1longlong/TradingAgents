@@ -1,3 +1,263 @@
+# Integrated branch records
+
+Both branch histories are retained below. Dates, result counts, approval scopes,
+and unresolved items belong to the recorded execution, not this merge. Commands
+in release history use the former root-level layout; their current equivalents
+use `src/`, `test/offline/`, and `test/live/`. No historical result is a fresh
+verification of the merged tree.
+
+## WebUI branch records
+
+# Review Memo
+
+## Preparation review — 2026-10-24
+
+- Scope authorized by the user: development environment, document/permission workflow, transcript preservation, and repository CI blocking gates. At that stage, Git commits, pushes, merges, deployment, and product implementation were excluded.
+- Source baseline: `release` at `2d17df8da1536c121e4d7395ac5a5dcec9e96d6f`; preparation branch: `feature/webui`.
+- Existing migration and governance work is retained. No WebUI framework, product requirements, architecture decision, or quality threshold is invented.
+- Implementation scope: developer dependencies/configuration, existing governance and record files, `test/ci_gates.py`, `test/offline/test_ci_gates.py`, and `.github/workflows/ci.yml`.
+- Verification strategy: positive and negative gate tests; native configuration validation in a temporary project; actual schema/structure checks; lint, full-source type checks, dependency checks, and network-isolated regression. Do not turn baseline failures into passes.
+- Plan/test approval evidence: the current conversation authorizes this preparation task. It is not a GitHub `[test-plan-approved]`, `[safety-approved]`, or `[governance-approved]` review, and it must not be represented as one.
+- Human review status: pending. No final human verdict has been issued.
+
+## Per-pull-request record format
+
+For each real PR, append its URL, base/head commits, reviewer identity, review time, and scope. Cover requirements and architecture alignment, code and test quality, security, efficiency, operational metadata, actual commands/results, exceptions, and unresolved blockers. Record the actual human verdict: `APPROVE`, `CHANGES REQUIRED`, or `REJECT`. An agent recommendation must be identified separately.
+
+## GitHub review protocol
+
+Current policy, revised 2026-11-21 in ADR-012-error-handling-merge-integration.md: use ordinary human GitHub reviews and the repository's native branch protection. CI no longer requires special approval markers, a tests/design-only commit, or retrospective reconstruction of approval chronology. The compatibility `approval` command only explains this ownership and does not certify review.
+
+Continue to agree on iteration plans and tests, record authentic decisions and their scope, and update an ADR for safety-relevant changes. Reviewers assess safety and governance changes as part of their normal PR review. Never invent reviewer identities, timestamps, approvals, or model-quality evidence.
+
+A read-only protection check on 2026-11-21 confirmed one required approving review, code-owner review, stale-review dismissal, last-push approval and administrator enforcement on `release`. Required status-check contexts were empty; `blocking-gate` is not proven required by that configuration. No remote setting was changed. Dated records below describe the policy and evidence at their recorded time; obsolete marker/chronology requirements are historical, not current instructions.
+
+## First CI adoption
+
+Workflow and checker changes require human inspection through normal PR review. This repository cannot protect its own unmerged workflow from every hostile edit; require the stable `blocking-gate` check and human review through GitHub rulesets/branch protection before relying on enforcement. The former special-marker protocol is retired, not retrospectively satisfied.
+
+## Local verification evidence — 2026-10-24
+
+- Environment used for these historical checks: Python 3.12.14 in an ignored `.venv`, subsequently removed during cleanup.
+- Gate tests: 42 passed with real network disabled. Ruff, dependency consistency, permissions, and structural checks passed.
+- Complete regression with Python sockets disabled: 984 passed, 4 inherited failures, 2 skipped, 88 subtests passed.
+- Full-source mypy: 202 errors in 27 files (84 source files checked). These existing application findings were not suppressed or repaired by this preparation change.
+- Bandit at medium severity and above: 5 findings; these require human triage, not an assumption that every result is exploitable.
+- Schema gate correctly blocks the empty requirements registry. No product requirements were invented.
+- Workflow syntax/expressions passed actionlint 1.7.12. Native OpenCode accepted the configuration and all four roles in a temporary project. A freshly built wheel installed into a clean temporary environment, imported outside the repository, and retained the CLI resource and working help command.
+- Dependency audit passed for 122 exact installed third-party versions; only this local application was excluded. No other editable dependencies are accepted.
+- Hosted workflow, real reviewer approvals, and live model/data API behavior have not been exercised by these local checks.
+- Read-only GitHub inspection: default branch `release`, repository public, current account has admin permission, no rulesets. Existing release protection enforces admins, one human review, stale-review dismissal, last-push approval, and code-owner review; required-status-check contexts are empty. Remote settings have not been modified.
+
+## Cleanup and commit authorization — 2026-10-24
+
+- The user explicitly requested cleanup of generated intermediate files and caches, followed by one Git commit, and instructed that this preparation work does not need further tests.
+- Removed local virtual environments, Python and tool caches, editable-install metadata, temporary build outputs, and task-specific temporary reports. Removed the verbose dependency inventory from this memo; the concise historical results above remain historical evidence.
+- Retained source and CI implementation files, existing tests, governance documents, and intentional empty requirements/design placeholders. Preserved the existing deletion of `CHANGELOG.md` and removed its stale references.
+- No tests were run for this cleanup. No new passing-check or human-review verdict is claimed. Commit authorization does not imply final governance approval.
+- Push, merge, deployment, product development, and remote repository settings remain outside this cleanup scope.
+
+## Requirements and architecture drafting — 2026-11-05
+
+- Scope authorized by the user: discuss WebUI requirements in batches, then enter the Docs phase and write project documents in English. Product implementation, tests, commits, pushes, merges, deployments, dependency installation, and live API calls were not authorized.
+- Confirmed product baseline: local single-user WebUI on `127.0.0.1` without authentication; one active run at a time; coexist with an unchanged CLI and core; complete eight-step wizard; live progress, messages, tools, statistics, and full I–V report; read-only history over existing artifacts; backtest launch and results; checkpoint controls; portfolio JSON by paste or upload; cancellation with CLI-equivalent semantics; server-only provider keys; announcements with TUI parity; Chinese/English UI.
+- Explicit exclusions: new data sources/models, agent or prompt changes, trading execution, multi-user/tenancy/billing, new databases or message queues, cloud/container deployment, PDF/Word export, native mobile, multi-ticker analysis outside backtest, cross-run comparison/scoring, and any change to CLI or core behavior.
+- Artifacts created: `docs/req/requirements.yaml` (26 draft requirements, 69 acceptance criteria), `architecture-blueprint.md`, `docs/architecture/adr/001-choice.md`, `docs/architecture/invariants.md`, `docs/architecture/trace-matrix.md`, `docs/architecture/risk-list.md`, `docs/architecture/runtime-policy-catalog.md`, `docs/architecture/memory-design.md`, `docs/architecture/option-ledger.md`, `docs/architecture/evaluation-table.md`, and `docs/architecture/evaluation-logbook.md`. `README.md` was updated to point to the draft documents and to state that drafts do not authorize implementation.
+- Validation performed: local YAML parsing with duplicate-key detection and a targeted validator mirroring the schema and gate rules passed (26 requirements, 69 unique criteria). The official `python -m test.ci_gates schema` was not run because the host lacks `PyYAML`, `jsonschema`, and `json5`; dependency installation was not authorized. No product tests or live tests were run.
+- Human approval status: the user confirmed the discussion baseline and authorized this Docs phase in the current conversation. The written artifacts themselves have not received a review verdict. No `[test-plan-approved]`, `[safety-approved]`, or `[governance-approved]` review is claimed.
+- Open decisions: web framework, event transport, frontend stack, final package path, default UI language, preference-file writes, backtest cancellation, download packaging, and the event-latency target.
+- No implementation, dependency change, CI change, commit, push, or remote setting change was performed in this phase.
+
+## Design approval and decision recording — 2026-11-05
+
+- Human decision: the user approved the architecture design presented in the current conversation, including TypeScript + React + UI technology and the delegated backend, transport, packaging, history, security, and run-control choices. This approval covers documentation only; it is not a GitHub `[safety-approved]`, `[test-plan-approved]`, or `[governance-approved]` review.
+- Approved decisions: FastAPI + Uvicorn single worker; SSE; React 19 + TypeScript + Vite; Tailwind + shadcn/Radix + Lucide; Zustand + TanStack Query; React Hook Form + Zod; react-markdown + rehype-sanitize; react-i18next with English default and Chinese switch; `src/tradingagents_web/` with `[web]` extra and `tradingagents-web` entry point; in-memory single run; read-only hash-id history; complete Markdown + zip downloads; analysis cancellation only; no backtest cancellation; loopback without authentication with Host/Origin/CSRF/CSP controls; server-only keys; no server paths.
+- Artifacts updated: `architecture-blueprint.md`, `docs/architecture/adr/001-choice.md` (updated), `docs/architecture/adr/002-backend-framework-and-transport.md` through `007-run-controls.md` (new), `docs/architecture/invariants.md` (001–015), `docs/architecture/trace-matrix.md`, `docs/architecture/permission-model.md` (filled), `docs/architecture/memory-design.md`, `docs/architecture/runtime-policy-catalog.md`, `docs/architecture/option-ledger.md`, `docs/architecture/risk-list.md`, `docs/architecture/evaluation-table.md`, `docs/architecture/evaluation-logbook.md`, `docs/debt-register.md`, `README.md`, and `docs/ai-use-log.yaml`.
+- Validation performed: the requirements registry was unchanged; its earlier local YAML and targeted schema/gate-equivalent checks remain the only executed validation. Blueprint architecture anchors were checked locally and resolve. No architecture experiment, product test, packaging test, browser test, latency measurement, dependency audit, or live call was executed. The official `python -m test.ci_gates schema`, structure, lint, type, dependency, and security checks remain unrun because the host lacks the dev dependencies.
+- Planned versus actual: `docs/architecture/evaluation-table.md` lists EVAL-01 through EVAL-10 as planned; `docs/architecture/evaluation-logbook.md` records only the executed documentation checks. No planned result is reported as passing.
+- Remaining before implementation:
+  1. A concrete test plan with implemented test nodes and fixtures, approved via `[test-plan-approved]` on a test-only revision.
+  2. Current-head `[safety-approved]` for the new web entry point (ADR-001 through ADR-007).
+  3. Current-head `[governance-approved]` for `pyproject.toml`, CI, dependency, packaging, and permission changes.
+  4. Dependency, license, and advisory approval for FastAPI, Uvicorn, and the npm dependency tree.
+  5. Official schema, structure, lint, type, dependency, and security checks in an approved environment.
+  6. Human review of the filled permission model and the blueprint as written artifacts.
+  7. Live-test authorization before any live model/data verification.
+- No implementation, dependency installation, `pyproject.toml` change, CI change, commit, push, merge, deployment, or remote setting change was performed.
+
+## Iteration-1 test plan review request — 2026-11-05
+
+- Scope: read-only WebUI history and report browser. Requirements: `REQ-WEB-010`, `014`, `020`, `021`, `023`, `024`, `025`, `026` (18 acceptance criteria). Deferred: analysis runs, SSE, cancellation, checkpoints, portfolio, backtest launch, config/wizard, key input.
+- Test files written: `test/offline/web_fixture_app.py`, `test/offline/test_web_history.py`, `test/offline/test_web_security.py`, `test/offline/test_web_contracts.py`, `test/offline/test_web_frontend_contract.py`.
+- Test design: normal history/report/download flows; invalid IDs and traversal; missing/partial/malformed artifacts; loopback/Host/CORS/CSP; secret redaction; no server paths; read-only mutations; no execution route; core/CLI signature and import compatibility; i18n and frontend static contracts.
+- Execution status at the time of the review request: **not run**. The host lacked `pytest`, `fastapi`, `httpx`, and a runnable `tradingagents` test environment; dependency installation had not yet been authorized. Only a Python AST syntax check was executed on the five test files.
+- Expected failure class while product code is absent: `EXPECTED-UNIMPLEMENTED` from the test helper. These are expected, not passing, not skipped, and not test defects.
+- Coverage gaps requiring the frontend harness: behavioral i18n report-language independence (`FC-WEB-014-02`), browser execution (`FC-WEB-021-01`), and runtime XSS/sanitization (`FC-WEB-025-01/02`) currently have static contract checks only. They must not be marked verified until Playwright/Vitest execute them.
+- GitHub test-plan approval: **none is claimed.** To record a real `[test-plan-approved]`, commit and push this exact test-only revision (tests plus the unchanged requirements and blueprint), then have a trusted human reviewer submit a review containing `[test-plan-approved]` on that commit before any implementation commit. The reviewer decision is human-owned; this memo is only a request for review.
+- At the time of this review request, no product code, dependency installation, commit, push, merge, deployment, or remote setting change had been performed.
+
+## Iteration-1 test version approval — 2026-11-05
+
+- Reviewer: human project owner, in the current conversation.
+- Time: 2026-11-05.
+- Scope: the iteration-1 read-only history/report test version identified by content hash `0923433e9108ab8c6a2ce3f7e8505e8b8efc1b5b8848825c83df923b2c47b9e7` (five files under `test/offline/`), covering `REQ-WEB-010`, `014`, `020`, `021`, `023`, `024`, `025`, `026`.
+- Verdict: **APPROVE** for this test version only.
+- Limits: this is a conversation approval, not a GitHub `[test-plan-approved]` review, not approval to install dependencies, and not approval to start product implementation. At the time of this approval the test version had not been executed; a separate authorization was later given to install test dependencies and run it.
+- Remaining gates: dependency/license/advisory approval; a real GitHub `[test-plan-approved]` on a committed test-only revision if CI gating is used; `[safety-approved]` for the web entry point; `[governance-approved]` for `pyproject.toml`/CI/packaging.
+- No commit, push, or product implementation was performed at this stage.
+
+## Iteration-1 test execution — 2026-11-05
+
+- Authorization: the user authorized creating `.venv`, installing test dependencies, and executing the approved test version.
+- Environment: Python 3.14.3; repo-local `.venv`; `pip install -e '.[dev]' fastapi uvicorn httpx`. The `[web]` extra does not exist yet, so the equivalent runtime/test packages were installed directly. `pyproject.toml` was not changed.
+- New WebUI tests: **5 passed, 13 failed, 40 errors** in 11.36 s. All 13 failures and 40 errors are `EXPECTED-UNIMPLEMENTED` (`tradingagents_web` or frontend files absent). No unexpected failure or test defect was observed. The 5 passes are the core/CLI compatibility checks in `test_web_contracts.py`.
+- Official gates: `python -m test.ci_gates schema` **PASS**; `python -m test.ci_gates structure` **PASS**.
+- Existing compatibility: `test/offline/test_cli_commands.py` + `test/offline/test_reporting.py` **14 passed**; import smoke **OK**; ruff on the five new test files **passed**.
+- Existing regression (all tests excluding the four new WebUI test files): **984 passed, 4 failed, 2 skipped, 88 subtests passed**. The 4 failures are the documented historical baseline failures (`test/live/test_no_data_handling.py::TestLoadOhlcvNoPoison::test_empty_download_raises_and_does_not_cache`; three `test/offline/test_ohlcv_cache_freshness.py` tests). No new regression was introduced.
+- Not run: architecture experiments EVAL-01 through EVAL-10; Playwright browser execution; frontend Vitest; packaging/clean install; full mypy; Bandit; live model/data calls.
+- No product code was implemented; no commit, push, merge, deployment, or remote setting change was performed.
+
+## Iteration-1 implementation — 2026-11-06
+
+- Authorization: the user instructed the agent to start implementing Iteration 1 after approving the architecture and test version.
+- Scope implemented: read-only WebUI history/report browser only. No analysis runs, SSE, cancellation, checkpoints, portfolio, backtest launch, config/wizard, or key input.
+- Backend: `src/tradingagents_web/` with FastAPI app factory, loopback/Host/CSP middleware, safe error payloads, artifact index/readers/downloads, health and history APIs, CLI entry point.
+- Frontend: React 19 + TypeScript + Vite source under `src/tradingagents_web/frontend/`, i18n catalogues, sanitized Markdown, history/detail pages, browser matrix, Playwright config. Build output goes to `src/tradingagents_web/static/` and is ignored by Git.
+- Packaging: `pyproject.toml` adds the `[web]` extra, `tradingagents-web` entry point, `httpx` to dev, and `tradingagents_web/static/**` package data. `.gitignore` ignores frontend `node_modules`, generated `static/`, and Playwright outputs.
+- Verification (Python 3.14.3, repo-local `.venv`):
+  - WebUI tests: **58 passed**.
+  - Full regression: **1042 passed, 4 failed, 2 skipped, 88 subtests passed**. The 4 failures are the documented historical baseline failures; no new regression.
+  - `test.ci_gates schema` and `structure`: **PASS**.
+  - `mypy src/tradingagents_web`: **Success, no issues**.
+  - `ruff` on the new package and tests: **All checks passed**.
+  - CLI/reporting compatibility: **14 passed**; import smoke: **OK**.
+  - Frontend `npm run lint`, `npm run typecheck`, `npm run build`: **PASS**.
+  - `npm audit`: **0 vulnerabilities** after upgrading Vitest and overriding minimatch.
+  - Wheel inspection: `tradingagents_web/static/index.html` and the `tradingagents-web` console script are present.
+  - Static/API smoke: `/`, `/history`, `/api/health`, `/api/history` return **200**.
+- Deviations and unfinished items:
+  - Local verification uses Python 3.14.3, outside the CI 3.10–3.13 matrix; CI execution is pending.
+  - Frontend Vitest and Playwright browser execution are not implemented/run; behavioral i18n report-language independence, browser matrix, and runtime XSS criteria remain unverified.
+  - Clean-install in a fresh environment and full mypy/Bandit/pip-audit checks are not run.
+  - Requirements statuses remain `draft`; the implementation review verdict is recorded below.
+- No commit, push, merge, deployment, or remote setting change was performed.
+
+## Iteration-1 implementation approval — 2026-11-06
+
+- Reviewer: human project owner, in the current conversation.
+- Time: 2026-11-06.
+- Scope: the Iteration-1 read-only history/report implementation, including the `src/tradingagents_web/` backend, React/TypeScript frontend, `pyproject.toml`/`.gitignore` changes, tests, and verification evidence described above.
+- Verdict: **APPROVE** for the Iteration-1 implementation.
+- Evidence accepted: WebUI tests 58 passed; full regression 1042 passed with 4 documented historical failures; schema/structure gates passed; new-package mypy and ruff passed; frontend lint/typecheck/build passed; npm audit 0; wheel contains static assets and the `tradingagents-web` entry point.
+- Limits: this is a conversation approval, not a GitHub `[safety-approved]`, `[governance-approved]`, or `[test-plan-approved]` review. The frontend Vitest/Playwright behavioral gaps, clean-install check, CI 3.10–3.13 run, full mypy/Bandit/pip-audit, and live tests remain open. Requirements registry statuses remain `draft`; no separate requirements-verification verdict is claimed.
+- No commit, push, merge, deployment, or remote setting change was performed.
+
+## Iteration-2 test version review request — 2026-11-06
+
+- Scope: merged Iteration-2 (run control plane + wizard/live UI). Requirements: `REQ-WEB-001`–`009`, `013`, `014`, `020`–`029`, `031`; deferred: `REQ-WEB-011` (backtest), `REQ-WEB-012` (announcements), `REQ-WEB-030` (backtest isolation).
+- Test version hash: `de2193180ffd42f17e13f6adb9c2b223fb38de85663ca1432873c248db0cdfca`.
+- Backend test files: `test/offline/web_fixture_app.py`, `test_web_config.py`, `test_web_runs.py`, `test_web_events.py`, `test_web_portfolio.py`, `test_web_checkpoints.py`, `test_web_reporting.py`, plus extended `test_web_security.py` and `test_web_contracts.py`.
+- Frontend test files: `frontend/vitest.config.ts`, `frontend/src/test-setup.ts`, `frontend/tests/i18n.test.ts`, `markdown-sanitize.test.tsx`, `wizard-validation.test.ts`, `run-store.test.ts`, `frontend/e2e/run.spec.ts`.
+- Backend execution (Python 3.14.3, `.venv`): **15 failed, 30 passed, 40 errors**. All 15 failures and 40 errors are `EXPECTED-UNIMPLEMENTED` because the Iteration-2 `tradingagents_web.api.*` / `runtime.*` modules do not exist. The 30 passes include existing Iteration-1 security/history/contract tests; the separate Iteration-1 suite remains **58 passed**.
+- Frontend execution (`vitest`, jsdom): **4 tests passed, 2 suites failed to resolve**. The two failures are `EXPECTED-UNIMPLEMENTED` (`src/pages/NewAnalysis/validation` and `src/stores/runStore` do not exist). `i18n.test.ts` and `markdown-sanitize.test.tsx` pass. `npm run lint` passes.
+- Test defect found and fixed during execution: the Markdown script test originally placed `<script>...</script>safe text` in one HTML block, so the safe text was sanitized with it. The test now uses a separate paragraph; the sanitizer assertion was not weakened.
+- Not run: Playwright E2E (browser binaries/implementation absent), real model/data calls, live tests.
+- Coverage: normal/failure/permission/CSRF/CLI–Python compatibility are represented in the test files. Full behavioral acceptance cannot pass until Iteration-2 product code exists.
+- GitHub test-plan approval: **none is claimed.** To record a real `[test-plan-approved]`, commit and push this exact test-only revision, then have a trusted human reviewer submit a review containing `[test-plan-approved]` on that commit before implementation. The reviewer decision is human-owned.
+- No product code, commit, push, merge, deployment, or remote setting change was performed.
+
+## Iteration-2 implementation — 2026-11-06
+
+- Authorization: the user approved the merged Iteration-2 plan and test version and instructed implementation to proceed.
+- Scope implemented: eight-step analysis wizard, server-side config projection and key status, portfolio validation, checkpoint toggle/clear, single-run coordinator, SSE live view, cancellation, reattachment, run artifacts, completed report, and history integration. Backtest launch and announcements remain deferred.
+- Backend: `api/session.py`, `api/config.py`, `api/portfolio.py`, `api/checkpoints.py`, `api/runs.py`, `runtime/coordinator.py`, `graph_runner.py`, `projector.py`, `event_buffer.py`, `artifacts_writer.py`, and request models. CSRF is now active for start/cancel/portfolio/checkpoint POSTs; unknown POST routes still return 404/405.
+- Frontend: wizard, validation module, run store, run API client, live-run page, new-analysis route, navigation link, and expanded i18n/UI strings. Added `zustand` and its lockfile entries.
+- Verification (Python 3.14.3; Node 24.13.0):
+  - WebUI backend suite: **113 passed**.
+  - Full regression: **1097 passed, 4 failed, 2 skipped, 88 subtests passed**. The 4 failures are the documented historical baseline failures.
+  - `test.ci_gates schema` and `structure`: **PASS**.
+  - `mypy src/tradingagents_web`: **Success**; `ruff`: **All checks passed**.
+  - Frontend Vitest: **10 passed** (4 files); `npm run typecheck`, `npm run lint`, `npm run build`: **PASS**.
+  - `npm audit`: **0 vulnerabilities**.
+  - Wheel includes the new Iteration-2 modules and built static assets.
+- Deviations / not run:
+  - Playwright E2E was not executed at the time of implementation verification; the Chromium E2E follow-up is recorded below.
+  - The real `GraphRunner` path was not exercised against a live model/data provider; automated tests use `FakeGraphRunner`. Live tests require separate credentials/cost authorization.
+  - Clean install in a fresh environment, full mypy, Bandit, and pip-audit were not run.
+  - Requirements registry statuses remain `draft`; no separate requirements-verification verdict is claimed.
+- Test-version delta: the approved test hash `de2193180ffd42f17e13f6adb9c2b223fb38de85663ca1432873c248db0cdfca` changed to `542fc400fb2541fb1f25220791dc5eb41873280dc940b132d48064b345660cb1` after two test-support fixes during implementation: `parse_sse` now flushes the final SSE frame, and `_collect_events` stops on a `data:` line instead of the preceding `event:` line. No assertion was weakened. This test delta requires review.
+- No commit, push, merge, deployment, or remote setting change was performed.
+
+## Iteration-2 Chromium E2E — 2026-11-06
+
+- User instruction: use Chromium only; do not use Firefox or WebKit.
+- Added `test/offline/web_e2e_server.py` (fake-backend FastAPI server with `E2ERunner`), Playwright `webServer` configuration, and `e2e/run.spec.ts` covering history, wizard → live → completed report, and cancel.
+- Fixed the live page's SSE handling: custom SSE event types were previously ignored by `onmessage`; the page now subscribes per event type and closes the stream on a terminal event.
+- Result: **4/4 Chromium E2E passed** in 7.9 s. Chromium uses the installed Google Chrome channel rather than a downloaded Playwright browser.
+- Supporting checks: frontend Vitest **10 passed**, typecheck/lint/build passed, `npm audit` **0 vulnerabilities**.
+- Not run by instruction: Firefox and WebKit E2E. The browser matrix remains partially verified.
+- Not run: real GraphRunner/live model/data path, clean install, full mypy/Bandit/pip-audit.
+- No commit, push, merge, deployment, or remote setting change was performed.
+
+## Iteration-3 test version review request — 2026-11-06
+
+- Scope: `REQ-WEB-011` (backtest launch/results), `REQ-WEB-012` (announcements), and `REQ-WEB-030` (backtest/live isolation and read-only history). No product code was implemented.
+- Authorization: the user approved the Iteration-3 plan and test plan in the current conversation and instructed test-first work.
+- Test version hash: `18f712b9148496d5a61f4ba25b620b257f23a44e37f1694c6971385d19cf308f`.
+- Hash method: SHA-256 over the 12 changed/new test files, sorted by repository path, hashing `path`, NUL, file bytes, NUL for each file. This method is stated explicitly because earlier hashes were recorded without a reproducible command.
+- Backend files: `test/offline/web_fixture_app.py`, `test_web_backtest.py`, `test_web_announcements.py`, `test_web_contracts.py`, `test_web_security.py`.
+- Frontend files: `tests/iteration3-support.ts`, `backtest-validation.test.ts`, `backtest-summary.test.tsx`, `announcements.test.tsx`, `backtest-i18n.test.ts`, `e2e/backtest.spec.ts`, `e2e/announcements.spec.ts`.
+- Backend execution (Python 3.14.3, `.venv`): **113 passed, 6 failed, 28 errors** for `test/offline/test_web_*.py`. All 34 new failed/error items are `EXPECTED-UNIMPLEMENTED` because `tradingagents_web.api.backtests`, `api.announcements`, `models.backtest_requests`, and `runtime.backtest_runner` do not exist. No unexpected failure or test defect was observed.
+- Frontend execution (`vitest`, jsdom): **10 passed, 15 failed**. All 15 failures are `EXPECTED-UNIMPLEMENTED`: the backtest validation/summary/announcement components and the new i18n keys are absent. The 10 existing Iteration-1/2 frontend tests still pass.
+- Chromium Playwright: **4 passed, 2 failed**. The two new specs report `EXPECTED-UNIMPLEMENTED` because `/api/backtests` and `/api/announcements` return 404. The four existing history/wizard/cancel specs still pass.
+- Static checks: Python compileall and ruff on the changed test files **passed**; frontend ESLint on `tests` and `e2e` **passed**.
+- Test coverage added: CLI-equivalent backtest parameters, summary fields, log artifact download, `run_id` resume, single-slot conflict with analysis, isolated live memory, failure isolation, no backtest cancel route, read-only backtest history, invalid requests, CSRF/Origin enforcement, secret/path redaction, announcement success/fallback/malformed payload/cache/no-path, unsafe announcement rendering, frontend validation, summary rendering, no cancel control, blocking acknowledgement, and i18n key presence.
+- Not run: full regression (the new suites intentionally fail until implementation), real `run_backtest` model/data calls, real announcement network calls, Firefox/WebKit, clean install, full mypy/Bandit/pip-audit.
+- GitHub test-plan approval: **not claimed**. The local test revision is frozen for human review; implementation must not begin until this test version is approved.
+- No product code was implemented. The test-only revision is committed locally and has not been pushed; no merge, deployment, or remote setting change was performed.
+
+## Iteration-3 implementation — 2026-11-06
+
+- Authorization: the user approved the Iteration-3 plan and the test version in the current conversation.
+- Scope implemented: backtest launch/status/summary/log download, read-only backtest history, shared single-run slot with analysis, server-side announcements with fallback/cache, blocking announcement acknowledgement, and frontend Backtest/Announcements pages.
+- Backend modules: `api/backtests.py`, `api/announcements.py`, `runtime/backtest_runner.py`, `models/backtest_requests.py`; coordinator extended with `BacktestRecord` and shared-slot `start_backtest`; history download extended with `kind=log`; CSRF covers `/api/backtests`.
+- Frontend: `BacktestPage`, `BacktestRunPage`, `Backtest/validation.ts`, `Backtest/BacktestSummary.tsx`, `Announcements.tsx`, `api/backtestClient.ts`, routes, history link, and i18n strings. No new npm dependency was added.
+- Verification (Python 3.14.3; Node 24.13.0):
+  - WebUI backend suite: **147 passed**.
+  - Frontend Vitest: **25 passed** (8 files).
+  - Chromium Playwright E2E: **6 passed** (history, announcements, backtest, wizard/live/report, cancel).
+  - Full regression: **1131 passed, 4 historical failures, 2 skipped, 88 subtests passed**. The 4 failures are the documented historical baseline failures.
+  - `test.ci_gates schema` and `structure`: **PASS**.
+  - `mypy src/tradingagents_web`: **Success, 31 source files**; `ruff`: **All checks passed**.
+  - Frontend typecheck, lint, and build: **PASS**; `npm audit`: **0 vulnerabilities**.
+  - CLI help/import smoke: **PASS**.
+  - Wheel includes the new backtest/announcement modules and built static assets.
+- Test-version delta: only `test/offline/web_e2e_server.py` changed during implementation (+46 lines) to add fake backtest and announcement providers for the already-approved E2E specs. No test assertion was changed; the frozen 12-file hash `18f712b9148496d5a61f4ba25b620b257f23a44e37f1694c6971385d19cf308f` remains unchanged.
+- E2E fix: the English label for the history section was changed from "Backtest history" to "Past sweeps" because the approved locator `getByRole("heading", { name: /backtest/i })` is strict-mode and matched two headings. No test was weakened.
+- Not run: real `run_backtest` model/data calls, real announcement network calls, Firefox/WebKit, clean install, full mypy/Bandit/pip-audit, GitHub review markers.
+- Startup help/banner text was corrected after implementation to describe analysis, backtest, and history instead of the Iteration-1 read-only wording.
+- No push, merge, deployment, or remote setting change was performed.
+
+
+## Analysis-path repair authorization — 2026-11-06
+
+- The user requested a read-only investigation of basic WebUI analysis, then explicitly authorized the proposed repairs after confirming that original CLI/core functionality must remain unchanged.
+- Product-code allowlist: `src/tradingagents_web/`. Supporting changes cover Web tests, architecture refinement, traceability, bug records, and actual AI-use/verification evidence. No original core/CLI source, dependencies, CI rules, or credentials are modified.
+- Scope: effective configuration and provider/model selection; complete snapshots/SSE recovery; safe visible failures and correlated redacted logs; artifact initialization cleanup; isolated per-run reports; real graph progress and resume state.
+- Test changes retain assertions; two existing artifact-path expectations now point to the isolated Web run directory. The offline integration test uses actual GraphRunner, TradingAgentsGraph, LangGraph, memory and report writers, replacing only model/identity-provider boundaries. Browser tests also retain existing assertions and add reload verification.
+- The user explicitly authorized local Chromium browser verification after automatic approval initially applied the earlier preparation-only no-test instruction. No live model/data smoke, Git commit, push, merge, or deployment is authorized by that approval.
+- Final human review and GitHub review markers remain pending. Requirements retain their existing approval/status records.
+
+
+## Real API failure follow-up — 2026-11-06
+
+The user supplied a real-run traceback for `c_6c77fd7723f2`. The direct exception is Yahoo Finance throttling in the market tool, rather than an LLM-authentication error. Continuing the authorized Web-only repair, the error mapper now distinguishes this condition and typed market-data failures from other execution errors. No original CLI/core behavior, vendor policy, retry budget, credentials, or external-service configuration is changed. Validation uses an actual tool-calling core graph with isolated fake provider boundaries. Live provider calls remain unrun; resolving actual Yahoo throttling requires data-source recovery or an explicitly chosen existing vendor configuration.
+
+The user subsequently confirmed that no alternative vendor key is available and chose to continue using Yahoo Finance. Keep the existing vendor selection and retry policy; do not add implicit fallbacks or background live requests.
+
+
+## Release core records (79103c3)
+
 # Review Memo — Human Review Record
 
 Each project phase requires an explicit recorded human review before it is
@@ -17,7 +277,7 @@ complete. Reviews are recorded here; AI-tool use is recorded separately in
   clean; governance validator PASS (43/43); `git diff --check` clean (logbook
   082). There is **no current live-provider run, no remote-CI-green claim, no
   human signoff/acceptance, and no commit/push**. **Independent AI verification
-  (Codex, 2026-11-11): CONFIRMED offline** — 107 focused cap tests passed; full
+  (OpenCode, 2026-11-11): CONFIRMED offline** — 107 focused cap tests passed; full
   strict-offline 2154 passed / 1 skipped / 1 deselected / 22 warnings / 88
   subtests / 0 forbidden socket attempts; Ruff clean; governance validator PASS
   (43/43); `git diff --check` clean; HEAD `5ecea91` unchanged and frozen files
@@ -47,7 +307,7 @@ complete. Reviews are recorded here; AI-tool use is recorded separately in
   strict-offline suite 1844 passed, 0 socket attempts); the historical figures
   below are preserved as history.
 
-  **INDEPENDENT Codex verification of this repair (2026-11-11; AI technical
+  **INDEPENDENT OpenCode verification of this repair (2026-11-11; AI technical
   evidence, NOT remote-green and NOT human acceptance):** focused three modules
   **76 passed / 0 socket attempts**; forced-no-jsonschema governance **52 passed,
   6 skipped / 0 attempts**; full strict offline **1844 passed, 1 skipped, 1
@@ -61,7 +321,7 @@ complete. Reviews are recorded here; AI-tool use is recorded separately in
 
 - **LATEST final-commit live verification (supersedes the earlier absence of a
   post-follow-up full-workflow run; NOT human acceptance).** At the human's
-  explicit request, Codex reran the actual school model on committed source
+  explicit request, OpenCode reran the actual school model on committed source
   `bda6e3a135976bcdb66f84e02ebda666167177e2`, with a clean starting tree and
   matching 214-file source/test fingerprints before and after execution.
   Both bounded workflows completed: 25 application calls, 219496 reported
@@ -169,7 +429,7 @@ complete. Reviews are recorded here; AI-tool use is recorded separately in
   made) from the existing `test_no_data_handling` baseline, so **NFR-OFF-001 stays
   PARTIAL/OPEN**; the suite is **NOT all-green**. No baseline test/CI/waiver was
   modified.
-- **Independent Codex AI verification (HISTORICAL / PRE-REPAIR, logbook 072; the
+- **Independent OpenCode AI verification (HISTORICAL / PRE-REPAIR, logbook 072; the
   "583 passed / 1768 passed" figures are superseded by the CURRENT DISPOSITION
   above; NOT human acceptance):** 14-file focused suite **583 passed / 2
   warnings**; validator **42/42 PASS** + no secret hits; independent boundary
@@ -178,7 +438,7 @@ complete. Reviews are recorded here; AI-tool use is recorded separately in
   deselected** with the same **1** intercepted baseline attempt; Ruff clean;
   `git diff --check` clean. This was the pre-repair recorded result and is AI
   technical verification only.
-- **User-authorized school-model live run (2026-11-10, Codex; docs-only record;
+- **User-authorized school-model live run (2026-11-10, OpenCode; docs-only record;
   NOT human acceptance; logbook 073 — HISTORICAL / PRE-REPAIR; superseded for its
   "0 complete rounds / DEBT-021 OPEN" status by the CURRENT DISPOSITION / logbook
   074):** measured by external callbacks, **16
@@ -325,9 +585,9 @@ visible. Raw session backups and live-run artifacts remain in
 
 ## Phase 3B — Dynamic debate termination
 
-- **Status:** Review requested; human/Codex review performed; verification
+- **Status:** Review requested; human/OpenCode review performed; verification
   recorded.
-- **Reviewer:** Human (project) with Codex review.
+- **Reviewer:** Human (project) with OpenCode review.
 - **Date:** 2026-10-21
 - **Decision:** Implementation accepted with corrections applied (see
   `docs/bug-diary.md`).
@@ -762,7 +1022,7 @@ harness 4 failed / 1768 passed / 1 skipped / 1 deselected (same 4 known
 baselines) with 1 intercepted attempt (NFR-OFF-001 PARTIAL/OPEN); Ruff clean;
 `git diff --check` clean (logbook 071).
 
-**Independent Codex AI verification of the CURRENT files (HISTORICAL /
+**Independent OpenCode AI verification of the CURRENT files (HISTORICAL /
 PRE-REPAIR; logbook 072, NOT human acceptance — superseded by the CURRENT
 DISPOSITION at the top and logbook 074):** 14-file focused suite 583 passed / 2
 warnings; validator 42/42 PASS + no secret hits; independent boundary 39/39;
@@ -789,7 +1049,7 @@ dependencies/CI/active-permissions/human-rules change; no commit/push/PR.
 
 **Verification (offline + bounded live, AI; NOT human acceptance — PRE-FOLLOWUP
 counts; superseded by the CURRENT DISPOSITION / logbook 076):**
-Inline implementation focused suite 387 passed. Codex independent re-run of the
+Inline implementation focused suite 387 passed. OpenCode independent re-run of the
 then-current frozen PRE-FOLLOWUP tree: 639 focused offline tests passed, 0
 forbidden socket attempts, 19/19 external boundary probes; full canonical
 `scripts/validate/strict_offline_harness.py` 1817 passed, 4 SAME known baseline
@@ -799,7 +1059,7 @@ attempt (no connection); Ruff/governance 42/42/diff clean; code fingerprint of
 214 files unchanged across the live verification (this fingerprint statement
 applies to the PRE-FOLLOWUP tree only, not the final post-followup tree).
 
-Bounded real school-model validation COMPLETED (Codex; guarded at 32 requests /
+Bounded real school-model validation COMPLETED (OpenCode; guarded at 32 requests /
 250000 observed tokens / 4096 output-per-call / 120 s per request / 1200 s wall;
 25 actual application calls, 228903 reported gateway tokens, 0 retries, no
 trades, no threshold tuning). Evidence backup:
@@ -855,7 +1115,7 @@ no prior signatures are changed.
   warnings, 88 subtests, 0 forbidden socket attempts; `ruff check .` clean;
   governance validator PASS (43/43); `git diff --check` clean (logbook 079).
 - **Decision / status:** Stage 1 is **technically verified offline** and awaits
-  **independent reviewer (Codex) verification** and **later explicit human
+  **independent reviewer (OpenCode) verification** and **later explicit human
   acceptance**. No human approval is claimed or invented; no prior signatures are
   changed. Not a remote-CI-green claim (push not authorized). Not a live-vendor
   proof. Stages 2–4 are NOT implemented; residual gaps recorded (DEBT-015,
@@ -887,7 +1147,7 @@ no prior signatures are changed.
   socket attempts; `ruff check .` clean; governance validator PASS (43/43);
   `git diff --check` clean (logbook 080).
 - **Decision / status:** Stage 2 is **technically verified offline** and awaits
-  **independent reviewer (Codex) verification** and **later explicit human
+  **independent reviewer (OpenCode) verification** and **later explicit human
   acceptance**. No human approval is claimed or invented; prior signed decisions
   are preserved unchanged. Not a remote-CI-green claim (push not authorized); not a
   live-provider/live-concurrency proof. Stage 3 (claim date/value/unit) and Stage 4
@@ -918,7 +1178,7 @@ no prior signatures are changed.
   never → 1; reject int/ambiguous dates; timestamp instant comparison) implemented
   and covered.
 - **Decision / status:** Stage 3 is **technically verified offline** and awaits
-  **independent reviewer (Codex) verification** and **later explicit human
+  **independent reviewer (OpenCode) verification** and **later explicit human
   acceptance**. No human approval is claimed or invented; prior signed decisions are
   preserved unchanged. Not a remote-CI-green claim (push not authorized); not a
   live-provider proof. Only typed exact claims and common inline exact prose are
@@ -953,7 +1213,7 @@ no prior signatures are changed.
   `tests/test_exact_claim_runtime.py` 30 passed; full strict-offline suite 2044 passed,
   1 skipped, 1 deselected, 22 warnings, 88 subtests, 0 forbidden socket attempts;
   `ruff check .` clean; governance validator PASS (43/43); `git diff --check` clean.
-- **Status:** still **technically verified offline**; independent Codex review of the
+- **Status:** still **technically verified offline**; independent OpenCode review of the
   final tree and explicit human acceptance remain pending. NOT remote-green; NOT live.
   Stage 4 (cap 0.60) NOT started.
 
@@ -976,7 +1236,7 @@ no prior signatures are changed.
   sockets; `ruff check .` clean; governance validator PASS (43/43); `git diff
   --check` clean (logbook 082).
 - **Decision / status:** Stage 4 is **technically verified offline** and awaits
-  **independent reviewer (Codex) verification** and **later explicit human
+  **independent reviewer (OpenCode) verification** and **later explicit human
   acceptance**. No human approval is claimed or invented. Not a remote-CI-green
   claim (push not authorized); not a live-provider proof. 0.60 is an engineering
   ceiling, not a calibrated probability/accuracy claim nor production threshold
@@ -1015,19 +1275,19 @@ no prior signatures are changed.
   (baseline 2154 + 36); `ruff check .` clean; governance validator PASS (43/43);
   `git diff --check` clean.
 - **Decision / status:** both fixes are **technically verified offline** and await
-  **independent Codex verification** and **later explicit human acceptance**. The
+  **independent OpenCode verification** and **later explicit human acceptance**. The
   prior incomplete 2026-11-11 school-model live run is NOT relabelled as a fixed
   live proof; both fixes remain offline-only until a separately authorized future
   live verification. No human acceptance is claimed or invented. Not a
   remote-CI-green claim (push not authorized).
 
-### 2026-11-11 — Independent Codex technical review of the two live-finding repairs: COMPLETED (NOT human acceptance; NOT a live retest)
+### 2026-11-11 — Independent OpenCode technical review of the two live-finding repairs: COMPLETED (NOT human acceptance; NOT a live retest)
 
-- **Scope:** independent AI (Codex) technical verification of the repaired tree for
+- **Scope:** independent AI (OpenCode) technical verification of the repaired tree for
   the two confirmed live-run defects (Defect-1 origin authority, Defect-2 structured
   raw usage) and the scoped no-resurrection tombstone edge. Documentation-only sync;
   no source/test changes, no product/vendor/model calls, no Git mutations.
-- **Independent results (Codex, on this tree):** full strict-offline **2190 passed,
+- **Independent results (OpenCode, on this tree):** full strict-offline **2190 passed,
   1 skipped, 1 deselected, 22 warnings, 88 subtests, 0 forbidden socket attempts**;
   focused two new files **36 passed, 0 sockets** (18 origin + 18 structured); Ruff
   clean; governance validator **43/43 PASS** including the likely-secret scan;
@@ -1035,7 +1295,7 @@ no prior signatures are changed.
   files untouched.
 - **Independently rerun reproduction (stale-map + state-tombstone):**
   `gate_retrusted=False`, `direct_consumer_retrusted=False` (previously True/True).
-- **Logs (Codex):** `/Users/wangyiwen/OpenCodeRecords/TradingAgents/2026-11-11-live-findings-repair-independent-full-offline.log`
+- **Logs (OpenCode):** `/Users/wangyiwen/OpenCodeRecords/TradingAgents/2026-11-11-live-findings-repair-independent-full-offline.log`
   and `.../2026-11-11-live-findings-repair-independent-focused.log`.
 - **Status:** independent AI technical review is **COMPLETE** and the earlier
   independent OFFLINE metadata replay remains **OFFLINE only** — neither is a live
@@ -1048,7 +1308,7 @@ no prior signatures are changed.
 - **Authorization:** human WANG Yiwen approved this round's CORRECTED plan AND test
   cases on 2026-11-12 (implementation approval ONLY, NOT final acceptance), per
   `/Users/wangyiwen/OpenCodeRecords/TradingAgents/2026-11-12-price-claim-repair-plan-only.md`
-  (original plan overridden by its Correction 1/2/3). Builder (OpenCode; Codex
+  (original plan overridden by its Correction 1/2/3). Builder (OpenCode; OpenCode
   independent verifier). Branch `feature/data-quality-debate-control`, HEAD
   `5ecea91` unchanged; dirty Stage 1–4 work preserved; no commit/push/PR; no
   reset/revert/stash; no dependencies/CI/permissions/prompt/human-only file edits;
@@ -1074,7 +1334,7 @@ no prior signatures are changed.
   0 forbidden socket attempts**; Ruff (changed source) clean; governance validator
   **43/43 PASS**; YAML/JSON parse OK; `git diff --check` clean.
 - **Status:** IMPLEMENTED and technically verified offline; awaiting **independent
-  Codex review** and **later explicit human acceptance**. The preserved 2026-11-11
+  OpenCode review** and **later explicit human acceptance**. The preserved 2026-11-11
   live evidence is unchanged and is NOT relabelled as post-fix live proof. No human
   acceptance is claimed or invented.
 
@@ -1094,14 +1354,14 @@ coverage/verified assertion and malformed/rejected not-stored checks.
   49 = 100; related regressions 755 passed; full strict-offline **2290 passed, 1
   skipped, 1 deselected, 22 warnings, 88 subtests, 0 forbidden socket attempts**;
   Ruff clean; governance 43/43 PASS; YAML/JSON OK; `git diff --check` clean.
-- **Status:** IMPLEMENTED + offline-verified; awaits independent Codex review and
+- **Status:** IMPLEMENTED + offline-verified; awaits independent OpenCode review and
   later explicit human acceptance. Not a live retest; preserved 2026-11-11 live
   evidence unchanged and not relabelled. Branch `feature/data-quality-debate-control`,
   HEAD `5ecea91` unchanged; no commit/push/PR.
 
-### 2026-11-12 — Independent Codex technical review of the two-defect repair: COMPLETE (NOT human acceptance; NOT a live retest)
+### 2026-11-12 — Independent OpenCode technical review of the two-defect repair: COMPLETE (NOT human acceptance; NOT a live retest)
 
-Independent AI (Codex) technical verification of the final repair tree is complete.
+Independent AI (OpenCode) technical verification of the final repair tree is complete.
 Documentation-only sync; no source/test changes, no product/vendor/model calls, no
 Git mutations.
 
@@ -1135,7 +1395,7 @@ Git mutations.
 ### 2026-11-12 — Verified-span repair (residual false-redaction): IMPLEMENTED + offline-verified (NOT human acceptance; NOT a live rerun)
 
 - **Authorization:** human WANG Yiwen approved this round's plan AND test cases on
-  2026-11-12 (implementation approval ONLY). Builder (OpenCode); Codex independent
+  2026-11-12 (implementation approval ONLY). Builder (OpenCode); OpenCode independent
   verifier. Branch `feature/data-quality-debate-control`, HEAD `5ecea91` unchanged;
   no commit/push/PR; no frozen/config/dependency/schema edits; no live calls.
 - **Defect:** a CORRECT long-decimal typed claim (`value=306127800.0000000000`,
@@ -1160,13 +1420,13 @@ Git mutations.
   regressions 716 passed; full strict-offline **2367 passed, 1 skipped, 1 deselected,
   22 warnings, 88 subtests, 0 socket attempts**; Ruff clean; governance 43/43 PASS;
   YAML/JSON OK; `git diff --check` clean.
-- **Status:** IMPLEMENTED + offline-verified; awaits independent Codex review and
+- **Status:** IMPLEMENTED + offline-verified; awaits independent OpenCode review and
   later explicit human acceptance. Prior 26-call / 202,941-token run remains
   historical bug evidence, not post-fix live proof.
 
-### 2026-11-12 — Independent Codex FINAL technical review of the verified-span repair: COMPLETE (NOT human acceptance; NOT a live rerun)
+### 2026-11-12 — Independent OpenCode FINAL technical review of the verified-span repair: COMPLETE (NOT human acceptance; NOT a live rerun)
 
-- **Scope:** independent AI (Codex) technical review of the repaired verified-span
+- **Scope:** independent AI (OpenCode) technical review of the repaired verified-span
   source/test hashes on covered OFFLINE scope. Documentation/comment sync only; no
   behaviour/test change; no new product live call; no Git mutation.
 - **Independent results (supplied):** full strict-offline **2367 passed, 1 skipped
@@ -1247,9 +1507,9 @@ Git mutations.
   never labelled 3.10 proof), not an actual Python 3.10 run; no 3.10 runtime is
   installed and none was authorized.
 
-### 2026-11-12 — Independent Codex technical verification (COMPLETE) + `zZ` wording correction
+### 2026-11-12 — Independent OpenCode technical verification (COMPLETE) + `zZ` wording correction
 
-- **Status:** independent Codex technical verification of the CURRENT covered offline
+- **Status:** independent OpenCode technical verification of the CURRENT covered offline
   scope is **COMPLETE**. This is **offline technical evidence only**, NOT a live/3.10
   CI proof and NOT human acceptance. Human plan+test approval remains
   **implementation-only**.
@@ -1285,11 +1545,969 @@ Git mutations.
 - **Still pending:** explicit final **HUMAN acceptance** and the **actual new remote
   Python 3.10 CI** (no push authorized). No commit/push/new PR/merge/product live call.
 
+## Local release merge — 2026-11-19 (human decision pending)
+
+- Human instruction in the current conversation: merge local `release` into
+  the current WebUI branch, resolve understandable conflicts, and ask at the end
+  about conflicts requiring a decision. This authorizes this integration work;
+  it is not a final acceptance or a GitHub review marker.
+- Source heads: `feature/webui` at `1fc6727`, `release` at `79103c3`.
+- Original conflicts: 78 file-location conflicts and 27 content conflicts.
+  Location conflicts retain the established `src/` and `test/offline/` layout.
+  Of the content conflicts, 25 are resolved; the two registry/schema files remain
+  explicitly unmerged pending the decision below. No merge commit or push.
+- All 123 release core/CLI files were compared by Git blob hash at their new
+  paths: identical. Integration edits are limited to the Web streaming adapter,
+  related deterministic tests, path-sensitive script/tests and governance merging.
+- Both branch histories, original requirement/invariant identifiers and ADR
+  files are retained. Overlapping numeric ADR prefixes are qualified by core vs
+  WebUI and descriptive filename. Historical results/approvals are not current
+  merged-tree results/approvals.
+- The existing V1 default-deny OpenCode permissions are retained without new
+  grants. The stronger WebUI `blocking-gate` is retained and also depends on the
+  imported release governance-validation job; no check is waived.
+- AI-log histories are retained in the existing entries envelope. The release
+  reused AUL-020/021/022 for different events; date-qualified imported keys retain
+  `original_id`, dates, scopes and review decisions. Tool display names are
+  normalized to OpenCode under the existing human instruction; original release
+  provenance remains available at `79103c3`.
+- `.agents/` and `demo/` remain local, untracked and unstaged. They are not merge
+  deliverables. No original frontend, demo, credential file or actual user data
+  was read or changed for this integration.
+
+### Actual verification
+
+Commands ran with dotenv loading disabled, temporary test state and no real
+provider calls. The main offline run also removed credential/provider variables
+from the child environment and disabled sockets. Initial real-graph tests
+attempted a market-data lookup after the release gate was added; that attempt
+failed in the restricted environment. The test was repaired by supplying fixed
+OHLCV at the I/O boundary while retaining the actual gate.
+
+- Initial compatibility: `python -m pytest -q test/offline
+  --ignore=test/offline/test_governance_scaffold.py
+  --ignore=test/offline/test_ci_gates.py --disable-socket --allow-unix-socket
+  -p no:cacheprovider --tb=short`: **2503 passed, 1 failed, 1 skipped**, 88
+  subtests. The failure was the old Web real-graph fixture missing gate data.
+- Final same command: **2508 passed, 1 skipped**, 88 subtests; **9.79 s**.
+  The optional `langchain_aws` dependency was absent; its test skipped.
+- `python -m pytest -q test/offline/test_ci_gates.py -k 'not schema and not
+  registry and not distinct_objects' --disable-socket --allow-unix-socket
+  -p no:cacheprovider --tb=short`: **33 passed, 10 deselected**, **0.35 s**.
+  The deselected cases depend on the unresolved registry/schema.
+- An earlier broader gate selection produced **51 passed, 2 failed, 8
+  deselected**; the two failures were registry-ID tests parsing conflict markers
+  in the deliberately unresolved JSON Schema. These are blockers, not passes.
+- `python -m ruff check --no-cache src test scripts --output-format=concise`:
+  **PASS** after two local import-order corrections.
+- Workflow YAML, ten jobs, aggregate dependency on `governance-validation`, V1
+  default-deny policy and unique imported AI-log keys: **PASS**. Core dependency
+  direction, canonical layout and permission checks also passed in a clean
+  temporary tree excluding local untracked directories.
+- `git diff --check HEAD`: reports conflict markers only in the two unresolved
+  requirements/schema files. Full governance validation and full-suite collection
+  are **blocked/not passing** until these files are resolved.
+- Live tests, paid APIs, remote GitHub CI and merge-commit creation: **not run**.
+
+### Requirements/schema decision
+
+Both files are newly authored on both branches and have incompatible formats:
+
+| Aspect | WebUI branch | Release branch |
+| --- | --- | --- |
+| Entries | 26 | 22 |
+| Identifiers | REQ-WEB-* | FR-DQG-*, FR-DDT-*, NFR-* |
+| Type/priority | functional/invariant/etc.; must/should/etc. | Feature/NonFunctional; Must/Should/Could |
+| Acceptance | fit_criteria list, IDs, verification contracts | fit_criterion object, threshold type, applicability and evidence status |
+| Product scope | project purpose/scope/baseline | separate product PRD, stakeholder/success/tradeoff blocks |
+| Schema/checker | test/ci_gates.py | scripts/validate/validate_requirements.py |
+
+Recommended resolution for human review: use one consolidated format based on
+the current WebUI registry, extend it to retain release's structured PRD and
+acceptance/status information, preserve all 48 entries and original IDs, and
+update both validators and their tests together. Do not drop a branch, silently
+upgrade approval/verification status, or disable a checker. The alternative is
+to use the release format as the base and migrate the 26 WebUI entries while
+retaining their criterion IDs, dependencies, source and invariant references.
+No choice has been recorded as approved; the files remain unmerged.
+
+## Unified registry decision and completion — 2026-11-19
+
+- Reviewer: current user in this conversation; no identity is inferred from the
+  imported student's historical records. Date: 2026-11-19; exact message time is
+  not exposed by the host.
+- Decision: the user accepted the recommended resolution in the preceding
+  "Requirements/schema decision" proposal: consolidate on the existing WebUI
+  format, preserve all core/WebUI IDs and evidence, and update both validators.
+  The current reply authorizes that integration work and completion of the
+  original local merge request. It is not a fabricated final feature acceptance,
+  safety approval marker or remote PR review.
+- The earlier pending decision above is now superseded. Both conflicted files
+  use canonical format 1.1 with **48 original requirements and 91 criteria**.
+  The 26 WebUI entries are unchanged and remain draft; 22 core entries retain
+  original title/type/status/origin metadata, tradeoffs, source/design/test
+  mappings and evidence. `Implemented` becomes `implemented`, not `verified`.
+- The release PRD is retained and extended with WebUI scope. Obsolete release
+  scope deferrals remain under `product.historical_scope`; existing inherited
+  implementations and the authorized layout are not called unimplemented.
+- Each original core single criterion becomes a `fit_criteria` item with a
+  deterministic criterion ID. Its typed threshold, applicability, verification
+  explanation and evidence status are preserved. Zero-tolerance invariant units
+  normalize to violations; their original descriptive units are retained.
+  Historical evidence is explicitly scoped and cannot certify a newly verified
+  requirement. No tests or YAML commands are automatically executed by validators.
+- Both validator entry points enforce the canonical contract. The retained
+  optional fallback covers only the schema's supported vocabulary and rejects
+  unknown validation keywords. Real Draft 2020-12 remains the CI validator.
+- The incoming regex-only JSONC parser damaged quoted `src/**` globs in the
+  retained V1 permission file. A string-aware comment parser fixes this without
+  widening permissions. Duplicate YAML keys and missing YAML support fail closed.
+- Source integrity is pinned independently: the original 26 WebUI entries match
+  SHA-256 `81df24e4f42a2cca59cea01cd194f28bea282a3d44d65d90ae5457ac6251a12b`;
+  reconstructing all original core requirement fields after layout/tool-label
+  normalization matches `0a85468de7021dd8826190089ed1e0b399a14616a8d2d211f81c9311adfac02b`.
+  These prove migration fidelity, not runtime quality or human acceptance.
+- `python -m test.ci_gates schema`: PASS. `python
+  scripts/validate/validate_requirements.py`: PASS, 43/43 required artifacts,
+  no likely secrets in the explicitly scanned artifact list.
+- `python -m test.ci_gates permissions`: PASS. `python -m ruff check --no-cache
+  src test scripts --output-format=concise`: PASS. Core/CLI/WebUI imports and both
+  `python -m cli.main --help` and `python -m tradingagents_web --help`: PASS.
+- After the first canonical conversion the scoped checks reported 5 failures:
+  three existing diagnostic-case expectations plus the historical 22-ID count
+  and singular criterion-field access. The diagnostics and format assumptions
+  were updated while preserving negative checks; the final focused run reports
+  **116 passed in 7.42 s**. An earlier complete offline run reports **2623 passed,
+  1 skipped**, 88 subtests; the final complete run is **2624 passed, 1 skipped**,
+  88 subtests, 23 warnings, **16.58 s**, with no offline suites excluded. See the
+  fresh logbook entry for its exact command and environment.
+- No real provider API, live benchmark, new dependency, push or remote CI run is
+  claimed. `.agents/` and `demo/` remain local/untracked and outside the merge.
+
+## Demo-based workspace UI replication — 2026-11-20
+
+- User instruction: use `demo/` as the visual and interaction baseline, copy its layout/colour/type/spacing into `src/tradingagents_web/frontend/`, keep `demo/` unchanged, connect only real backend capabilities, and do not modify backend APIs, `src/tradingagents/`, or `src/cli/` without approval.
+- Implemented a production React shell matching the demo: persistent sidebar, topbar search/announcements/settings, paper/dark themes, responsive mobile navigation, keyboard shortcuts, and the demo's warm-paper/pine-green visual language.
+- Rebuilt Overview, Analysis history, Report detail, Backtest, Live Run, New Analysis, Decision journal, and announcement surfaces against existing APIs. Removed the demo preview-state selector and all sample report/backtest/progress fixtures from the production path.
+- Added `src/styles/workspace.css` copied from `demo/styles.css`; no redesign of colours, type, spacing, or component shapes.
+- Real data connections: `/api/history`, `/api/history/{id}`, `/api/backtests`, `/api/runs`, `/api/runs/{id}`, `/api/runs/{id}/events`, `/api/config`, `/api/config/models`, `/api/portfolio/validate`, `/api/checkpoints/clear`, and `/api/announcements`.
+- Removed fixture-only company names/sectors and invented audit/comparison data. Available history metadata renders `Not recorded` when the backend does not supply it.
+- Research audit and Policy comparison remain explicit interface-gap pages. The core capabilities exist but no WebUI read projection is exposed; the pages list the minimum required endpoints and do not render sample audit/comparison data.
+- Frontend file-upload control reads portfolio JSON locally and fills the existing validation/submit path; no server-path upload capability was added.
+- E2E fake server now sets a dummy `OPENAI_API_KEY` so its fixture secret is exercised by the real response-redaction layer instead of appearing in a screenshot.
+- Verification:
+  - WebUI backend suite: **165 passed**.
+  - Frontend Vitest: **30 passed (9 files)**.
+  - Chromium Playwright E2E: **6 passed**.
+  - Offline regression: **2624 passed, 1 skipped, 88 subtests passed**.
+  - `npm run typecheck`, `npm run lint`, `npm run build`: **PASS**; `npm audit`: **0 vulnerabilities**.
+  - `ci_gates schema`: **PASS**. `ci_gates structure`: **BLOCKED** by the untracked `demo/` directory (`Unexpected obsolete source directory: demo`), which the user instructed to keep unchanged.
+  - `mypy src/tradingagents_web`: **1 pre-existing error** in `runtime/graph_runner.py` (`UsageCapture` has no attribute `debate_config`); not introduced by this UI change and not repaired in scope.
+  - Full suite including live tests: **1 failed** (`test_deepseek_live.py` attempted a network call while sockets were disabled). Reported as a live/network execution condition, not a UI regression.
+- Deviations from the demo: the 8-step analysis panel preserves the existing tested CLI-parity flow instead of the demo's 3-step sample sheet; audit/comparison use explicit gap pages; fixture-only company metadata and sample charts are not fabricated.
+- No backend route, core module, CLI module, dependency, commit, push, merge, or deployment change was made.
+
+## Workspace visual-parity correction — 2026-11-20
+
+- Scope source: the current user's direct instruction to inspect the integrated
+  frontend against `demo/` and correct supported visual/interaction differences.
+  This continues the preceding UI migration, not a new backend feature or final
+  human acceptance. Existing user changes are retained.
+- Plan and verification scope: frontend components, routes, styles, API clients,
+  frontend tests, and these process/trace records. Compare matching viewport
+  geometry and screenshots; exercise real local APIs through temporary fake
+  runners; retain negative input, missing-artifact and privacy checks. No new
+  dependency, backend route, core/CLI behavior, deployment or commit.
+- Replaced the eight-step standalone form with the reference three-step modal
+  sheet over the existing workspace. Added explicit stock/crypto selection,
+  supported endpoint/thinking inputs, environment locks, local portfolio file
+  selection, server validation, safe drafts and active-task handling.
+- Matched the brand mark, header, reference table columns/filters, report cards,
+  team markers, pipeline, running activity filter/counters, completed report,
+  backtest form/results, decision/outcome/reflection dialog and settings flows.
+  Tailwind theme/utilities remain; its conflicting preflight is excluded.
+- History pagination is fully consumed before totals/filter/sort. A combined
+  report is a fallback instead of a duplicate of individual sections. Missing
+  ratings/counters stay absent; downloads depend on actual artifact availability.
+  Read-only history metadata not exposed by the API remains `Not recorded`.
+- The reference's sample content, simulated timings, preview switches and mock
+  audit/comparison results are not production features. Audit/comparison remain
+  unavailable because the current WebUI lacks their projections; no new routes
+  were added. Existing translation catalogs are retained; the reference
+  presentation and newly introduced text are English.
+- Fresh verification: frontend **33 passed**, Chromium **10 passed**, lint,
+  typecheck and production build **PASS**. The browser checks include desktop
+  shell/sheet geometry within **0.75 CSS px**, all three steps, API completion and
+  cancellation, backtests, downloads, journal dialogs, settings, privacy, both
+  themes at 375/768/1024/1512px, landscape and reduced motion.
+- Full network-isolated offline suite: **2624 passed, 1 skipped, 88 subtests**,
+  52 warnings, 17.04 s. Optional `langchain_aws` is absent. Schema and permissions
+  gates pass. Structure remains blocked by the intentionally retained `demo/`;
+  no directory was deleted and no governance rule was weakened.
+- Initial frontend tests failed on the old step selectors and duplicated chart
+  labels. Initial browser runs also exposed obsolete selectors, animation during
+  geometry measurement and selection of newly created records instead of the
+  fixed missing-report fixture. These failures were corrected with explicit
+  reference interactions, table-scoped assertions, reduced motion and stable
+  fixture selection. Final checks above are actual reruns, not waived failures.
+- Port 8000 was already occupied. Tests used an independently created temporary
+  fixture server on 127.0.0.1:8008 and a temporary test configuration; the existing
+  service was not stopped or reused. An approval-service connection interruption
+  was retried through the same review mechanism. No real provider was called.
+- The production build retains its bundle-size advisory. Real API calls,
+  Firefox/WebKit, remote CI and final human acceptance are not claimed.
+
+- Follow-up formatting and `git diff --check` pass. A broad scan still flags four
+  untouched frontend files (listed in the logbook); unrelated formatting was
+  left intact. The temporary fixture server has been stopped. Existing port-8000
+  and prototype services were not stopped.
+
+## Missing WebUI projections — scope and contract, 2026-11-20
+
+The current user explicitly requested completing the backend interfaces missing
+from the preceding UI integration. This authorizes the previously identified
+read projections and their necessary frontend integration. It does not authorize
+core/CLI changes, strategy tuning, arbitrary uploads, paid calls, deployment or
+Git actions. This record is the implementation/test scope, not final human
+acceptance or a fabricated independent test-review decision.
+
+Plan version: `web-projections-20261120-v1`.
+
+- Add bounded read-only audit endpoints for indexed analysis artifacts and live
+  Web run identities, and allowlisted JSON/Markdown artifact preview/download.
+  Return complete/partial/absent availability independently of usage completeness.
+  Missing historical data remains absent; invalid JSON is explicitly invalid.
+- Retain the four core audit families next to new Web run artifacts, using the
+  existing shared report writer. Expose only safe effective run metadata, never
+  endpoint credentials, portfolios, filesystem paths or checkpoint fingerprints.
+- Add a catalog, per-case comparison and JSON download over the existing pure
+  comparison runner and its controlled D/E/F fixtures plus G regression. Pairing
+  uses actual core identities; selecting a different existing dynamic case must
+  fail pairing. No client scripts, arbitrary result upload, model/data call,
+  permanent report write or production budget tuning is introduced.
+- Replace the audit/comparison unavailable pages with the unchanged demo layout
+  bound to these APIs. The replay control refetches an actual deterministic
+  server replay. Estimated data stays labelled; human rubric scores stay pending.
+- Allowed implementation: `src/tradingagents_web/api/`, `artifacts/`, existing
+  run writer/coordinator, application router registration, and frontend clients,
+  pages/components/types; tests under `test/offline/` and frontend test folders.
+  Maintain existing blueprint/ADR/trace/process records. No new dependencies.
+- Prior verification strategy: core-writer fixtures and socket-isolated tests
+  for real artifact shape, partial/legacy/invalid/oversized data, symlink/path
+  escapes, secret/path redaction, stable run-local artifact association, safe
+  metadata, unchanged core/CLI; exact D/E/F/G runner outcomes, mismatch refusal,
+  invalid IDs and read-only replay/download; frontend negative states, filtering,
+  provenance, budget/usage separation, previews/downloads and browser flows.
+  Run previous frontend and complete offline suites without weakening assertions.
+
+
+### Implementation evidence — `web-projections-20261120-v1`
+
+Added the planned audit and comparison routes and replaced the two unavailable
+pages with production API bindings in the reference layout. History/live report
+links select the correct audit identity. Overview can display a recorded audit
+summary. New run records preserve effective analyst/provider/model/depth/language
+metadata; legacy records remain unspecified. The four run-local artifact copies
+retain only structured origin/source-attempt/conflict descriptors in an optional
+`web_context`, with explicit field allowlists and redaction. No core serializer,
+algorithm, CLI, dependency or demo file changed.
+
+Audit availability is separate from usage completeness. Invalid or contradictory
+artifacts do not become successful empty audits. A saved folder date is never
+used as an invented historical analysis cutoff. Run-ID audit responses retain
+the coordinator's actual lifecycle for refresh. Comparison pairing delegates
+to the real core identity check; G remains input exhaustion rather than an early
+stop. Exports contain actual deterministic results, with human scores pending.
+
+Verification: 2649 offline tests passed, 1 optional-dependency skip and 88
+subtests passed; frontend 37 passed; Chromium 12 passed. Source/test/script lint,
+frontend lint/typecheck/build, schema/permissions validators and diff whitespace
+checks passed. See the evaluation logbook for initial corrections, the existing
+mypy error, retained-demo structure blocker, local skill-script lint failures
+and build-size advisory. No live-service or final human acceptance claim.
+The temporary browser server uses isolated fixtures with environment credentials
+excluded; existing port-8000 and demo services are outside this verification.
+
+## Local commit and release synchronization authorization — 2026-11-20
+
+The current user explicitly requested a local commit of the existing workspace,
+excluding `.agents/` and `demo/` from version control, followed by pulling remote
+`release` into local `release` and merging local `release` into `feature/webui`.
+Both excluded directories were untracked before staging; root ignore entries
+preserve their local contents without adding them to the index. The change does
+not alter product behavior or require another product test run. Existing test
+results and blockers above retain their actual scope. No push, deployment or
+independent/final implementation acceptance is authorized by this Git operation.
+
+
+## Release synchronization and conflict resolution — 2026-11-20
+
+The user explicitly requested the local commit, remote release pull and merge
+into `feature/webui`, then authorized resolving understandable conflicts and
+confirmed continuing. The feature snapshot was committed as `b896308`; local
+`release` fast-forwarded from `79103c3` to `24adf97`. This record describes merge
+resolution, not independent implementation review or new acceptance of business
+or safety changes.
+
+Resolution decisions:
+
+- Preserve both implementations: existing core/CLI/WebUI source is unchanged
+  from `b896308`; imported `src/trading/` and `src/safety/` are byte-identical to
+  `24adf97`. The new subsystem remains standalone, with no new WebUI execution
+  endpoint or real broker path.
+- Retain the canonical source/test layout. Incoming `tests/trading/` moves into
+  `test/offline/trading/`; its opt-in live smoke moves to `test/live/trading/`.
+  Adjust root/path constants and documentation only. Add package markers for
+  offline/live tests to avoid shadowing the production `trading` package and
+  colliding with existing test module names.
+- Keep the existing schema 1.1 registry and validator protections. Preserve the
+  original 48 entries without any object changes and import the ten TRD entries
+  with original IDs, statements, tradeoffs, thresholds, status and historical
+  evidence. Retain zero-tolerance invariants and the 100% rejection threshold;
+  historical evidence is not promoted to current verification. Both validation
+  paths reject weakened TRD invariants and evidence upgrades.
+- Retain working V1 OpenCode permissions and the feature CI blocking gates,
+  rather than replacing them with release's incompatible configuration format.
+  Add the safety-module approval ask guard and explicit baseline-document read;
+  preserve secret restrictions and plan/test/ADR gates. Merge subsystem rules,
+  invariants, trace rows and distinct historical AI-use entries without claiming
+  a new human approval.
+- Keep `.agents/` and `demo/` ignored and untracked. Neither is deleted or
+  incorporated into the merge.
+
+Validation on the merged tree: socket-isolated offline suite **2896 passed,
+1 optional AWS dependency skip, 88 subtests passed**; imported subsystem tests
+contribute 244 cases. Frontend lint/typecheck and **37 unit tests** pass; schema,
+permissions, the standalone registry validator, source/test/script lint and diff
+whitespace checks pass. The original 48 entries and imported source byte parity
+were checked explicitly. Browser tests were not rerun for this Git merge; WebUI
+source is unchanged from its previously browser-verified snapshot. No live tests
+or providers were run. Existing local demo structure/type-check limitations
+remain as previously recorded; no gate was weakened to conceal them.
+
+Initial merge checks exposed registry priority casing, a missing schema scope,
+test-package shadowing and a trace-tag matcher limited to the old namespaces.
+Those integration issues were corrected without changing business algorithms or
+removing assertions. Final human feature acceptance remains pending.
+
+## One-command WebUI startup — 2026-11-20
+
+Scope/test plan: `web-startup-20261120-v1`. The current user approved the proposed
+`--dev --open` and `--build --open` modes and explicitly requested README updates.
+This is operational startup tooling over the existing WebUI, not a change to
+analysis, trading, permissions or credentials. No independent test review or
+final feature acceptance is claimed.
+
+- Extend the existing CLI; keep default static-serving behavior. Development
+  supervises one single-worker backend and local Vite, with automatic proxy-port
+  propagation. Build mode runs the existing frontend build before serving static
+  assets. Node/npm dependencies must already be installed; do not install them.
+- Validate loopback host, distinct/ranged ports, source/dependency prerequisites
+  and port availability. Refuse occupied ports without stopping other processes.
+  Readiness checks use local health/Vite endpoints only; open the browser only
+  after readiness. Exiting/interruption/startup failure stops owned processes.
+- Ownership: existing `cli.py`, new `launcher.py` under the WebUI package,
+  existing Vite configuration, README and existing architecture/process records.
+  No dependency, lockfile, Docker, CI, permission, runtime-prompt or core/CLI change.
+- Prior verification strategy: deterministic tests for exclusive flags, default
+  behavior, invalid hosts/ports, missing tools/source/dependencies, failed build,
+  child startup/exit/timeout/interruption and cleanup, browser readiness ordering,
+  custom proxy ports; real local fixture-only process checks where authorized.
+  Run source lint, frontend lint/types/build/tests and the complete offline suite.
+
+
+### Implementation/verification — `web-startup-20261120-v1`
+
+The existing module/installed command now supports `--dev --open` and
+`--build --open`; `--frontend-port` customizes the development listener and
+`--port` automatically controls its API proxy. Mode flags are exclusive and
+non-loopback/invalid/duplicate or occupied ports fail before process startup.
+Missing frontend source/tools/dependencies return actionable instructions and
+are never installed automatically. The current interpreter starts the backend;
+only owned child groups are stopped, including npm descendants. Startup waits
+for direct health, the Vite client and proxied health before opening a browser.
+Build failure never starts stale assets; default API-only/missing-static behavior
+is retained. Frontend HMR is enabled; backend edits require restarting.
+
+Validation: startup contracts 24 passed; full offline 2920 passed, 1 optional AWS
+skip, 88 subtests; frontend 37 passed plus lint/types/build; scoped startup mypy
+and source/test/script lint pass. Final Chromium E2E: 12 passed.
+Actual marked, isolated-fixture smoke exercised both CLI modes and Ctrl+C cleanup, with no provider calls or real runtime data.
+The evaluation logbook records initial harness corrections and evidence limits.
+README, blueprint/ADRs and traceability are updated; core/CLI/trading, dependencies,
+permission rules, ignored local directories and Git history remain unchanged.
+
+
+## OpenCode documentation naming — 2026-11-20
+
+The current user explicitly requested using OpenCode consistently for development
+agent names across project documentation, including AI-use tool labels. This is
+an editorial naming normalization, not evidence of a new tool session, execution,
+contribution or review. Existing dates, outcomes, authorship responsibilities,
+approval scopes and verification results remain unchanged. Historical prompt
+role labels are included at the user's request; their binding rules, phases,
+versions and human gates are unchanged. Product analyst/research/risk agent
+names and model-provider identifiers retain their business meanings.
+
+The change covers the entry-point title, README, blueprint actor label, tool
+manifest, proposed governance ADR, prompt role wording and AI-use labels. Existing
+uncommitted startup implementation is preserved. No product tests are needed for
+this documentation-only change; YAML/JSON schema parsing and whitespace checks
+are used. Ignored third-party skills and the standalone demo are not rewritten.
+
+
+## Stage-based live activity — 2026-11-20
+
+Scope/test strategy: `web-activity-20261120-v1`, requested directly by the
+current user: show TUI-like process messages, prioritize Run activity, remove
+excess prose, and automatically show each new stage with clickable progress
+tabs for reviewing earlier stages. These instructions authorize this bounded
+presentation change; no separate test-version review or final acceptance is
+asserted.
+
+- REQ-WEB-002/007/021; ADR-002-backend-framework-and-transport and
+  ADR-003-frontend-stack; INV-WEB-001/003/012/014.
+- Ownership: existing WebUI projector and run store, new frontend
+  `components/RunActivity.tsx` and `utils/runActivity.ts`, LiveRunPage and
+  index.css, focused offline/frontend/Chromium tests, existing process records.
+- Four real stages: analysts, research debate, trading plan, risk review/final
+  assessment. Tabs show recorded messages/reports and actual statuses; pending
+  stages show an empty state. New stage entry selects its tab without moving
+  keyboard focus. Older snapshots keep unassigned messages in All activity.
+- Add optional stage/speaker metadata to existing message/tool events; retain
+  replay, sequence checks, redaction, bounded buffers and terminal snapshots.
+  Extract public text blocks only; project existing debate histories without
+  publishing private reasoning metadata or inventing intermediate conclusions.
+- Prior checks: stage transitions/auto-selection, manual and keyboard switching,
+  pending/absent data, per-stage messages/reports, terminal recovery, safe text
+  rendering, message classification/deduplication and history deltas; full
+  offline regression, frontend lint/types/tests/build and local fake-run E2E.
+- No core/CLI/trading/safety, dependency, credential, permission, runtime-prompt,
+  provider-call, Git or deployment change. Existing working changes are retained.
+
+
+### Implementation and verification — `web-activity-20261120-v1`
+
+Run activity is now directly below essential run context and error banners.
+Four progress tabs follow actual graph-stage entry and show each stage's public
+messages, tool calls/results and report sections; manual/keyboard review remains
+available. No recorded output is treated as execution authority or a fabricated
+agent status. Existing public Bull/Bear/risk histories are included. Non-text
+reasoning blocks are excluded, and existing coordinator redaction remains the
+serialization boundary. Activity survives failure/cancellation/completion and
+snapshot recovery; unknown historical provenance stays in All activity.
+
+Long messages expand on demand, older-message scrolling pauses following, and
+completed runs can switch to the existing complete report without duplicate
+content. Oversized live cards and redundant explanatory banners are removed
+from the live page only; overview/history reference layouts are retained.
+
+Actual checks: offline 2927 passed, one optional-dependency skip, 88 subtests;
+frontend 44 passed plus lint/types/build; final fresh-fixture Chromium 13 passed;
+Ruff, scoped projector mypy, schema, permission and whitespace checks pass.
+Structure remains blocked by the existing ignored demo directory. The evaluation
+logbook records initial defects, test-harness timing/state corrections and
+verification limits. Core/CLI/trading/safety and existing unrelated working
+changes are preserved. No commit or final human acceptance has been recorded.
+
+
+## Report table containment — 2026-11-20
+
+Scope/test strategy: `web-report-table-20261120-v1`, directly requested by the
+user after a screenshot showed a report table extending beneath the contents
+sidebar. Limit changes to the shared Markdown renderer, scoped report CSS and
+frontend tests, plus these existing process records. REQ-WEB-009/021, ADR-003,
+INV-WEB-001/012/014 apply. Override inherited nowrap/last-column sizing only
+inside Markdown, allow cell wrapping and give each table an accessible local
+horizontal scroll container. Preserve table semantics, all content and existing
+sanitization. Verify long text, many columns and unsafe markup; check desktop
+sidebar containment and mobile page width/scrolling in Chromium, then run the
+existing frontend and offline suites. No dependency, API, core, CLI, business
+logic, credential, permission or Git change. No separate test-version review
+or final human acceptance is asserted.
+
+
+Implementation/verification: the report-only wrapper and CSS contain wide tables
+without clipping content or changing sanitization. Frontend 46 passed plus
+lint/types/build; fresh-fixture Chromium 14 passed; complete offline 2927 passed
+with one optional AWS skip and 88 subtests; schema/whitespace checks pass.
+Sidebar containment and horizontal keyboard scrolling are checked at desktop,
+portrait and landscape widths. All earlier working changes remain present.
+No Git commit or final human acceptance is recorded.
+
+
+## English/Chinese interface — 2026-11-20
+
+Scope/test strategy: `web-i18n-20261120-v1`, directly requested by the user.
+REQ-WEB-014/021, ADR-003, INV-WEB-001/003/007/012/014 apply. Reuse existing
+i18next/react-i18next with English and Simplified Chinese catalogues, a visible
+workspace language control, persisted preference, document language and localized
+dates. Cover navigation/settings/help, overview/history/reports/journal, wizard
+labels/validation, activity/stages, audit/comparison and backtest controls.
+Preserve canonical API values, ratings/REVIEW, report output language, model/tool
+content, form drafts and active-run connections. No automatic report translation.
+
+Ownership: existing frontend app/components/pages, utilities and i18n files;
+new `i18n/ui.ts` helper within the established frontend directory; frontend
+unit/Chromium tests and existing process/architecture records. No dependency,
+backend, core/CLI, prompt, credentials, permission or Git change. Translation
+catalogues contain Chinese under this explicit localization authorization;
+code/comments/process prose remain English. Prior checks: key and interpolation
+parity, no missing visible-string translations, switch/persistence/invalid saved
+locale and storage failure, document language/date locale, dynamic stage/status
+labels, wizard validation, canonical submitted values and unchanged report/tool
+content; English regression plus Chinese responsive browser flows and offline
+regression. No separate test-version review or final acceptance is asserted.
+
+
+### Implementation/verification — `web-i18n-20261120-v1`
+
+Implemented English/Chinese controls in the top bar, settings and analysis
+wizard footer; persisted preference, HTML language and date formatting; matching
+workspace catalogues and reactive localization throughout navigation, forms,
+validation, activity, history, reports, journal, audit/comparison and backtests.
+Explicit form option values, request payloads, report output language, ratings,
+source Markdown/tool messages, drafts and active connections remain authoritative.
+Known generated titles/windows localize only their display; custom values stay raw.
+README, blueprint, ADR and traceability reflect the implementation.
+
+Final checks: frontend 51 passed with lint/types/build; fresh-fixture Chromium
+18 passed, including a single SSE connection through a live language switch;
+full offline 2927 passed, one optional AWS skip and 88 subtests; schema,
+permissions and whitespace checks pass. Existing ignored demo structure block
+and Vite chunk warning remain. The evaluation logbook records initial issues,
+corrections and browser/provider limits. Prior working changes remain intact.
+No commit or final human acceptance is asserted.
+
+
+## Per-analysis debate settings — 2026-11-20
+
+Scope/test strategy: `web-debate-settings-20261120-v1`. The current user
+explicitly requested implementing the previously described integration on
+feature/webui: real-run fixed/dynamic mode, independent round caps, termination
+thresholds, debate budgets/reserves and effective-configuration display. This
+direct instruction authorizes the bounded integration; no independent test-file
+review, GitHub approval marker or final acceptance is asserted.
+
+Requirements: REQ-WEB-001/003/013/014, FR-DDT-004; invariants INV-WEB-001/003/
+006/009/010/012/014 and core budget/compatibility rules. Ownership is restricted
+to WebUI request models, config/run endpoints, runtime projection/coordinator/
+writer, the existing graph adapter, new runtime/debate_policy.py and
+runtime/analysis_graph.py, frontend wizard/client/locale resources, new
+components/DebateSettings.tsx and utils/debateSettings.ts, focused offline/
+frontend/Chromium tests and existing architecture/process records. No core/CLI/
+trading/safety, dependency, permission, prompt, deployment or Git change.
+
+Contract: accept an optional strictly typed allowlisted debate_termination
+object and optional max_risk_discuss_rounds. Internal manifest/trace fields and
+unknown keys are rejected. Reuse the core resolver for ranges/cross-constraints.
+Preserve legacy research_depth mapping when advanced settings are absent.
+Precedence for debate cap: environment lock, explicit nested cap, explicit legacy
+depth, server defaults; risk cap: environment lock, explicit risk cap, legacy
+depth, server default. Synchronize resolved root/nested debate caps before graph
+construction. Return/persist only normalized public fields, not arbitrary config.
+No mutation of DEFAULT_CONFIG or CLI preferences.
+
+Recovery boundary: the core checkpoint signature covers rounds/analysts/assets/
+portfolio but not all termination thresholds. The Web-only graph subclass will
+reuse the core signature and append a deterministic policy fingerprint only
+when non-cap debate settings differ from core defaults. Default policies retain
+the original checkpoint identity; changed custom policies cannot resume each
+other or a legacy/default checkpoint. Existing ledger checks remain in place.
+No core execution/decision/budget algorithm is copied or weakened.
+
+Prior verification: omitted/default/fixed/dynamic/custom/partial settings, strict
+types, bool-as-number, NaN/Inf, cross-constraint and unknown/internal-key negative
+cases; both environment locks and priority conflicts; normalized snapshots/
+metadata/config immutability, cancellation/idempotency and core-graph forwarding;
+checkpoint signature stability/isolation including threshold-only differences;
+bilingual wizard edits, presets, independent risk rounds, safe draft restoration,
+validation, canonical POST fields and effective policy reload/history display.
+Run affected suites, complete socket-disabled offline regression, frontend
+lint/types/tests/build and fresh local-fixture Chromium regression. Real provider
+calls, monetary-cost claims and changes to scripted comparison cases are excluded.
+
+
+### Implementation/verification — `web-debate-settings-20261120-v1`
+
+Implemented the approved real-run integration in the existing WebUI. The wizard
+now supports fixed/dynamic mode, independent round caps, thresholds and debate
+budgets/reserves; effective settings persist through run snapshots and saved
+reports. Strict public validation, environment precedence, legacy depth mapping,
+read-only history projection and Web-only custom-policy checkpoint isolation
+preserve core contracts. README, blueprint, ADR addenda and traceability are
+updated. No protected core/CLI/trading/safety or dependency changes belong to
+this iteration; prior working changes remain intact.
+
+Frontend 57 passed with lint/types/build; fresh offline-fixture Chromium 21
+passed; full network-isolated offline 2979 passed, one optional AWS skip and
+88 subtests. Scoped mypy (six modules), Ruff, schema, permissions and whitespace
+pass. The ignored demo structure block and Vite chunk warning remain. Initial
+test-reference and browser assertion-type failures plus verification limits are
+recorded in the evaluation logbook. No live-provider, commit, final human review
+or CI approval claim is made.
+
+
+## TUI capability parity — 2026-11-20
+
+Scope/test plan: web-tui-parity-20261120-v1. The user approved the preceding
+capability audit recommendations, excluding language expansion and simulated
+trading. Implement individual role status, analyst timing and real report counts,
+positive-integer custom backtest spacing, and OpenRouter discovery/refresh.
+Keep credentials and CLI preferences server-owned; no new preference writes,
+core/CLI/safety/trading changes, dependencies, deployment or Git operations.
+REQ-WEB-001/002/006/007/013/014/021; INV-WEB-001/003/006/007/012/014;
+ADR-001-choice, ADR-003-frontend-stack and ADR-007-run-controls apply.
+
+Ownership: existing WebUI runtime projector/graph_runner/coordinator, new
+runtime/model_catalog.py for bounded cached public-model discovery, config API
+and app composition; existing frontend run store/activity/utilities, wizard/model
+client, backtest interval control and bilingual labels; focused tests under
+existing offline/frontend/e2e trees and existing architecture/process records.
+No new language options or simulated-trading integration. Individual statuses
+come from observed graph node lifecycle/output, with aggregate team events
+retained. Completed reports require their finalizing node and content, not
+interim debate text. Timings cover observed current-process work; restored
+historical stages are not assigned fabricated durations. Existing snapshots
+carry added stats and times without lifecycle/idempotency changes.
+
+OpenRouter uses its fixed public models URL without credentials or client URLs,
+filtered to validated text model IDs/names, newest mainstream shortlist matching
+TUI, with bounded response/time, application-local TTL and refresh coalescing.
+Failures produce a safe warning with cached/custom-ID fallback; arbitrary model
+IDs remain accepted. No live discovery/model requests run in verification.
+
+Prior tests: per-role/repeated turns, default empty states, blocked/partial and
+resumed runs; exact report finalization counts and injected-clock analyst times;
+real core offline runner stats/snapshots; reconnect preservation and stage filters
+with new risk roles; custom intervals including invalid zero/fractional inputs;
+OpenRouter sorting/filtering/deduplication, cache/refresh, HTTP/malformed/oversize
+failure and redaction, no calls for other providers; manual IDs and refresh
+preserve draft inputs with stale-response guards. Run full isolated offline,
+frontend lint/types/tests/build, local Chromium and schema/permissions/whitespace.
+Direct scope authorization is recorded; no separate test-file review or final
+human acceptance is asserted.
+
+
+### Implementation/verification — web-tui-parity-20261120-v1
+
+Completed on 2026-11-21 after the authorized capability-parity scope began on
+2026-11-20. Individual role events, selected-analyst timing, real report/agent
+counts and reconnect preservation are integrated in the existing run view.
+OpenRouter discovery/refresh preserves manual IDs and safely falls back to
+cached/manual suggestions. Backtest interval input supports any positive whole
+number. README, blueprint/ADRs and traceability are updated; prior working
+changes remain intact. No language expansion, simulated trading, credential or
+CLI preference writes, core/CLI changes, dependency changes or Git action.
+
+Actual evidence: offline 2991 passed with one optional AWS skip/88 subtests;
+frontend 59 passed with lint/types/build; Chromium 23 passed on a fresh fixture.
+Ruff and five scoped mypy modules pass. graph_runner retains its pre-existing
+UsageCapture.debate_config type error; ignored demo still blocks structure.
+Initial test/fixture corrections and evidence limits are in the evaluation
+logbook. No final human review or complete CI approval is claimed.
+
+
+## Simulated-trading WebUI integration — 2026-11-21
+
+Plan/test version: web-simulation-20261121-v1. Human source: current user request
+for corresponding simulated-trading frontend, followed by explicit selection
+"frontend and necessary interfaces, integrate the existing simulated core".
+The user requires a single final verification phase after implementation; do not
+run iterative tests during development. This direct instruction authorizes this
+bounded integration; no independent test-file review or final acceptance is
+asserted. Preserve all prior working changes and feature/webui.
+
+Requirements: FR-TRD-001..006, INV-TRD-001..003, NFR-TRD-001 and
+REQ-WEB-001/006/007/013/014/021/023. Existing core statuses/IDs and historical
+approval scope are unchanged. ADR-001-simulated-trading-system.md and
+ADR-001-choice.md/003-frontend-stack.md/007-run-controls.md receive this Web
+composition refinement. No trading/safety/core/CLI logic is modified.
+
+Ownership/allowlist: new Web runtime simulation.py and simulation_jobs.py,
+models/simulation_requests.py, api/simulation.py; existing app/coordinator and
+security route-prefix integration; new frontend api/simulationClient.ts,
+pages/SimulationPage.tsx, pages/Simulation/* view components and utility/types;
+existing app/nav/styles/catalogues, README, package inclusion in pyproject.toml
+for the already-existing trading/safety packages, focused offline/frontend/
+Chromium tests and current architecture/process records. No dependency added,
+credential/environment-template/prompt/rule/permission edit, broker, automatic
+live trading, release or Git operation.
+
+Contracts: fixed server-owned results_dir/simulated_trading namespace, Decimal
+strings for money/quantity, no submitted filesystem paths/config/execution
+permissions. Explicit initialize/reset with confirmation; reset preserves audit.
+Use existing pipeline for completed advisory report -> deterministic sizing ->
+safety evaluation -> simulated fill or issued human approval. Caller supplies
+an explicitly labeled scenario quote with aware timestamp; no LLM price or size
+is accepted. Approval requires reason/name plus an issued in-memory request,
+matching portfolio version, unexpired approval and still-fresh quote; only the
+core engine can execute. Reject repeated/mismatched/stale decisions; public
+idempotency receipts persist, but pending approvals cannot survive process
+restart and must be reevaluated. State/audit corruption or uncertain execution
+persistence blocks further mutations. All public reads redact paths/secrets.
+
+One per-process manager and advisory filesystem ownership lock prevent another
+Web process using the same simulation namespace. All mutating transactions use
+the existing coordinator single-active slot. Background simulation backtests
+retain the slot through completion, expose polling/reload and offer no fake
+cancellation. Each job owns separate state/audit/cursor and immutable parameters;
+resume requires matching parameters/config. Existing BacktestRunner owns daily
+advancement, core providers own decisions/quotes. Deterministic rows and real
+analysis/historical quote modes are explicitly distinct. Without a synchronous
+human callback, pending approvals in walk-forward runs remain unexecuted and are
+counted, matching core behavior; account approvals belong to the interactive
+account flow. No unattended approval or fabricated fills/equity curves.
+
+Prior tests (written before the final run): initialize/account Decimal values,
+reset audit retention/confirmation/version, completed-report selection, approved/
+pending/rejected/no-action outcomes, explicit human approve/deny/expiry/staleness,
+no bypass/duplicate execution, restart receipts and pending invalidation, audit/
+state tampering and path escape, single-slot conflict, offline scenario walk-
+forward/resume/isolation and source/date validation, protected import boundary;
+frontend tabs/forms/negative validation/empty-error states, confirmation and
+manual approval, canonical requests and no unsupported cancel/broker controls;
+local Chromium account/approval/backtest/audit plus previous suites. Run all
+network-isolated offline tests, frontend lint/types/tests/build, local Chromium,
+schema/permissions/whitespace together only after implementation. No real
+provider calls or user runtime-state access in verification.
+
+Implementation evidence: four bilingual simulation views and necessary Web
+interfaces now compose the existing runtime, pipeline, approval gate, engine,
+portfolio, audit and BacktestRunner. Packaging includes the existing trading
+and safety packages; those source trees and CLI/core source remain unchanged.
+Completed-cursor resume validates the original cursor and returns zero new
+work, preserving the saved portfolio and avoiding duplicate execution.
+
+Closing verification: offline 3025 passed / 3 failed / 1 optional skip; frontend
+63 passed / 3 failed; Chromium 26 passed on the corrected tree. New failures
+were corrected from the first logs without rerunning either unit suite, under
+the user's single-final-run instruction. The unchanged-core determinism failure
+remains open. Ruff, scoped mypy, ESLint, TypeScript/build, schema, permissions
+and whitespace pass. Detailed commands, failure distinctions and limitations
+are recorded in the evaluation logbook. Real providers were not called. These
+are implementation results, not independent review or human acceptance. No Git
+operation was performed.
+
+
+## Frontend information simplification — 2026-11-21
+
+Iteration: web-ui-simplify-20261121-v1. Direct user authorization: simplify
+nonessential descriptions, displays, statistics and unnecessary navigation
+throughout the frontend. Preserve current working changes and all capabilities,
+backend contracts, warning/error states, human approvals and destructive-action
+confirmations. No core, server, dependencies, permissions or Git changes.
+
+Plan: focus the overview on latest/recent research; remove decorative copy,
+placeholder company facts and duplicated summary/navigation blocks; reduce
+history columns; disclose run counters, account rules and detailed comparison
+identity/rubric on demand. Retain completed/partial/failed/REVIEW distinctions,
+quote/source limitations, cost disclosure, money/holdings, pending/rejected
+outcomes and failure reasons. Selecting a comparison case already runs replay;
+keep its explicit refresh but remove duplicate case selector cards. Completed
+simulation runs should not invite a no-work resume; interrupted/failed runs
+retain resume. Routes, deep links, filtering, downloads and stage tabs remain.
+
+Scope: existing frontend pages/components/app shell/styles/locales and affected
+frontend tests/e2e; README and current ADR/trace/evaluation/AI-use records.
+No new implementation modules. Existing REQ-WEB-001/002/006/007/008/010/011/
+014/021 and FR-TRD-001..006 remain unchanged. Current instruction supersedes
+prior strict demo geometry for the simplified surfaces.
+
+Verification strategy before edits: use existing validation, approval, stage,
+localization and browser tests, adapting only intentional presentation changes;
+assert removed clutter is absent, diagnostic details are collapsed but accessible,
+failed/pending states remain visible, deep links work and completed simulations
+have no resume action. Run suites once in the closing phase with isolated local
+fixtures, plus build/lint/types and document checks. No live providers or user
+runtime data. This records direct authorization, not a separate human test-file
+review or final acceptance.
+
+
+Closing evidence for web-ui-simplify-20261121-v1: existing frontend surfaces are
+simplified; preset comparison moves from the sidebar into help diagnostics.
+Business APIs and protected source trees remain unchanged. Offline 3028 and
+frontend 66 passed; Chromium 24 passed / 3 failed. Two stale presentation
+selectors were corrected; the third case encountered a task conflict after the
+first failure. No suite rerun is claimed. Lint/types/build and document checks
+pass. Failure evidence and the optional screenshot approval-transport limitation
+are recorded in the evaluation logbook. No merge-ready verdict or final human
+acceptance is asserted.
+
+
+## Backtest failure diagnostics — 2026-11-21
+
+Iteration: web-backtest-errors-20261121-v1. Human source: reported backtest failure,
+then confirmation that the server prints no traceback and screenshot of NVDA,
+2026-10-21 through 2026-11-20, interval 7. Those inputs produce five valid grid
+dates; the screenshot cannot establish the runtime exception. Read-only code
+inspection confirms the coordinator discards every backtest exception without
+logging it and returns a fixed internal-error sentence. No root cause such as
+Yahoo throttling or wrong provider is claimed established.
+
+Bounded repair plan: reuse existing redacted error classification/logging for
+backtests, give backtest failures the correct task name, show the correlation ID
+in the existing failure banner, and identify missing server API-key configuration
+without exposing exception text. Keep all current analysis error behavior and
+single-active lease release. Do not change core backtesting, model selection,
+credentials, data vendors, public launch inputs, trading safety or dependencies.
+Relevant REQ-WEB-006/011/013 and INV-WEB-003/014; ADR-007-run-controls.md owns the
+lifecycle refinement. Allowlisted existing paths: Web errors/coordinator,
+backtest display components/locales, README, existing backtest/analysis tests and current
+ADR/trace/evaluation/AI-use/bug records.
+
+Prior verification design: inject internal/config/authentication/rate-limit
+failures through the real API/coordinator; assert categorized error and matching
+server correlation, traceback presence with secret redaction, absence of private paths and raw
+exception payload in the client, live-memory preservation, slot release and
+subsequent run success. Browser failure fixture must show the same safe message
+and correlation in place. Run each full offline/frontend suite once after the
+repair; no live provider calls or real environment files. Direct user context
+authorizes diagnosis and this bounded fix, not a fabricated test-file review or
+final human acceptance.
+
+
+Closing evidence for web-backtest-errors-20261121-v1: categorized/correlated
+server and frontend diagnostics are implemented and verified offline. Offline
+3034 passed / 1 optional skip / 88 subtests; frontend 66 and Chromium 28 passed.
+Static/build/schema/whitespace pass; chunk warning remains. The user's original
+exception is not recoverable from the old generic response and requires a new
+run after restart. No core semantics, configured models, CLI, trading safety,
+credentials or real services were changed or invoked. This is diagnostic repair
+evidence, not proof that the user's underlying provider issue is resolved.
+
+
+## Model environment defaults — 2026-11-21
+
+Iteration: web-model-defaults-20261121-v1. Human source: current correction that
+the provider variable should be a default and the analysis dropdown should
+preselect it. Prior context explicitly identifies provider and quick/deep models
+as the fields whose forced locking prevents selection. The user also confirmed
+actual official DeepSeek usage; no remaining provider-routing failure is asserted.
+
+Plan: make those three non-secret model-selection environment fields defaults
+in the WebUI, allow explicit per-analysis overrides, and keep backtests on server
+defaults. Add non-secret env_defaults provenance alongside existing env_locks;
+retain environment enforcement for budget/rounds, checkpoint, language and other
+unrelated settings. Preserve server-owned credentials. When the provider changes,
+never inherit the prior provider's model IDs, endpoint or thinking options. The
+caller supplies both new model IDs; an omitted provider reuses server defaults.
+The configured endpoint remains authoritative for the server-default provider;
+other selected providers use their own default or an explicit existing endpoint
+override. This prevents sending another provider's credential to the default
+provider's endpoint. No new provider, endpoint capability or credential input.
+
+Frontend initialization: configured model defaults preselect the form ahead of
+CLI preferences; explicit retry setup remains effective. Drafts retain chosen
+models only while their recorded server-model-default baseline still matches;
+legacy/stale model drafts cannot silently replace newly configured defaults.
+Other draft fields and privacy boundaries remain. Switching back to the default
+provider restores its configured models. Existing risk/budget locks still apply.
+
+Ownership: existing Web api/config.py, api/runs.py, api/backtests.py, frontend
+runClient/NewAnalysisPage/locales, existing offline analysis/backtest tests and
+frontend/browser tests; README, blueprint, ADR-001-choice.md, current trace,
+evaluation, review, bug and AI-use records. No core/CLI/safety/trading source,
+real .env/keys, dependencies, prompts, permissions, Git or live-service actions.
+Existing REQ-WEB-001/003/005/011/013 and INV-WEB-001/003/006/014 apply. Refine
+existing architecture statements that previously treated every model variable
+as a lock; retain original requirement IDs/status and historical evidence.
+
+Prior verification design: API default projection and omitted request values;
+explicit provider/models accepted despite environment defaults; wrong/missing
+models on provider switch rejected; endpoint/thinking isolation and no secret
+exposure; unchanged budget/language/checkpoint enforcement; backtest defaults
+and no mutation of shared DEFAULT_CONFIG. Frontend configured preselection over
+stale preferences/drafts, editable selection and returning models, private draft
+persistence and canonical submission; Chromium real POST plus negative existing
+validation. Run each offline/frontend/browser suite once after implementation,
+with temporary data and no real model or market calls. Current direct correction
+authorizes this bounded change, not an independent test-file review or final
+human acceptance. The registry's legacy test_web_wizard.py reference is absent;
+its draft status remains unchanged and current tests provide scoped evidence.
+
+
+Closing evidence for web-model-defaults-20261121-v1: implementation follows the
+bounded plan. Provider/model selection is editable end to end, default provenance
+is public without secrets, backtests keep defaults, and provider-specific
+endpoint/thinking fields do not cross providers. Offline 3040 passed / 1 optional
+skip / 88 subtests; frontend 68 and Chromium 29 passed. Ruff, scoped mypy,
+ESLint, TypeScript/build and document checks pass; chunk warning remains.
+No core/CLI/safety/trading source changes, real key/environment access, live
+providers or Git operation. Current human instruction is the authorization;
+independent review and final acceptance have not been fabricated.
+
+
+## Backtest per-date progress — 2026-11-21
+
+Iteration: web-backtest-progress-20261121-v1. Direct human scope: add frontend
+per-date progress so a long backtest does not appear stuck. The user changed the
+model alias independently; the capability-table repair is not included.
+
+Necessary integration: core run_backtest has no start/finish callback. Add an
+optional, context-scoped, read-only observer in existing src/tradingagents/
+backtest.py; publish initializing, cell started/completed/failed/skipped and
+settlement started/completed/failed facts around the existing serial calls.
+Preserve run_backtest arguments/results, propagation, exception handling,
+settlement, memory paths, ordering, CLI behavior and budgets. No Web/HTTP import
+in core, no global graph monkeypatch or duplicate backtest implementation.
+Observer exceptions are isolated from business execution, and context cleanup
+must occur on failure. This small core observability extension is necessary to
+fulfill the current request and is covered by ADR-007-run-controls.md before
+editing; no safety/trading/agent strategy changes or live calls are authorized.
+
+Web ownership: new runtime/backtest_progress.py owns presentation progress state
+under the existing BacktestRecord lock, snapshots and transition validation.
+Existing runner/coordinator/API bridge real events and show summarization/terminal
+phases. A paginated progress slice on GET /api/backtests/{run_id} uses optional
+cells_offset/cells_limit; omitted offset follows the current cell, limits bound
+returned detail. Counts distinguish success, failure and resume skips. Analysis
+completion is separate from settlement/final completion. Public progress never
+contains exception text, credentials, model messages or paths. Page refresh uses
+the current process record; legacy disk artifacts have no invented progress.
+
+Frontend ownership: new pages/Backtest/BacktestProgress.tsx and existing backtest
+page/client/locales/styles render native progress, current ticker/date/elapsed,
+per-date statuses and in-place pagination/follow controls. No ETA, simulated
+percentage, new route, cancellation or extra navigation. Existing layout and
+bilingual UI remain. Existing request defaults, models and core scoring stay.
+Allowlist includes the above files, existing core/backtest/Web tests and local
+fixture, README, blueprint and existing ADR/trace/review/evaluation/bug/AI-use
+records. No dependencies, permissions, prompts, real .env/user state or Git work.
+
+Requirements: REQ-WEB-006/007/011/021/026, INV-WEB-003/009/014 and current core
+compatibility contracts. Existing IDs/status remain unchanged. Prior verification
+scope: real core loop with fake graph barriers proves started snapshots before a
+cell finishes, terminal/skip/failure facts, settlement phase, unchanged output/
+order/memory and observer exception/context isolation; Web snapshots validate
+unknown/duplicate events, concurrent poll consistency, pagination bounds and
+refresh; frontend/browser actual progress at runtime, failed/skipped distinctions,
+100% cell completion while still settling, bilingual/mobile layout and no fake
+history progress or cancellation. Run each full offline/frontend/browser suite
+once after implementation, isolated from real providers. Direct request is the
+bounded implementation authorization, not independent test-file review or final
+human acceptance.
+
+
+Closing evidence for web-backtest-progress-20261121-v1: the implementation and
+verification completed before interruption; this record is now closed under the
+user's explicit commit/push instruction. Offline 3046 / 1 optional skip / 88
+subtests, frontend 71 passed; initial Chromium 26 passed / 4 failed, followed by
+four passing focused cases after the actual narrow-layout correction. All
+original assertions remain. Desktop/mobile visual review completed. Ruff,
+four scoped Web mypy modules, ESLint and build pass; explicit core mypy retains
+two unchanged summarize optional-float errors. Historical broader type/structure
+limits and chunk warning remain, so no complete CI/merge-ready verdict is made.
+
+Publication scope is all current authorized feature/webui changes, retaining
+ignored .agents/demo, real environment files, dependencies and generated output
+outside Git. The user explicitly requested local commit and remote push; no
+force push, merge, deployment or invented review approval is authorized.
 
 ## 2026-11-21 — PR #5 merge integration
 
 The repository user approved the concrete merge/conflict/test plan in chat with
-an explicit confirmation, then instructed Codex to continue after an
+an explicit confirmation, then instructed OpenCode to continue after an
 interruption. This authorizes implementation, corresponding test adjustments,
 verification, commit/push and continuation of the requested PR merge.
 It is NOT another contributor's GitHub approval and NOT final acceptance of the
@@ -1297,3 +2515,169 @@ result. Preserve release Gate/SourceAttempt, debate/run-budget, confidence cap,
 trusted-output and simulated-trading semantics. ADR-012 records the integration
 choices. Another contributor's review and Linux CI remain required before final
 merge; no human review is impersonated or backfilled.
+
+
+## Local release merge — 2026-11-21
+
+Human authorization: the current user requested pulling remote release into
+local release, then merging local release into local feature/webui and resolving
+understandable conflicts. This authorizes the local merge commit and necessary
+compatibility resolutions; it does not authorize pushing this merge or represent
+independent review/final acceptance.
+
+Parents: WebUI 977a22b and updated release 9a08e08. Preserve src/ and test/
+layout, both histories, all imported core protections and existing Web features.
+Keep the intentional CHANGELOG.md deletion from the approved layout preparation;
+release changes remain represented in the existing ADR/evaluation/trace records
+and Git history. No new root deliverable is introduced. Imported development-tool
+labels follow the existing user-required OpenCode convention, preserving dates,
+contributions, outcomes and approval scope.
+
+Integration findings required only three test-file changes: accept Yahoo's new
+session constructor argument and validate release's unavailable-data/Hold path;
+assert the new v2 core policy identity together with the existing Web digest;
+and correct a newly imported test's repository-root path. Product implementation
+conflict resolution introduces no changes beyond the imported release source.
+Exact verification and failed intermediate attempts belong in the logbook.
+
+
+## PR #7 CI diagnosis and bounded repair — 2026-11-21
+
+Scope version: web-ci-repair-20261121-v1. The user reported multiple failing
+checks on PR #7. Current local/remote feature head is 095fa59, base release
+9a08e08; working tree was clean. Actions run 44867605790 is the actual source
+of CI evidence. This record is not a human test-plan review or final approval.
+
+Bounded maintenance plan: install the existing web extra alongside dev in the
+regression, full-source type/audit and architecture/security jobs that verify
+WebUI code. Keep the lean core clean-install job and every other gate. Map the
+approved tests/trading/live relocation to test/live/trading in the diff checker;
+do not invent entries for nonexistent test/offline/trading/live files. Preserve
+actual content changes and reject duplicate logical paths. Allowlist is
+.github/workflows/ci.yml, test/ci_gates.py, test/offline/test_ci_gates.py and
+existing architecture/governance evidence documents. No runtime implementation,
+dependency declaration, permission or approval/semantic decision changes.
+
+Verification design: map each live/offline/root test independently; assert a
+modified live fixture still appears in changes; reject a tree containing both
+old and new copies of the same logical file; verify WebUI-checking jobs install
+the declared optional web extra while the core smoke install stays lean. Run
+the complete offline regression and the full test tree with credentials absent,
+dotenv disabled and sockets denied, plus Ruff/schema/requirements checks. Do not
+skip failed tests or treat blocked sockets as live proof.
+
+Larger findings remain separately gated: mypy reports 322 errors in 60 existing
+source files, including core/CLI/safety; Bandit reports 10 medium/high findings.
+The review gate lacks a verifiable prior [test-plan-approved] event. Semantic
+evaluation currently triggers only on the four development governance prompt
+files with name-normalization edits and lacks a base-approved evaluator. Do
+not weaken these gates or fabricate approvals/evaluation evidence. The current
+user has been asked whether to authorize broader core type/security repair;
+continue only the bounded CI installation/identity repair while that is pending.
+
+
+### Expanded scope explicitly authorized — 2026-11-21
+
+The user answered the CI scope question: repair all type and security issues
+while preserving business behavior. This is direct authorization for
+web-ci-types-security-20261121-v1 (ADR-012), including protected core/CLI/trading/
+safety paths where necessary. The prior question identified those paths and
+retained every check. The ADR records the bounded design and positive/negative
+test strategy before implementation. No separate test-file review, platform
+prior-test approval, final acceptance or commit/push authorization is invented.
+Preserve the existing uncommitted bounded CI fixes and every previous test.
+
+
+Closing evidence for web-ci-types-security-20261121-v1: complete mypy reports
+zero errors in 194 files and Bandit reports zero medium/high findings with no
+excluded tests/nosec. Full isolated Python tree: 4240 passed, 3 skipped,
+92 subtests; frontend: 71 passed. Detailed commands, the dependency-audit proxy
+failure/retry, and verification limits are in the logbook. Rules and assertions
+are not weakened. The actual tuple-return defect is repaired according to the
+existing denials contract, and normal prompt/ID bytes are regression-pinned.
+No policy/strategy/threshold, broker, execution authorization or audit hash
+changes. Final typing/import-only refinements received static/import/CLI smoke
+checks after the full suite; a repeated full suite is not claimed. The user
+requested source fixes, so they remain uncommitted/unpushed. Separate platform
+prior-test/current-head reviews and a base-approved evaluator remain missing.
+
+
+Publication authorization — 2026-11-21: the user explicitly requested committing,
+pushing and submitting a PR after the complete type/security repair report.
+Existing PR #7 remains open from feature/webui to release; update it with the
+normal push and current scope/evidence. This authorizes publication of the
+completed working tree, not a force push, gate bypass, approval, merge or
+fabricated CI result. The earlier no-publication statements describe their
+original implementation phases and are superseded only for this Git action.
+
+
+## CI policy simplification authorization — 2026-11-21
+
+The current user requested simplifying the prior-review and semantic gates.
+web-ci-policy-simple-20261121-v1 and ADR-012 record the concrete replacement:
+native GitHub reviews, blocking AI-use coverage, optional explicitly unrun empty
+semantic policy, and unchanged enforcement of configured semantic evaluations.
+This is direct authority to change these CI policies and their tests, not an
+independent test-file review, final approval or permission to forge missing
+history. Existing role/path and business-safety rules remain. No commit, push,
+merge or remote-protection change is authorized by this implementation request.
+
+Implementation evidence: the custom review API/chronology/marker checker is
+removed; the compatibility approval command issues an ownership notice only.
+The workflow retains blocking AI-use coverage and all automatic prerequisites.
+Absent/empty semantic policy reports NOT RUN; configured policy errors and
+quality failures still block. Active documentation is synchronized, while dated
+history remains historical.
+
+Final isolated regression: 4240 passed, 3 skipped, 22 warnings, 92 subtests,
+44.37s. Ruff, checker-scoped mypy and both requirements validators pass after
+the recorded lint/annotation corrections. Actual semantic/approval commands
+return zero with explicit unrun/ownership notices, not quality/review passes.
+See the evaluation logbook for exact limits. Agent assessment: ready for human
+review of this policy revision; no human merge approval or remote green CI
+result is claimed. Changes remain local and uncommitted.
+
+### CI policy publication authorization — 2026-11-21
+
+The user subsequently requested commit, push and PR submission for the completed
+policy simplification. This authorizes a normal feature/webui push and updating
+the existing open PR #7 to release. Earlier no-publication statements describe
+the implementation phase; this instruction supersedes them for publication
+only. No force push, merge, reviewer approval or branch-protection change is
+authorized. Verification remains the results recorded above; remote CI outcomes
+will be reported separately after publication.
+
+### Report idempotency test clock repair — 2026-11-21
+
+Scope ci-report-clock-20261121-v1. The human owner explicitly accepted the
+proposed test-only repair after reviewing the CI failure: freeze report
+generation time in test_report_export_idempotent, preserve complete report and
+confidence-cap equality, and leave production behavior and blocking gates
+unchanged. This is current conversation authorization for this repair, not an
+independent final review or GitHub approval.
+
+CI PR run 44879223281 at 38279ae failed only this test: report headers were
+generated at 07:14:16 and 07:14:17. The dependent blocking-gate failed because
+regression failed. The same-head push Python 3.12 job passed, supporting the
+observed real-clock boundary cause rather than a demonstrated version defect.
+
+Allowlist: test/offline/test_confidence_cap_runtime.py and existing AI-use,
+bug, evaluation, traceability and review records. Use pytest monkeypatch for
+the reporting module's clock; assert the fixed Generated header and retain
+all complete-report and confidence-cap comparisons. Run one complete
+credential-free/socket-denied suite after edits plus Ruff and document
+validation. No source/runtime, dependencies, schema, threshold, skip policy,
+workflow, remote setting or publication change is included.
+
+Verification completed once after the test edit: complete socket-denied suite
+4240 passed, 3 skipped, 22 warnings, 92 subtests in 42.80s. Ruff, both requirements
+validators and whitespace checks pass. No source or original assertion was
+removed; the exact fixed Generated header is an additional assertion. These are
+local results, not independent human acceptance or a passing hosted 3.12 run.
+The repair remains uncommitted and unpushed under the current instruction.
+
+Publication authorization — 2026-11-21: the user subsequently requested
+committing, pushing and submitting this repair. Publish the verified candidate
+on feature/webui with a normal push and update existing PR #7 to release.
+This supersedes the preceding implementation-phase publication limit only;
+no force push, merge, review approval or remote-protection change is authorized.
