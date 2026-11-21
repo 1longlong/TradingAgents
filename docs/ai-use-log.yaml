@@ -6394,3 +6394,15 @@ entries:
   - test/offline/test_tool_date_enforcement.py
   - test/offline/test_undated_tools_as_of.py
   - test/offline/test_vendor_errors.py
+- id: AUL-110
+  date: '2026-11-21'
+  tool: ChatGPT
+  phase: verification
+  purpose: AI-assisted correction of the CI regression test's expected blocking jobs after the human-applied workflow
+    update added frontend and frontend-e2e jobs.
+  scope: 'PR #8 post-merge GitHub Actions follow-up.'
+  outcome: The human executed the one-line test adjustment. The targeted test passed and test_ci_gates.py passed
+    49 tests. The subsequent AI-use-log check identified missing file coverage.
+  human_review: pending
+  paths:
+  - test/offline/test_ci_gates.py
