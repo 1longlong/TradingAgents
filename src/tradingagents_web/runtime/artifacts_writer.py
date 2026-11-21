@@ -36,6 +36,8 @@ class RunArtifactWriter:
         allowed = {
             "analysts",
             "research_depth",
+            "debate_termination",
+            "max_risk_discuss_rounds",
             "llm_provider",
             "quick_think_llm",
             "deep_think_llm",

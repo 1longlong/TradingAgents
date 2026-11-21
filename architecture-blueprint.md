@@ -155,7 +155,7 @@ change governance on its own.
 | Actor | Authority | Boundary |
 | --- | --- | --- |
 | Human (WANG Yiwen, 60536848) | Ultimate: scope, safety, git, network, approvals | Owns `.opencode/rules.md` (human-only) and every phase/review decision |
-| Coding agent (OpenCode) | Read/analyze/implement within the active authorized scope | May suggest; must stop and ask on any denied action |
+| OpenCode | Read/analyze/implement within the active authorized scope | May suggest; must stop and ask on any denied action |
 | Runtime graph (gate/evaluator/agents) | Emits a verdict/recommendation within deterministic rules | Cannot override a blocked verdict downstream (FR-DQG-006) |
 
 Advice is never promoted to authority by an AI: human decisions cannot be
@@ -330,7 +330,7 @@ Outputs: a validated run request or a field-level error.
 Rules:
 - Validation mirrors the CLI and core rules; the core remains authoritative.
 - The provider/API-key step displays `configured / not_configured / not_required` from the server environment and never accepts a key.
-- Environment-locked values are shown as locked with their source, matching the CLI's "from environment" messages.
+- Provider and quick/deep models are preselected from server defaults and remain editable in Web analysis. Other environment-locked settings remain read-only with their source; see the model-defaults refinement.
 - Crypto detection filters out the fundamentals analyst, matching `filter_analysts_for_asset_type`.
 - The request accepts only the allowlisted fields; the client cannot submit a config dictionary or a filesystem path.
 
@@ -798,3 +798,214 @@ the release branch's incompatible ACL schema. Test paths follow the existing
 merged `test/offline/` and `test/live/` layout. Historical subsystem approvals and
 results retain their original scope; merged-tree verification is recorded in
 the review memo and evaluation logbook.
+
+### W10 Local startup modes
+
+The user approved `web-startup-20261120-v1` on 2026-11-20. Existing `cli.py` owns
+argument parsing and static serving; `launcher.py` owns frontend prerequisites,
+port checks, readiness and owned-child supervision. `--dev` starts a single-worker
+backend plus loopback-only Vite; `/api` proxies to the selected backend port.
+`--build` runs the existing build then serves static files from the backend.
+The default command still serves previously built assets. No tool installs
+packages, kills unrelated listeners, runs an analysis or changes core behavior.
+Ctrl+C/failure cleans up children; `--open` waits for service readiness. These
+modes use current dependencies and the native source tree, not the ignored demo.
+References: REQ-WEB-020/023/026/027, ADR-002/003 frontend-stack,
+INV-WEB-001/003/013/014/015.
+
+
+### W8/W4 stage-based activity presentation
+
+Under the user's `web-activity-20261120-v1` request, W4 may add optional `stage`
+and `speaker` fields to existing public message/tool payloads. The projector
+owns classification of emitted public messages and appended research/risk
+histories. It excludes non-text reasoning blocks and private audit transcripts.
+W8 owns `frontend/src/utils/runActivity.ts` (presentation stage grouping) and
+`components/RunActivity.tsx` (progress tabs, bounded activity and stage reports).
+The four groups follow actual analyst, research, trader and risk state; the
+final assessment belongs to risk review. The view follows newly entered stages
+and permits manual review without changing execution. Replayed snapshots retain
+stage metadata; unassigned legacy messages remain accessible in All activity.
+Run activity stays visible after completion, cancellation or failure. Existing
+redaction, event sequencing, report authority and terminal semantics are retained.
+References: REQ-WEB-002/007/021, ADR-002-backend-framework-and-transport,
+ADR-003-frontend-stack, INV-WEB-001/003/012/014. Final human acceptance is pending.
+
+
+### W8 English/Chinese interface localization
+
+Under `web-i18n-20261120-v1`, retain existing i18next and reactive component
+subscriptions. Existing `frontend/src/i18n/index.ts` owns the normalized locale,
+local preference and document language; new `i18n/ui.ts` owns UI text lookup
+and subscriptions, with explicit interpolation and English fallback. Existing
+English/Chinese JSON files own matching interface catalogues. Frontend views
+and date formatters localize presentation only; canonical field values, routes,
+REVIEW/ratings, report output language, source/model/tool content and SSE identity
+remain authoritative and unchanged. The workspace exposes language switching
+on desktop/mobile without resetting forms or runs. No backend translation
+service, dependency or runtime prompt is introduced. REQ-WEB-014/021, ADR-003,
+INV-WEB-001/003/007/012/014. Final human acceptance remains pending.
+
+
+### W1/W3 per-analysis debate settings and recovery identity
+
+Under `web-debate-settings-20261120-v1`, existing request/config/run modules
+project a strictly allowlisted subset of the core DebateTerminationConfig.
+New runtime/debate_policy.py owns merge/precedence/public projection while the
+core resolver owns policy validation. No paths, manifest/trace selectors or
+arbitrary configuration are accepted from the browser. Resolved root/nested
+round caps agree; existing environment locks remain authoritative. Snapshots and
+run metadata record normalized public debate settings and independent risk caps.
+
+New runtime/analysis_graph.py subclasses the existing core graph solely to
+extend its checkpoint signature with a fingerprint for nondefault termination
+policies. All graph execution, evidence, ledger, cancellation and decisions stay
+in core methods. Default policies keep legacy identities; custom policies have
+distinct recovery identities even if only a convergence threshold changes.
+GraphRunner retains its existing factory injection point for offline tests.
+
+Frontend components/DebateSettings.tsx and utils/debateSettings.ts own typed
+controls, translated labels and form feedback; the existing wizard/client owns
+submission/drafts and the live/history views show effective settings. Quick
+presets retain coupled round behavior until risk rounds are explicitly edited;
+locked values are shown read-only. Budgets are debate-scoped and admission may
+use estimates; these controls do not promise an analysis-wide monetary cap.
+REQ-WEB-001/003/013/014, FR-DDT-004, ADR-001-choice/007-run-controls and
+INV-WEB-001/003/006/009/010/012/014 apply. Final human acceptance pending.
+
+The existing artifacts/index.py projects validated recorded policy without
+applying current environment defaults to historical runs. Missing or malformed
+legacy settings stay absent. The runs router returns the standard validation
+envelope for malformed typed inputs without echoing submitted values, including
+nonfinite JSON numbers that cannot safely be serialized in default error detail.
+
+
+## TUI capability parity — 2026-11-20
+
+Scope/test plan: web-tui-parity-20261120-v1. The user approved the preceding
+capability audit recommendations, excluding language expansion and simulated
+trading. Implement individual role status, analyst timing and real report counts,
+positive-integer custom backtest spacing, and OpenRouter discovery/refresh.
+Keep credentials and CLI preferences server-owned; no new preference writes,
+core/CLI/safety/trading changes, dependencies, deployment or Git operations.
+REQ-WEB-001/002/006/007/013/014/021; INV-WEB-001/003/006/007/012/014;
+ADR-001-choice, ADR-003-frontend-stack and ADR-007-run-controls apply.
+
+Ownership: existing WebUI runtime projector/graph_runner/coordinator, new
+runtime/model_catalog.py for bounded cached public-model discovery, config API
+and app composition; existing frontend run store/activity/utilities, wizard/model
+client, backtest interval control and bilingual labels; focused tests under
+existing offline/frontend/e2e trees and existing architecture/process records.
+No new language options or simulated-trading integration. Individual statuses
+come from observed graph node lifecycle/output, with aggregate team events
+retained. Completed reports require their finalizing node and content, not
+interim debate text. Timings cover observed current-process work; restored
+historical stages are not assigned fabricated durations. Existing snapshots
+carry added stats and times without lifecycle/idempotency changes.
+
+OpenRouter uses its fixed public models URL without credentials or client URLs,
+filtered to validated text model IDs/names, newest mainstream shortlist matching
+TUI, with bounded response/time, application-local TTL and refresh coalescing.
+Failures produce a safe warning with cached/custom-ID fallback; arbitrary model
+IDs remain accepted. No live discovery/model requests run in verification.
+
+Prior tests: per-role/repeated turns, default empty states, blocked/partial and
+resumed runs; exact report finalization counts and injected-clock analyst times;
+real core offline runner stats/snapshots; reconnect preservation and stage filters
+with new risk roles; custom intervals including invalid zero/fractional inputs;
+OpenRouter sorting/filtering/deduplication, cache/refresh, HTTP/malformed/oversize
+failure and redaction, no calls for other providers; manual IDs and refresh
+preserve draft inputs with stale-response guards. Run full isolated offline,
+frontend lint/types/tests/build, local Chromium and schema/permissions/whitespace.
+Direct scope authorization is recorded; no separate test-file review or final
+human acceptance is asserted.
+
+
+## Simulated-trading WebUI integration — 2026-11-21
+
+Plan/test version: web-simulation-20261121-v1. Human source: current user request
+for corresponding simulated-trading frontend, followed by explicit selection
+"frontend and necessary interfaces, integrate the existing simulated core".
+The user requires a single final verification phase after implementation; do not
+run iterative tests during development. This direct instruction authorizes this
+bounded integration; no independent test-file review or final acceptance is
+asserted. Preserve all prior working changes and feature/webui.
+
+Requirements: FR-TRD-001..006, INV-TRD-001..003, NFR-TRD-001 and
+REQ-WEB-001/006/007/013/014/021/023. Existing core statuses/IDs and historical
+approval scope are unchanged. ADR-001-simulated-trading-system.md and
+ADR-001-choice.md/003-frontend-stack.md/007-run-controls.md receive this Web
+composition refinement. No trading/safety/core/CLI logic is modified.
+
+Ownership/allowlist: new Web runtime simulation.py and simulation_jobs.py,
+models/simulation_requests.py, api/simulation.py; existing app/coordinator and
+security route-prefix integration; new frontend api/simulationClient.ts,
+pages/SimulationPage.tsx, pages/Simulation/* view components and utility/types;
+existing app/nav/styles/catalogues, README, package inclusion in pyproject.toml
+for the already-existing trading/safety packages, focused offline/frontend/
+Chromium tests and current architecture/process records. No dependency added,
+credential/environment-template/prompt/rule/permission edit, broker, automatic
+live trading, release or Git operation.
+
+Contracts: fixed server-owned results_dir/simulated_trading namespace, Decimal
+strings for money/quantity, no submitted filesystem paths/config/execution
+permissions. Explicit initialize/reset with confirmation; reset preserves audit.
+Use existing pipeline for completed advisory report -> deterministic sizing ->
+safety evaluation -> simulated fill or issued human approval. Caller supplies
+an explicitly labeled scenario quote with aware timestamp; no LLM price or size
+is accepted. Approval requires reason/name plus an issued in-memory request,
+matching portfolio version, unexpired approval and still-fresh quote; only the
+core engine can execute. Reject repeated/mismatched/stale decisions; public
+idempotency receipts persist, but pending approvals cannot survive process
+restart and must be reevaluated. State/audit corruption or uncertain execution
+persistence blocks further mutations. All public reads redact paths/secrets.
+
+One per-process manager and advisory filesystem ownership lock prevent another
+Web process using the same simulation namespace. All mutating transactions use
+the existing coordinator single-active slot. Background simulation backtests
+retain the slot through completion, expose polling/reload and offer no fake
+cancellation. Each job owns separate state/audit/cursor and immutable parameters;
+resume requires matching parameters/config. Existing BacktestRunner owns daily
+advancement, core providers own decisions/quotes. Deterministic rows and real
+analysis/historical quote modes are explicitly distinct. Without a synchronous
+human callback, pending approvals in walk-forward runs remain unexecuted and are
+counted, matching core behavior; account approvals belong to the interactive
+account flow. No unattended approval or fabricated fills/equity curves.
+
+Prior tests (written before the final run): initialize/account Decimal values,
+reset audit retention/confirmation/version, completed-report selection, approved/
+pending/rejected/no-action outcomes, explicit human approve/deny/expiry/staleness,
+no bypass/duplicate execution, restart receipts and pending invalidation, audit/
+state tampering and path escape, single-slot conflict, offline scenario walk-
+forward/resume/isolation and source/date validation, protected import boundary;
+frontend tabs/forms/negative validation/empty-error states, confirmation and
+manual approval, canonical requests and no unsupported cancel/broker controls;
+local Chromium account/approval/backtest/audit plus previous suites. Run all
+network-isolated offline tests, frontend lint/types/tests/build, local Chromium,
+schema/permissions/whitespace together only after implementation. No real
+provider calls or user runtime-state access in verification.
+
+
+## Web model defaults refinement — 2026-11-21
+
+web-model-defaults-20261121-v1 and ADR-001-choice.md supersede the W1 blanket
+lock description for provider and quick/deep model selection: environment values
+preselect editable analysis controls, explicit run choices win, and omission or
+backtests use server defaults. Budget/round and other unrelated locks remain.
+The configuration projection separates env_defaults from env_locks without
+exposing credentials or endpoint paths. Provider switching cannot carry another
+provider's models, endpoint or thinking settings. Draft model choices record
+only a non-secret provider/model baseline; stale defaults invalidate selection
+fields. Public routes and core/CLI ownership and behavior stay unchanged.
+
+
+## Backtest per-date progress — 2026-11-21
+
+web-backtest-progress-20261121-v1 / ADR-007-run-controls.md assigns generic optional
+loop observation to existing core backtest.py, and presentation state to new
+tradingagents_web.runtime.backtest_progress. The runner scopes observation to its
+worker context; coordinator owns synchronization/lifetime. Existing backtest GET
+adds bounded progress paging (cells_offset/cells_limit), retaining old fields and
+launch inputs. New frontend pages/Backtest/BacktestProgress.tsx renders truthful
+cell/settlement status and elapsed time. The core stays independent of Web/HTTP;
+public backtest signature/results, CLI, memory and analysis semantics remain.

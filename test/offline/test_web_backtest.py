@@ -382,3 +382,182 @@ def test_invalid_backtest_requests_are_rejected(tree_client, overrides):
     response = client.post("/api/backtests", json=_body(**overrides))
     assert response.status_code in {400, 422}, response.text
     assert client.get("/api/runs/active").json().get("run_id") is None
+
+
+@pytest.mark.parametrize(
+    "kind,category",
+    [
+        ("internal", "internal"),
+        ("config", "config"),
+        ("missing_key", "config"),
+        ("authentication", "authentication"),
+        ("provider_limit", "rate_limit"),
+        ("market_limit", "market_data_rate_limit"),
+    ],
+)
+def test_backtest_failures_are_logged_safely_and_release_the_slot(
+    tree_client, monkeypatch, caplog, kind, category
+):
+    """REQ-WEB-011/013, INV-WEB-003/014: diagnostics never replace failures or leak secrets."""
+    from openai import OpenAIError
+    from yfinance.exceptions import YFRateLimitError
+
+    tree, client = tree_client
+    secret = "temporary-backtest-provider-secret-1234567890"
+    private_path = "/private/test/provider/credentials.json"
+    monkeypatch.setenv("DEEPSEEK_API_KEY", secret)
+    raw = f"provider failed with {secret} at {private_path}"
+    error = RuntimeError(raw)
+    if kind == "config":
+        error = ValueError(raw)
+    elif kind == "missing_key":
+        error = OpenAIError("The api_key client option must be set " + raw)
+    elif kind == "market_limit":
+        error = YFRateLimitError()
+    elif kind in {"authentication", "provider_limit"}:
+        error.status_code = 401 if kind == "authentication" else 429
+    before = hashlib.sha256(tree.memory_log_path.read_bytes()).hexdigest()
+    _install_fake(monkeypatch, error=error)
+    _, run_id = _start(client)
+    terminal = _wait_terminal(client, run_id)
+    assert terminal["status"] == "failed"
+    failure = terminal["error"]
+    assert failure["category"] == category
+    assert failure["phase"] == "backtest"
+    assert re.fullmatch(r"c_[a-f0-9]{12}", failure["correlation_id"])
+    assert f"Backtest {failure['correlation_id']} failed during backtest" in caplog.text
+    assert "Traceback (most recent call last)" in caplog.text
+    assert secret not in caplog.text
+    public = json.dumps(terminal)
+    assert secret not in public
+    assert private_path not in public
+    assert raw not in public
+    assert "Traceback" not in public
+    if kind == "internal":
+        assert failure["message"].startswith("Backtest failed")
+    elif kind == "missing_key":
+        assert "server's default model provider" in failure["message"]
+        assert "not analysis-wizard selections" in failure["message"]
+    assert hashlib.sha256(tree.memory_log_path.read_bytes()).hexdigest() == before
+    deadline = time.monotonic() + 5
+    while client.get("/api/runs/active").json().get("run_id") and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert client.get("/api/runs/active").json()["run_id"] is None
+    _install_fake(monkeypatch)
+    _, next_id = _start(client)
+    assert _wait_terminal(client, next_id)["status"] == "completed"
+
+
+
+def test_backtests_keep_environment_model_defaults(tree_client, monkeypatch):
+    """REQ-WEB-011/013: editable analysis selection does not replace server backtest defaults."""
+    from copy import deepcopy
+
+    from tradingagents.default_config import DEFAULT_CONFIG
+
+    before = deepcopy(DEFAULT_CONFIG)
+    monkeypatch.setenv("TRADINGAGENTS_LLM_PROVIDER", "deepseek")
+    monkeypatch.setenv("TRADINGAGENTS_QUICK_THINK_LLM", "deepseek-flash")
+    monkeypatch.setenv("TRADINGAGENTS_DEEP_THINK_LLM", "deepseek-flash")
+    _, client = tree_client
+    calls = []
+    _install_fake(monkeypatch, calls=calls)
+    _, run_id = _start(client)
+    assert _wait_terminal(client, run_id)["status"] == "completed"
+    assert calls[0]["config"]["llm_provider"] == "deepseek"
+    assert calls[0]["config"]["quick_think_llm"] == "deepseek-flash"
+    assert calls[0]["config"]["deep_think_llm"] == "deepseek-flash"
+    assert before == DEFAULT_CONFIG
+
+
+@pytest.mark.parametrize("fail_second", [False, True])
+def test_real_core_progress_is_visible_before_completion_and_while_settling(tree_client, monkeypatch, fail_second):
+    """REQ-WEB-007/011/026, INV-WEB-014: observe the actual loop, never infer progress from disk."""
+    import tradingagents.backtest as core
+    import tradingagents_web.runtime.backtest_runner as web
+
+    tree, client = tree_client
+    in_cell, release_cell = threading.Event(), threading.Event()
+    in_settlement, release_settlement = threading.Event(), threading.Event()
+
+    class Graph:
+        def __init__(self, analysts, config):
+            self.memory_log = TradingMemoryLog(config)
+
+        def propagate(self, ticker, date, asset_type, portfolio=None):
+            if date == "2026-06-08":
+                in_cell.set()
+                assert release_cell.wait(5)
+                if fail_second:
+                    raise RuntimeError("offline cell failure")
+            self.memory_log.store_decision(ticker, date, "**Rating**: Buy")
+
+        def settle_pending(self, ticker):
+            in_settlement.set()
+            assert release_settlement.wait(5)
+
+    monkeypatch.setattr(core, "TradingAgentsGraph", Graph)
+    monkeypatch.setattr(web, "run_backtest", core.run_backtest)
+    try:
+        _, run_id = _start(client, _body(tickers=["NVDA"]))
+        assert in_cell.wait(5)
+        path = f"/api/backtests/{run_id}"
+        active = client.get(path).json()
+        p = active["progress"]
+        assert active["status"] == "running"
+        assert p["phase"] == "analyzing" and p["current_date"] == "2026-06-08"
+        assert p["processed"] == 1 and p["total"] == 2
+        assert [row["status"] for row in p["cells"]] == ["completed", "running"]
+        assert p["cells"][1]["elapsed_seconds"] >= 0
+        reloaded = client.get(path).json()["progress"]
+        assert [row["status"] for row in reloaded["cells"]] == ["completed", "running"]
+        paged = client.get(path + "?cells_offset=1&cells_limit=1").json()["progress"]
+        assert paged["offset"] == 1 and len(paged["cells"]) == 1
+        assert paged["cells"][0]["date"] == "2026-06-08"
+        for query in ("cells_offset=-1", "cells_limit=0", "cells_limit=101"):
+            assert client.get(path + "?" + query).status_code == 422
+        release_cell.set()
+        assert in_settlement.wait(5)
+        settling = client.get(path).json()
+        assert settling["status"] == "running"
+        assert settling["progress"]["processed"] == 2
+        assert settling["progress"]["phase"] == "settling"
+        assert settling["progress"]["failed"] == int(fail_second)
+        listing = client.get("/api/backtests").json()["items"]
+        assert next(row for row in listing if row["run_id"] == run_id)["status"] == "running"
+        release_settlement.set()
+        finished = _wait_terminal(client, run_id)
+        assert finished["progress"]["phase"] == "completed"
+        assert finished["progress"]["completed"] == 2 - int(fail_second)
+        assert finished["progress"]["settlements_completed"] == 1
+        assert len(finished["summary"]["failures"]) == int(fail_second)
+        legacy = client.get(f"/api/backtests/{tree.backtest_run_id}").json()
+        assert legacy.get("progress") is None
+    finally:
+        release_cell.set()
+        release_settlement.set()
+
+
+def test_progress_rejects_invalid_transitions_and_bounds_snapshots():
+    """REQ-WEB-011/021, INV-WEB-003/014: duplicate/foreign observations cannot inflate completion."""
+    from tradingagents_web.runtime.backtest_progress import BacktestProgress
+
+    p = BacktestProgress(["NVDA"], [f"2026-06-{index:02}" for index in range(1, 29)])
+    for event in [
+        {"event": "cell.completed", "ticker": "NVDA", "date": "2026-06-01"},
+        {"event": "cell.started", "ticker": "OTHER", "date": "2026-06-01"},
+        {"event": "settlement.started", "ticker": "NVDA"},
+        {"event": "summarizing"},
+    ]:
+        p.update(event)
+    assert p.snapshot()["processed"] == 0 and p.phase == "preparing"
+    for date in p.dates:
+        p.update({"event": "cell.skipped", "ticker": "NVDA", "date": date})
+        p.update({"event": "cell.completed", "ticker": "NVDA", "date": date})
+    snapshot = p.snapshot()
+    assert snapshot["processed"] == 28 and snapshot["skipped"] == 28
+    assert snapshot["offset"] == 25 and len(snapshot["cells"]) == 3
+    assert len(p.snapshot(0, 1000)["cells"]) <= 100
+    p.finish("completed")
+    p.update({"event": "cell.started", "ticker": "NVDA", "date": p.dates[0]})
+    assert p.snapshot()["phase"] == "completed"

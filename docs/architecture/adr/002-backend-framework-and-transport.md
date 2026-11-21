@@ -79,3 +79,15 @@ nor weakens the existing CSRF protected-route set.
 
 References: REQ-WEB-008/009/010/013/023/024/027, NFR-AUD-001,
 NFR-CMP-001/002/003, INV-WEB-001/003/004/005/011/012/014 and INV-9/10.
+
+## Addendum — local development launcher, 2026-11-20
+
+Under the user's `web-startup-20261120-v1` authorization, add supervised local
+startup modes to the existing entry point. The backend remains one Uvicorn worker
+on loopback. Development uses existing Vite as a second owned process and proxies
+API requests; the normal/build modes retain same-origin static serving. Keep
+security middleware unchanged, propagate only the chosen loopback proxy port,
+refuse occupied ports and close owned child groups on failure/interruption.
+Open the browser only after readiness. No network dependency installation or
+provider call belongs to launcher startup. This selects no new dependency or
+production transport; final human acceptance remains pending.

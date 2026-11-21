@@ -1,3 +1,4 @@
+import { ui, useUILanguage } from "../i18n/ui";
 // NFR-CMP-001/002/003, ADR-002/003, INV-9: the core owns replay and pairing.
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
@@ -12,6 +13,7 @@ import { Icon } from "../components/Icon";
 import { AuditBadge } from "./AuditPage";
 
 export function ComparisonPage() {
+  useUILanguage();
   const [selected, setSelected] = useState("D"),
     [mismatch, setMismatch] = useState(false);
   const catalog = useQuery({
@@ -41,11 +43,9 @@ export function ComparisonPage() {
     <>
       <section className="page-header">
         <div>
-          <p className="eyebrow">SAME CASE. TWO POLICIES.</p>
-          <h1>Policy comparison</h1>
+          <h1>{ui("Policy comparison")}</h1>
           <p className="page-description">
-            Inspect the existing fixed-round vs dynamic offline replay. This is
-            separate from financial backtesting.
+            {ui("Preset cases only · fixed rounds vs dynamic termination")}
           </p>
         </div>
         <div className="page-header-actions">
@@ -55,12 +55,12 @@ export function ComparisonPage() {
               href={comparisonDownload(selected, dynamicId)}
             >
               <Icon name="download" />
-              Export comparison
+              {ui("Export comparison")}
             </a>
           ) : (
             <button className="button ghost" disabled>
               <Icon name="download" />
-              Export comparison
+              {ui("Export comparison")}
             </button>
           )}
           <button
@@ -69,66 +69,55 @@ export function ComparisonPage() {
             onClick={() => void replay.refetch()}
           >
             <Icon name={pending ? "activity" : "refresh"} />
-            {pending ? "Replaying fixtures…" : "Replay scripted fixtures"}
+            {pending
+              ? ui("Replaying fixtures…")
+              : ui("Replay scripted fixtures")}
           </button>
         </div>
       </section>
-      <div className="comparison-intro panel">
-        <span>
-          <Icon name="layers" />
-        </span>
-        <div>
-          <h2>A controlled comparison, not a live benchmark.</h2>
-          <p>
-            {catalog.data
-              ? `${catalog.data.representative_cases} representative scripted cases plus ${catalog.data.regression_cases} input-exhaustion regression.`
-              : "Reading scripted case coverage."}{" "}
-            Provider costs, latency savings and profitability are not measured
-            here.
-          </p>
-        </div>
-        <AuditBadge value="Scripted / estimated" tone="warn" />
-      </div>
       {catalog.isError ? (
         <div className="panel empty-state" role="alert">
-          <strong>Comparison catalog unavailable</strong>
-          <p>{catalog.error.message}</p>
+          <strong>{ui("Comparison catalog unavailable")}</strong>
+          <p>{ui(catalog.error.message)}</p>
         </div>
       ) : (
         <>
           <div className="audit-toolbar">
             <label className="audit-scenario">
-              Inspect case
+              {ui("Inspect case")}
               <select
-                aria-label="Inspect case"
+                aria-label={ui("Inspect case")}
                 value={selected}
                 onChange={(event) => setSelected(event.target.value)}
               >
                 {cases.map((row) => (
                   <option key={row.case_id} value={row.case_id}>
-                    {row.case_id} · {row.title}
+                    {ui(row.case_id)}
+                    {ui(" · ")}
+                    {ui(row.title)}
                   </option>
                 ))}
               </select>
             </label>
+          </div>
+          <details className="panel audit-card compact-details pairing-card">
+            <summary>{ui("Pairing details")}</summary>
             <label className="audit-scenario">
-              Pairing check
+              {ui("Pairing check")}
               <select
-                aria-label="Pairing check"
+                aria-label={ui("Pairing check")}
                 value={mismatch ? "mismatch" : "matched"}
                 onChange={(event) =>
                   setMismatch(event.target.value === "mismatch")
                 }
               >
-                <option value="matched">Matching case identity</option>
+                <option value="matched">{ui("Matching case identity")}</option>
                 <option value="mismatch">
-                  Different scripted case identity
+                  {ui("Different scripted case identity")}
                 </option>
               </select>
             </label>
-          </div>
-          <section className="panel audit-card pairing-card">
-            <p className="eyebrow">FOUR-PART IDENTITY CHECK</p>
+
             <div className="audit-identity-grid">
               {[
                 ["Ticker", "ticker"],
@@ -137,27 +126,32 @@ export function ComparisonPage() {
                 ["Policy version", "policy_version"],
               ].map(([label, key]) => (
                 <div key={key}>
-                  <small>{label}</small>
+                  <small>{ui(label)}</small>
                   <code>{text(identity[key])}</code>
                 </div>
               ))}
             </div>
             <p className="inline-note">
-              Both strategies must match ticker, date, evidence snapshot and
-              policy version. An identity mismatch blocks pairing.
+              {ui(
+                "Both strategies must match ticker, date, evidence snapshot and policy version. An identity mismatch blocks pairing.",
+              )}
               {mismatch
-                ? ` Fixed uses case ${selected}; dynamic uses case ${dynamicId}.`
-                : ""}
+                ? ui(
+                    " Fixed uses case {{value0}}; dynamic uses case {{value1}}.",
+                    { value0: selected, value1: dynamicId },
+                  )
+                : ui("")}
             </p>
-          </section>
+          </details>
           {pending ? (
             <div className="report-state-banner" role="status">
               <Icon name="activity" />
               <div>
-                <strong>Replaying local scripted fixtures</strong>
+                <strong>{ui("Replaying local scripted fixtures")}</strong>
                 <p>
-                  The server calls the existing deterministic replay. No model
-                  or market-data request is made.
+                  {ui(
+                    "The server calls the existing deterministic replay. No model or market-data request is made.",
+                  )}
                 </p>
               </div>
             </div>
@@ -165,10 +159,10 @@ export function ComparisonPage() {
             <div className="audit-verdict is-blocked" role="alert">
               <Icon name="warning" />
               <div>
-                <h2>Comparison blocked.</h2>
-                <p>{replay.error.message}</p>
+                <h2>{ui("Comparison blocked.")}</h2>
+                <p>{ui(replay.error.message)}</p>
                 <span className="audit-code">
-                  No comparative result or export is available.
+                  {ui("No comparative result or export is available.")}
                 </span>
               </div>
             </div>
@@ -187,8 +181,8 @@ export function ComparisonPage() {
                       <div className="audit-section-head">
                         <h2>
                           {key === "fixed"
-                            ? "Fixed-round baseline"
-                            : "Dynamic termination"}
+                            ? ui("Fixed-round baseline")
+                            : ui("Dynamic termination")}
                         </h2>
                         <AuditBadge
                           value={
@@ -200,14 +194,17 @@ export function ComparisonPage() {
                         />
                       </div>
                       <div className="strategy-rounds">
-                        <strong>{text(rounds)}</strong>
-                        <span>scripted rounds</span>
+                        <strong>{ui(text(rounds))}</strong>
+                        <span>{ui("scripted rounds")}</span>
                       </div>
                       {rounds != null ? (
                         <div
                           className="comparison-bar"
                           role="img"
-                          aria-label={`${key} completed ${rounds} scripted rounds`}
+                          aria-label={ui(
+                            "{{value0}} completed {{value1}} scripted rounds",
+                            { value0: key, value1: rounds },
+                          )}
                         >
                           <span
                             style={{ width: `${(rounds / maximum) * 100}%` }}
@@ -221,8 +218,8 @@ export function ComparisonPage() {
                           ["Stop reason", row.stop_reason],
                         ].map(([label, value]) => (
                           <div key={String(label)}>
-                            <dt>{String(label)}</dt>
-                            <dd>{text(value)}</dd>
+                            <dt>{ui(String(label))}</dt>
+                            <dd>{ui(text(value))}</dd>
                           </div>
                         ))}
                       </dl>
@@ -230,68 +227,46 @@ export function ComparisonPage() {
                   );
                 })}
               </div>
-              <div className="audit-two-col">
-                <section className="panel audit-card">
-                  <div className="audit-section-head">
-                    <div>
-                      <p className="eyebrow">CASE COVERAGE</p>
-                      <h2>Inspect why the policy behaves differently.</h2>
+              <details className="panel audit-card compact-details">
+                <summary>{ui("Human scoring & policy details")}</summary>
+
+                <p>
+                  {ui(
+                    "Source attribution, reasoning clarity, evidence groundedness and decision auditability require actual human scoring. This replay assigns no human score.",
+                  )}
+                </p>
+                <div className="rubric-grid">
+                  {result.rubric_dimensions.map((label) => (
+                    <div key={label}>
+                      <span>{ui(label.replaceAll("_", " "))}</span>
+                      <AuditBadge value="Pending" />
                     </div>
-                  </div>
-                  <div className="comparison-case-list">
-                    {cases.map((row) => (
-                      <button
-                        className={`comparison-case ${row.case_id === selected ? "selected" : ""}`}
-                        key={row.case_id}
-                        aria-pressed={row.case_id === selected}
-                        onClick={() => setSelected(row.case_id)}
-                      >
-                        <span>{row.case_id}</span>
-                        <div>
-                          <strong>{row.title}</strong>
-                          <small>
-                            {row.case_id === selected
-                              ? `${text(result.fixed.debate_rounds)} → ${text(result.dynamic.debate_rounds)} rounds · ${text(result.dynamic.stop_reason)}`
-                              : row.role}
-                          </small>
-                        </div>
-                        <Icon name="arrow" />
-                      </button>
-                    ))}
-                  </div>
-                  <p>
-                    {current?.role === "regression"
-                      ? "Input exhaustion is a regression case, not evidence of policy-driven early stopping."
-                      : "Representative scripted behavior, not a production performance claim."}
-                  </p>
-                </section>
-                <section className="panel audit-card">
-                  <p className="eyebrow">HUMAN TRACEABILITY RUBRIC</p>
-                  <h2>Unscored stays pending.</h2>
-                  <p>
-                    Source attribution, reasoning clarity, evidence groundedness
-                    and decision auditability require actual human scoring. This
-                    replay assigns no human score.
-                  </p>
-                  <div className="rubric-grid">
-                    {result.rubric_dimensions.map((label) => (
-                      <div key={label}>
-                        <span>{label.replaceAll("_", " ")}</span>
-                        <AuditBadge value="Pending" />
-                      </div>
-                    ))}
-                  </div>
-                  <p className="inline-note">
-                    Policy version{" "}
-                    {text(
+                  ))}
+                </div>
+                <p className="inline-note">
+                  {ui("Policy version")}
+                  {ui(" ")}
+                  {ui(
+                    text(
                       result.policy.policy_version ??
                         result.identity.policy_version,
-                    )}{" "}
-                    · max rounds {text(result.policy.max_debate_rounds)}.
-                    Estimated usage describes scripted execution only.
-                  </p>
-                </section>
-              </div>
+                    ),
+                  )}
+                  {ui(" ")}
+                  {ui("· max rounds ")}
+                  {ui(text(result.policy.max_debate_rounds))}
+                  {ui(". Estimated usage describes scripted execution only.")}
+                </p>
+              </details>
+              <p className="inline-note">
+                {current?.role === "regression"
+                  ? ui(
+                      "Input exhaustion is a regression case, not evidence of policy-driven early stopping.",
+                    )
+                  : ui(
+                      "Scripted replay only; profitability, real cost and latency are not measured.",
+                    )}
+              </p>
             </>
           ) : null}
         </>

@@ -1,16 +1,17 @@
+import { ui, useUILanguage } from "../i18n/ui";
 // REQ-WEB-010, ADR-003, INV-WEB-011: read-only decisions, outcomes and reflections.
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Modal } from "../components/Modal";
 import { Markdown } from "../components/Markdown";
 import { CompanyLogo } from "../components/Research";
-import { Link } from "react-router-dom";
 
 import { getAllHistory, getHistoryDetail } from "../api/client";
 import { Icon } from "../components/Icon";
 import { formatDate, ratingClass } from "../utils/workspace";
 
 export function JournalPage() {
+  useUILanguage();
   const history = useQuery({
     queryKey: ["history", "journal"],
     queryFn: getAllHistory,
@@ -33,54 +34,32 @@ export function JournalPage() {
     <>
       <section className="page-header">
         <div>
-          <p className="eyebrow">A RECORD OF YOUR REASONING</p>
-          <h1>Decision journal</h1>
-          <p className="page-description">
-            Read-only decisions, outcomes and reflections from the live decision
-            log.
-          </p>
-        </div>
-        <div className="page-header-actions">
-          <Link className="button ghost" to="/history">
-            <Icon name="folder" />
-            All research
-          </Link>
+          <h1>{ui("Decision journal")}</h1>
         </div>
       </section>
 
-      <div className="report-state-banner">
-        <Icon name="book" />
-        <div>
-          <strong>Decisions and reports are separate records.</strong>
-          <p>
-            A log entry contains the final decision and any later outcome or
-            reflection. It does not guarantee a full report or an exact report
-            link. Backtest logs remain separate.
-          </p>
-        </div>
-      </div>
-
       {history.isLoading || detail.isLoading ? (
-        <div className="panel empty-state">Loading decision log...</div>
+        <div className="panel empty-state">{ui("Loading decision log...")}</div>
       ) : history.isError || detail.isError ? (
         <div className="panel empty-state" role="alert">
-          <strong>Decision log unavailable</strong>
-          <p>{(history.error ?? detail.error)?.message}</p>
+          <strong>{ui("Decision log unavailable")}</strong>
+          <p>{ui((history.error ?? detail.error)?.message)}</p>
         </div>
       ) : !decision ? (
         <div className="panel empty-state">
           <Icon name="book" />
-          <strong>No decision log found</strong>
+          <strong>{ui("No decision log found")}</strong>
           <p>
-            The configured live decision memory does not exist yet. Run an
-            analysis to create the first entry.
+            {ui(
+              "The configured live decision memory does not exist yet. Run an analysis to create the first entry.",
+            )}
           </p>
         </div>
       ) : entries.length === 0 ? (
         <div className="panel empty-state">
           <Icon name="book" />
-          <strong>No decision entries</strong>
-          <p>The decision log exists but contains no entries.</p>
+          <strong>{ui("No decision entries")}</strong>
+          <p>{ui("The decision log exists but contains no entries.")}</p>
         </div>
       ) : (
         <section className="journal-list">
@@ -96,23 +75,30 @@ export function JournalPage() {
                   <h2>{String(entry.ticker ?? "")}</h2>
                   <p>{decisionText(String(entry.decision ?? ""))}</p>
                   <span className="eyebrow">
-                    {formatDate(String(entry.date ?? ""))} ·{" "}
+                    {ui(formatDate(String(entry.date ?? "")))}
+                    {ui(" ·")}
+                    {ui(" ")}
                     {rating === "REVIEW"
-                      ? "UNSCORED / REVIEW"
+                      ? ui("UNSCORED / REVIEW")
                       : entry.pending
-                        ? "PENDING OUTCOME"
-                        : `RESOLVED ${String(entry.resolved ?? "")}`}{" "}
-                    {entry.holding ? `· ${String(entry.holding)}` : null}
+                        ? ui("PENDING OUTCOME")
+                        : ui("RESOLVED {{value0}}", {
+                            value0: String(entry.resolved ?? ""),
+                          })}
+                    {ui(" ")}
+                    {entry.holding
+                      ? ui("· {{value0}}", { value0: String(entry.holding) })
+                      : ui(null)}
                   </span>
                   <button
                     className="text-button"
                     onClick={() => setSelected(entry)}
                   >
-                    Read decision & outcome
+                    {ui("Read decision & outcome")}
                     <Icon name="arrow" />
                   </button>
                 </div>
-                <span className={ratingClass(rating)}>{rating}</span>
+                <span className={ratingClass(rating)}>{ui(rating)}</span>
               </article>
             );
           })}
@@ -120,33 +106,42 @@ export function JournalPage() {
       )}
       <Modal
         open={Boolean(selected)}
-        title={`${String(selected?.ticker ?? "")} decision`}
+        title={ui("{{value0}} decision", {
+          value0: String(selected?.ticker ?? ""),
+        })}
         onClose={() => setSelected(null)}
       >
         {selected ? (
           <>
             <p className="eyebrow">
-              LIVE DECISION LOG · {formatDate(String(selected.date ?? ""))}
+              {ui("LIVE DECISION LOG · ")}
+              {ui(formatDate(String(selected.date ?? "")))}
             </p>
             <span className={ratingClass(String(selected.rating ?? ""))}>
-              {String(selected.rating ?? "—")}
+              {ui(String(selected.rating ?? "—"))}
             </span>
-            <h3>Original decision</h3>
-            <Markdown>{String(selected.decision ?? "Not recorded")}</Markdown>
-            <h3>Outcome</h3>
+            <h3>{ui("Original decision")}</h3>
+            <Markdown>
+              {String(selected.decision ?? ui("Not recorded"))}
+            </Markdown>
+            <h3>{ui("Outcome")}</h3>
             <p>
               {selected.pending
-                ? "Pending. No realized return or alpha is available."
-                : `Return ${String(selected.raw ?? "Not recorded")} · Alpha ${String(selected.alpha ?? "Not recorded")} · Holding ${String(selected.holding ?? "Not recorded")} · Resolved ${String(selected.resolved ?? "Not recorded")}`}
+                ? ui("Pending. No realized return or alpha is available.")
+                : ui(
+                    "Return {{value0}} · Alpha {{value1}} · Holding {{value2}} · Resolved {{value3}}",
+                    {
+                      value0: String(selected.raw ?? "Not recorded"),
+                      value1: String(selected.alpha ?? "Not recorded"),
+                      value2: String(selected.holding ?? "Not recorded"),
+                      value3: String(selected.resolved ?? "Not recorded"),
+                    },
+                  )}
             </p>
-            <h3>Reflection</h3>
+            <h3>{ui("Reflection")}</h3>
             <Markdown>
-              {String(selected.reflection || "No reflection recorded.")}
+              {String(selected.reflection || ui("No reflection recorded."))}
             </Markdown>
-            <p className="inline-note">
-              Read-only log entry. No report association or manual rating update
-              is assumed.
-            </p>
           </>
         ) : null}
       </Modal>

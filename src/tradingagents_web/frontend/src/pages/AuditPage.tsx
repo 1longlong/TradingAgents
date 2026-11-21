@@ -1,3 +1,4 @@
+import { ui, useUILanguage } from "../i18n/ui";
 // REQ-WEB-008/009/010, NFR-AUD-001, ADR-002/003, INV-WEB-003/014: recorded audit data only.
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
@@ -28,66 +29,17 @@ const TABS = [
   ["artifacts", "Artifacts"],
 ];
 export function AuditBadge({ value, tone }: { value: unknown; tone?: string }) {
+  useUILanguage();
   const label = text(value, "Unknown");
   return (
     <span
       className={`audit-badge ${tone ?? (["normal", "High", "Medium", "verified", "pass", "complete", "executed"].includes(label) ? "good" : ["blocked", "Blocked", "rejected", "fail", "invalid", "inconsistent"].includes(label) ? "bad" : ["degraded", "Low", "partial", "estimated", "mixed", "unverified"].includes(label) ? "warn" : "")}`}
     >
-      {label}
+      {ui(label)}
     </span>
   );
 }
-export function AuditOverview({ artifactId }: { artifactId?: string }) {
-  const audit = useQuery({
-    queryKey: ["audit", artifactId],
-    queryFn: () => getAudit(artifactId!),
-    enabled: Boolean(artifactId),
-    retry: false,
-  });
-  const data = audit.data;
-  if (!data?.available) return null;
-  const summary = object(data.data.run_summary),
-    manifest = object(data.data.evidence_manifest),
-    trace = object(data.data.debate_trace);
-  const verdict =
-    data.consistency?.status === "inconsistent"
-      ? "inconsistent"
-      : text(manifest.verdict ?? summary.gate_verdict);
-  return (
-    <section className="panel audit-overview">
-      <div className="audit-overview-title">
-        <Icon name="shield" />
-        <div>
-          <p className="eyebrow">BEHIND THIS ASSESSMENT</p>
-          <h3>
-            {verdict === "normal"
-              ? "Evidence checked. Provenance retained."
-              : verdict === "degraded"
-                ? "Usable evidence, with explicit limits."
-                : verdict === "blocked"
-                  ? "Critical evidence blocked the directional debate."
-                  : "Recorded audit, with explicit unknowns."}
-          </h3>
-        </div>
-      </div>
-      <div className="audit-overview-facts">
-        <AuditBadge value={`Gate · ${verdict}`} />
-        <AuditBadge
-          value={`Debate · ${text(trace.round_count ?? summary.debate_round_count)} rounds`}
-        />
-        <AuditBadge
-          value={`Accounting · ${text(object(summary.whole_run_usage).completeness, "unknown")}`}
-        />
-      </div>
-      <Link className="text-button" to={`/audit?artifact_id=${artifactId}`}>
-        Inspect the audit
-        <Icon name="arrow" />
-      </Link>
-    </section>
-  );
-}
 function Card({
-  eyebrow,
   title,
   children,
 }: {
@@ -95,36 +47,39 @@ function Card({
   title: string;
   children: ReactNode;
 }) {
+  useUILanguage();
   return (
     <section className="panel audit-card">
-      {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
-      <h2>{title}</h2>
+      <h2>{ui(title)}</h2>
       {children}
     </section>
   );
 }
 function Values({ rows }: { rows: Array<[string, unknown]> }) {
+  useUILanguage();
   return (
     <dl className="audit-key-values">
       {rows.map(([key, value]) => (
         <div key={key}>
-          <dt>{key}</dt>
-          <dd>{text(value)}</dd>
+          <dt>{ui(key)}</dt>
+          <dd>{ui(text(value))}</dd>
         </div>
       ))}
     </dl>
   );
 }
 function Empty({ title, copy }: { title: string; copy: string }) {
+  useUILanguage();
   return (
     <div className="panel empty-state">
       <Icon name="folder" />
-      <strong>{title}</strong>
-      <p>{copy}</p>
+      <strong>{ui(title)}</strong>
+      <p>{ui(copy)}</p>
     </div>
   );
 }
 export function AuditPage() {
+  useUILanguage();
   const [params, setParams] = useSearchParams(),
     [tab, setTab] = useState("evidence"),
     [filter, setFilter] = useState("all"),
@@ -158,11 +113,7 @@ export function AuditPage() {
     manifest = object(data?.data.evidence_manifest),
     summary = object(data?.data.run_summary),
     trace = object(data?.data.debate_trace);
-  const gate = object(manifest.gate_decision),
-    participation = object(trace.participation ?? summary.participation),
-    usage = object(
-      summary.whole_run_usage ?? object(trace.usage_provenance).whole_run_usage,
-    );
+  const gate = object(manifest.gate_decision);
   const inconsistent = data?.consistency?.status === "inconsistent";
   const verdict = inconsistent
     ? "inconsistent"
@@ -187,8 +138,9 @@ export function AuditPage() {
         body: (
           <>
             <p className="inline-note">
-              Server-redacted artifact view. Structured audit metadata is
-              distinct from a trusted final decision.
+              {ui(
+                "Server-redacted artifact view. Structured audit metadata is distinct from a trusted final decision.",
+              )}
             </p>
             <pre className="artifact-json" tabIndex={0}>
               {content}
@@ -199,7 +151,7 @@ export function AuditPage() {
     } catch (error) {
       setModal({
         title: "Artifact unavailable",
-        body: <p role="alert">{String(error)}</p>,
+        body: <p role="alert">{ui(String(error))}</p>,
       });
     }
   }
@@ -220,35 +172,37 @@ export function AuditPage() {
     <>
       <section className="page-header">
         <div>
-          <p className="eyebrow">EVIDENCE, WITH A PAPER TRAIL</p>
-          <h1>Research audit</h1>
-          <p className="page-description">
-            Trace the inputs, decisions and resource accounting behind{" "}
-            {title ?? "your research"}.
-          </p>
+          <h1>{ui("Research audit")}</h1>
         </div>
         <div className="page-header-actions">
           <Link className="button ghost" to={reportUrl}>
             <Icon name="book" />
-            Research report
+            {ui("Research report")}
           </Link>
         </div>
       </section>
       <div className="audit-toolbar">
         <div>
-          <strong>{title ?? "Select a record"}</strong>
+          <strong>{ui(title ?? "Select a record")}</strong>
           <span className="subtle">
-            {" "}
-            · {formatDate(data?.trade_date)} ·{" "}
+            {ui(" ")}
+            {ui("· ")}
+            {ui(formatDate(data?.trade_date))}
+            {ui(" ·")}
+            {ui(" ")}
             {data?.available
-              ? `Policy ${text(manifest.policy_version ?? summary.gate_policy_version)}`
-              : "Structured data not available"}
+              ? ui("Policy {{value0}}", {
+                  value0: text(
+                    manifest.policy_version ?? summary.gate_policy_version,
+                  ),
+                })
+              : ui("Structured data not available")}
           </span>
         </div>
         <label className="audit-scenario">
-          Research record
+          {ui("Research record")}
           <select
-            aria-label="Research record"
+            aria-label={ui("Research record")}
             value={runId ? "active" : (selected ?? "")}
             onChange={(event) => {
               setParams({ artifact_id: event.target.value });
@@ -257,11 +211,18 @@ export function AuditPage() {
             }}
           >
             {runId ? (
-              <option value="active">Current run · {runId}</option>
+              <option value="active">
+                {ui("Current run · ")}
+                {ui(runId)}
+              </option>
             ) : null}
             {choices.map((item) => (
               <option key={item.artifact_id} value={item.artifact_id}>
-                {item.ticker} · {formatDate(item.date)} · {item.source}
+                {item.ticker}
+                {ui(" · ")}
+                {ui(formatDate(item.date))}
+                {ui(" · ")}
+                {ui(item.source)}
               </option>
             ))}
           </select>
@@ -269,60 +230,27 @@ export function AuditPage() {
       </div>
       {audit.isLoading || history.isLoading ? (
         <Empty
-          title="Loading audit…"
+          title={ui("Loading audit…")}
           copy="Reading the recorded artifact families."
         />
       ) : audit.isError ? (
-        <Empty title="Audit unavailable" copy={audit.error.message} />
+        <Empty title={ui("Audit unavailable")} copy={audit.error.message} />
       ) : !data?.available ? (
         <section className="panel empty-state audit-missing">
           <Icon name="folder" />
           <strong>
             {data?.artifact_availability === "unavailable"
-              ? "Audit artifacts could not be read"
+              ? ui("Audit artifacts could not be read")
               : data?.status && data.status !== "completed"
-                ? "Audit is not ready"
-                : "No structured audit recorded"}
+                ? ui("Audit is not ready")
+                : ui("No structured audit recorded")}
           </strong>
           <p>
-            Legacy or incomplete artifacts are not proof of participation, data
-            quality or zero cost. Read the available report; missing audit
-            fields remain unknown.
+            {ui("No audit data is available. Missing fields remain unknown.")}
           </p>
-          <div className="audit-empty-values">
-            <AuditBadge value="Gate · not recorded" />
-            <AuditBadge value="Participation · unverified" />
-            <AuditBadge value="Accounting · unknown" />
-          </div>
         </section>
       ) : (
         <>
-          <div className="audit-summary-grid">
-            {[
-              ["Data quality gate", verdict, "Deterministic verdict"],
-              [
-                "Eligible evidence",
-                `${eligible.size} / ${evidence.length}`,
-                "Excluded items stay visible",
-              ],
-              [
-                "Debate participation",
-                text(participation.status, "Unverified"),
-                "Structured execution records",
-              ],
-              [
-                "Usage completeness",
-                text(usage.completeness, "Unknown"),
-                "Provenance is explicit",
-              ],
-            ].map(([label, value, note]) => (
-              <div className="panel audit-stat" key={label}>
-                <small>{label}</small>
-                <strong>{value}</strong>
-                <span>{note}</span>
-              </div>
-            ))}
-          </div>
           <div
             className={`audit-verdict ${verdict === "blocked" || inconsistent ? "is-blocked" : ""}`}
           >
@@ -332,43 +260,48 @@ export function AuditPage() {
             <div>
               <h2>
                 {inconsistent
-                  ? "Audit artifacts disagree."
+                  ? ui("Audit artifacts disagree.")
                   : verdict === "blocked"
-                    ? "Hold is enforced. The debate did not run."
+                    ? ui("Hold is enforced. The debate did not run.")
                     : verdict === "normal"
-                      ? "Checks passed for this recorded run."
+                      ? ui("Checks passed for this recorded run.")
                       : verdict === "degraded"
-                        ? "Proceed with recorded limitations."
-                        : "The gate verdict was not recorded."}
+                        ? ui("Proceed with recorded limitations.")
+                        : ui("The gate verdict was not recorded.")}
               </h2>
               <p>
                 {inconsistent
-                  ? data.consistency?.issues.join(" · ")
-                  : text(
-                      gate.human_readable_reason,
-                      "No gate explanation recorded.",
+                  ? ui(data.consistency?.issues.join(" · "))
+                  : ui(
+                      text(
+                        gate.human_readable_reason,
+                        "No gate explanation recorded.",
+                      ),
                     )}
               </p>
-              <span className="audit-code">
-                {text(trace.stop_reason ?? summary.debate_stop_reason)}
-              </span>
             </div>
           </div>
           {data.artifact_availability !== "complete" ? (
             <div className="report-state-banner warning">
               <Icon name="warning" />
               <div>
-                <strong>Partial audit</strong>
+                <strong>{ui("Partial audit")}</strong>
                 <p>
-                  {data.artifacts
-                    .filter((item) => !item.available)
-                    .map((item) => `${item.filename}: ${item.status}`)
-                    .join(" · ")}
+                  {ui(
+                    data.artifacts
+                      .filter((item) => !item.available)
+                      .map((item) => `${item.filename}: ${item.status}`)
+                      .join(" · "),
+                  )}
                 </p>
               </div>
             </div>
           ) : null}
-          <div className="audit-tabs" role="tablist" aria-label="Audit views">
+          <div
+            className="audit-tabs"
+            role="tablist"
+            aria-label={ui("Audit views")}
+          >
             {TABS.map(([key, label], index) => (
               <button
                 role="tab"
@@ -380,7 +313,7 @@ export function AuditPage() {
                 onKeyDown={(event) => keyboard(event, index)}
                 onClick={() => setTab(key)}
               >
-                {label}
+                {ui(label)}
               </button>
             ))}
           </div>
@@ -405,9 +338,10 @@ export function AuditPage() {
                     body: (
                       <>
                         <p className="eyebrow">
-                          {text(record.category)} · RECORDED EVIDENCE
+                          {ui(text(record.category))}
+                          {ui(" · RECORDED EVIDENCE")}
                         </p>
-                        <h3>{text(record.metric_name)}</h3>
+                        <h3>{ui(text(record.metric_name))}</h3>
                         <Values
                           rows={[
                             ["Evidence ID", record.evidence_id],
@@ -421,8 +355,9 @@ export function AuditPage() {
                           ]}
                         />
                         <p className="inline-note">
-                          Eligibility concerns quality and cutoff only. A cited
-                          ID does not verify an exact claim.
+                          {ui(
+                            "Eligibility concerns quality and cutoff only. A cited ID does not verify an exact claim.",
+                          )}
                         </p>
                         <pre className="artifact-json" tabIndex={0}>
                           {JSON.stringify(
@@ -454,10 +389,11 @@ export function AuditPage() {
               <>
                 <div className="audit-section-head">
                   <div>
-                    <h2>The reasoning has a record.</h2>
+                    <h2>{ui("The reasoning has a record.")}</h2>
                     <p>
-                      Core reporting artifacts, projected and redacted by the
-                      server.
+                      {ui(
+                        "Core reporting artifacts, projected and redacted by the server.",
+                      )}
                     </p>
                   </div>
                 </div>
@@ -484,7 +420,7 @@ export function AuditPage() {
                           disabled={!item.available}
                           onClick={() => void preview(item.kind, item.filename)}
                         >
-                          Preview
+                          {ui("Preview")}
                         </button>
                         {item.available && data.artifact_id ? (
                           <a
@@ -496,11 +432,11 @@ export function AuditPage() {
                             )}
                           >
                             <Icon name="download" />
-                            Download
+                            {ui("Download")}
                           </a>
                         ) : (
                           <button className="button" disabled>
-                            Unavailable
+                            {ui("Unavailable")}
                           </button>
                         )}
                       </div>
@@ -511,13 +447,14 @@ export function AuditPage() {
                   <Icon name="shield" />
                   <div>
                     <strong>
-                      Trusted output and raw audit text have different
-                      authority.
+                      {ui(
+                        "Trusted output and raw audit text have different authority.",
+                      )}
                     </strong>
                     <p>
-                      Final reports and memory apply deterministic guards. Audit
-                      metadata is not an executable instruction or a calibrated
-                      probability.
+                      {ui(
+                        "Final reports and memory apply deterministic guards. Audit metadata is not an executable instruction or a calibrated probability.",
+                      )}
                     </p>
                   </div>
                 </div>
@@ -528,7 +465,7 @@ export function AuditPage() {
       )}
       <Modal
         open={Boolean(modal)}
-        title={modal?.title ?? "Audit detail"}
+        title={ui(modal?.title ?? "Audit detail")}
         onClose={() => setModal(null)}
       >
         {modal?.body}
@@ -557,6 +494,7 @@ function EvidencePanel({
   setSearch: (value: string) => void;
   inspect: (record: JsonObject) => void;
 }) {
+  useUILanguage();
   const rows = evidence.filter(
     (row) =>
       (filter === "all" ||
@@ -581,22 +519,26 @@ function EvidencePanel({
     <>
       <div className="audit-section-head">
         <div>
-          <h2>Evidence ledger</h2>
-          <p>One source remains one source, even when several tools read it.</p>
+          <h2>{ui("Evidence ledger")}</h2>
+          <p>
+            {ui(
+              "One source remains one source, even when several tools read it.",
+            )}
+          </p>
         </div>
         <div className="audit-filters">
           <label className="sr-only" htmlFor="evidence-query">
-            Search evidence by ID, metric or source
+            {ui("Search evidence by ID, metric or source")}
           </label>
           <input
             id="evidence-query"
             type="search"
-            placeholder="Find evidence..."
+            placeholder={ui("Find evidence...")}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
           <label className="sr-only" htmlFor="evidence-filter">
-            Filter evidence
+            {ui("Filter evidence")}
           </label>
           <select
             id="evidence-filter"
@@ -613,7 +555,7 @@ function EvidencePanel({
               ["sentiment", "Sentiment"],
             ].map(([key, label]) => (
               <option key={key} value={key}>
-                {label}
+                {ui(label)}
               </option>
             ))}
           </select>
@@ -623,15 +565,15 @@ function EvidencePanel({
         <div className="panel audit-table-wrap">
           <table className="audit-table">
             <caption className="sr-only">
-              Recorded evidence, source, cutoff eligibility and quality
+              {ui("Recorded evidence, source, cutoff eligibility and quality")}
             </caption>
             <thead>
               <tr>
-                <th>Evidence / metric</th>
-                <th>Source / observed</th>
-                <th>Quality</th>
-                <th>Eligibility</th>
-                <th>Details</th>
+                <th>{ui("Evidence / metric")}</th>
+                <th>{ui("Source / observed")}</th>
+                <th>{ui("Quality")}</th>
+                <th>{ui("Eligibility")}</th>
+                <th>{ui("Details")}</th>
               </tr>
             </thead>
             <tbody>
@@ -639,26 +581,26 @@ function EvidencePanel({
                 <tr key={`${text(row.evidence_id)}-${index}`}>
                   <td data-label="Evidence">
                     <code>{text(row.evidence_id)}</code>
-                    <small>{text(row.metric_name)}</small>
+                    <small>{ui(text(row.metric_name))}</small>
                   </td>
                   <td data-label="Provenance">
-                    {text(row.source_name)}
-                    <small>{text(row.observed_at)}</small>
+                    {ui(text(row.source_name))}
+                    <small>{ui(text(row.observed_at))}</small>
                   </td>
                   <td data-label="Quality">
                     <AuditBadge value={row.quality_status} />
                   </td>
                   <td data-label="Eligibility">
                     {eligible.has(text(row.evidence_id, ""))
-                      ? "Eligible"
-                      : "Excluded"}
+                      ? ui("Eligible")
+                      : ui("Excluded")}
                   </td>
                   <td>
                     <button
                       className="text-button"
                       onClick={() => inspect(row)}
                     >
-                      Inspect
+                      {ui("Inspect")}
                       <Icon name="arrow" />
                     </button>
                   </td>
@@ -669,8 +611,8 @@ function EvidencePanel({
         </div>
       ) : (
         <div className="panel empty-state">
-          <strong>No matching evidence</strong>
-          <p>No matching records were returned.</p>
+          <strong>{ui("No matching evidence")}</strong>
+          <p>{ui("No matching records were returned.")}</p>
           <button
             className="button"
             onClick={() => {
@@ -678,12 +620,12 @@ function EvidencePanel({
               setSearch("");
             }}
           >
-            Clear evidence filters
+            {ui("Clear evidence filters")}
           </button>
         </div>
       )}
       <div className="audit-two-col">
-        <Card eyebrow="FIVE VALIDATION CLASSES" title="What was checked?">
+        <Card eyebrow="FIVE VALIDATION CLASSES" title={ui("What was checked?")}>
           <div className="audit-checks">
             {classes.map(([key, label]) => {
               const checks = validations.filter(
@@ -695,23 +637,27 @@ function EvidencePanel({
                     <Icon name={checks.length ? "checkCircle" : "help"} />
                   </span>
                   <span>
-                    <strong>{label}</strong>
+                    <strong>{ui(label)}</strong>
                     <small>
                       {checks.length
-                        ? Array.from(
-                            new Set(checks.map((item) => text(item.status))),
-                          )
-                            .map(
-                              (status) =>
-                                `${checks.filter((item) => item.status === status).length} ${status}`,
+                        ? ui(
+                            Array.from(
+                              new Set(checks.map((item) => text(item.status))),
                             )
-                            .join(" · ")
-                        : "No per-record check recorded"}
+                              .map(
+                                (status) =>
+                                  `${checks.filter((item) => item.status === status).length} ${status}`,
+                              )
+                              .join(" · "),
+                          )
+                        : ui("No per-record check recorded")}
                     </small>
                   </span>
                   <AuditBadge
                     value={
-                      checks.length ? `${checks.length} checks` : "Not recorded"
+                      checks.length
+                        ? ui("{{value0}} checks", { value0: checks.length })
+                        : "Not recorded"
                     }
                   />
                 </div>
@@ -719,26 +665,29 @@ function EvidencePanel({
             })}
           </div>
           <p className="inline-note">
-            Record-level check counts do not replace the authoritative gate
-            verdict.
+            {ui(
+              "Record-level check counts do not replace the authoritative gate verdict.",
+            )}
           </p>
         </Card>
         <Card
           eyebrow="CATEGORY COVERAGE"
-          title="Limitations travel with the result."
+          title={ui("Limitations travel with the result.")}
         >
           <p>
-            The gate retains category quality, reason codes and source counts.
+            {ui(
+              "The gate retains category quality, reason codes and source counts.",
+            )}
           </p>
           <dl className="audit-key-values">
             {records(manifest.category_statuses).map((category, index) => (
               <div key={index}>
-                <dt>{text(category.category)}</dt>
+                <dt>{ui(text(category.category))}</dt>
                 <dd>
                   <AuditBadge value={category.quality_status} />
                   <small>
-                    {text(category.independent_source_count)} independent
-                    sources
+                    {ui(text(category.independent_source_count))}
+                    {ui(" independent sources")}
                   </small>
                 </dd>
               </div>
@@ -753,8 +702,9 @@ function EvidencePanel({
             ]}
           />
           <p className="inline-note">
-            High is a corroborated category result. An individual record and
-            optional categories are at most Medium.
+            {ui(
+              "High is a corroborated category result. An individual record and optional categories are at most Medium.",
+            )}
           </p>
         </Card>
       </div>
@@ -762,7 +712,7 @@ function EvidencePanel({
         .length ? (
         <Card
           eyebrow="SOURCE ATTEMPTS"
-          title="Attempted sources stay distinct."
+          title={ui("Attempted sources stay distinct.")}
         >
           <div className="audit-checks">
             {records(
@@ -770,9 +720,11 @@ function EvidencePanel({
             ).map((attempt, index) => (
               <div key={index}>
                 <span>
-                  <strong>{text(attempt.source)}</strong>
+                  <strong>{ui(text(attempt.source))}</strong>
                   <small>
-                    {text(attempt.tool)} · {text(attempt.started_at)}
+                    {ui(text(attempt.tool))}
+                    {ui(" · ")}
+                    {ui(text(attempt.started_at))}
                   </small>
                 </span>
                 <AuditBadge value={attempt.result_status} />
@@ -793,6 +745,7 @@ function DebatePanel({
   summary: JsonObject;
   verdict: string;
 }) {
+  useUILanguage();
   const participation = object(trace.participation ?? summary.participation),
     cap = object(summary.confidence_cap),
     confidence = records(cap.entries)[0],
@@ -802,59 +755,71 @@ function DebatePanel({
   return (
     <>
       <div className="audit-two-col">
-        <Card eyebrow="STRUCTURED PARTICIPATION" title="Who actually spoke?">
+        <Card
+          eyebrow="STRUCTURED PARTICIPATION"
+          title={ui("Who actually spoke?")}
+        >
           <div className="speaker-grid">
             {["Bull", "Bear"].map((speaker) => (
               <div className="speaker-card" key={speaker}>
                 <span>
                   <Icon name="users" />
                 </span>
-                <strong>{speaker}</strong>
+                <strong>{ui(speaker)}</strong>
                 <small>
-                  {text(participation[speaker.toLowerCase()], "unverified")} ·{" "}
-                  {text(
-                    participation[`${speaker.toLowerCase()}_turns`],
-                    "Unknown",
-                  )}{" "}
-                  turns
+                  {ui(text(participation[speaker.toLowerCase()], "unverified"))}
+                  {ui(" ·")}
+                  {ui(" ")}
+                  {ui(
+                    text(
+                      participation[`${speaker.toLowerCase()}_turns`],
+                      "Unknown",
+                    ),
+                  )}
+                  {ui(" ")}
+                  {ui("turns")}
                 </small>
               </div>
             ))}
           </div>
           <p className="inline-note">
             {verdict === "blocked"
-              ? "Critical evidence blocked the directional debate. No Bull/Bear argument is invented."
-              : "Participation is based on structured turns. A legacy transcript alone does not prove execution."}
+              ? ui(
+                  "Critical evidence blocked the directional debate. No Bull/Bear argument is invented.",
+                )
+              : ui(
+                  "Participation is based on structured turns. A legacy transcript alone does not prove execution.",
+                )}
           </p>
         </Card>
         <Card
           eyebrow="OUTPUT SAFEGUARDS"
           title={
             verdict === "degraded"
-              ? "Degraded evidence limits confidence."
-              : "The authoritative verdict controls output."
+              ? ui("Degraded evidence limits confidence.")
+              : ui("The authoritative verdict controls output.")
           }
         >
           <div className="confidence-flow">
             {confidence ? (
               <>
                 <div>
-                  <small>Raw recorded</small>
-                  <strong>{text(confidence.raw_value)}</strong>
+                  <small>{ui("Raw recorded")}</small>
+                  <strong>{ui(text(confidence.raw_value))}</strong>
                 </div>
                 <span>
                   <Icon name="arrow" />
                 </span>
                 <div>
-                  <small>Effective</small>
-                  <strong>{text(confidence.effective_value)}</strong>
+                  <small>{ui("Effective")}</small>
+                  <strong>{ui(text(confidence.effective_value))}</strong>
                 </div>
               </>
             ) : (
               <strong>
                 {verdict === "blocked"
-                  ? "Hold · no directional debate"
-                  : "No explicit confidence recorded"}
+                  ? ui("Hold · no directional debate")
+                  : ui("No explicit confidence recorded")}
               </strong>
             )}
           </div>
@@ -870,27 +835,43 @@ function DebatePanel({
             ]}
           />
           <p className="inline-note">
-            An engineering constraint, not a calibrated probability or accuracy
-            score. Raw audit values are not authoritative decisions.
+            {ui(
+              "An engineering constraint, not a calibrated probability or accuracy score. Raw audit values are not authoritative decisions.",
+            )}
           </p>
         </Card>
       </div>
       {rounds.length ? (
-        <Card eyebrow="DETERMINISTIC DECISION TRACE" title="Why did it stop?">
+        <Card
+          eyebrow="DETERMINISTIC DECISION TRACE"
+          title={ui("Why did it stop?")}
+        >
           <div className="audit-rounds">
             {rounds.map((round, index) => (
               <article key={index}>
-                <span className="round-number">{text(round.round_index)}</span>
+                <span className="round-number">
+                  {ui(text(round.round_index))}
+                </span>
                 <div>
-                  <strong>Round {text(round.round_index)}</strong>
+                  <strong>
+                    {ui("Round ")}
+                    {ui(text(round.round_index))}
+                  </strong>
                   <p>
-                    {text(round.new_valid_evidence_count)} new eligible evidence
-                    items ·{" "}
-                    {text(round.unresolved_critical_or_major_conflict_count)}{" "}
-                    unresolved major/critical conflicts
+                    {ui(text(round.new_valid_evidence_count))}
+                    {ui(" new eligible evidence items ·")}
+                    {ui(" ")}
+                    {ui(
+                      text(round.unresolved_critical_or_major_conflict_count),
+                    )}
+                    {ui(" ")}
+                    {ui("unresolved major/critical conflicts")}
                   </p>
                   <small>
-                    {text(round.calls)} calls · {text(round.tokens)} tokens
+                    {ui(text(round.calls))}
+                    {ui(" calls · ")}
+                    {ui(text(round.tokens))}
+                    {ui(" tokens")}
                   </small>
                 </div>
                 <AuditBadge
@@ -904,8 +885,8 @@ function DebatePanel({
         <Empty
           title={
             verdict === "blocked"
-              ? "Debate skipped"
-              : "No structured rounds recorded"
+              ? ui("Debate skipped")
+              : ui("No structured rounds recorded")
           }
           copy="Absent rounds do not prove that a two-sided debate executed."
         />
@@ -913,16 +894,20 @@ function DebatePanel({
       <div className="audit-two-col">
         <Card
           eyebrow="CLAIMS & CONFLICTS"
-          title="Eligible citation does not prove a claim."
+          title={ui("Eligible citation does not prove a claim.")}
         >
           {["verified", "rejected", "unverified"].flatMap((status) =>
             records(claims[status]).map((claim, index) => (
               <div className="audit-claim" key={`${status}-${index}`}>
                 <div>
-                  <strong>{text(claim.metric, "Claim")}</strong>
+                  <strong>{ui(text(claim.metric, "Claim"))}</strong>
                   <p>
-                    {text(claim.reason)} · {text(claim.date)} ·{" "}
-                    {text(claim.value)} {text(claim.unit, "")}
+                    {ui(text(claim.reason))}
+                    {ui(" · ")}
+                    {ui(text(claim.date))}
+                    {ui(" ·")}
+                    {ui(" ")}
+                    {ui(text(claim.value))} {ui(text(claim.unit, ""))}
                   </p>
                 </div>
                 <AuditBadge value={status} />
@@ -932,7 +917,7 @@ function DebatePanel({
           {!["verified", "rejected", "unverified"].some(
             (status) => records(claims[status]).length,
           ) ? (
-            <p>No per-claim descriptors recorded.</p>
+            <p>{ui("No per-claim descriptors recorded.")}</p>
           ) : null}
           {conflicts.map((conflict, index) => (
             <div className="audit-conflict" key={index}>
@@ -941,27 +926,37 @@ function DebatePanel({
               </span>
               <div>
                 <strong>
-                  {text(conflict.kind)} conflict · {text(conflict.conflict_id)}
+                  {ui(text(conflict.kind))}
+                  {ui(" conflict · ")}
+                  {ui(text(conflict.conflict_id))}
                 </strong>
                 <p>
-                  {text(conflict.status)} · {text(conflict.severity)} · rounds{" "}
-                  {text(conflict.first_seen_round)}–
-                  {text(conflict.last_seen_round)}
+                  {ui(text(conflict.status))}
+                  {ui(" · ")}
+                  {ui(text(conflict.severity))}
+                  {ui(" · rounds")}
+                  {ui(" ")}
+                  {ui(text(conflict.first_seen_round))}
+                  {ui("–")}
+                  {ui(text(conflict.last_seen_round))}
                 </p>
               </div>
             </div>
           ))}
           {!conflicts.length ? (
             <p className="inline-note">
-              No individual conflict lifecycle descriptors recorded.
+              {ui("No individual conflict lifecycle descriptors recorded.")}
             </p>
           ) : null}
         </Card>
         <Card
           eyebrow="STOP REASON"
-          title={text(
-            trace.stop_reason ?? summary.debate_stop_reason,
-          ).replaceAll("_", " ")}
+          title={ui(
+            text(trace.stop_reason ?? summary.debate_stop_reason).replaceAll(
+              "_",
+              " ",
+            ),
+          )}
         >
           <Values
             rows={[
@@ -975,8 +970,9 @@ function DebatePanel({
             ]}
           />
           <p className="inline-note">
-            A completed restricted Hold differs from REVIEW, cancellation and a
-            provider failure.
+            {ui(
+              "A completed restricted Hold differs from REVIEW, cancellation and a provider failure.",
+            )}
           </p>
         </Card>
       </div>
@@ -990,6 +986,7 @@ function UsagePanel({
   trace: JsonObject;
   summary: JsonObject;
 }) {
+  useUILanguage();
   const usage = object(
       summary.whole_run_usage ?? object(trace.usage_provenance).whole_run_usage,
     ),
@@ -1006,29 +1003,31 @@ function UsagePanel({
       <div className="audit-two-col">
         <Card
           eyebrow="WHOLE-RUN ACCOUNTING"
-          title="Every accounted model phase, kept separate."
+          title={ui("Every accounted model phase, kept separate.")}
         >
           <div className="usage-total">
-            <strong>{unknown ? "—" : text(totals.calls)}</strong>
+            <strong>{unknown ? ui("—") : ui(text(totals.calls))}</strong>
             <span>
-              accounted calls
+              {ui("accounted calls")}
               <br />
               <AuditBadge value={usage.completeness ?? "unknown"} />
             </span>
           </div>
           <p>
-            <strong>{unknown ? "Unknown" : text(totals.tokens)}</strong> known
-            token subtotal ·{" "}
+            <strong>{unknown ? ui("Unknown") : ui(text(totals.tokens))}</strong>
+            {ui(" known token subtotal ·")}
+            {ui(" ")}
             <AuditBadge value={totals.tokens_source ?? "unavailable"} />
           </p>
           <p className="inline-note">
-            Reporting only. Whole-run totals are not the debate budget or a
-            monetary bill. Unknown telemetry is not zero cost.
+            {ui(
+              "Reporting only. Whole-run totals are not the debate budget or a monetary bill. Unknown telemetry is not zero cost.",
+            )}
           </p>
         </Card>
         <Card
           eyebrow="DEBATE BUDGET · RECORDED POLICY"
-          title="Keep room for the final summary."
+          title={ui("Keep room for the final summary.")}
         >
           <Values
             rows={[
@@ -1039,7 +1038,10 @@ function UsagePanel({
               ["Debate token use / cap", `${text(used)} / ${text(maximum)}`],
               [
                 "Reserved summary",
-                `${text(reserve)} tokens · ${text(budget.reserved_summary_seconds)}s`,
+                ui("{{value0}} tokens · {{value1}}s", {
+                  value0: text(reserve),
+                  value1: text(budget.reserved_summary_seconds),
+                }),
               ],
               ["Next-round estimate", budget.next_round_estimate_tokens],
             ]}
@@ -1047,13 +1049,13 @@ function UsagePanel({
           {maximum != null && maximum > 0 && used != null && reserve != null ? (
             <>
               <div className="budget-legend">
-                <span>Recorded debate use</span>
-                <span>Protected summary reserve</span>
+                <span>{ui("Recorded debate use")}</span>
+                <span>{ui("Protected summary reserve")}</span>
               </div>
               <div
                 className="budget-bar"
                 role="img"
-                aria-label="Recorded debate use and summary reserve"
+                aria-label={ui("Recorded debate use and summary reserve")}
               >
                 <span
                   style={{
@@ -1069,14 +1071,15 @@ function UsagePanel({
             </>
           ) : null}
           <p className="inline-note">
-            Read-only recorded policy. Missing limits are not replaced with
-            production defaults.
+            {ui(
+              "Read-only recorded policy. Missing limits are not replaced with production defaults.",
+            )}
           </p>
         </Card>
       </div>
       <Card
         eyebrow="DURABLE USAGE LEDGER"
-        title="Known, estimated and unknown are different states."
+        title={ui("Known, estimated and unknown are different states.")}
       >
         <div className="ledger-flags">
           {[
@@ -1091,8 +1094,8 @@ function UsagePanel({
             ],
           ].map(([key, value]) => (
             <div key={String(key)}>
-              <small>{String(key)}</small>
-              <strong>{text(value)}</strong>
+              <small>{ui(String(key))}</small>
+              <strong>{ui(text(value))}</strong>
             </div>
           ))}
         </div>
@@ -1100,15 +1103,15 @@ function UsagePanel({
           <div className="audit-table-wrap">
             <table className="audit-table">
               <caption className="sr-only">
-                Recorded model-calling phase accounting
+                {ui("Recorded model-calling phase accounting")}
               </caption>
               <thead>
                 <tr>
-                  <th>Phase</th>
-                  <th>Calls</th>
-                  <th>Tokens</th>
-                  <th>Provenance</th>
-                  <th>Duration</th>
+                  <th>{ui("Phase")}</th>
+                  <th>{ui("Calls")}</th>
+                  <th>{ui("Tokens")}</th>
+                  <th>{ui("Provenance")}</th>
+                  <th>{ui("Duration")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1116,13 +1119,15 @@ function UsagePanel({
                   const row = object(value);
                   return (
                     <tr key={phase}>
-                      <td data-label="Phase">{phase.replaceAll("_", " ")}</td>
-                      <td data-label="Calls">{text(row.calls)}</td>
-                      <td data-label="Tokens">{text(row.tokens)}</td>
+                      <td data-label="Phase">
+                        {ui(phase.replaceAll("_", " "))}
+                      </td>
+                      <td data-label="Calls">{ui(text(row.calls))}</td>
+                      <td data-label="Tokens">{ui(text(row.tokens))}</td>
                       <td data-label="Provenance">
                         <AuditBadge value={row.tokens_source ?? row.source} />
                       </td>
-                      <td data-label="Duration">{text(row.seconds)}</td>
+                      <td data-label="Duration">{ui(text(row.seconds))}</td>
                     </tr>
                   );
                 })}
@@ -1130,12 +1135,12 @@ function UsagePanel({
             </table>
           </div>
         ) : (
-          <p>No model-calling phases were accounted in this record.</p>
+          <p>{ui("No model-calling phases were accounted in this record.")}</p>
         )}
         <p className="inline-note">
-          A reservation is an estimated commitment, not proof a call completed.
-          Missing or unreadable accounting does not imply free optional
-          capacity.
+          {ui(
+            "A reservation is an estimated commitment, not proof a call completed. Missing or unreadable accounting does not imply free optional capacity.",
+          )}
         </p>
         <Values
           rows={[

@@ -384,9 +384,9 @@ Please reference our work if you find *TradingAgents* provides you with some hel
 
 ## Development preparation and OpenCode
 
-The current branch integrates release `79103c3` into the existing WebUI layout.
-The unified requirements registry retains all 22 core and 26 WebUI requirements
-and their original IDs. Historical verification remains explicitly scoped;
+The current branch integrates release `24adf97` into the existing WebUI layout.
+The unified requirements registry retains all 22 core, 26 WebUI and 10 standalone
+simulated-trading requirements and their original IDs. Historical verification remains explicitly scoped;
 format normalization does not grant new product or human-review approval.
 
 The preparation branch is `feature/webui`, based on TradingAgents v0.5.0. Product source is under `src/`; deterministic and external-service tests are under `test/offline/` and `test/live/`. WebUI requirements are recorded in `docs/req/requirements.yaml`; architecture decisions are recorded in `architecture-blueprint.md` and `docs/architecture/adr/`. Iteration 1 (read-only history/report browser), Iteration 2 (single analysis run with wizard, SSE live view, cancellation, checkpoint toggle, and portfolio input), and Iteration 3 (backtest launch/results and announcements) are implemented. Later work remains blocked on test-plan, safety, governance, and dependency approvals. Empty or draft documents are not approval to implement features.
@@ -402,21 +402,194 @@ python -m test.ci_gates structure
 OPENCODE_CONFIG=.opencode/permissions.jsonc opencode --agent plan
 ```
 
-### WebUI (Iteration 3)
+### WebUI
 
-The WebUI supports the eight-step analysis wizard, one active analysis run, SSE progress/messages/report events, cancellation, checkpoint toggle/clear, portfolio JSON input, completed-report downloads, backtest launch/results with isolated decision logs, and an announcement banner with a blocking acknowledgement when required. Analysis and backtest share one active-run slot. Analysis runs use the existing CLI/core stream path; backtests call the existing `run_backtest`/`summarize` path. Backtest cancellation is not offered because the core has no cancellation hook. The server is loopback-only and keys remain server-side.
+Use the language button in the top bar to switch the interface between English
+and Chinese. The preference is saved in the current browser. The analysis wizard
+provides the same control in its footer, so switching preserves your inputs.
+Choose the report output language separately in the wizard; reports, original
+decisions and tool output retain their generated content.
+
+The server's `TRADINGAGENTS_LLM_PROVIDER`, `TRADINGAGENTS_QUICK_THINK_LLM` and
+`TRADINGAGENTS_DEEP_THINK_LLM` values preselect the analysis provider/models but
+do not lock them. Change the selections for one analysis; omitted API selections
+and backtests keep server defaults. API keys remain server-only. Switching a
+provider clears the previous provider's model/endpoint choices; both model IDs
+must be supplied for the new provider. Switching back restores its configured
+models. A configured server endpoint applies only to its default provider; other
+providers use their own default or an explicit endpoint override. Old model
+drafts reset when the server's model defaults change; other draft inputs remain.
+
+In **New analysis → Research setup → Debate rules & budgets**, configure the
+real analysis before starting it. Choose dynamic termination or the fixed-round
+baseline, set the debate and risk-discussion round caps independently, and tune
+convergence thresholds, model-call/token/time budgets and summary reserves.
+Quick depth presets update both round caps until you explicitly edit risk
+rounds. Server environment locks take precedence and appear read-only.
+
+The review step shows selected settings. The run and saved report show the
+normalized settings actually used; older reports without recorded settings do
+not acquire inferred values. Summary reserves must be below their corresponding
+budgets. Budgets cover the research debate and admission uses estimates; they
+are not an analysis-wide monetary limit. Checkpoint recovery requires matching
+debate settings. **Help & shortcuts → Diagnostic tools → Policy comparison**
+opens the separate preset-case experiment; it does not compare your analysis
+results or configure a new analysis. Its direct URL remains `/comparison`.
+
+Run activity includes individual agent status, finalized report counts and
+per-analyst timing under **Agent status & analyst timing**. The stage tabs filter
+these roles alongside their messages. Durations measure work observed during
+the current server process; restored earlier stages retain unknown timing.
+
+For OpenRouter, the research setup retrieves a public shortlist of the five
+newest mainstream text models, following the TUI selection policy. **Refresh
+model list** updates suggestions without replacing your entered model IDs.
+Discovery uses the fixed [OpenRouter models endpoint](https://openrouter.ai/docs/api/api-reference/models/get-models),
+a five-minute application cache, a ten-second network timeout and a bounded
+response. Requests within two seconds share the latest result. On failure,
+cached suggestions or manual IDs remain available; no credentials are sent to
+model discovery. Selecting a model does not invoke it.
+
+The backtest **Sample every** field accepts any positive whole number of
+calendar days, with 7/14/30-day suggestions. It uses the existing backtest API
+and retains the same grid, scoring and resume behavior.
+
+The WebUI supports the analysis wizard, one active analysis run, SSE progress/messages/report events, cancellation, checkpoint toggle/clear, portfolio JSON input, completed-report downloads, backtest launch/results with isolated decision logs, and an announcement banner with a blocking acknowledgement when required. Analysis, scoring backtests and simulations share one active-run slot. Analysis runs use the existing CLI/core stream path; backtests call the existing `run_backtest`/`summarize` path. Backtest cancellation is not offered because the core has no cancellation hook. The server is loopback-only and keys remain server-side.
+
+During a backtest, the results panel shows the current instrument/date, elapsed
+time and actual per-date status (pending, analyzing, completed, failed or
+skipped on resume). The bar counts processed instrument/date cells, including
+failures and skips; it is not a time estimate. After the grid is processed the
+panel continues to show settlement and summarization until the worker finishes.
+Date details are paginated and follow the current date unless you select a page.
+Browser refresh reattaches to the same running process; legacy saved artifacts
+have no invented per-date progress, and a server restart loses active progress.
+
+Backtests use server model defaults (`TRADINGAGENTS_LLM_PROVIDER`,
+`TRADINGAGENTS_QUICK_THINK_LLM`, `TRADINGAGENTS_DEEP_THINK_LLM` and the configured
+provider key). Selecting a provider in the analysis wizard does not configure a
+backtest. Restart the server after changing its environment. A backtest failure
+shows a safe category/message and reference ID; the matching redacted traceback
+is written to the server terminal. Earlier failures without a reference ID need
+to be retried after restarting with the updated code; their exception was not
+retained.
+
+The overview focuses on the latest analysis and recent records. Run counters,
+analysis settings, account rules and comparison diagnostics are available in
+expandable details. Stage progress, warnings, failed/pending outcomes and human
+approval controls remain visible. History opens a report through one action per
+row; detailed reports retain context-specific audit and download actions.
+
+#### Simulated trading
+
+Open **Simulated trading** in the sidebar for four connected views:
+
+1. **Account** — explicitly create an account, inspect cash/equity/holdings,
+   realized and unrealized results, fees and the core safety policy. Reset
+   requires typing `RESET` and preserves the append-only trading audit.
+2. **Decisions & approvals** — choose a completed research report and supply an
+   explicitly labeled scenario price and aware UTC quote time. The existing
+   pipeline computes quantity and applies deterministic rules. Smaller approved
+   orders may simulate a fill immediately; approval-gated decisions require a
+   human name, reason and explicit approve/reject action. HOLD and REVIEW remain
+   no-action outcomes. There is no quantity or execution-permission override.
+3. **Walk-forward** — replay user-entered daily decisions/prices offline, or
+   choose research with historical quotes to invoke the configured core model
+   and data providers. Each run has a separate portfolio, audit and saved daily
+   cursor. Interrupted or failed runs can resume with identical parameters and
+   server policy; completed runs have no resume action. Summary
+   counts describe the current attempt; saved days are skipped. Approval-gated
+   orders are counted but remain unexecuted in walk-forward mode. Runs do not
+   offer cancellation. Date ranges are limited to 366 calendar days and the
+   current weekday calendar skips weekends and days without quotes.
+4. **Trading audit** — filter the interactive-account or a simulation's events,
+   inspect rule/approval/fill payloads and chain hashes, paginate and download
+   the displayed page. The server verifies integrity before returning records;
+   this view is separate from Research audit.
+
+To try the offline path without model or market-data calls, open Walk-forward,
+choose Offline scenario, use initial cash `10000.00`, and enter a past weekday
+BUY at `100` followed by a weekday SELL at `105`. The core performs sizing,
+fees, risk checks and simulated fills; the account snapshot and verified audit
+show the result. This is supplied scenario data, not measured market returns.
+The interactive account instead uses actual completed analysis reports.
+
+Simulation is isolated under the server-owned `results_dir/simulated_trading`
+namespace. Account-generation IDs and portfolio versions prevent old pages from
+operating on a reset account. Decision request receipts are idempotent;
+process-owned pending approvals are not restored after restart and must be
+reevaluated. Quotes/approvals must remain fresh, and changed portfolios invalidate
+old evaluations. Corrupt state/audit or uncertain post-fill persistence blocks
+further mutations for reconciliation; it never silently creates a new account.
+An ownership lock prevents two Web processes from mutating the same simulation
+workspace. The existing trading core requires POSIX file locking; on Windows
+this feature reports unavailable while the other WebUI features remain usable.
+
+All values use Decimal strings and one account unit; no currency conversion or
+broker connection is implemented. Analyses, scoring backtests and simulations
+share the single-active-task slot. Source and tests for the existing trading/
+safety packages are unchanged; packaging now includes those existing modules.
+
+Install dependencies once from the repository root. Use the existing `.venv`,
+or create it with `python3 -m venv .venv` first. Node.js 22 LTS and npm must be
+available on `PATH`.
 
 ```bash
-python -m pip install -e '.[dev,web]'
-cd src/tradingagents_web/frontend
-npm ci
-npm run build
-cd -
-tradingagents-web --port 8000
-# or: python -m tradingagents_web --port 8000
+.venv/bin/python -m pip install -e '.[dev,web]'
+npm ci --prefix src/tradingagents_web/frontend
 ```
 
-The server binds to `127.0.0.1` only and serves existing artifacts under the configured results directory. If static assets are missing, it starts in API-only mode and prints the build instruction. The WebUI does not accept provider keys; keys remain server-side.
+For everyday development, start both services with one command:
+
+```bash
+.venv/bin/python -m tradingagents_web --dev --open
+```
+
+This starts the single-worker backend at `http://127.0.0.1:8000` and Vite at
+`http://127.0.0.1:5173`. Open the Vite URL for frontend hot reload. Frontend
+changes update automatically; restart the command after backend changes. API
+requests and SSE pass through Vite's local `/api` proxy. No frontend build is
+required in this mode.
+
+To verify the built application instead:
+
+```bash
+.venv/bin/python -m tradingagents_web --build --open
+```
+
+This builds the frontend, then starts one backend service at
+`http://127.0.0.1:8000` that serves both the API and generated static files.
+Build failures stop startup. Re-run this command after changing frontend code.
+If the existing build is already current, start it without rebuilding:
+
+```bash
+.venv/bin/python -m tradingagents_web --open
+```
+
+With the virtual environment activated, `tradingagents-web` and
+`python -m tradingagents_web` accept the same options. `--dev` and `--build`
+are mutually exclusive; both require the source checkout and installed frontend
+dependencies. The launcher does not install dependencies automatically.
+
+If another application uses the default ports, select unused ones:
+
+```bash
+.venv/bin/python -m tradingagents_web --dev --port 8008 --frontend-port 5178 --open
+.venv/bin/python -m tradingagents_web --build --port 8008 --open
+```
+
+The proxy follows `--port` automatically. Occupied ports produce an error;
+the launcher does not stop existing listeners or silently switch ports.
+`--open` waits for service readiness. Press `Ctrl+C` in the launching terminal
+to stop its services; development startup failures also clean up owned child
+processes. Both listeners bind to `127.0.0.1`; `localhost` is accepted as a host
+alias. Existing results, memory and cache configuration stays unchanged.
+
+Without `--dev` or `--build`, missing static assets retain the API-only behavior
+and the root page reports the build instruction. Provider keys remain
+server-side and are not accepted through the WebUI. Starting a service does not
+run an analysis; submitting real analysis/backtest tasks uses the configured
+providers normally.
 
 Playwright E2E currently targets Chromium only:
 
@@ -424,7 +597,7 @@ Playwright E2E currently targets Chromium only:
 npm run e2e --prefix src/tradingagents_web/frontend
 ```
 
-The permission configuration targets OpenCode 1.18.29. Configure the coding assistant's provider/model separately from TradingAgents runtime providers. Plan is read-only; use Docs to persist agreed requirements and architecture drafts, Build after plan/test approval, and Verify for independent checks. Docs can run the listed data validators. Draft requirements/design files do not block discussion, but they do not authorize dependent implementation until reviewed and approved; the schema gate must pass first.
+The permission configuration targets OpenCode 1.18.29. Configure OpenCode's provider/model separately from TradingAgents runtime providers. Plan is read-only; use Docs to persist agreed requirements and architecture drafts, Build after plan/test approval, and Verify for independent checks. Docs can run the listed data validators. Draft requirements/design files do not block discussion, but they do not authorize dependent implementation until reviewed and approved; the schema gate must pass first.
 
 ```bash
 python -m test.ci_gates schema
@@ -536,7 +709,7 @@ Full course-metadata and requirement/layout details live under [`docs/`](docs/).
 | --- | --- | --- |
 | [`AGENTS.md`](AGENTS.md) | Governance | Coding-agent governance rules. |
 | [`architecture-blueprint.md`](architecture-blueprint.md) | Design | Master constraint/design document. |
-| [`Prompt.md`](Prompt.md) | Prompt | Static startup prompt for coding agents. |
+| [`Prompt.md`](Prompt.md) | Prompt | Static startup prompt for OpenCode. |
 | [`Report.md`](Report.md) | Process | Phase progress report + student reflection. |
 | [`docs/req/requirements.yaml`](docs/req/requirements.yaml) | Requirements | Machine-readable PRD (validated against schema). |
 | [`docs/req/req-schema.json`](docs/req/req-schema.json) | Schema | CI validation schema for requirements. |

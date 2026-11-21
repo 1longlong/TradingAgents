@@ -24,9 +24,10 @@ from tradingagents_web.security import redact_text
 def run_failure(exc: Exception, phase: str) -> dict:
     """Log redacted diagnostics; expose safe failure categories (INV-WEB-003)."""
     correlation_id = f"c_{uuid.uuid4().hex[:12]}"
+    task = "Backtest" if phase == "backtest" else "Analysis"
     category, message = (
         "internal",
-        "Analysis failed during execution. Check the server log using the reference ID.",
+        f"{task} failed during execution. Check the server log using the reference ID.",
     )
     fields: dict[str, Any] = {}
     status = getattr(exc, "status_code", None)
@@ -57,6 +58,12 @@ def run_failure(exc: Exception, phase: str) -> dict:
             "A configured market-data vendor is missing server credentials or configuration.",
         )
         fields = {"source": "market_data", "retryable": False}
+    elif phase == "backtest" and "api_key client option must be set" in str(exc):
+        category, message = (
+            "config",
+            "The server's default model provider is missing its API key. "
+            "Backtests use server defaults, not analysis-wizard selections.",
+        )
     elif isinstance(exc, ValueError):
         category, message = (
             "config",
@@ -79,7 +86,8 @@ def run_failure(exc: Exception, phase: str) -> dict:
             "Cannot write analysis artifacts. Check server storage and permissions.",
         )
     logging.getLogger(__name__).error(
-        "Analysis %s failed during %s:\n%s",
+        "%s %s failed during %s:\n%s",
+        task,
         correlation_id,
         phase,
         redact_text(traceback.format_exc()),

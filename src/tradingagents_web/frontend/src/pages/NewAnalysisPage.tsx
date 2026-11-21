@@ -1,3 +1,4 @@
+import { ui, useUILanguage } from "../i18n/ui";
 // REQ-WEB-001/003/004/013, ADR-003, INV-WEB-006/014: three-step sheet; server validation is authoritative.
 import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -11,6 +12,17 @@ import {
   type RunConfig,
 } from "../api/runClient";
 import { Icon } from "../components/Icon";
+import { LanguageSwitch } from "../components/LanguageSwitch";
+import {
+  DebateSettings,
+  DebatePolicySummary,
+} from "../components/DebateSettings";
+import {
+  readDebatePolicy,
+  validateDebateSettings,
+  type DebatePolicy,
+  type DebateFieldError,
+} from "../utils/debateSettings";
 import { Modal } from "../components/Modal";
 import { ANALYST_LABELS, formatDate } from "../utils/workspace";
 import { validateStep } from "./NewAnalysis/validation";
@@ -24,6 +36,9 @@ type Values = {
   language: string;
   analysts: string[];
   depth: number;
+  debatePolicy: DebatePolicy | null;
+  riskRounds: number | null;
+  riskIndependent: boolean;
   provider: string;
   quick: string;
   deep: string;
@@ -33,17 +48,27 @@ type Values = {
   endpoint: string;
   effort: string;
 };
-type FieldError = [string, string];
+type FieldError = DebateFieldError;
 function today() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 }
-function readDraft(): Partial<Values> {
+function modelDefaultSignature(config: RunConfig): string {
+  return JSON.stringify([
+    config.defaults.llm_provider,
+    config.defaults.quick_think_llm,
+    config.defaults.deep_think_llm,
+  ]);
+}
+function readDraft(config: RunConfig): Partial<Values> {
   try {
     const saved = JSON.parse(
       localStorage.getItem("ta.analysisDraft") ?? "null",
     );
     if (!saved || typeof saved !== "object") return {};
+    const staleModels =
+      Object.values(config.env_defaults ?? {}).some(Boolean) &&
+      saved.modelDefaults !== modelDefaultSignature(config);
     return Object.fromEntries(
       [
         "ticker",
@@ -52,12 +77,19 @@ function readDraft(): Partial<Values> {
         "language",
         "analysts",
         "depth",
+        "debatePolicy",
+        "riskRounds",
+        "riskIndependent",
         "provider",
         "quick",
         "deep",
         "checkpoint",
       ]
-        .filter((key) => key in saved)
+        .filter(
+          (key) =>
+            key in saved &&
+            !(staleModels && ["provider", "quick", "deep"].includes(key)),
+        )
         .map((key) => [key, saved[key]]),
     );
   } catch {
@@ -69,6 +101,7 @@ export function NewAnalysisPage({
 }: {
   returnTo?: string;
 }) {
+  useUILanguage();
   const navigate = useNavigate(),
     location = useLocation();
   const [step, setStep] = useState(0),
@@ -79,6 +112,9 @@ export function NewAnalysisPage({
       language: "English",
       analysts: [...ANALYSTS],
       depth: 1,
+      debatePolicy: null,
+      riskRounds: null,
+      riskIndependent: false,
       provider: "",
       quick: "",
       deep: "",
@@ -92,6 +128,9 @@ export function NewAnalysisPage({
     [submitting, setSubmitting] = useState(false);
   const [config, setConfig] = useState<RunConfig | null>(null),
     [configError, setConfigError] = useState<string | null>(null);
+  const [modelWarning, setModelWarning] = useState<string | null>(null);
+  const [modelRefresh, setModelRefresh] = useState(0);
+  const refreshRequested = useRef(false);
   const [modelError, setModelError] = useState<string | null>(null),
     [modelsLoading, setModelsLoading] = useState(true);
   const [options, setOptions] = useState<{
@@ -103,12 +142,22 @@ export function NewAnalysisPage({
     kind?: string;
   } | null>(null);
   const initialized = useRef(false);
+  const initialModelDefaults = useRef<string | null>(null);
   const dialog = useRef<HTMLDialogElement>(null),
     form = useRef<HTMLFormElement>(null),
     requestId = useRef(crypto.randomUUID()),
     latest = useRef(values);
   latest.current = values;
-  const locked = (key: string) => Boolean(config?.env_locks[key]);
+  const locked = (key: string) => {
+    if (["llm_provider", "quick_think_llm", "deep_think_llm"].includes(key))
+      return false;
+    if (
+      key === "backend_url" &&
+      values.provider !== config?.defaults.llm_provider
+    )
+      return false;
+    return Boolean(config?.env_locks[key]);
+  };
   function close() {
     navigate(returnTo, { replace: true });
   }
@@ -125,10 +174,14 @@ export function NewAnalysisPage({
           language: v.language,
           analysts: v.analysts,
           depth: v.depth,
+          debatePolicy: v.debatePolicy,
+          riskRounds: v.riskRounds,
+          riskIndependent: v.riskIndependent,
           provider: v.provider,
           quick: v.quick,
           deep: v.deep,
           checkpoint: v.checkpoint,
+          modelDefaults: initialModelDefaults.current,
         }),
       );
     } catch {
@@ -158,56 +211,83 @@ export function NewAnalysisPage({
         const defaults = { ...loaded.defaults };
         for (const [key, value] of Object.entries(loaded.prefs)) {
           if (
+            !loaded.env_defaults?.[key] &&
             !loaded.env_locks[
               key === "research_depth" ? "max_debate_rounds" : key
             ]
           )
             defaults[key] = value;
         }
-        const draft = readDraft();
+        const draft = readDraft(loaded);
         const setup =
           (location.state as { setup?: Partial<Values> } | null)?.setup ?? {};
         const chosen = { ...draft, ...setup };
-        const provider = loaded.env_locks.llm_provider
-          ? String(loaded.defaults.llm_provider)
-          : (chosen.provider ?? String(defaults.llm_provider ?? ""));
+        const provider = chosen.provider ?? String(defaults.llm_provider ?? "");
         const samePrefs = loaded.prefs.llm_provider === provider,
           sameDefaults = loaded.defaults.llm_provider === provider;
+        function modelValue(
+          key: "quick_think_llm" | "deep_think_llm",
+          field: "quick" | "deep",
+        ) {
+          if (chosen.provider === provider && chosen[field])
+            return chosen[field]!;
+          if (sameDefaults && loaded.env_defaults?.[key])
+            return String(loaded.defaults[key] ?? "");
+          return String(
+            (samePrefs ? loaded.prefs[key] : undefined) ??
+              (sameDefaults ? loaded.defaults[key] : undefined) ??
+              "",
+          );
+        }
+        const serverPolicy = readDebatePolicy(
+          loaded.defaults.debate_termination,
+        );
+        const savedPolicy = readDebatePolicy(chosen.debatePolicy);
+        const depth = Number(
+          loaded.env_locks.max_debate_rounds
+            ? loaded.defaults.research_depth
+            : (savedPolicy?.max_debate_rounds ??
+                chosen.depth ??
+                defaults.research_depth ??
+                1),
+        );
+        const serverRisk =
+          typeof loaded.defaults.max_risk_discuss_rounds === "number"
+            ? loaded.defaults.max_risk_discuss_rounds
+            : depth;
+        const riskIndependent =
+          chosen.riskIndependent === true ||
+          Boolean(loaded.env_locks.max_risk_discuss_rounds) ||
+          (serverPolicy != null &&
+            serverRisk !== serverPolicy.max_debate_rounds);
+        const savedRisk =
+          typeof chosen.riskRounds === "number" &&
+          Number.isFinite(chosen.riskRounds)
+            ? chosen.riskRounds
+            : null;
+        const riskRounds = serverPolicy
+          ? loaded.env_locks.max_risk_discuss_rounds
+            ? serverRisk
+            : riskIndependent
+              ? (savedRisk ?? serverRisk)
+              : depth
+          : null;
         setValues((current) => ({
           ...current,
           ...chosen,
           provider,
-          quick: loaded.env_locks.quick_think_llm
-            ? String(loaded.defaults.quick_think_llm ?? "")
-            : chosen.provider === provider && chosen.quick
-              ? chosen.quick
-              : String(
-                  (samePrefs
-                    ? loaded.prefs.quick_think_llm
-                    : sameDefaults
-                      ? loaded.defaults.quick_think_llm
-                      : "") ?? "",
-                ),
-          deep: loaded.env_locks.deep_think_llm
-            ? String(loaded.defaults.deep_think_llm ?? "")
-            : chosen.provider === provider && chosen.deep
-              ? chosen.deep
-              : String(
-                  (samePrefs
-                    ? loaded.prefs.deep_think_llm
-                    : sameDefaults
-                      ? loaded.defaults.deep_think_llm
-                      : "") ?? "",
-                ),
+          quick: modelValue("quick_think_llm", "quick"),
+          deep: modelValue("deep_think_llm", "deep"),
           language: loaded.env_locks.output_language
             ? String(loaded.defaults.output_language)
             : (chosen.language ??
               String(defaults.output_language ?? "English")),
-          depth: Number(
-            loaded.env_locks.max_debate_rounds
-              ? loaded.defaults.research_depth
-              : (chosen.depth ?? defaults.research_depth ?? 1),
-          ),
+          depth,
+          debatePolicy: serverPolicy
+            ? { ...(savedPolicy ?? serverPolicy), max_debate_rounds: depth }
+            : null,
+          riskRounds,
+          riskIndependent,
           analysts: Array.isArray(chosen.analysts)
             ? chosen.analysts
             : ((defaults.analysts as string[]) ?? ANALYSTS),
@@ -219,6 +299,7 @@ export function NewAnalysisPage({
           endpoint: "",
           effort: "",
         }));
+        initialModelDefaults.current = modelDefaultSignature(loaded);
         initialized.current = true;
         setConfig(loaded);
       })
@@ -241,9 +322,12 @@ export function NewAnalysisPage({
     let mounted = true;
     setModelsLoading(true);
     setModelError(null);
+    setModelWarning(null);
+    const refresh = refreshRequested.current;
+    refreshRequested.current = false;
     Promise.all([
-      getRunModels(values.provider, "quick"),
-      getRunModels(values.provider, "deep"),
+      getRunModels(values.provider, "quick", refresh),
+      getRunModels(values.provider, "deep", refresh),
     ])
       .then(([quick, deep]) => {
         if (!mounted) return;
@@ -252,6 +336,7 @@ export function NewAnalysisPage({
           deep: deep.models.filter((item) => item.value !== "custom"),
         };
         setOptions(next);
+        setModelWarning(quick.warning ?? deep.warning ?? null);
         setValues((current) => ({
           ...current,
           quick: current.quick || next.quick[0]?.value || "",
@@ -259,7 +344,14 @@ export function NewAnalysisPage({
         }));
       })
       .catch((exc) => {
-        if (mounted) setModelError(String(exc));
+        if (mounted) {
+          if (values.provider === "openrouter") {
+            setOptions({ quick: [], deep: [] });
+            setModelWarning(
+              "OpenRouter model list is unavailable. Enter a model ID manually.",
+            );
+          } else setModelError(String(exc));
+        }
       })
       .finally(() => {
         if (mounted) setModelsLoading(false);
@@ -267,18 +359,32 @@ export function NewAnalysisPage({
     return () => {
       mounted = false;
     };
-  }, [config, values.provider]);
+  }, [config, values.provider, modelRefresh]);
   useEffect(() => {
     if (errors.length) document.getElementById("wizard-errors")?.focus();
   }, [errors]);
   function update<K extends keyof Values>(key: K, value: Values[K]) {
-    setValues((current) => ({ ...current, [key]: value }));
+    setValues((current) => ({
+      ...current,
+      [key]: value,
+      ...(key === "depth"
+        ? {
+            debatePolicy: current.debatePolicy
+              ? { ...current.debatePolicy, max_debate_rounds: Number(value) }
+              : null,
+            riskRounds:
+              current.riskIndependent || locked("max_risk_discuss_rounds")
+                ? current.riskRounds
+                : Number(value),
+          }
+        : {}),
+    }));
   }
   function fieldError(id: string) {
     const error = errors.find(([key]) => key === id);
     return error ? (
       <small className="field-error" id={`${id}-error`}>
-        {error[1]}
+        {ui(error[1], error[2])}
       </small>
     ) : null;
   }
@@ -314,6 +420,9 @@ export function NewAnalysisPage({
         found.push(["date", "Choose a valid calendar date."]);
     }
     if (step === 1) {
+      found.push(
+        ...validateDebateSettings(values.debatePolicy, values.riskRounds),
+      );
       if (!values.analysts.length)
         found.push(["analysts", "Choose at least one analyst."]);
       if (!values.quick.trim() || !values.deep.trim())
@@ -385,6 +494,12 @@ export function NewAnalysisPage({
             ? values.analysts.filter((key) => key !== "fundamentals")
             : values.analysts,
         research_depth: values.depth,
+        ...(values.debatePolicy
+          ? {
+              debate_termination: values.debatePolicy,
+              max_risk_discuss_rounds: values.riskRounds ?? values.depth,
+            }
+          : {}),
         llm_provider: values.provider,
         quick_think_llm: values.quick.trim(),
         deep_think_llm: values.deep.trim(),
@@ -426,7 +541,7 @@ export function NewAnalysisPage({
         className="sheet"
         ref={dialog}
         aria-labelledby="sheet-title"
-        aria-label="New analysis"
+        aria-label={ui("New analysis")}
         onCancel={(event) => {
           event.preventDefault();
           close();
@@ -435,22 +550,23 @@ export function NewAnalysisPage({
         <div id="sheet-content">
           <div className="sheet-header">
             <div>
-              <p className="eyebrow">NEW RESEARCH</p>
               <h2 id="sheet-title" tabIndex={-1}>
-                A more considered perspective.
+                {ui("New analysis")}
               </h2>
-              <p>A few choices. An entire research team.</p>
             </div>
             <button
               className="icon-button"
-              aria-label="Save draft and close"
+              aria-label={ui("Save draft and close")}
               onClick={close}
             >
               <Icon name="close" />
             </button>
           </div>
           <div className="sheet-body">
-            <div className="wizard-steps" aria-label="Analysis setup steps">
+            <div
+              className="wizard-steps"
+              aria-label={ui("Analysis setup steps")}
+            >
               {STEPS.map((label, index) => (
                 <div
                   className={`wizard-step ${index === step ? "active" : ""}`}
@@ -460,7 +576,7 @@ export function NewAnalysisPage({
                   <span>
                     {index < step ? <Icon name="check" /> : index + 1}
                   </span>
-                  {label}
+                  {ui(label)}
                 </div>
               ))}
             </div>
@@ -471,8 +587,8 @@ export function NewAnalysisPage({
                 tabIndex={-1}
                 role="alert"
               >
-                <strong>Please check the following:</strong>
-                {errors.map(([field, message]) => (
+                <strong>{ui("Please check the following:")}</strong>
+                {errors.map(([field, message, parameters]) => (
                   <a
                     href={`#${field}`}
                     key={field}
@@ -481,22 +597,24 @@ export function NewAnalysisPage({
                       focusField(field);
                     }}
                   >
-                    {message}
+                    {ui(message, parameters)}
                   </a>
                 ))}
               </div>
             ) : null}
             {configError ? (
               <p className="field-error" role="alert">
-                {configError}
+                {ui(configError)}
               </p>
             ) : null}
             {!config && !configError ? (
-              <p className="inline-note">Loading server configuration...</p>
+              <p className="inline-note">
+                {ui("Loading server configuration...")}
+              </p>
             ) : null}
             {modelError ? (
               <p className="field-error" role="alert">
-                {modelError}
+                {ui(modelError)}
               </p>
             ) : null}
             <form
@@ -511,14 +629,10 @@ export function NewAnalysisPage({
               {step === 0 ? (
                 <>
                   <h3 className="wizard-section-title">
-                    What is on your radar?
+                    {ui("Instrument & date")}
                   </h3>
-                  <p className="wizard-section-description">
-                    Choose an instrument and a point in time. We will bring the
-                    perspectives.
-                  </p>
                   <fieldset className="asset-choices unstyled-fieldset">
-                    <legend className="sr-only">Asset type</legend>
+                    <legend className="sr-only">{ui("Asset type")}</legend>
                     {[
                       ["stock", "Stocks & ETFs", "building"],
                       ["crypto", "Crypto assets", "globe"],
@@ -543,14 +657,15 @@ export function NewAnalysisPage({
                           }
                         />
                         <span>
-                          <Icon name={icon} /> {label}
+                          <Icon name={icon} /> {ui(label)}
                         </span>
                       </label>
                     ))}
                   </fieldset>
                   <div className="form-field">
                     <label htmlFor="ticker">
-                      Ticker symbol <span aria-hidden="true">*</span>
+                      {ui("Ticker symbol ")}
+                      <span aria-hidden="true">{ui("*")}</span>
                     </label>
                     <input
                       id="ticker"
@@ -558,7 +673,7 @@ export function NewAnalysisPage({
                       maxLength={32}
                       autoComplete="off"
                       spellCheck={false}
-                      placeholder="e.g. NVDA, 0700.HK or BTC-USD"
+                      placeholder={ui("e.g. NVDA, 0700.HK or BTC-USD")}
                       {...attrs("ticker")}
                       onChange={(event) =>
                         update("ticker", event.target.value.toUpperCase())
@@ -566,15 +681,17 @@ export function NewAnalysisPage({
                       required
                     />
                     <small>
-                      Include the exchange suffix where relevant. No live lookup
-                      is performed.
+                      {ui(
+                        "Include the exchange suffix where relevant. No live lookup is performed.",
+                      )}
                     </small>
                     {fieldError("ticker")}
                   </div>
                   <div className="field-row">
                     <div className="form-field">
                       <label htmlFor="date">
-                        Analysis date <span aria-hidden="true">*</span>
+                        {ui("Analysis date ")}
+                        <span aria-hidden="true">{ui("*")}</span>
                       </label>
                       <input
                         id="date"
@@ -588,7 +705,7 @@ export function NewAnalysisPage({
                       {fieldError("date")}
                     </div>
                     <div className="form-field">
-                      <label htmlFor="language">Report language</label>
+                      <label htmlFor="language">{ui("Report language")}</label>
                       <select
                         id="language"
                         disabled={locked("output_language")}
@@ -608,41 +725,36 @@ export function NewAnalysisPage({
                             values.language,
                           ]),
                         ].map((language) => (
-                          <option key={language}>{language}</option>
+                          <option key={language} value={language}>
+                            {ui(language)}
+                          </option>
                         ))}
                       </select>
                     </div>
                   </div>
-                  <p className="inline-note">
-                    A historical date keeps the research anchored to that point
-                    in time. Report output language is a separate analysis
-                    setting.
-                  </p>
                 </>
               ) : null}
               {step === 1 ? (
                 <>
                   <h3 className="wizard-section-title">
-                    Build your research team.
+                    {ui("Team & models")}
                   </h3>
-                  <p className="wizard-section-description">
-                    A single instrument. Independent lenses. You choose the
-                    depth.
-                  </p>
                   <fieldset
                     className="unstyled-fieldset"
                     id="analysts"
                     tabIndex={-1}
                     {...attrs("analysts")}
                   >
-                    <legend className="form-label">Analyst perspectives</legend>
+                    <legend className="form-label">
+                      {ui("Analyst perspectives")}
+                    </legend>
                     <div className="analyst-choices">
                       {ANALYSTS.map((key, index) => (
                         <label className="choice" key={key}>
                           <Icon
                             name={["chart", "users", "news", "building"][index]}
                           />
-                          <span>{ANALYST_LABELS[key]}</span>
+                          <span>{ui(ANALYST_LABELS[key])}</span>
                           <input
                             type="checkbox"
                             name="analysts"
@@ -670,14 +782,16 @@ export function NewAnalysisPage({
                   </fieldset>
                   {values.asset === "crypto" ? (
                     <p className="helper">
-                      Company fundamentals are unavailable for crypto assets.
+                      {ui(
+                        "Company fundamentals are unavailable for crypto assets.",
+                      )}
                     </p>
                   ) : null}
                   <p className="form-label research-depth-label">
-                    Research depth
+                    {ui("Research depth")}
                   </p>
                   <fieldset className="depth-choices unstyled-fieldset">
-                    <legend className="sr-only">Research depth</legend>
+                    <legend className="sr-only">{ui("Research depth")}</legend>
                     {[
                       [1, "Shallow"],
                       [3, "Medium"],
@@ -696,51 +810,128 @@ export function NewAnalysisPage({
                           onChange={() => update("depth", Number(value))}
                         />
                         <span>
-                          {label}
+                          {ui(label)}
                           <small>
-                            {value} debate round{value === 1 ? "" : "s"}
+                            {ui("{{count}} debate rounds", { count: value })}
                           </small>
                         </span>
                       </label>
                     ))}
                   </fieldset>
+                  {values.debatePolicy && values.riskRounds != null ? (
+                    <DebateSettings
+                      policy={values.debatePolicy}
+                      riskRounds={values.riskRounds}
+                      locks={config?.env_locks ?? {}}
+                      errors={errors}
+                      onPolicy={(policy) =>
+                        setValues((current) => ({
+                          ...current,
+                          debatePolicy: policy,
+                          depth: policy.max_debate_rounds,
+                          riskRounds:
+                            current.riskIndependent ||
+                            locked("max_risk_discuss_rounds")
+                              ? current.riskRounds
+                              : policy.max_debate_rounds,
+                        }))
+                      }
+                      onRisk={(riskRounds) =>
+                        setValues((current) => ({
+                          ...current,
+                          riskRounds,
+                          riskIndependent: true,
+                        }))
+                      }
+                    />
+                  ) : null}
                   <div className="form-field">
-                    <label htmlFor="provider">Model provider</label>
+                    <label htmlFor="provider">{ui("Model provider")}</label>
                     <select
                       id="provider"
                       value={values.provider}
                       disabled={locked("llm_provider")}
+                      aria-describedby={
+                        config?.env_defaults?.llm_provider &&
+                        values.provider === config.defaults.llm_provider
+                          ? "provider-default"
+                          : undefined
+                      }
                       onChange={(event) =>
                         setValues((current) => ({
                           ...current,
                           provider: event.target.value,
-                          quick: "",
-                          deep: "",
+                          quick:
+                            event.target.value === config?.defaults.llm_provider
+                              ? String(config.defaults.quick_think_llm ?? "")
+                              : "",
+                          deep:
+                            event.target.value === config?.defaults.llm_provider
+                              ? String(config.defaults.deep_think_llm ?? "")
+                              : "",
+                          endpoint: "",
                           effort: "",
                         }))
                       }
                     >
                       {config?.providers.map((provider) => (
                         <option key={provider.key} value={provider.key}>
-                          {provider.label}
+                          {ui(provider.label)}
                         </option>
                       ))}
                     </select>
                     <small>
-                      <Icon name="shield" />{" "}
+                      <Icon name="shield" />
+                      {ui(" ")}
                       {status === "configured"
-                        ? "Key configured"
+                        ? ui("Key configured")
                         : status === "not_required"
-                          ? "No key required"
-                          : "Server credentials not configured"}
-                      . Credentials stay on the server.
+                          ? ui("No key required")
+                          : ui("Server credentials not configured")}
+                      {ui(". Credentials stay on the server.")}
+                      {config?.env_defaults?.llm_provider &&
+                      values.provider === config.defaults.llm_provider ? (
+                        <span id="provider-default">
+                          {" "}
+                          · {ui("Server default")}
+                        </span>
+                      ) : null}
                     </small>
                   </div>
+                  {values.provider === "openrouter" ? (
+                    <div className="model-discovery">
+                      <small>
+                        {ui(
+                          "Latest OpenRouter text models; custom IDs remain available.",
+                        )}
+                      </small>
+                      <button
+                        type="button"
+                        className="button ghost"
+                        disabled={modelsLoading}
+                        onClick={() => {
+                          refreshRequested.current = true;
+                          setModelRefresh((value) => value + 1);
+                        }}
+                      >
+                        {ui(
+                          modelsLoading
+                            ? "Loading models…"
+                            : "Refresh model list",
+                        )}
+                      </button>
+                    </div>
+                  ) : null}
+                  {modelWarning ? (
+                    <p className="inline-note" role="status">
+                      {ui(modelWarning)}
+                    </p>
+                  ) : null}
                   <div className="field-row">
                     {(["quick", "deep"] as const).map((mode) => (
                       <div className="form-field" key={mode}>
                         <label htmlFor={`${mode}-model`}>
-                          {mode === "quick" ? "Quick" : "Deep"} model
+                          {ui(mode === "quick" ? "Quick model" : "Deep model")}
                         </label>
                         <input
                           id={`${mode}-model`}
@@ -756,7 +947,7 @@ export function NewAnalysisPage({
                         <datalist id={`${mode}-options`}>
                           {options[mode].map((item) => (
                             <option value={item.value} key={item.value}>
-                              {item.label}
+                              {ui(item.label)}
                             </option>
                           ))}
                         </datalist>
@@ -765,19 +956,20 @@ export function NewAnalysisPage({
                     ))}
                   </div>
                   <p className="helper">
-                    The quick model handles analyst work. The deep model weighs
-                    the debate and final assessment.
+                    {ui(
+                      "The quick model handles analyst work. The deep model weighs the debate and final assessment.",
+                    )}
                   </p>
                   <details className="disclosure model-options">
-                    <summary>Endpoint & model thinking</summary>
+                    <summary>{ui("Endpoint & model thinking")}</summary>
                     <div className="form-field">
                       <label htmlFor="endpoint">
-                        Endpoint override (optional)
+                        {ui("Endpoint override (optional)")}
                       </label>
                       <input
                         id="endpoint"
                         type="url"
-                        placeholder="Use server / provider default"
+                        placeholder={ui("Use server / provider default")}
                         value={values.endpoint}
                         disabled={locked("backend_url")}
                         onChange={(event) =>
@@ -786,15 +978,16 @@ export function NewAnalysisPage({
                         {...attrs("endpoint")}
                       />
                       <small>
-                        HTTP(S) URL only. Never paste a key, username, query
-                        token or fragment. Endpoint drafts are not persisted.
+                        {ui(
+                          "HTTP(S) URL only. Never paste a key, username, query token or fragment. Endpoint drafts are not persisted.",
+                        )}
                       </small>
                       {fieldError("endpoint")}
                     </div>
                     {effort ? (
                       <div className="form-field">
                         <label htmlFor="effort">
-                          {effort[0].replaceAll("_", " ")}
+                          {ui(effort[0].replaceAll("_", " "))}
                         </label>
                         <select
                           id="effort"
@@ -804,37 +997,39 @@ export function NewAnalysisPage({
                             update("effort", event.target.value)
                           }
                         >
-                          <option value="">Server / model default</option>
+                          <option value="">
+                            {ui("Server / model default")}
+                          </option>
                           {effort[1].map((value) => (
-                            <option key={value}>{value}</option>
+                            <option key={value} value={value}>
+                              {ui(value)}
+                            </option>
                           ))}
                         </select>
                         <small>
-                          Only effective for supported models. Backend
-                          capability checks remain authoritative.
+                          {ui(
+                            "Only effective for supported models. Backend capability checks remain authoritative.",
+                          )}
                         </small>
                       </div>
                     ) : (
                       <p className="inline-note">
-                        No provider-specific thinking override is exposed for
-                        this selection.
+                        {ui(
+                          "No provider-specific thinking override is exposed for this selection.",
+                        )}
                       </p>
                     )}
                     <p className="inline-note">
-                      Effective server environment values take precedence over
-                      request overrides.
+                      {ui(
+                        "Effective server environment values take precedence over request overrides.",
+                      )}
                     </p>
                   </details>
                 </>
               ) : null}
               {step === 2 ? (
                 <>
-                  <h3 className="wizard-section-title">
-                    A final look before you begin.
-                  </h3>
-                  <p className="wizard-section-description">
-                    Your question, your team, your research context.
-                  </p>
+                  <h3 className="wizard-section-title">{ui("Review setup")}</h3>
                   <dl className="review-list">
                     {[
                       ["Instrument", values.ticker],
@@ -842,7 +1037,7 @@ export function NewAnalysisPage({
                       [
                         "Analysts",
                         values.analysts
-                          .map((key) => ANALYST_LABELS[key])
+                          .map((key) => ui(ANALYST_LABELS[key]))
                           .join(", "),
                       ],
                       [
@@ -870,17 +1065,23 @@ export function NewAnalysisPage({
                       ["Report language", values.language],
                     ].map(([key, value]) => (
                       <div className="review-item" key={key}>
-                        <dt>{key}</dt>
-                        <dd>{value}</dd>
+                        <dt>{ui(key)}</dt>
+                        <dd>{ui(value)}</dd>
                       </div>
                     ))}
                   </dl>
+                  <DebatePolicySummary
+                    policy={values.debatePolicy}
+                    riskRounds={values.riskRounds}
+                    title="Selected debate settings"
+                  />
                   <label className="toggle-row">
                     <span>
-                      Enable checkpoint recovery
+                      {ui("Enable checkpoint recovery")}
                       <small>
-                        Resume a matching interrupted run when a saved
-                        checkpoint exists.
+                        {ui(
+                          "Resume a matching interrupted run when a saved checkpoint exists.",
+                        )}
                       </small>
                     </span>
                     <input
@@ -894,10 +1095,11 @@ export function NewAnalysisPage({
                   </label>
                   <label className="toggle-row">
                     <span>
-                      Include portfolio context
+                      {ui("Include portfolio context")}
                       <small>
-                        Optional holdings and cash for a more contextual
-                        proposal.
+                        {ui(
+                          "Optional holdings and cash for a more contextual proposal.",
+                        )}
                       </small>
                     </span>
                     <input
@@ -909,10 +1111,12 @@ export function NewAnalysisPage({
                     />
                   </label>
                   <div className="form-field" hidden={!values.portfolioEnabled}>
-                    <label htmlFor="portfolio">Portfolio JSON</label>
+                    <label htmlFor="portfolio">{ui("Portfolio JSON")}</label>
                     <textarea
                       id="portfolio"
-                      placeholder='{"cash":10000,"currency":"USD","positions":[]}'
+                      placeholder={ui(
+                        '{"cash":10000,"currency":"USD","positions":[]}',
+                      )}
                       value={values.portfolio}
                       {...attrs("portfolio")}
                       onChange={(event) =>
@@ -920,13 +1124,13 @@ export function NewAnalysisPage({
                       }
                     />
                     <small>
-                      An explicit empty positions list means a flat book.
-                      Leaving context off means no portfolio was supplied.
-                      Portfolio text is not saved as a draft.
+                      {ui(
+                        "An explicit empty positions list means a flat book. Leaving context off means no portfolio was supplied. Portfolio text is not saved as a draft.",
+                      )}
                     </small>
                     {fieldError("portfolio")}
                     <label className="portfolio-upload">
-                      Choose a portfolio JSON file
+                      {ui("Choose a portfolio JSON file")}
                       <input
                         type="file"
                         accept="application/json,.json"
@@ -949,9 +1153,9 @@ export function NewAnalysisPage({
                     </label>
                   </div>
                   <p className="inline-note">
-                    Research output is advisory. Starting an analysis contacts
-                    your configured model and market-data providers; it does not
-                    place a trade.
+                    {ui(
+                      "Research output is advisory. Starting an analysis contacts your configured model and market-data providers; it does not place a trade.",
+                    )}
                   </p>
                 </>
               ) : null}
@@ -968,8 +1172,9 @@ export function NewAnalysisPage({
                 } else close();
               }}
             >
-              {step ? "Back" : "Save draft & close"}
+              {step ? ui("Back") : ui("Save draft & close")}
             </button>
+            <LanguageSwitch />
             <button
               className="button primary"
               form="analysis-form"
@@ -980,10 +1185,10 @@ export function NewAnalysisPage({
             >
               {step === 2 && !submitting ? <Icon name="play" /> : null}
               {submitting
-                ? "Starting…"
+                ? ui("Starting…")
                 : step === 2
-                  ? "Start analysis"
-                  : "Continue"}
+                  ? ui("Start analysis")
+                  : ui("Continue")}
               {step < 2 ? <Icon name="arrow" /> : null}
             </button>
           </div>
@@ -991,29 +1196,32 @@ export function NewAnalysisPage({
       </dialog>
       <Modal
         open={Boolean(active)}
-        title="One perspective at a time."
+        title={ui("One perspective at a time.")}
         onClose={close}
       >
         <p>
-          The workspace accepts one analysis or backtest at a time. Open the
-          active task or keep exploring until it finishes.
+          {ui(
+            "The workspace accepts one analysis or backtest at a time. Open the active task or keep exploring until it finishes.",
+          )}
         </p>
         <div className="modal-actions">
           <button className="button" onClick={close}>
-            Keep exploring
+            {ui("Keep exploring")}
           </button>
           <button
             className="button primary"
             onClick={() =>
               navigate(
-                active?.kind === "backtest"
-                  ? `/backtest/${active.run_id}`
-                  : `/runs/${active?.run_id}`,
+                active?.kind === "simulation"
+                  ? "/simulation"
+                  : active?.kind === "backtest"
+                    ? `/backtest/${active.run_id}`
+                    : `/runs/${active?.run_id}`,
                 { replace: true },
               )
             }
           >
-            Open active run
+            {ui("Open active run")}
           </button>
         </div>
       </Modal>

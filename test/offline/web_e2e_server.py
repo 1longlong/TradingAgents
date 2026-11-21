@@ -15,7 +15,7 @@ import uvicorn
 
 from test.offline.web_fixture_app import SECRET, build_fixture_tree
 from tradingagents.agents.utils.memory import TradingMemoryLog
-from tradingagents.backtest import BacktestResult
+from tradingagents.backtest import BacktestResult, _notify_backtest_progress
 from tradingagents.report_artifacts import write_report_artifacts
 from tradingagents_web.app import create_app
 from tradingagents_web.settings import WebSettings
@@ -30,9 +30,12 @@ def fake_run_backtest(
     selected_analysts=("market", "social", "news", "fundamentals"),
     run_id=None,
 ):
+    _notify_backtest_progress("initializing")
     log = TradingMemoryLog({"memory_log_path": str(config["memory_log_path"])})
     for ticker in tickers:
         for date in dates:
+            _notify_backtest_progress("cell.started", ticker, date)
+            time.sleep(2.5 if ticker == "PROGRESS" else 0.05)
             log.store_decision(ticker, date, "**Rating**: Buy\n\nE2E backtest cell.\n")
             log.update_with_outcome(
                 ticker,
@@ -43,6 +46,12 @@ def fake_run_backtest(
                 reflection="E2E backtest reflection.",
                 resolution_date=date,
             )
+            _notify_backtest_progress("cell.completed", ticker, date)
+    for ticker in tickers:
+        _notify_backtest_progress("settlement.started", ticker)
+        if ticker == "PROGRESS":
+            time.sleep(3)
+        _notify_backtest_progress("settlement.completed", ticker)
     return BacktestResult(
         run_id=run_id or "bt_e2e",
         log_path=Path(config["memory_log_path"]),
@@ -110,11 +119,98 @@ class E2ERunner:
                 },
             },
         ]
+        # REQ-WEB-002/007/021: exercise recorded stage transitions and tool data.
+        events[1]["payload"]["stage"] = "analysts"
+        events[2:2] = [
+            {
+                "type": "tool_call",
+                "payload": {
+                    "name": "get_stock_data",
+                    "arguments": {"symbol": ticker},
+                    "stage": "analysts",
+                },
+            },
+            {
+                "type": "message",
+                "payload": {"type": "Data", "content": "E2E price data", "stage": "analysts"},
+            },
+        ]
+        final_index = next(
+            i
+            for i, event in enumerate(events)
+            if event["type"] == "report.section"
+            and event["payload"]["section"] == "final_trade_decision"
+        )
+        events[final_index:final_index] = [
+            {"type": "agent.status", "payload": {"agent": "Market Analyst", "status": "completed"}},
+            {
+                "type": "agent.status",
+                "payload": {"agent": "Research Team", "status": "in_progress"},
+            },
+            {
+                "type": "message",
+                "payload": {
+                    "type": "Agent",
+                    "speaker": "Bull researcher",
+                    "content": "E2E research argument",
+                    "stage": "research",
+                },
+            },
+            {
+                "type": "report.section",
+                "payload": {"section": "investment_plan", "content": "E2E research conclusion"},
+            },
+            {"type": "agent.status", "payload": {"agent": "Research Team", "status": "completed"}},
+            {"type": "agent.status", "payload": {"agent": "Trader", "status": "in_progress"}},
+            {
+                "type": "message",
+                "payload": {"type": "Agent", "content": "E2E trader working", "stage": "trading"},
+            },
+            {
+                "type": "report.section",
+                "payload": {"section": "trader_investment_plan", "content": "E2E trading proposal"},
+            },
+            {"type": "agent.status", "payload": {"agent": "Trader", "status": "completed"}},
+            {"type": "agent.status", "payload": {"agent": "Risk Team", "status": "in_progress"}},
+            {
+                "type": "message",
+                "payload": {"type": "Agent", "content": "E2E risk argument", "stage": "risk"},
+            },
+        ]
         for event in events:
             if cancel_event.is_set():
                 return
             emit(event)
-            time.sleep(0.6)
+            if event["type"] == "agent.status" and event["payload"] == {
+                "agent": "Market Analyst",
+                "status": "completed",
+            }:
+                emit(
+                    {"type": "analyst.timing", "payload": {"wall_times": {"Market Analyst": 1.25}}}
+                )
+            if (
+                ticker.upper() == "MSFT"
+                and event["type"] == "message"
+                and event["payload"].get("type") == "Data"
+            ):
+                emit(
+                    {
+                        "type": "run.failed",
+                        "payload": {
+                            "message": "E2E market request failed",
+                            "category": "market_data",
+                            "correlation_id": "c_e2e",
+                        },
+                    }
+                )
+                return
+            # Keep each short fixture stage observable by browser assertions.
+            time.sleep(
+                1.0
+                if event["type"] == "message"
+                and event["payload"].get("stage") in {"research", "trading"}
+                else 0.35
+            )
 
         if ticker.upper() == "AAPL":
             while not cancel_event.is_set():
@@ -127,7 +223,7 @@ class E2ERunner:
                 "payload": {
                     "signal": "Buy",
                     "review": False,
-                    "wall_times": {"Market Analyst": 0.5},
+                    "wall_times": {"Market Analyst": 1.25},
                 },
             }
         )

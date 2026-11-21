@@ -389,3 +389,185 @@ All backend module paths above are relative to `src/tradingagents_web/`.
 
 Merge authorization comes from the current user conversation; it is not a new
 product implementation or final acceptance decision.
+
+
+## One-command startup — 2026-11-20
+
+Scope/test contract `web-startup-20261120-v1`; current user approved the two
+startup modes and README update. No core/CLI, dependency or permission change.
+
+| Requirement / invariant | Implementation | Verification |
+| --- | --- | --- |
+| REQ-WEB-020/026; INV-WEB-001/013/015 | `cli.py`: mode/port/host validation, existing static serving, single worker and browser-after-startup; `launcher.py`: source/tool/dependency checks, build gating, readiness and owned-process supervision | `test/offline/test_web_launcher.py`: default no-build operation, exclusive flags, invalid/duplicate ports and non-loopback hosts, absent prerequisites, build failure/missing output, child exit/spawn failure/timeout/interruption, readiness ordering and owned-group cleanup |
+| REQ-WEB-020/023/026; INV-WEB-003/013 | Existing `frontend/vite.config.ts`: loopback host, strict frontend port and validated backend-port proxy selected by the launcher | Frontend lint/types/build and 37 tests; real local dev/build smoke with explicit isolated-fixture marker verifies custom proxy, Vite client/HTML, session/CSRF, static files, occupied-port refusal and Ctrl+C listener cleanup |
+
+Module paths above are relative to `src/tradingagents_web/`. Browser launch
+ordering is covered by deterministic callback tests; smoke startup did not open
+a browser or invoke a real model/data provider.
+
+
+## Stage-based live activity — 2026-11-20
+
+Scope: `web-activity-20261120-v1`, current user requests for TUI-like process
+messages, prominent activity and automatically selected, clickable stage tabs.
+
+| Contract | Presentation ownership | Verification |
+| --- | --- | --- |
+| REQ-WEB-002; INV-WEB-001/003/012/014 | `runtime/projector.py`: TUI labels, public text blocks, stage/speaker metadata and appended public research/risk arguments; existing redaction and event buffers unchanged | `test/offline/test_web_activity.py`: cumulative IDs, public/private blocks, producing-node attribution, empty risk defaults, history deltas, risk judgment and unknown recovered provenance; existing events/security/real graph suites |
+| REQ-WEB-002/007; INV-WEB-014 | `frontend/src/stores/runStore.ts`, `utils/runActivity.ts`: optional metadata, actual progress and missing-state handling; no sequence/recovery or business-semantic change | `frontend/tests/run-activity.test.tsx`: event/snapshot preservation, terminal retention and no fabricated completion; existing store and analysis-flow tests |
+| REQ-WEB-002/007/021; INV-WEB-012/014 | `frontend/src/components/RunActivity.tsx`, `pages/LiveRunPage.tsx`, `styles/index.css`: top-level activity, auto/manual/keyboard tabs, per-stage reports, message filters, expand/follow controls and separate complete-report view | Same component suite; `frontend/e2e/run.spec.ts`: real SSE stage switching, report toggle/reload, cancellation and failed tool activity recovery; existing responsive Chromium suite |
+
+Browser evidence is Chromium only, not completion of the entire REQ-WEB-021
+browser matrix. No live provider execution is part of this presentation check.
+
+
+## Report table containment — 2026-11-20
+
+REQ-WEB-009/021, ADR-003, INV-WEB-001/012/014 map to the existing shared
+`frontend/src/components/Markdown.tsx` and scoped `styles/index.css`. Tables
+retain native semantics within a keyboard-focusable horizontal scroll region;
+Markdown cells override inherited nowrap, fixed height and last-column sizing.
+`tests/markdown-sanitize.test.tsx` checks all-column/content preservation and
+unsafe table content. `e2e/report-tables.spec.ts` checks actual browser geometry,
+contents-sidebar separation, page width, wrapping and keyboard scrolling at
+desktop, portrait and landscape sizes. No core or history-list layout changes.
+
+
+## English/Chinese interface — 2026-11-20
+
+Scope: `web-i18n-20261120-v1`; REQ-WEB-014/021 and ADR-003.
+
+| Contract | Ownership | Verification |
+| --- | --- | --- |
+| UI-language switching, persistence and fallback | `frontend/src/i18n/index.ts`, `ui.ts`, existing en/zh JSON resources; `components/LanguageSwitch.tsx`, `app/AppShell.tsx` | `tests/localization.test.tsx`: matching variables/catalogues/static lookups and UI props, no hardcoded JSX copy, normalized unsupported locales, optional storage, document language, reactive stage labels, source-content preservation and plural/format behavior; existing catalogue parity tests |
+| Whole workspace presentation, preserved API/domain values | Existing app, pages, components and date utilities; top-bar/settings/wizard controls, scoped language-button styles | `e2e/localization.spec.ts`: route labels and persisted reload, Chinese narrow layouts, modal control, wizard validation and in-place values, original models/output language submitted, terminal recovery and active-run language changes with one SSE connection; previous English browser flows |
+| INV-WEB-001/007/012/014 | Display-only lookup; original form values, stores, report bodies, tool text, ratings, identifiers and stream lifecycle retained | Same locale suite explicitly checks REVIEW versus Hold, opaque identifiers, custom titles/windows, source Markdown and tool messages; prior offline/core/WebUI suites |
+
+Unknown provider/runtime diagnostics and source content retain their original
+text. Proper names, symbols, shortcuts, the CLEAR confirmation token and REVIEW
+remain literal identities. Browser execution evidence is Chromium only.
+
+## Per-analysis debate settings — 2026-11-20
+
+Scope: `web-debate-settings-20261120-v1`; REQ-WEB-001/003/013/014, FR-DDT-004;
+ADR-001-choice, ADR-003-frontend-stack and ADR-007-run-controls addenda.
+
+| Contract | Ownership | Verification |
+| --- | --- | --- |
+| Strict public settings, authoritative core validation, environment precedence and legacy depth | `models/requests.py`, `api/config.py`, `api/runs.py`, `runtime/debate_policy.py` | `test/offline/test_web_debate_config.py`: full/partial/default/legacy inputs, independent risk caps, environment locks, strict types/ranges/reserves, NaN/Inf, internal/unknown keys, no rejected-value echo and unchanged defaults |
+| Effective snapshots and historical settings without fabricated legacy values | `runtime/coordinator.py`, `runtime/artifacts_writer.py`, `artifacts/index.py`, frontend report/live components | Same offline suite: actual runner inputs, snapshots and saved history; malformed/missing historical policy; `e2e/debate-settings.spec.ts`: real API, completion, reload and history parity |
+| Custom-policy checkpoint isolation, preserved default identity | `runtime/analysis_graph.py`, existing `runtime/graph_runner.py` | Same offline suite: default core-signature equality and each threshold/budget/mode difference; `test_web_analysis_flow.py`: real offline core graph with default and custom fixed policies |
+| Bilingual controls, independent risk rounds, safe drafts, validation and canonical payload | `frontend/src/components/DebateSettings.tsx`, `utils/debateSettings.ts`, existing wizard/client/catalogues | `tests/debate-settings.test.tsx`, `tests/analysis-flow.test.tsx`: public projection, locks/draft priority, presets/risk independence, negative feedback, translations and payload; Chromium suite: real run plus negative Chinese validation and mobile locked controls |
+
+INV-WEB-001/003/006/009/010/012/014 remain covered by these checks and the full
+offline/frontend/browser regression. Core, CLI and simulated trading have no
+working-tree changes. This mapping records implementation evidence, not a new
+human acceptance decision or live-provider result.
+
+
+## TUI capability parity — 2026-11-20 to 2026-11-21
+
+Scope: web-tui-parity-20261120-v1; REQ-WEB-001/002/006/007/013/014/021,
+INV-WEB-001/003/006/007/012/014; ADR-001-choice/003-frontend-stack refinements.
+
+| Contract | Ownership | Verification |
+| --- | --- | --- |
+| Individual observed roles, report finalizers and selected analyst timing | runtime/projector.py, graph_runner.py; existing core timing helper reused | test_web_tui_parity.py: repeated turns, nested-callback exclusion, tool-request versus final-report boundary, injected exact clock, partial/restored participation; test_web_analysis_flow.py: actual core graph through snapshots, exact counts and analyst time |
+| Timing events retained through completion/reconnect and correctly grouped risk roles | runtime/coordinator.py; frontend run store, activity component and grouping utility | Same offline suite: terminal event without times preserves prior samples; tests/run-activity.test.tsx and e2e/tui-parity.spec.ts: stage isolation, recorded roles, counts, timings and reload; run.spec.ts: actual SSE timing event |
+| Bounded public OpenRouter discovery with cached/custom fallback | new runtime/model_catalog.py, app.py, api/config.py; wizard/client refresh | Offline tests: sort/filter/deduplicate/cache/refresh, malformed/oversize/HTTP/redirect/timeout failure, stale fallback and no error-value echo/auth forwarding; analysis-flow.test.tsx: manual-ID preservation and failed refresh; tui-parity.spec.ts: browser refresh/manual entry/mobile |
+| CLI-equivalent positive integer calendar spacing | existing BacktestPage.tsx input/datalist; API/core unchanged | Existing backtest validation positives/negatives; e2e/backtest.spec.ts submits a nonpreset five-day interval through the real fixture API |
+
+Language options, credential/preference ownership, core/CLI and simulated trading
+remain unchanged. API keys are never needed for public-model discovery. No live
+provider evidence or final human acceptance is claimed.
+
+
+## Simulated trading Web composition — 2026-11-21
+
+Scope: web-simulation-20261121-v1. Existing FR-TRD-001..006,
+INV-TRD-001..003, NFR-TRD-001 and REQ-WEB-001/006/007/013/014/021/023;
+ADR-001-simulated-trading-system.md plus the Web ADR refinements apply.
+
+| Contract | Web ownership | Final verification coverage |
+| --- | --- | --- |
+| Strict Decimal inputs, issued human approval, deterministic sizing and engine-only fills | models/simulation_requests.py, api/simulation.py, runtime/simulation.py | test_web_simulation.py: actual pipeline outcomes, approve/deny/expiry/quote/version/epoch, idempotency/restart and no quantity/config/authority overrides; unchanged trading invariants |
+| Fixed account namespace, audit retention/verification and fail-closed recovery | runtime/simulation.py; inherited core store/audit | Same suite: reset, tampered state/audit, post-fill save failure, audit visibility, symlink escape, owner conflict, no restored pending authority |
+| Serial isolated walk-forward with matching resume | runtime/simulation_jobs.py; coordinator.external_run; existing core BacktestRunner/providers/clocks | Same suite: offline BUY/SELL, pending orders unexecuted, no-action and skipped behavior, portfolio/cursor/account isolation, identical-parameter resume, injected research/quote boundaries and active-slot conflict |
+| Account/decision/approval/backtest/audit controls with honest states | new frontend api/simulationClient.ts, SimulationPage.tsx, pages/Simulation components; existing app/nav/styles/catalogues | tests/simulation.test.tsx: validation, typed reset/epoch, canonical/idempotent requests, human reason/name, expired requests and inert audit; e2e/simulation.spec.ts: actual core account/approval/audit/reset, walk-forward/resume/reload, negative submissions and mobile themes |
+| Package and platform compatibility | pyproject package finder includes existing trading/safety; app defers POSIX-only simulation composition on Windows | Static/package import checks and previous full offline/frontend/browser regression; Windows runtime itself is not claimed as tested |
+
+The user requested one final verification phase. Until that phase runs these
+rows describe coverage, not passing results or final human acceptance.
+
+
+## Frontend information simplification — 2026-11-21
+
+web-ui-simplify-20261121-v1 changes presentation only. Existing IDs, domain
+semantics, API contracts and approval status remain unchanged.
+
+| Existing coverage | Presentation enforcement | Verification |
+| --- | --- | --- |
+| REQ-WEB-002/010/021 | Overview latest/recent research; concise history; no duplicate sidebar summary or decorative counts | visual-parity.spec.ts simplified workspace and external-task routing cases; existing history/locale/responsive cases |
+| REQ-WEB-001/006/007/014 | Same analysis inputs/stage tabs/errors; counters and policy detail disclosed on demand | analysis-flow, run-activity, localization unit tests; run/debate/tui-parity browser cases |
+| REQ-WEB-008/011, NFR-CMP-001/002/003 | Audit verdict remains explicit; one backtest score table; preset comparison under help with identity/rubric details | audit-comparison unit/browser tests; backtest and report-table browser cases |
+| FR-TRD-001..006, INV-TRD-001..003 | Core amounts/holdings, approval/expiry/error/reset confirmations remain; extra account/attempt/rule details collapsed; completed runs have no resume action | simulation unit/browser cases, including no completed-resume and reload assertions; existing offline core/API tests |
+
+No runtime provider evidence or new requirement verification status is inferred
+from this UI adjustment. Closing check outcomes belong to the evaluation logbook.
+
+
+## Backtest failure diagnostics — 2026-11-21
+
+Existing REQ-WEB-006/011/013, INV-WEB-003/014 and ADR-007-run-controls.md are
+implemented by errors.run_failure, RunCoordinator._execute_backtest and the
+existing backtest failure banner. test_web_backtest.py::
+test_backtest_failures_are_logged_safely_and_release_the_slot covers internal,
+configuration/missing-key, authentication, provider rate limit and Yahoo rate
+limit exceptions through the actual coordinator/API, including secret/path
+non-disclosure, preserved live memory and failure recovery. backtest.spec.ts
+covers the categorized reference in English/Chinese without a misleading empty
+card. No requirement status or actual-provider success is inferred.
+
+
+## Editable Web model defaults — 2026-11-21
+
+web-model-defaults-20261121-v1 refines existing REQ-WEB-001/003/005/011/013 and
+INV-WEB-001/003/006/014 under ADR-001-choice.md. No requirement IDs or statuses
+change. config.py exposes editable model provenance and preserved other locks;
+runs.py applies per-analysis selection after policy enforcement and scopes
+endpoint/thinking fields to their provider. backtests.py copies current server
+defaults. NewAnalysisPage preselects configured values, preserves matching draft
+choices, resets stale model drafts and clears cross-provider fields.
+
+Evidence: test_web_analysis_flow.py::
+test_server_defaults_and_other_locks_survive_omitted_model_inputs,
+test_explicit_analysis_models_override_environment_defaults_without_cross_provider_leak,
+test_provider_switch_rejects_inherited_model_ids,
+test_provider_switch_can_use_its_explicit_endpoint_and_thinking;
+test_web_backtest.py::test_backtests_keep_environment_model_defaults;
+analysis-flow.test.tsx configured-default and draft-baseline cases;
+tui-parity.spec.ts environment-default preselection/selection/submission case.
+Existing budget/round, credential redaction, invalid-input and recovery tests
+remain required. No live-provider call or new human acceptance is inferred.
+
+
+## Per-date backtest progress — 2026-11-21
+
+web-backtest-progress-20261121-v1 uses REQ-WEB-006/007/011/021/026 and
+INV-WEB-003/009/014 under ADR-007-run-controls.md. Generic observer ownership is
+core backtest.py; Web presentation ownership is runtime/backtest_progress.py;
+existing runner/coordinator/API bridge notifications to bounded GET snapshots.
+BacktestProgress.tsx and the existing page/client own in-place presentation.
+No requirement IDs, statuses, business acceptance, model or safety rule changes.
+
+Evidence: test_backtest.py::
+test_backtest_observer_reports_real_cells_resume_and_settlement,
+test_observer_failure_cannot_change_execution_and_is_removed_after_exit,
+test_observers_are_nested_and_thread_context_isolated;
+test_web_backtest.py::
+test_real_core_progress_is_visible_before_completion_and_while_settling,
+test_progress_rejects_invalid_transitions_and_bounds_snapshots;
+backtest-progress.test.tsx observed/settlement, paging and legacy cases;
+backtest.spec.ts per-date progress/refresh/settlement/mobile/bilingual case.
+Existing core signature, CLI, memory, failure, slot and negative request tests
+remain required. Optional observation adds no UI dependency to the core.

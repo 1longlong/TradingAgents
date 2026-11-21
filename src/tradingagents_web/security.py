@@ -44,6 +44,9 @@ def host_allowed(host_header: str | None) -> bool:
 CSRF_HEADER = "x-csrf-token"
 _CSRF_EXACT = {
     "/api/runs",
+    "/api/simulation/account",
+    "/api/simulation/decisions",
+    "/api/simulation/jobs",
     "/api/backtests",
     "/api/checkpoints/clear",
     "/api/portfolio/validate",
@@ -57,7 +60,11 @@ def csrf_path(path: str) -> bool:
     Unknown POST routes must still reach FastAPI and return 404/405; otherwise
     a generic CSRF middleware would mask them as 403.
     """
-    return path in _CSRF_EXACT or bool(_CSRF_CANCEL_RE.fullmatch(path))
+    return (
+        path in _CSRF_EXACT
+        or bool(_CSRF_CANCEL_RE.fullmatch(path))
+        or bool(re.fullmatch(r"/api/simulation/approvals/[^/]+", path))
+    )
 
 
 def origin_allowed(origin: str | None) -> bool:
@@ -90,9 +97,7 @@ def collect_secrets(environ: dict[str, str] | None = None) -> tuple[str, ...]:
     secrets = {
         value
         for name, value in source.items()
-        if value
-        and len(value) >= _MIN_REDACT_LEN
-        and _SECRET_ENV_RE.search(name)
+        if value and len(value) >= _MIN_REDACT_LEN and _SECRET_ENV_RE.search(name)
     }
     return tuple(sorted(secrets, key=len, reverse=True))
 

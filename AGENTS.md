@@ -1,4 +1,4 @@
-# TradingAgents Coding Agent Entry Point
+# TradingAgents OpenCode Entry Point
 
 ## 1. Goal, baseline, and authorization
 

@@ -37,6 +37,32 @@ export type BacktestSnapshot = {
   finished_at?: string | null;
   summary?: BacktestSummaryData | null;
   error?: Record<string, unknown> | null;
+  progress?: {
+    phase: string;
+    current_ticker: string | null;
+    current_date: string | null;
+    processed: number;
+    total: number;
+    completed: number;
+    failed: number;
+    skipped: number;
+    settlements_completed: number;
+    settlements_failed: number;
+    settlements_total: number;
+    observed: boolean;
+    elapsed_seconds: number;
+    updated_at: string;
+    offset: number;
+    limit: number;
+    cells: Array<{
+      ticker: string;
+      date: string;
+      status: string;
+      started_at: string | null;
+      finished_at: string | null;
+      elapsed_seconds: number | null;
+    }>;
+  };
 };
 
 export type BacktestList = { items: BacktestSnapshot[] };
@@ -65,9 +91,10 @@ export async function startBacktest(body: Record<string, unknown>) {
   });
 }
 
-export function getBacktest(runId: string) {
+export function getBacktest(runId: string, cellsOffset?: number) {
+  const query = cellsOffset === undefined ? "" : `?cells_offset=${cellsOffset}`;
   return requestJson<BacktestSnapshot>(
-    `/api/backtests/${encodeURIComponent(runId)}`,
+    `/api/backtests/${encodeURIComponent(runId)}${query}`,
   );
 }
 

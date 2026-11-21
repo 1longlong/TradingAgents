@@ -1,11 +1,12 @@
+import { ui, useUILanguage } from "../i18n/ui";
 // REQ-WEB-002/008/010, ADR-003: presentation of recorded reports; no inferred facts.
 import { useState } from "react";
 import type { KeyboardEvent } from "react";
 import { Link } from "react-router-dom";
 import { Icon } from "./Icon";
 import { Markdown } from "./Markdown";
+import { DebatePolicySummary } from "./DebateSettings";
 import {
-  ANALYST_LABELS,
   formatDate,
   ratingClass,
   sectionLabel,
@@ -21,6 +22,7 @@ export function CompanyLogo({
   ticker: string;
   small?: boolean;
 }) {
+  useUILanguage();
   return (
     <span className={`company-logo ${small ? "small" : ""}`}>
       {ticker === "NVDA" ? <Icon name="chip" /> : ticker.slice(0, 1)}
@@ -28,10 +30,11 @@ export function CompanyLogo({
   );
 }
 export function Rating({ value }: { value?: string | null }) {
+  useUILanguage();
   return value ? (
-    <span className={ratingClass(value)}>{value}</span>
+    <span className={ratingClass(value)}>{ui(value)}</span>
   ) : (
-    <span className="subtle">—</span>
+    <span className="subtle">{ui("—")}</span>
   );
 }
 export function Status({
@@ -41,6 +44,7 @@ export function Status({
   status: string;
   review?: boolean;
 }) {
+  useUILanguage();
   const name =
     status === "completed"
       ? "checkCircle"
@@ -52,7 +56,7 @@ export function Status({
   return (
     <span className={review ? "status-tag warning" : statusClass(status)}>
       <Icon name={name} />
-      {review ? "Needs review" : statusLabel(status)}
+      {review ? ui("Needs review") : ui(statusLabel(status))}
     </span>
   );
 }
@@ -89,77 +93,6 @@ export function recordedStages(
     has("final_trade_decision", "5_portfolio") || Boolean(rating),
   ];
 }
-export function Pipeline({
-  record,
-  agents = {},
-  wallTimes = {},
-}: {
-  record: ResearchRecord;
-  agents?: Record<string, string>;
-  wallTimes?: Record<string, number>;
-}) {
-  const stages = recordedStages(record.sections, record.rating);
-  const running = ["starting", "running", "cancelling"].includes(record.status);
-  const titles = [
-    "Analyst team",
-    "Quality gate & debate",
-    "Trading plan",
-    "Risk review",
-    "Final assessment",
-  ];
-  const copies = [
-    record.analysts?.map((key) => ANALYST_LABELS[key] ?? key).join(", ") ||
-      "Independent evidence and perspectives",
-    "Verify evidence, then debate",
-    "Portfolio-aware proposal",
-    "Three competing perspectives",
-    "Portfolio manager decision",
-  ];
-  const current = stages.findIndex((done) => !done);
-  return (
-    <aside className="panel pipeline">
-      <p className="panel-kicker">
-        A COLLECTIVE PERSPECTIVE <Icon name="layers" />
-      </p>
-      <h3>From evidence to assessment</h3>
-      <div className="pipeline-list">
-        {titles.map((title, index) => (
-          <div
-            className={`pipeline-step ${stages[index] ? "done" : running && current === index ? "active" : ""}`}
-            key={title}
-          >
-            <span className="step-dot">
-              {stages[index] ? <Icon name="check" /> : index + 1}
-            </span>
-            <div className="step-copy">
-              <strong>{title}</strong>
-              <small>{copies[index]}</small>
-              {index === 0 && Object.keys(agents).length ? (
-                <small>
-                  {Object.entries(agents)
-                    .map(
-                      ([agent, status]) =>
-                        `${agent}: ${status.replaceAll("_", " ")}`,
-                    )
-                    .join(" · ")}
-                </small>
-              ) : null}
-            </div>
-            <span className="step-time">
-              {wallTimes[title] == null
-                ? "—"
-                : `${wallTimes[title].toFixed(1)}s`}
-            </span>
-          </div>
-        ))}
-      </div>
-      <div className="pipeline-bottom">
-        <span>Stages completed</span>
-        <strong>{stages.filter(Boolean).length} / 5</strong>
-      </div>
-    </aside>
-  );
-}
 export function ResearchCard({
   record,
   href,
@@ -171,6 +104,7 @@ export function ResearchCard({
   running?: boolean;
   onCancel?: () => void;
 }) {
+  useUILanguage();
   const [tab, setTab] = useState("");
   const sections = record.sections ?? {};
   const keys = visibleSectionKeys(sections);
@@ -198,7 +132,7 @@ export function ResearchCard({
   return (
     <article className="panel featured">
       <div className="featured-top">
-        <p className="eyebrow">LATEST RESEARCH</p>
+        <p className="eyebrow">{ui("LATEST RESEARCH")}</p>
         <Status status={record.status} review={record.review} />
       </div>
       <div className="featured-info">
@@ -206,41 +140,33 @@ export function ResearchCard({
           <CompanyLogo ticker={record.ticker} />
           <div>
             <h2 className="ticker-heading">{record.ticker}</h2>
-            <p className="company-name">
-              {String(metadata.company_name ?? "Company details not recorded")}
-            </p>
+            {metadata.company_name ? (
+              <p className="company-name">{String(metadata.company_name)}</p>
+            ) : null}
           </div>
         </div>
         <div className="rating-box">
-          <small>Final assessment</small>
+          <small>{ui("Final assessment")}</small>
           <Rating value={record.rating} />
         </div>
       </div>
       <div className="research-meta">
         <span>
           <Icon name="calendar" />
-          {formatDate(record.date)}
+          {ui(formatDate(record.date))}
         </span>
-        <span>
-          <Icon name="layers" />
-          {metadata.research_depth == null
-            ? "Depth not recorded"
-            : `${metadata.research_depth} research`}
-        </span>
-        <span>
-          <Icon name="chip" />
-          {String(metadata.llm_provider ?? "Provider not recorded")}
-        </span>
-        <span>
-          <Icon name="globe" />
-          {String(metadata.output_language ?? "Language not recorded")}
-        </span>
+        {metadata.llm_provider ? (
+          <span>
+            <Icon name="chip" />
+            {String(metadata.llm_provider)}
+          </span>
+        ) : null}
       </div>
       {available.length ? (
         <div
           className="report-tabs"
           role="tablist"
-          aria-label="Research perspective"
+          aria-label={ui("Research perspective")}
         >
           {available.map((key, index) => (
             <button
@@ -253,7 +179,7 @@ export function ResearchCard({
               onKeyDown={(event) => keyboard(event, index)}
               onClick={() => setTab(key)}
             >
-              {sectionLabel(key).replace(/ analysis$/i, "")}
+              {ui(sectionLabel(key).replace(/ analysis$/i, ""))}
             </button>
           ))}
         </div>
@@ -263,22 +189,21 @@ export function ResearchCard({
           <>
             <p className="report-kicker">
               <Icon name="activity" />
-              RESEARCH IN PROGRESS
+              {ui("RESEARCH IN PROGRESS")}
             </p>
             <h3>
               {record.status === "cancelling"
-                ? "Stopping the research safely."
-                : "Weighing both sides of the thesis."}
+                ? ui("Stopping the research safely.")
+                : ui("Analysis in progress")}
             </h3>
-            <p>
-              The research continues while you explore the workspace. Your
-              current report will become available here as each stage finishes.
-            </p>
             <div className="progress-track">
               <span style={{ width: `${(stages / 5) * 100}%` }} />
             </div>
             <div className="running-copy">
-              <span>{stages} of 5 stages complete</span>
+              <span>
+                {stages}
+                {ui(" of 5 stages complete")}
+              </span>
               {onCancel ? (
                 <button
                   className="text-button"
@@ -286,23 +211,19 @@ export function ResearchCard({
                   onClick={onCancel}
                 >
                   {record.status === "cancelling"
-                    ? "Stopping…"
-                    : "Cancel analysis"}
+                    ? ui("Stopping…")
+                    : ui("Cancel analysis")}
                 </button>
               ) : null}
             </div>
-            <p className="inline-note">
-              The active slot stays occupied until the worker exits. A provider
-              call already in flight may finish first.
-            </p>
           </>
         ) : (
           <>
             <p className="report-kicker">
               <Icon name="spark" />
               {record.status === "partial"
-                ? "PARTIAL REPORT"
-                : "THE RESEARCH BRIEF"}
+                ? ui("PARTIAL REPORT")
+                : ui("THE RESEARCH BRIEF")}
             </p>
             {active ? (
               <div className="research-prose">
@@ -312,45 +233,20 @@ export function ResearchCard({
               <>
                 <h3>
                   {record.status === "failed"
-                    ? "No final decision is available."
-                    : "Read the evidence that is available."}
+                    ? ui("No final decision is available.")
+                    : ui("Read the evidence that is available.")}
                 </h3>
-                <p>No report sections have been recorded for this run.</p>
+                <p>
+                  {ui("No report sections have been recorded for this run.")}
+                </p>
               </>
             )}
           </>
         )}
       </div>
       <div className="report-footer">
-        <span className="team-stack">
-          {(
-            record.analysts ??
-            available.map(
-              (key) => key.split("/").pop()?.replace("_report", "") ?? key,
-            )
-          ).map((key) => (
-            <span
-              className="team-avatar"
-              key={key}
-              title={ANALYST_LABELS[key] ?? key}
-            >
-              {(
-                {
-                  market: "MK",
-                  sentiment: "SE",
-                  social: "SE",
-                  news: "NW",
-                  fundamentals: "FN",
-                } as Record<string, string>
-              )[key] ?? key.slice(0, 2).toUpperCase()}
-            </span>
-          ))}
-          <span className="team-caption">
-            Independent voices. Shared context.
-          </span>
-        </span>
         <Link className="text-button" to={href}>
-          {running ? "Follow analysis" : "Read full analysis"}
+          {running ? ui("Follow analysis") : ui("Read full analysis")}
           <Icon name="arrow" />
         </Link>
       </div>
@@ -365,6 +261,7 @@ export function ReportDocument({
   record: ResearchRecord;
   prefix?: string;
 }) {
+  useUILanguage();
   const keys = visibleSectionKeys(record.sections),
     metadata = record.metadata ?? {};
   return (
@@ -374,29 +271,29 @@ export function ReportDocument({
           <CompanyLogo ticker={record.ticker} />
           <div>
             <h2 className="ticker-heading">{record.ticker}</h2>
-            <p className="company-name">ANALYSIS REPORT</p>
+            <p className="company-name">{ui("ANALYSIS REPORT")}</p>
           </div>
         </div>
-        <h2>
-          {record.status !== "completed"
-            ? "The research is incomplete."
-            : record.rating === "REVIEW"
-              ? "An assessment for your review."
-              : "Evidence, examined from every angle."}
-        </h2>
         <div className="document-meta">
           <Status status={record.status} review={record.review} />
-          <span>{formatDate(record.date)}</span>
-          <span>
-            {metadata.research_depth == null
-              ? "Depth not recorded"
-              : `${metadata.research_depth} research`}
-          </span>
-          <span>
-            {String(metadata.llm_provider ?? "Provider not recorded")}
-          </span>
+          <span>{ui(formatDate(record.date))}</span>
           <Rating value={record.rating} />
         </div>
+        <details className="disclosure report-details">
+          <summary>{ui("Analysis settings")}</summary>
+          {metadata.llm_provider ? (
+            <p>{String(metadata.llm_provider)}</p>
+          ) : null}
+          <DebatePolicySummary
+            policy={metadata.debate_termination}
+            riskRounds={
+              typeof metadata.max_risk_discuss_rounds === "number"
+                ? metadata.max_risk_discuss_rounds
+                : undefined
+            }
+          />
+        </details>
+        <p className="helper">{ui("Research output is advisory.")}</p>
         {keys.length ? (
           keys.map((key) => (
             <section
@@ -406,40 +303,30 @@ export function ReportDocument({
             >
               <p className="report-kicker">
                 <Icon name="file" />
-                {sectionLabel(key).toUpperCase()}
+                {ui(sectionLabel(key).toUpperCase())}
               </p>
               <Markdown>{record.sections![key]}</Markdown>
-              {key === "final_trade_decision" ? (
-                <p className="inline-note">
-                  Research output is advisory. A rating is not an order, a
-                  guarantee, or an executed position.
-                </p>
-              ) : null}
             </section>
           ))
         ) : (
           <div className="empty-state">
             <Icon name="file" />
-            <strong>No final report available</strong>
+            <strong>{ui("No final report available")}</strong>
             <p>
-              No saved sections are available. A failed, cancelled or partial
-              run is not a successful analysis.
+              {ui(
+                "No saved sections are available. A failed, cancelled or partial run is not a successful analysis.",
+              )}
             </p>
           </div>
         )}
       </article>
       <aside className="panel toc-panel">
-        <p className="eyebrow">IN THIS REPORT</p>
+        <p className="eyebrow">{ui("IN THIS REPORT")}</p>
         {keys.map((key) => (
           <a key={key} href={`#${prefix}-${key}`}>
-            {sectionLabel(key)}
+            {ui(sectionLabel(key))}
           </a>
         ))}
-        <div className="toc-divider" />
-        <p className="inline-note">
-          Independent perspectives. One considered assessment. Research output
-          is advisory.
-        </p>
       </aside>
     </div>
   );

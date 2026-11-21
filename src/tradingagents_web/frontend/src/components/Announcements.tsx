@@ -1,3 +1,4 @@
+import { ui, useUILanguage } from "../i18n/ui";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -17,6 +18,7 @@ export function Announcements({
   requireAttention,
   onAcknowledge,
 }: AnnouncementsProps) {
+  useUILanguage();
   const { t } = useTranslation();
   const [open, setOpen] = useState(requireAttention);
 
@@ -33,7 +35,7 @@ export function Announcements({
         <div>
           <strong>{t("announcements.title")}</strong>
           {announcements.map((announcement, index) => (
-            <p key={index}>{announcement}</p>
+            <p key={index}>{ui(announcement)}</p>
           ))}
         </div>
       </div>
@@ -48,7 +50,7 @@ export function Announcements({
             <Dialog.Description className="dialog-description">
               {announcements.map((announcement, index) => (
                 <span key={index} className="block">
-                  {announcement}
+                  {ui(announcement)}
                 </span>
               ))}
             </Dialog.Description>
@@ -72,6 +74,7 @@ export function Announcements({
 }
 
 export function AnnouncementsGate() {
+  useUILanguage();
   const [acknowledged, setAcknowledged] = useState(false);
   const query = useQuery({
     queryKey: ["announcements"],

@@ -6,7 +6,7 @@ import os
 from copy import deepcopy
 from typing import Any
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 
 from cli.prefs import load_last_run
 from cli.utils import _llm_provider_table
@@ -15,6 +15,7 @@ from tradingagents.llm_clients.api_key_env import PROVIDER_API_KEY_ENV, get_api_
 from tradingagents.llm_clients.model_catalog import get_model_options
 from tradingagents.llm_clients.openai_client import OPENAI_COMPATIBLE_PROVIDERS
 from tradingagents_web.errors import error_response
+from tradingagents_web.runtime.debate_policy import configure_debate_policy, public_debate_policy
 
 router = APIRouter(prefix="/api", tags=["config"])
 
@@ -26,6 +27,9 @@ _REMEMBERED_KEYS = (
     "quick_think_llm",
     "deep_think_llm",
 )
+
+# REQ-WEB-001/013, ADR-001-choice.md: editable defaults, not execution limits.
+MODEL_DEFAULT_KEYS = ("llm_provider", "quick_think_llm", "deep_think_llm")
 
 
 def effective_defaults() -> dict:
@@ -51,7 +55,7 @@ def _key_status() -> dict[str, str]:
 @router.get("/config")
 def config() -> dict:
     prefs = load_last_run()
-    defaults = effective_defaults()
+    defaults = configure_debate_policy(effective_defaults())
     providers = [
         {"key": key, "label": label, "default_url": url}
         for label, key, url in _llm_provider_table()
@@ -70,12 +74,20 @@ def config() -> dict:
             "output_language": defaults.get("output_language", "English"),
             "analysts": ["market", "social", "news", "fundamentals"],
             "research_depth": defaults.get("max_debate_rounds", 1),
+            "debate_termination": public_debate_policy(defaults),
+            "max_risk_discuss_rounds": defaults["max_risk_discuss_rounds"],
             "checkpoint": defaults.get("checkpoint_enabled", False),
         },
         "backend_url_configured": bool(defaults.get("backend_url")),
         "providers": providers,
         "env_locks": {
-            key: bool(os.environ.get(env_var)) for env_var, key in _ENV_OVERRIDES.items()
+            key: key not in MODEL_DEFAULT_KEYS and bool(os.environ.get(env_var))
+            for env_var, key in _ENV_OVERRIDES.items()
+        },
+        "env_defaults": {
+            key: bool(os.environ.get(env_var))
+            for env_var, key in _ENV_OVERRIDES.items()
+            if key in MODEL_DEFAULT_KEYS
         },
         "key_status": _key_status(),
         "prefs": {key: prefs[key] for key in _REMEMBERED_KEYS if key in prefs},
@@ -84,11 +96,15 @@ def config() -> dict:
 
 @router.get("/config/models")
 def models(
+    request: Request,
     provider: str = Query(...),
     mode: str = Query(...),
+    refresh: bool = False,
 ) -> Any:
     if mode not in {"quick", "deep"}:
         return error_response(422, "validation", "mode must be quick or deep")
+    if provider.lower() == "openrouter":
+        return request.app.state.openrouter_catalog.models(refresh=refresh)
     try:
         options = get_model_options(provider, mode)
     except KeyError:

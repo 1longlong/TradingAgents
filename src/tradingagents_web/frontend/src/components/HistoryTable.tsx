@@ -1,9 +1,10 @@
+import { ui, uiHistoryTitle, useUILanguage } from "../i18n/ui";
 // REQ-WEB-010, ADR-003: present only recorded history metadata.
 import { Link } from "react-router-dom";
 import type { HistoryItem } from "../api/client";
 import { CompanyLogo, Rating } from "./Research";
 import { Icon } from "./Icon";
-import { ANALYST_LABELS, formatDate, statusLabel } from "../utils/workspace";
+import { formatDate, statusLabel } from "../utils/workspace";
 export function HistoryFilters({
   search,
   status,
@@ -17,20 +18,21 @@ export function HistoryFilters({
   onStatus: (value: string) => void;
   onClear?: () => void;
 }) {
+  useUILanguage();
   return (
     <div className="history-controls">
       <label className="filter-input">
         <Icon name="search" />
-        <span className="sr-only">Filter analyses by ticker</span>
+        <span className="sr-only">{ui("Filter analyses by ticker")}</span>
         <input
           type="search"
-          placeholder="Search symbol..."
+          placeholder={ui("Search symbol...")}
           value={search}
           onChange={(event) => onSearch(event.target.value)}
         />
       </label>
       <label>
-        <span className="sr-only">Filter by status</span>
+        <span className="sr-only">{ui("Filter by status")}</span>
         <select
           className="select-small"
           value={status}
@@ -45,7 +47,7 @@ export function HistoryFilters({
             ["partial", "Partial report"],
           ].map(([key, label]) => (
             <option key={key} value={key}>
-              {label}
+              {ui(label)}
             </option>
           ))}
         </select>
@@ -53,7 +55,7 @@ export function HistoryFilters({
       {onClear ? (
         <button
           className="icon-button"
-          aria-label="Clear filters"
+          aria-label={ui("Clear filters")}
           onClick={onClear}
         >
           <Icon name="refresh" />
@@ -95,12 +97,13 @@ export function HistoryTable({
   onSort: () => void;
   full?: boolean;
 }) {
+  useUILanguage();
   if (!items.length)
     return (
       <div className="panel empty-state">
         <Icon name="search" />
-        <strong>No matching research</strong>
-        <p>Try another symbol or clear the current filters.</p>
+        <strong>{ui("No matching research")}</strong>
+        <p>{ui("Try another symbol or clear the current filters.")}</p>
       </div>
     );
   return (
@@ -108,23 +111,20 @@ export function HistoryTable({
       <div className="table-wrap">
         <table>
           <caption className="sr-only">
-            Analysis history. Open a row to read the report.
+            {ui("Analysis history. Open a row to read the report.")}
           </caption>
           <thead>
             <tr>
-              <th>Instrument</th>
+              <th>{ui("Instrument")}</th>
               <th aria-sort={descending ? "descending" : "ascending"}>
                 <button onClick={onSort}>
-                  Analysis date
+                  {ui("Analysis date")}
                   <Icon name="sort" />
                 </button>
               </th>
-              <th className="hide-medium">Research team</th>
-              <th className="hide-medium">Model provider</th>
-              <th>Depth</th>
-              <th>Assessment</th>
+              <th>{ui("Assessment")}</th>
               <th>
-                <span className="sr-only">Open report</span>
+                <span className="sr-only">{ui("Open report")}</span>
               </th>
             </tr>
           </thead>
@@ -132,51 +132,31 @@ export function HistoryTable({
             {items.map((item) => (
               <tr key={item.artifact_id}>
                 <td>
-                  <Link
-                    className="table-company"
-                    to={`/history/${item.artifact_id}`}
-                  >
+                  <div className="table-company">
                     <CompanyLogo ticker={item.ticker} small />
                     <span>
                       <strong>{item.ticker}</strong>
-                      <small>{item.title}</small>
+                      <small>{uiHistoryTitle(item.title, item.ticker)}</small>
                     </span>
-                  </Link>
+                  </div>
                 </td>
-                <td className="table-date">{formatDate(item.date)}</td>
-                <td className="hide-medium">
-                  <span className="subtle">
-                    {Array.isArray(item.metadata?.analysts)
-                      ? item.metadata.analysts
-                          .map(
-                            (value) =>
-                              ANALYST_LABELS[String(value)] ?? String(value),
-                          )
-                          .join(" · ")
-                      : "Not recorded"}
-                  </span>
-                </td>
-                <td className="hide-medium">
-                  <span className="model-label">
-                    {String(item.metadata?.llm_provider ?? "Not recorded")}
-                  </span>
-                </td>
-                <td>
-                  <span className="depth-label">
-                    {String(item.metadata?.research_depth ?? "Not recorded")}
-                  </span>
-                </td>
+                <td className="table-date">{ui(formatDate(item.date))}</td>
                 <td className="table-rating">
                   {item.rating ? (
                     <Rating value={item.rating} />
                   ) : (
-                    <span className="subtle">{statusLabel(item.status)}</span>
+                    <span className="subtle">
+                      {ui(statusLabel(item.status))}
+                    </span>
                   )}
                 </td>
                 <td>
                   <Link
                     className="icon-button"
-                    aria-label={`Read ${item.ticker} analysis from ${formatDate(item.date)}`}
+                    aria-label={ui("Read {{value0}} analysis from {{value1}}", {
+                      value0: item.ticker,
+                      value1: formatDate(item.date),
+                    })}
                     to={`/history/${item.artifact_id}`}
                   >
                     <Icon name="arrow" />
@@ -189,16 +169,15 @@ export function HistoryTable({
       </div>
       <div className="table-caption">
         <span>
-          {items.length} {full ? "matching analyses" : "recent analyses"}
+          {items.length}{" "}
+          {full ? ui("matching analyses") : ui("recent analyses")}
         </span>
-        {full ? (
-          <span>All records shown</span>
-        ) : (
+        {!full ? (
           <Link className="text-button" to="/history">
-            View all research
+            {ui("View all research")}
             <Icon name="arrow" />
           </Link>
-        )}
+        ) : null}
       </div>
     </>
   );

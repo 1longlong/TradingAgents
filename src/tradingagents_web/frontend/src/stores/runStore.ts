@@ -1,4 +1,5 @@
 import { createStore } from "zustand/vanilla";
+import { stageForAgent } from "../utils/runActivity";
 
 export type RunStatus =
   | "idle"
@@ -14,6 +15,8 @@ export type RunMessage = {
   id: string;
   timestamp?: string;
   type?: string;
+  stage?: string;
+  speaker?: string;
   content: string;
 };
 export type RunEvent = {
@@ -31,6 +34,7 @@ export type RunState = {
   sections: Record<string, string>;
   agents: Record<string, string>;
   stats: Record<string, number>;
+  wallTimes: Record<string, number>;
   phase: string;
   signal?: string;
   review: boolean;
@@ -52,6 +56,7 @@ const initial = () => ({
   sections: {},
   agents: {},
   stats: {},
+  wallTimes: {},
   phase: "preparing",
   signal: undefined,
   review: false,
@@ -76,6 +81,7 @@ function snapshotState(snapshot: Record<string, unknown>): Partial<RunState> {
     sections: (snapshot.sections as Record<string, string>) ?? {},
     agents: (snapshot.agents as Record<string, string>) ?? {},
     stats: (snapshot.stats as Record<string, number>) ?? {},
+    wallTimes: (snapshot.wall_times as Record<string, number>) ?? {},
     phase: String(snapshot.phase ?? "preparing"),
     signal: snapshot.signal as string | undefined,
     review: Boolean(snapshot.review),
@@ -114,6 +120,15 @@ export function createRunStore() {
             {
               id: `${event.run_id ?? "run"}:${event.seq}`,
               timestamp: payload.timestamp as string | undefined,
+              stage:
+                "stage" in payload
+                  ? (payload.stage as string | undefined)
+                  : stageForAgent(
+                      Object.entries(state.agents).find(
+                        ([, status]) => status === "in_progress",
+                      )?.[0] ?? "",
+                    ),
+              speaker: payload.speaker as string | undefined,
               type:
                 event.type === "tool_call"
                   ? "Tool"
@@ -137,10 +152,20 @@ export function createRunStore() {
             [String(payload.agent)]: String(payload.status),
           };
           break;
+        case "analyst.timing":
+          patch.wallTimes = {
+            ...state.wallTimes,
+            ...(payload.wall_times as Record<string, number>),
+          };
+          break;
         case "stats":
           patch.stats = payload as Record<string, number>;
           break;
         case "run.completed":
+          patch.wallTimes = {
+            ...state.wallTimes,
+            ...((payload.wall_times as Record<string, number>) ?? {}),
+          };
           patch.status = "completed";
           patch.signal = payload.signal as string | undefined;
           patch.review = Boolean(payload.review);

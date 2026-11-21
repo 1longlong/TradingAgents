@@ -1,10 +1,12 @@
+import { ui, useUILanguage } from "../i18n/ui";
 // REQ-WEB-002/007, ADR-007: restore snapshots before consuming subsequent events.
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { useTranslation } from "react-i18next";
 import { Link, useParams } from "react-router-dom";
 
 import { downloadUrl, getHistoryDetail } from "../api/client";
-import { ResearchCard, Pipeline, ReportDocument } from "../components/Research";
+import { ReportDocument, Status } from "../components/Research";
+import { DebatePolicySummary } from "../components/DebateSettings";
+import { RunActivity } from "../components/RunActivity";
 import { Modal } from "../components/Modal";
 import {
   cancelRun,
@@ -13,14 +15,13 @@ import {
   type RunSnapshot,
 } from "../api/runClient";
 import { Icon } from "../components/Icon";
-import { Markdown } from "../components/Markdown";
 import { createRunStore, type RunEvent } from "../stores/runStore";
-import { sectionLabel } from "../utils/workspace";
+import { formatDate } from "../utils/workspace";
 
 const TERMINAL = new Set(["completed", "failed", "cancelled"]);
 
 export function LiveRunPage() {
-  const { t } = useTranslation();
+  useUILanguage();
   const { runId = "" } = useParams();
   const [store] = useState(() => createRunStore());
   const state = useSyncExternalStore(
@@ -29,6 +30,7 @@ export function LiveRunPage() {
     store.getState,
   );
   const [actionError, setActionError] = useState<string | null>(null);
+  const [showComplete, setShowComplete] = useState(false);
 
   useEffect(() => {
     let source: EventSource | null = null;
@@ -70,6 +72,7 @@ export function LiveRunPage() {
           "run.started",
           "run.resumed",
           "agent.status",
+          "analyst.timing",
           "message",
           "tool_call",
           "report.section",
@@ -92,6 +95,7 @@ export function LiveRunPage() {
     }
 
     store.getState().reset();
+    setShowComplete(false);
     setSnapshot(null);
     void connect();
     return () => {
@@ -112,7 +116,6 @@ export function LiveRunPage() {
     }
   }
 
-  const [filter, setFilter] = useState("all");
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [snapshot, setSnapshot] = useState<RunSnapshot | null>(null);
   const status = state.status;
@@ -127,6 +130,8 @@ export function LiveRunPage() {
     analysts: snapshot?.analysts,
     metadata: {
       research_depth: snapshot?.research_depth,
+      debate_termination: snapshot?.debate_termination,
+      max_risk_discuss_rounds: snapshot?.max_risk_discuss_rounds,
       llm_provider: snapshot?.llm_provider,
       output_language: snapshot?.output_language,
     },
@@ -150,26 +155,20 @@ export function LiveRunPage() {
       mounted = false;
     };
   }, [state.artifactId]);
-  const events = state.messages.filter(
-    (message) =>
-      filter === "all" ||
-      (filter === "tool_call"
-        ? message.type === "Tool"
-        : message.type !== "Tool"),
-  );
   return (
     <>
       <section className="page-header">
         <div>
-          <p className="eyebrow">
-            {running ? "ACTIVE RESEARCH" : "RESEARCH / " + record.ticker}
-          </p>
-          <h1>{record.ticker} analysis</h1>
+          <h1>{ui("{{ticker}} analysis", { ticker: record.ticker })}</h1>
           <p className="page-description">
-            A collective review of {record.ticker}.
+            {record.date ? ui(formatDate(record.date)) : ui("")}
+            {snapshot?.llm_provider
+              ? ui(" · {{value0}}", { value0: snapshot.llm_provider })
+              : ui("")}
           </p>
         </div>
         <div className="page-header-actions">
+          <Status status={status} review={state.review} />
           {running ? (
             <button
               className="button"
@@ -177,17 +176,24 @@ export function LiveRunPage() {
               onClick={() => setConfirmCancel(true)}
             >
               <Icon name="stop" />
-              {status === "cancelling" ? "Stopping…" : "Cancel analysis"}
+              {status === "cancelling"
+                ? ui("Stopping…")
+                : ui("Cancel analysis")}
             </button>
           ) : (
             <>
-              <Link className="button ghost" to="/history">
-                <Icon name="clock" />
-                History
-              </Link>
+              {status === "completed" ? (
+                <button
+                  className="button"
+                  onClick={() => setShowComplete(!showComplete)}
+                >
+                  <Icon name={showComplete ? "activity" : "file"} />
+                  {showComplete ? ui("Run activity") : ui("Complete report")}
+                </button>
+              ) : null}
               <Link className="button ghost" to={`/audit?run_id=${runId}`}>
                 <Icon name="shield" />
-                Research audit
+                {ui("Research audit")}
               </Link>
               {complete ? (
                 <a
@@ -195,7 +201,7 @@ export function LiveRunPage() {
                   href={downloadUrl(state.artifactId!, "complete")}
                 >
                   <Icon name="download" />
-                  Export report
+                  {ui("Export report")}
                 </a>
               ) : null}
             </>
@@ -206,8 +212,8 @@ export function LiveRunPage() {
         <div className="report-state-banner warning" role="alert">
           <Icon name="warning" />
           <div>
-            <strong>Analysis could not finish</strong>
-            <p>{state.error}</p>
+            <strong>{ui("Analysis could not finish")}</strong>
+            <p>{ui(state.error)}</p>
             <Link
               className="text-button"
               to="/new"
@@ -219,12 +225,15 @@ export function LiveRunPage() {
                   provider: snapshot?.llm_provider,
                   analysts: snapshot?.analysts,
                   depth: snapshot?.research_depth,
+                  debatePolicy: snapshot?.debate_termination,
+                  riskRounds: snapshot?.max_risk_discuss_rounds,
+                  riskIndependent: true,
                   quick: snapshot?.quick_think_llm,
                   deep: snapshot?.deep_think_llm,
                 },
               }}
             >
-              Review setup
+              {ui("Review setup")}
               <Icon name="arrow" />
             </Link>
           </div>
@@ -234,11 +243,8 @@ export function LiveRunPage() {
         <div className="report-state-banner warning">
           <Icon name="warning" />
           <div>
-            <strong>A human perspective is needed</strong>
-            <p>
-              The result is flagged as REVIEW. It has not been converted to Hold
-              or treated as a position.
-            </p>
+            <strong>{ui("A human perspective is needed")}</strong>
+            <p>{ui("REVIEW requires human assessment before acting.")}</p>
           </div>
         </div>
       ) : null}
@@ -246,11 +252,9 @@ export function LiveRunPage() {
         <div className="report-state-banner warning">
           <Icon name="pause" />
           <div>
-            <strong>Stopped before a final decision</strong>
+            <strong>{ui("Stopped before a final decision")}</strong>
             <p>
-              Any sections and enabled checkpoint already written are retained;
-              no final decision is recorded. Recovery requires matching inputs,
-              including portfolio context.
+              {ui("Available sections and enabled checkpoints are retained.")}
             </p>
           </div>
         </div>
@@ -259,167 +263,44 @@ export function LiveRunPage() {
         <div className="report-state-banner warning" key={warning}>
           <Icon name="warning" />
           <div>
-            <strong>Analysis completed; report needs attention</strong>
-            <p>{warning}</p>
+            <strong>{ui("Analysis completed; report needs attention")}</strong>
+            <p>{ui(warning)}</p>
           </div>
         </div>
       ))}
       {actionError ? (
         <p className="field-error" role="alert">
-          {actionError}
+          {ui(actionError)}
         </p>
       ) : null}
-      {running ? (
+      {!showComplete ? (
         <>
-          <section className="research-grid">
-            <ResearchCard
-              record={record}
-              href={`/runs/${runId}`}
-              running
-              onCancel={() => setConfirmCancel(true)}
+          <details className="disclosure report-details">
+            <summary>{ui("Analysis settings")}</summary>
+            <DebatePolicySummary
+              policy={snapshot?.debate_termination}
+              riskRounds={snapshot?.max_risk_discuss_rounds}
             />
-            <Pipeline
-              record={record}
-              agents={state.agents}
-              wallTimes={snapshot?.wall_times}
-            />
-          </section>
-          <div className="report-state-banner">
-            <Icon name="activity" />
-            <div>
-              <strong>Research continues in the background</strong>
-              <p>
-                You can return to the overview without cancelling this run. The
-                workspace accepts one active analysis or backtest at a time.
-                Stage counts describe completed work, not a time estimate.
-              </p>
-            </div>
-          </div>
+          </details>
+          <RunActivity key={runId} state={state} />
         </>
       ) : null}
-      {running ? (
-        <section className="panel audit-card run-activity">
-          <div className="audit-section-head">
-            <div>
-              <p className="eyebrow">RUN ACTIVITY</p>
-              <h2>Follow the work as it happens.</h2>
-              <p>
-                Status: {status} · Connection: {state.connection} ·{" "}
-                {t(`live.phases.${state.phase}`, { defaultValue: state.phase })}
-              </p>
-            </div>
-            <label className="audit-scenario">
-              <span className="sr-only">Filter activity</span>
-              <select
-                value={filter}
-                onChange={(event) => setFilter(event.target.value)}
-              >
-                <option value="all">All events</option>
-                <option value="message">Messages</option>
-                <option value="tool_call">Tool calls</option>
-              </select>
-            </label>
-          </div>
-          <div className="activity-stats">
-            {[
-              ["Model calls", state.stats.llm_calls],
-              ["Tool calls", state.stats.tool_calls],
-              ["Input tokens", state.stats.tokens_in],
-              ["Output tokens", state.stats.tokens_out],
-              [
-                "Report stages",
-                state.stats.reports_completed == null
-                  ? undefined
-                  : `${state.stats.reports_completed} / ${state.stats.reports_total ?? "—"}`,
-              ],
-              [
-                "Elapsed",
-                state.stats.elapsed == null
-                  ? undefined
-                  : `${state.stats.elapsed.toFixed(1)}s`,
-              ],
-            ].map(([key, value]) => (
-              <div key={key}>
-                <small>{key}</small>
-                <strong>
-                  {value == null
-                    ? "—"
-                    : typeof value === "number"
-                      ? value.toLocaleString()
-                      : value}
-                </strong>
-              </div>
-            ))}
-          </div>
-          <div className="activity-events">
-            {events.length ? (
-              events.map((message) => (
-                <article key={message.id}>
-                  <span>
-                    <Icon name={message.type === "Tool" ? "sliders" : "file"} />
-                  </span>
-                  <div>
-                    <strong>
-                      {message.type === "Tool"
-                        ? "Tool call"
-                        : (message.type ?? "Message")}
-                    </strong>
-                    <p>{message.content}</p>
-                    <small>{message.timestamp}</small>
-                  </div>
-                  <span className="audit-badge">
-                    {message.type === "Tool" ? "Tool" : "Message"}
-                  </span>
-                </article>
-              ))
-            ) : (
-              <div className="empty-state">
-                <strong>
-                  {filter === "all"
-                    ? "Waiting for activity"
-                    : "No events of this type yet."}
-                </strong>
-                <p>Recorded activity will appear here as the run progresses.</p>
-              </div>
-            )}
-          </div>
-        </section>
-      ) : null}
-      {running ? (
-        Object.keys(state.sections).length ? (
-          <article className="panel document-panel">
-            <p className="eyebrow">AVAILABLE SECTIONS · LIVE REPORT</p>
-            {Object.entries(state.sections).map(([key, content]) => (
-              <section
-                className="document-section"
-                id={`live-section-${key}`}
-                key={key}
-              >
-                <p className="report-kicker">
-                  <Icon name="file" />
-                  {sectionLabel(key).toUpperCase()}
-                </p>
-                <Markdown>{content}</Markdown>
-              </section>
-            ))}
-          </article>
-        ) : null
-      ) : (
+      {status === "completed" && showComplete ? (
         <ReportDocument record={record} prefix="live-section" />
-      )}
+      ) : null}
       <Modal
         open={confirmCancel}
-        title="Stop this analysis?"
+        title={ui("Stop this analysis?")}
         onClose={() => setConfirmCancel(false)}
       >
         <p>
-          A provider call already in flight may finish first. The active slot
-          remains occupied until the worker exits. Available sections and
-          enabled checkpoints are retained.
+          {ui(
+            "A provider call already in flight may finish first. The active slot remains occupied until the worker exits. Available sections and enabled checkpoints are retained.",
+          )}
         </p>
         <div className="modal-actions">
           <button className="button" onClick={() => setConfirmCancel(false)}>
-            Keep researching
+            {ui("Keep researching")}
           </button>
           <button
             className="button danger"
@@ -428,7 +309,7 @@ export function LiveRunPage() {
               void handleCancel();
             }}
           >
-            Stop analysis
+            {ui("Stop analysis")}
           </button>
         </div>
       </Modal>

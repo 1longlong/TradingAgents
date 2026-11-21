@@ -60,7 +60,7 @@ tradingagents-web = "tradingagents_web.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["tradingagents*", "cli*"]
+include = ["tradingagents*", "cli*", "trading", "safety"]
 
 [tool.setuptools.package-data]
 cli = ["static/*"]

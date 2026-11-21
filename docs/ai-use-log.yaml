@@ -2932,7 +2932,7 @@ entries:
   - ci_gates structure is blocked by the untracked demo directory; mypy reports one pre-existing graph_runner error.
 - id: AI-20261120-UI-002
   date: '2026-11-20'
-  tool: Local workspace agent
+  tool: OpenCode
   purpose: >-
     Inspect the integrated production frontend against the unchanged demo and
     correct supported visual and interaction differences while preserving real
@@ -2979,7 +2979,7 @@ entries:
   - Audit/comparison remain unavailable through the current WebUI API; no sample production results are fabricated.
 - id: AI-20261120-API-001
   date: '2026-11-20'
-  tool: Local workspace agent
+  tool: OpenCode
   purpose: >-
     Complete the previously identified WebUI audit and offline comparison
     interfaces by projecting existing core reports and deterministic replay,
@@ -3027,7 +3027,7 @@ entries:
   - Existing structure/mypy/local-skill lint blockers and initial verification corrections are recorded in the logbook.
 - id: AI-20261120-GIT-001
   date: '2026-11-20'
-  tool: Local workspace agent
+  tool: OpenCode
   purpose: >-
     Exclude local skills and design references from tracking, prepare the current
     WebUI work for the requested local commit, and synchronize release into the
@@ -3268,7 +3268,7 @@ entries:
   human_review: requested
 - id: AI-20261120-MERGE-001
   date: '2026-11-20'
-  tool: Local workspace agent
+  tool: OpenCode
   purpose: Resolve the authorized merge of local release 24adf97 into feature/webui after committing b896308,
     preserving both systems and the canonical project layout.
   source: Current user conversation; explicit commit/pull/merge request, conflict-resolution authorization
@@ -3354,3 +3354,560 @@ entries:
   - Offline regression 2896 passed, 1 optional-dependency skip, 88 subtests; frontend 37 passed.
   - Initial integration failures and final results are recorded in the review memo; no live or browser
     rerun claimed.
+- id: AI-20261120-STARTUP-001
+  date: '2026-11-20'
+  tool: OpenCode
+  purpose: Implement the user-approved one-command WebUI development/build startup modes and update README
+    instructions, with local lifecycle verification.
+  source: Current user conversation; approved dev/build proposal and explicit README implementation request
+  human_review: User authorized implementation of the proposed startup modes; independent review and final
+    human acceptance are pending
+  paths:
+  - README.md
+  - architecture-blueprint.md
+  - docs/architecture/adr/002-backend-framework-and-transport.md
+  - docs/architecture/adr/003-frontend-stack.md
+  - src/tradingagents_web/cli.py
+  - src/tradingagents_web/launcher.py
+  - src/tradingagents_web/frontend/vite.config.ts
+  - test/offline/test_web_launcher.py
+  - docs/review-memo.md
+  - docs/architecture/trace-matrix.md
+  - docs/architecture/evaluation-logbook.md
+  - docs/ai-use-log.yaml
+  notes:
+  - Scope/test strategy recorded as web-startup-20261120-v1 before implementation.
+  - No new dependency, core/CLI/trading change, permission change, automatic installation, commit, push,
+    deployment or real provider call.
+  - Startup 24 passed; offline 2920 passed, 1 optional-dependency skip, 88 subtests; frontend 37 passed
+    with lint/types/build; scoped startup mypy passes.
+  - Marked fixture-only real dev/build startup verifies local proxy, static API serving, CSRF, occupied-port
+    refusal and Ctrl+C cleanup.
+  - Final Chromium E2E 12 passed; temporary harness corrections and unrun Windows/live verification are
+    recorded in the evaluation logbook.
+- id: AI-20261120-NAMING-001
+  date: '2026-11-20'
+  tool: OpenCode
+  purpose: Normalize development-agent and tool display names to OpenCode across project documentation
+    at the explicit request of the user.
+  source: Current user conversation; explicit documentation-wide naming instruction
+  human_review: User authorized editorial name normalization; no new feature approval or verification
+    outcome is asserted
+  paths:
+  - AGENTS.md
+  - README.md
+  - architecture-blueprint.md
+  - docs/code-governance/mcp-tool-manifest.md
+  - docs/architecture/adr/004-governance-context-design.proposed.md
+  - docs/ai-use-log.yaml
+  - prompts/prompt_v1.0.yaml
+  - prompts/prompt_v1.1.yaml
+  - prompts/prompt_v1.2.yaml
+  - prompts/prompt_v1.3.yaml
+  - docs/review-memo.md
+  notes:
+  - Documentation labels only; original dates, contribution scope, approvals and results remain unchanged.
+  - Historical prompt role wording is normalized under the user instruction; binding behavior and human
+    gates are unchanged.
+  - The OpenCode label follows the requested documentation naming convention and does not assert an additional
+    tool session or execution.
+  - Existing uncommitted startup changes are preserved; no product implementation, dependency or Git mutation
+    is part of this naming change.
+- id: AI-20261120-MAINCHECK-001
+  date: '2026-11-20'
+  tool: OpenCode
+  purpose: Compare the real NVDA Yahoo data path from local main and feature/webui using the user-authorized
+    current environment, with isolated source/cache paths and no model calls.
+  source: Current user conversation; explicit request to run main-branch code and permission for the program
+    to use the current .env
+  human_review: User authorized this comparison and environment-file use; no implementation change or
+    final acceptance is claimed
+  paths:
+  - docs/ai-use-log.yaml
+  - docs/architecture/evaluation-logbook.md
+  notes:
+  - Main 8b22d43/v0.5.2 exported to a temporary directory; active feature/webui and existing working changes
+    preserved.
+  - Main and feature Yahoo requests each returned 22 NVDA rows for 2026-10-01 through 2026-11-01 with
+    yfinance 1.8.0/pandas 3.1.1.
+  - 'Main Yahoo exception-handling tests: 37 passed offline; raw provider logs and credential values were
+    not printed.'
+  - No model call, full graph analysis, broker action, source fix, dependency update, Git mutation or
+    .env edit.
+  - The initial optional-version metadata harness error and the transient nature of the observation are
+    recorded in the evaluation logbook.
+
+- id: AI-20261120-ACTIVITY-001
+  date: '2026-11-20'
+  tool: OpenCode
+  purpose: Present TUI-like process activity prominently with automatically selected stage tabs and
+    retain recorded messages through terminal snapshots.
+  source: Current user conversation; explicit process-message, prominent activity and stage-tab instructions
+  human_review: User directly requested this bounded presentation work; no independent test-version review
+    or final human acceptance is asserted
+  paths:
+  - src/tradingagents_web/runtime/projector.py
+  - src/tradingagents_web/frontend/src/stores/runStore.ts
+  - src/tradingagents_web/frontend/src/utils/runActivity.ts
+  - src/tradingagents_web/frontend/src/components/RunActivity.tsx
+  - src/tradingagents_web/frontend/src/pages/LiveRunPage.tsx
+  - src/tradingagents_web/frontend/src/styles/index.css
+  - src/tradingagents_web/frontend/tests/run-activity.test.tsx
+  - src/tradingagents_web/frontend/e2e/run.spec.ts
+  - test/offline/test_web_activity.py
+  - test/offline/web_e2e_server.py
+  - architecture-blueprint.md
+  - docs/architecture/adr/003-frontend-stack.md
+  - docs/architecture/trace-matrix.md
+  - docs/architecture/evaluation-logbook.md
+  - docs/review-memo.md
+  - docs/ai-use-log.yaml
+  notes:
+  - Scope and negative-test strategy recorded before implementation as web-activity-20261120-v1.
+  - Four actual stages include final assessment within risk review; no unsupported quality-gate phase
+    or invented completion status is introduced.
+  - Only public message text and existing debate histories are projected; redaction, bounded replay,
+    snapshots, core/CLI and execution semantics are unchanged.
+  - Reused the ui-ux-pro-max skill for keyboard navigation, contextual status updates and responsive layout.
+  - Existing uncommitted startup and naming changes are retained. No dependency, credential, provider-call,
+    core/trading/safety change, Git mutation or deployment.
+  - Actual checks, initial harness/type issues and evidence limits are recorded in the evaluation logbook.
+
+- id: AI-20261120-TABLE-001
+  date: '2026-11-20'
+  tool: OpenCode
+  purpose: Contain report Markdown tables after the user reported overflow beneath the report contents sidebar.
+  source: Current user request and attached screenshot showing table overflow
+  human_review: User directly requested this bounded presentation fix; no separate test-version review or final acceptance is asserted
+  paths:
+  - src/tradingagents_web/frontend/src/components/Markdown.tsx
+  - src/tradingagents_web/frontend/src/styles/index.css
+  - src/tradingagents_web/frontend/tests/markdown-sanitize.test.tsx
+  - src/tradingagents_web/frontend/e2e/report-tables.spec.ts
+  - docs/review-memo.md
+  - docs/architecture/trace-matrix.md
+  - docs/architecture/evaluation-logbook.md
+  - docs/ai-use-log.yaml
+  notes:
+  - Recorded scope and positive/negative test strategy as web-report-table-20261120-v1 before implementation.
+  - Added local horizontal scrolling and scoped wrapping rather than hiding or truncating table content.
+  - Preserved sanitization, native table semantics, all previous working changes and non-Markdown table layouts.
+  - Reused ui-ux-pro-max guidance on responsive tables and avoiding clipped content.
+  - No dependencies, APIs, core/CLI/business logic, credentials, permissions, Git history or deployments changed.
+
+- id: AI-20261120-I18N-001
+  date: '2026-11-20'
+  tool: OpenCode
+  purpose: Implement English/Chinese interface switching across the existing WebUI while preserving
+    canonical requests, active runs and source report/tool content.
+  source: Current user request for frontend internationalization and continuation instruction
+  human_review: User directly requested this interface implementation; no independent test-version review
+    or final human acceptance is asserted
+  paths:
+  - src/tradingagents_web/frontend/src/app/App.tsx
+  - src/tradingagents_web/frontend/src/app/AppShell.tsx
+  - src/tradingagents_web/frontend/src/components/Announcements.tsx
+  - src/tradingagents_web/frontend/src/components/HistoryTable.tsx
+  - src/tradingagents_web/frontend/src/components/LanguageSwitch.tsx
+  - src/tradingagents_web/frontend/src/components/Markdown.tsx
+  - src/tradingagents_web/frontend/src/components/Modal.tsx
+  - src/tradingagents_web/frontend/src/components/Research.tsx
+  - src/tradingagents_web/frontend/src/components/RunActivity.tsx
+  - src/tradingagents_web/frontend/src/i18n/index.ts
+  - src/tradingagents_web/frontend/src/i18n/ui.ts
+  - src/tradingagents_web/frontend/src/i18n/en.json
+  - src/tradingagents_web/frontend/src/i18n/zh.json
+  - src/tradingagents_web/frontend/src/pages/AuditPage.tsx
+  - src/tradingagents_web/frontend/src/pages/Backtest/BacktestSummary.tsx
+  - src/tradingagents_web/frontend/src/pages/BacktestPage.tsx
+  - src/tradingagents_web/frontend/src/pages/BacktestRunPage.tsx
+  - src/tradingagents_web/frontend/src/pages/ComparisonPage.tsx
+  - src/tradingagents_web/frontend/src/pages/HistoryDetailPage.tsx
+  - src/tradingagents_web/frontend/src/pages/HistoryPage.tsx
+  - src/tradingagents_web/frontend/src/pages/JournalPage.tsx
+  - src/tradingagents_web/frontend/src/pages/LiveRunPage.tsx
+  - src/tradingagents_web/frontend/src/pages/NewAnalysisPage.tsx
+  - src/tradingagents_web/frontend/src/pages/OverviewPage.tsx
+  - src/tradingagents_web/frontend/src/utils/workspace.ts
+  - src/tradingagents_web/frontend/src/styles/index.css
+  - src/tradingagents_web/frontend/tests/localization.test.tsx
+  - src/tradingagents_web/frontend/e2e/localization.spec.ts
+  - README.md
+  - architecture-blueprint.md
+  - docs/architecture/adr/003-frontend-stack.md
+  - docs/architecture/trace-matrix.md
+  - docs/architecture/evaluation-logbook.md
+  - docs/review-memo.md
+  - docs/ai-use-log.yaml
+  notes:
+  - Recorded scoped plan and positive/negative verification strategy before implementation.
+  - Reused existing i18next and ui-ux-pro-max guidance; no dependencies or translation services added.
+  - Chinese is confined to interface resources, native language labels and localization assertions under
+    the explicit localization request; code identifiers, comments and process documentation remain English.
+  - The negative source-content test caught and corrected an initial Markdown-boundary translation; no
+    real user report or runtime data was accessed.
+  - Existing startup, activity and table changes are preserved. No core/CLI/backend, permission, credential,
+    runtime-prompt, Git or deployment mutation belongs to this work.
+  - Actual results, initial checks and evidence limits are recorded in the evaluation logbook.
+
+- id: AI-20261120-DEBATE-001
+  date: '2026-11-20'
+  tool: OpenCode
+  purpose: Expose existing core dynamic/fixed debate policy as real per-analysis WebUI settings.
+  source: User instruction to implement the described integration on feature/webui and continue
+  human_review: Direct bounded implementation authorization; no independent test-version review or final acceptance is asserted
+  paths:
+  - src/tradingagents_web/models/requests.py
+  - src/tradingagents_web/api/config.py
+  - src/tradingagents_web/api/runs.py
+  - src/tradingagents_web/runtime/debate_policy.py
+  - src/tradingagents_web/runtime/analysis_graph.py
+  - src/tradingagents_web/runtime/graph_runner.py
+  - src/tradingagents_web/runtime/coordinator.py
+  - src/tradingagents_web/runtime/artifacts_writer.py
+  - src/tradingagents_web/artifacts/index.py
+  - src/tradingagents_web/frontend/src/components/DebateSettings.tsx
+  - src/tradingagents_web/frontend/src/components/Research.tsx
+  - src/tradingagents_web/frontend/src/utils/debateSettings.ts
+  - src/tradingagents_web/frontend/src/pages/NewAnalysisPage.tsx
+  - src/tradingagents_web/frontend/src/pages/LiveRunPage.tsx
+  - src/tradingagents_web/frontend/src/api/runClient.ts
+  - src/tradingagents_web/frontend/src/styles/index.css
+  - src/tradingagents_web/frontend/src/i18n/en.json
+  - src/tradingagents_web/frontend/src/i18n/zh.json
+  - src/tradingagents_web/frontend/tests/debate-settings.test.tsx
+  - src/tradingagents_web/frontend/tests/analysis-flow.test.tsx
+  - src/tradingagents_web/frontend/e2e/debate-settings.spec.ts
+  - test/offline/test_web_debate_config.py
+  - test/offline/test_web_analysis_flow.py
+  - README.md
+  - architecture-blueprint.md
+  - docs/architecture/adr/001-choice.md
+  - docs/architecture/adr/003-frontend-stack.md
+  - docs/architecture/adr/007-run-controls.md
+  - docs/architecture/trace-matrix.md
+  - docs/architecture/evaluation-logbook.md
+  - docs/review-memo.md
+  - docs/ai-use-log.yaml
+  notes:
+  - Recorded web-debate-settings-20261120-v1 scope, public contract, recovery boundary and negative tests before implementation.
+  - Reused core policy validation and graph behavior without core or CLI changes; no new dependencies.
+  - Added WebUI-only checkpoint signatures for nondefault policies because the core signature omits convergence thresholds.
+  - Kept server locks authoritative, rejected unknown/internal settings and nonfinite numbers, and recorded normalized public settings.
+  - Reused ui-ux-pro-max form-label, disclosure, focus and responsive-layout guidance within the existing design.
+  - Full offline regression passed 2979 tests with one optional AWS skip and 88 subtests; frontend 57 and Chromium 21 passed.
+  - Initial test-isolation and browser assertion-type failures were corrected without removing assertions; final evidence is in the evaluation logbook.
+  - Existing ignored demo structure blocker and Vite chunk warning remain; no live providers, credentials, Git action or final human acceptance claimed.
+
+- id: AI-20261121-TUI-PARITY-001
+  date: '2026-11-21'
+  tool: OpenCode
+  purpose: Complete the authorized TUI/WebUI capability parity increment without language expansion or simulated trading.
+  source: User approval of the capability audit recommendations, excluding languages and simulated trading
+  human_review: Direct bounded implementation authorization; no independent test-file review or final acceptance asserted
+  paths:
+  - src/tradingagents_web/runtime/model_catalog.py
+  - src/tradingagents_web/runtime/projector.py
+  - src/tradingagents_web/runtime/graph_runner.py
+  - src/tradingagents_web/runtime/coordinator.py
+  - src/tradingagents_web/api/config.py
+  - src/tradingagents_web/app.py
+  - src/tradingagents_web/frontend/src/components/RunActivity.tsx
+  - src/tradingagents_web/frontend/src/utils/runActivity.ts
+  - src/tradingagents_web/frontend/src/stores/runStore.ts
+  - src/tradingagents_web/frontend/src/pages/LiveRunPage.tsx
+  - src/tradingagents_web/frontend/src/pages/NewAnalysisPage.tsx
+  - src/tradingagents_web/frontend/src/pages/BacktestPage.tsx
+  - src/tradingagents_web/frontend/src/api/runClient.ts
+  - src/tradingagents_web/frontend/src/i18n/en.json
+  - src/tradingagents_web/frontend/src/i18n/zh.json
+  - src/tradingagents_web/frontend/src/styles/index.css
+  - src/tradingagents_web/frontend/tests/run-activity.test.tsx
+  - src/tradingagents_web/frontend/tests/analysis-flow.test.tsx
+  - src/tradingagents_web/frontend/e2e/tui-parity.spec.ts
+  - src/tradingagents_web/frontend/e2e/backtest.spec.ts
+  - src/tradingagents_web/frontend/e2e/run.spec.ts
+  - test/offline/test_web_tui_parity.py
+  - test/offline/test_web_analysis_flow.py
+  - test/offline/web_e2e_server.py
+  - README.md
+  - architecture-blueprint.md
+  - docs/architecture/adr/001-choice.md
+  - docs/architecture/adr/003-frontend-stack.md
+  - docs/architecture/trace-matrix.md
+  - docs/architecture/evaluation-logbook.md
+  - docs/review-memo.md
+  - docs/ai-use-log.yaml
+  notes:
+  - Scope and negative-test strategy recorded as web-tui-parity-20261120-v1 before implementation; work continued across midnight.
+  - Reused core timing and existing model/provider policy without changing core/CLI or simulated trading.
+  - Public model discovery has no authentication, arbitrary URL or live-call verification; official API docs informed its schema.
+  - Existing bilingual design and ui-ux-pro-max form/disclosure/layout guidance retained; no language options added.
+  - Final offline 2991, frontend 59 and Chromium 23 passed; one optional AWS skip and 88 subtests retained.
+  - Initial fixture/test issues, existing graph-runner type error, structure blocker and chunk warning are recorded honestly in the evaluation logbook.
+  - No real credentials, user runtime state, paid providers, dependencies, Git actions or final human acceptance involved.
+
+
+- id: AI-20261121-SIMULATION-WEB-001
+  date: '2026-11-21'
+  tool: OpenCode
+  purpose: Implement simulated-trading frontend and necessary APIs using the existing independent core.
+  source: User request followed by explicit selection of frontend plus necessary interfaces and existing core integration
+  human_review: Direct bounded implementation authorization; no independent test-file review or final acceptance asserted
+  paths:
+  - src/tradingagents_web/models/simulation_requests.py
+  - src/tradingagents_web/runtime/simulation.py
+  - src/tradingagents_web/runtime/simulation_jobs.py
+  - src/tradingagents_web/runtime/coordinator.py
+  - src/tradingagents_web/api/simulation.py
+  - src/tradingagents_web/app.py
+  - src/tradingagents_web/security.py
+  - src/tradingagents_web/frontend/src/api/simulationClient.ts
+  - src/tradingagents_web/frontend/src/pages/SimulationPage.tsx
+  - src/tradingagents_web/frontend/src/pages/Simulation/
+  - src/tradingagents_web/frontend/src/pages/NewAnalysisPage.tsx
+  - src/tradingagents_web/frontend/src/pages/BacktestPage.tsx
+  - src/tradingagents_web/frontend/src/app/App.tsx
+  - src/tradingagents_web/frontend/src/app/AppShell.tsx
+  - src/tradingagents_web/frontend/src/styles/index.css
+  - src/tradingagents_web/frontend/src/i18n/en.json
+  - src/tradingagents_web/frontend/src/i18n/zh.json
+  - src/tradingagents_web/frontend/tests/simulation.test.tsx
+  - src/tradingagents_web/frontend/e2e/simulation.spec.ts
+  - test/offline/test_web_simulation.py
+  - pyproject.toml
+  - README.md
+  - architecture-blueprint.md
+  - docs/architecture/adr/001-simulated-trading-system.md
+  - docs/architecture/adr/001-choice.md
+  - docs/architecture/adr/003-frontend-stack.md
+  - docs/architecture/adr/007-run-controls.md
+  - docs/architecture/invariants.md
+  - docs/architecture/trace-matrix.md
+  - docs/architecture/evaluation-logbook.md
+  - docs/review-memo.md
+  - docs/bug-diary.md
+  - docs/ai-use-log.yaml
+  notes:
+  - Plan and negative-test scope recorded as web-simulation-20261121-v1 before implementation.
+  - Reused ui-ux-pro-max guidance and existing bilingual forest/paper design; no new dependency.
+  - Added account lifecycle, completed-report scenario evaluation, issued human approvals, isolated walk-forward jobs and verified audit.
+  - Decimal strings, account epochs, portfolio versions, fixed storage paths, ownership locks and shared active-run leases preserve deterministic boundaries.
+  - Trading, safety, tradingagents core and CLI source remain unchanged; packaging includes existing trading/safety modules.
+  - One closing phase only; offline 3025 passed / 3 failed / 1 optional skip, frontend 63 passed / 3 failed, Chromium 26 passed.
+  - New failures were corrected from logs without repeating unit suites; unchanged-core determinism failure remains open and is not described as a proven historical baseline.
+  - ESLint, Ruff, scoped mypy, TypeScript/build, schema, permissions and whitespace pass; prior type/structure limits and Vite chunk warning remain.
+  - No live providers, credentials, user runtime data, Git actions, broker execution or final human acceptance involved.
+
+
+- id: AI-20261121-UI-SIMPLIFY-001
+  date: '2026-11-21'
+  tool: OpenCode
+  purpose: Reduce nonessential frontend copy, metrics and duplicate navigation while preserving existing functionality.
+  source: Direct user request to simplify frontend information and interactions, followed by a question about preset comparison usefulness
+  human_review: Direct bounded implementation authorization; no separate test-file approval or final acceptance asserted
+  paths:
+  - src/tradingagents_web/frontend/src/app/AppShell.tsx
+  - src/tradingagents_web/frontend/src/components/HistoryTable.tsx
+  - src/tradingagents_web/frontend/src/components/Research.tsx
+  - src/tradingagents_web/frontend/src/components/RunActivity.tsx
+  - src/tradingagents_web/frontend/src/pages/OverviewPage.tsx
+  - src/tradingagents_web/frontend/src/pages/HistoryPage.tsx
+  - src/tradingagents_web/frontend/src/pages/HistoryDetailPage.tsx
+  - src/tradingagents_web/frontend/src/pages/JournalPage.tsx
+  - src/tradingagents_web/frontend/src/pages/LiveRunPage.tsx
+  - src/tradingagents_web/frontend/src/pages/NewAnalysisPage.tsx
+  - src/tradingagents_web/frontend/src/pages/BacktestPage.tsx
+  - src/tradingagents_web/frontend/src/pages/Backtest/BacktestSummary.tsx
+  - src/tradingagents_web/frontend/src/pages/AuditPage.tsx
+  - src/tradingagents_web/frontend/src/pages/ComparisonPage.tsx
+  - src/tradingagents_web/frontend/src/pages/SimulationPage.tsx
+  - src/tradingagents_web/frontend/src/pages/Simulation/Account.tsx
+  - src/tradingagents_web/frontend/src/pages/Simulation/Decisions.tsx
+  - src/tradingagents_web/frontend/src/pages/Simulation/Backtests.tsx
+  - src/tradingagents_web/frontend/src/pages/Simulation/Audit.tsx
+  - src/tradingagents_web/frontend/src/pages/Simulation/shared.tsx
+  - src/tradingagents_web/frontend/src/styles/index.css
+  - src/tradingagents_web/frontend/src/i18n/en.json
+  - src/tradingagents_web/frontend/src/i18n/zh.json
+  - src/tradingagents_web/frontend/tests/audit-comparison.test.tsx
+  - src/tradingagents_web/frontend/tests/run-activity.test.tsx
+  - src/tradingagents_web/frontend/e2e/visual-parity.spec.ts
+  - src/tradingagents_web/frontend/e2e/localization.spec.ts
+  - src/tradingagents_web/frontend/e2e/run.spec.ts
+  - src/tradingagents_web/frontend/e2e/audit-comparison.spec.ts
+  - src/tradingagents_web/frontend/e2e/tui-parity.spec.ts
+  - src/tradingagents_web/frontend/e2e/simulation.spec.ts
+  - src/tradingagents_web/frontend/e2e/backtest.spec.ts
+  - src/tradingagents_web/frontend/e2e/debate-settings.spec.ts
+  - README.md
+  - docs/review-memo.md
+  - docs/architecture/adr/003-frontend-stack.md
+  - docs/architecture/trace-matrix.md
+  - docs/architecture/evaluation-logbook.md
+  - docs/ai-use-log.yaml
+  notes:
+  - Plan and preservation checks recorded as web-ui-simplify-20261121-v1 before edits; prior working changes retained.
+  - Used ui-ux-pro-max information hierarchy and progressive disclosure within existing design tokens and bilingual UI.
+  - Removed decorative overview summaries, repeated metadata, duplicate report links and repeated backtest chart/table data.
+  - Moved preset-only comparison from primary navigation to help diagnostic tools; direct route and deterministic comparisons remain.
+  - Run statistics, analysis settings, account rules, receipts and identity/scoring details remain accessible in disclosures; critical errors and approval/reset controls stay visible.
+  - Completed simulations no longer offer no-work resume; interrupted/failed runs with remaining dates retain recovery.
+  - One closing phase; offline 3028 passed with one optional AWS skip and 88 subtests, frontend 66 passed, Chromium 24 passed and 3 failed.
+  - Browser failures included two outdated presentation selectors and one subsequent active-task conflict. Selectors now open Analysis settings and use the new Chinese team heading; no browser-suite rerun is claimed.
+  - ESLint, TypeScript/build, schema and whitespace pass. No backend/core/CLI/trading/safety change, live providers, user data access, new dependency or Git action.
+  - Screenshot review was limited by entrance-animation captures; follow-up capture was not executed because automatic approval review lost its transport connection.
+
+
+- id: AI-20261121-BACKTEST-ERRORS-001
+  date: '2026-11-21'
+  tool: OpenCode
+  purpose: Restore safe diagnostic evidence for failed WebUI backtests without changing core execution or model selection.
+  source: User report, screenshot and confirmation of absent server traceback
+  human_review: Direct bounded diagnostic repair; no separate test-file review or final acceptance asserted
+  paths:
+  - src/tradingagents_web/errors.py
+  - src/tradingagents_web/runtime/coordinator.py
+  - src/tradingagents_web/frontend/src/pages/BacktestPage.tsx
+  - src/tradingagents_web/frontend/src/pages/BacktestRunPage.tsx
+  - src/tradingagents_web/frontend/src/i18n/en.json
+  - src/tradingagents_web/frontend/src/i18n/zh.json
+  - src/tradingagents_web/frontend/e2e/backtest.spec.ts
+  - test/offline/test_web_backtest.py
+  - README.md
+  - docs/review-memo.md
+  - docs/architecture/adr/007-run-controls.md
+  - docs/architecture/trace-matrix.md
+  - docs/architecture/evaluation-logbook.md
+  - docs/bug-diary.md
+  - docs/ai-use-log.yaml
+  notes:
+  - Plan and negative-test scope recorded as web-backtest-errors-20261121-v1 before edits.
+  - Confirmed the coordinator discarded backtest exceptions without logging; the screenshot cannot establish the original exception.
+  - Reused redacted traceback logging, safe categories and correlation IDs; added a specific missing-default-provider-key message.
+  - Failure banners show the reference and do not simultaneously display an empty-sweep card; no extra statistics or navigation added.
+  - Six injected exception variants verify safe logs/public payloads, live-memory preservation, slot release and a subsequent successful run.
+  - Final offline 3034 passed with one optional AWS skip and 88 subtests; frontend 66 and Chromium 28 passed.
+  - Previous simplification browser corrections are now verified; prior failures remain recorded historically.
+  - Ruff, two scoped mypy modules, ESLint, TypeScript/build, schema and whitespace pass; the existing chunk warning remains.
+  - No real provider calls, environment-file access, user runtime data, dependency changes, core/CLI/trading/safety changes or Git operation.
+  - The user's actual failed invocation still needs reproduction after restart; no Yahoo or provider-default cause is asserted as proven.
+
+
+- id: AI-20261121-BACKTEST-DIAGNOSIS-002
+  date: '2026-11-21'
+  tool: OpenCode
+  purpose: Diagnose the correlated backtest traceback supplied by the user.
+  source: User-provided c_5c2b08079638 traceback
+  human_review: Evidence supplied by user; no new implementation or final acceptance claimed
+  paths:
+  - docs/bug-diary.md
+  - docs/architecture/evaluation-logbook.md
+  - docs/ai-use-log.yaml
+  notes:
+  - Confirmed OpenAI client initialization fails because its key is unset; this invocation did not reach analysis execution.
+  - Read startup/configuration source only; server defaults are independent of wizard selections and dotenv precedes DEFAULT_CONFIG.
+  - Recommended explicit intended DeepSeek server provider/model configuration and restart; no provider was silently changed.
+  - No real environment file, credentials, user runtime data, API requests, source changes, tests or Git operation.
+
+
+- id: AI-20261121-MODEL-DEFAULTS-001
+  date: '2026-11-21'
+  tool: OpenCode
+  purpose: Treat configured provider and quick/deep models as editable Web analysis defaults while retaining server defaults for backtests.
+  source: User correction that model environment values should be defaults and the dropdown should preselect them
+  human_review: Direct bounded implementation authorization; no independent test-file review or final acceptance asserted
+  paths:
+  - src/tradingagents_web/api/config.py
+  - src/tradingagents_web/api/runs.py
+  - src/tradingagents_web/api/backtests.py
+  - src/tradingagents_web/frontend/src/api/runClient.ts
+  - src/tradingagents_web/frontend/src/pages/NewAnalysisPage.tsx
+  - src/tradingagents_web/frontend/src/i18n/en.json
+  - src/tradingagents_web/frontend/src/i18n/zh.json
+  - src/tradingagents_web/frontend/tests/analysis-flow.test.tsx
+  - src/tradingagents_web/frontend/e2e/tui-parity.spec.ts
+  - test/offline/test_web_analysis_flow.py
+  - test/offline/test_web_backtest.py
+  - README.md
+  - architecture-blueprint.md
+  - docs/architecture/adr/001-choice.md
+  - docs/architecture/trace-matrix.md
+  - docs/architecture/evaluation-logbook.md
+  - docs/review-memo.md
+  - docs/bug-diary.md
+  - docs/ai-use-log.yaml
+  notes:
+  - Plan and negative-test scope recorded as web-model-defaults-20261121-v1 before edits; user confirmed official DeepSeek usage.
+  - Added non-secret default provenance; configured values preselect editable controls and explicit analysis provider/model choices override them.
+  - Preserved other environment locks and server-only credentials; backtests copy current server defaults.
+  - Scoped endpoints/thinking to the selected provider; switching requires both model IDs and clears prior-provider fields.
+  - Matching model drafts retain user choices; changed defaults invalidate stale model selections without persisting credentials, endpoint or portfolio text.
+  - Retained existing layout and bilingual labels; no added framework, provider, model catalogue or dependency.
+  - Single closing runs passed 3040 offline tests with one optional AWS skip and 88 subtests, 68 frontend tests and 29 Chromium cases.
+  - Ruff, three scoped mypy modules, ESLint, TypeScript/build, schema and whitespace pass; existing chunk warning remains.
+  - No real environment files, keys, user runtime state, live API calls, protected core/CLI/trading/safety changes or Git operation.
+
+
+- id: AI-20261121-DEEPSEEK-DIAGNOSIS-001
+  date: '2026-11-21'
+  tool: OpenCode
+  purpose: Investigate slow backtests and DeepSeek thinking-mode tool_choice 400 warnings.
+  source: User-provided Research Manager and Trader warning excerpt
+  human_review: Diagnosis requested; no core implementation or final acceptance authorized or asserted
+  paths:
+  - docs/bug-diary.md
+  - docs/architecture/evaluation-logbook.md
+  - docs/ai-use-log.yaml
+  notes:
+  - Found deepseek-flash missing from shared capability matching while the model catalogue exposes it.
+  - Compared actual structured bindings and request payloads for ResearchPlan and TraderProposal with deepseek-flash and the recognized v4 alias.
+  - The single offline probe used a dummy credential and disabled dotenv; named tool choices appeared only for the unrecognized alias and no network requests were sent.
+  - Verified current restrictions and default thinking through official DeepSeek documentation; source URLs are recorded in the bug diary.
+  - Identified serial full-analysis cells, fallback attempts and missing per-cell Web progress; exact time/cost attribution remains unknown.
+  - Recommended a scoped shared-core alias fix with payload tests; did not modify source, alter thinking/strategy/budgets, run full suites, read real environment files or perform Git operations.
+
+
+- id: AI-20261121-BACKTEST-PROGRESS-001
+  date: '2026-11-21'
+  tool: OpenCode
+  purpose: Add factual per-date backtest progress and close verification records before the requested branch commit and push.
+  source: User request for per-date progress, continuation and subsequent explicit feature/webui commit/push instruction
+  human_review: Bounded implementation and Git publication authorized directly; no independent review or final acceptance asserted
+  paths:
+  - src/tradingagents/backtest.py
+  - src/tradingagents_web/runtime/backtest_progress.py
+  - src/tradingagents_web/runtime/backtest_runner.py
+  - src/tradingagents_web/runtime/coordinator.py
+  - src/tradingagents_web/api/backtests.py
+  - src/tradingagents_web/frontend/src/api/backtestClient.ts
+  - src/tradingagents_web/frontend/src/pages/BacktestPage.tsx
+  - src/tradingagents_web/frontend/src/pages/Backtest/BacktestProgress.tsx
+  - src/tradingagents_web/frontend/src/styles/index.css
+  - src/tradingagents_web/frontend/src/i18n/en.json
+  - src/tradingagents_web/frontend/src/i18n/zh.json
+  - src/tradingagents_web/frontend/tests/backtest-progress.test.tsx
+  - src/tradingagents_web/frontend/e2e/backtest.spec.ts
+  - test/offline/test_backtest.py
+  - test/offline/test_web_backtest.py
+  - test/offline/web_e2e_server.py
+  - README.md
+  - architecture-blueprint.md
+  - docs/architecture/adr/007-run-controls.md
+  - docs/architecture/invariants.md
+  - docs/architecture/trace-matrix.md
+  - docs/architecture/evaluation-logbook.md
+  - docs/review-memo.md
+  - docs/bug-diary.md
+  - docs/ai-use-log.yaml
+  notes:
+  - Plan and negative-test scope recorded as web-backtest-progress-20261121-v1 before implementation.
+  - Added an optional context-scoped core observer without changing run_backtest arguments/results, CLI calls, serial analysis, scoring, memory or settlement.
+  - Web records expose validated paginated real cell/settlement state under the existing lock; old logs do not fabricate per-date progress.
+  - Added bilingual native progress, current date and elapsed time, distinct failure/skip statuses, refresh and in-place pagination/follow controls.
+  - Offline suite passed 3046 tests with one optional AWS skip and 88 subtests; frontend 71 passed.
+  - Initial Chromium suite passed 26 and failed 4; scoped table/grid CSS fixed actual mobile overflow, and all four affected browser cases passed focused re-verification.
+  - Desktop/light and mobile/dark progress-panel images were reviewed using temporary fixture records; no body overflow remains.
+  - Ruff, four scoped Web mypy modules, ESLint and TypeScript/build passed. Explicit core mypy still reports two existing optional-float errors in unchanged summarize logic; they were not hidden or repaired in this scope.
+  - Final record completion was interrupted, then resumed under the user's commit/push request; no additional product changes or full suites were run for publication.
+  - No real .env, keys, user runtime files, paid services or dependency changes. The owned fixture server was stopped; Git results are reported in the conversation.

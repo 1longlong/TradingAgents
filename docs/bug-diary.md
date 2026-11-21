@@ -414,3 +414,137 @@ the previous guard/budget/audit work intact:
   independent review and later human acceptance; the degraded numeric confidence
   ceiling (DEBT-014) and automatic optional adapters (DEBT-015/RISK-015) remain
   OPEN and were not touched.
+
+## 2026-11-21 — Simulated-trading Web integration verification
+
+- **WEB-SIM-20261121-RESUME (corrected; browser verified).** Resuming a fully
+  completed simulation supplied start > end to the core weekday calendar.
+  The Web adapter now validates the saved cursor and returns a zero-work core
+  result with saved equity; it does not invoke an empty calendar interval or
+  replay fills. The final Chromium test passed actual execution, resume with
+  zero new fills and reload. The offline suite that first found it was not
+  rerun, per the user's verification frequency instruction.
+- **CORE-20261121-DETERMINISM (open).** The single offline run observed
+  TestEngine.test_engine_deterministic_for_fixed_snapshot failing because its
+  two evidence-record collections differed. The gate's injected clock does not
+  appear to pin every market validator fetched_at default; second-boundary
+  timing is a hypothesis from inspection, not a reproduced diagnosis. No
+  tradingagents core or existing core test was changed. A future authorized
+  core investigation should pin all evidence timestamps and reproduce the
+  discrepancy before changing behavior. No claim of an already-known baseline
+  failure or passing regression is made.
+- **Verification fixture corrections.** The new unsupported-cancel test now
+  checks OpenAPI absence and rejected POST (404/405), matching existing SPA
+  method routing. New jsdom dialog tests use the established showModal/close
+  polyfill. Three translation keys were filled in both catalogues. Unit suites
+  were not rerun after those corrections; actual counts remain in the logbook.
+
+
+## 2026-11-21 — Backtest errors discarded before logging
+
+**WEB-BT-20261121-DIAGNOSTICS (fixed; runtime cause still unconfirmed).** The user
+reported a failed NVDA sweep for 2026-10-21 through 2026-11-20 with a 7-day
+interval and no server traceback. The grid has five valid dates. Coordinator
+inspection confirmed its exception handler discarded the error and returned
+`backtest failed; check the server log` without emitting any log. The exception
+from that previous invocation cannot be recovered from the screenshot.
+
+The Web coordinator now uses existing redacted traceback logging and categorized
+safe errors with a correlation ID. Missing default-provider API-key configuration
+has a specific safe message. The failure banner includes the reference and does
+not simultaneously claim there are no sweeps. Six injected failure variants
+verify logs, redaction, unchanged live memory, slot release and a subsequent
+successful run. Core/CLI and model-selection semantics remain unchanged. A
+provider-default mismatch is a possible cause, not an established diagnosis of
+the user's run; the user must restart and reproduce to obtain actual evidence.
+
+
+Follow-up evidence for WEB-BT-20261121-DIAGNOSTICS: the user supplied the new
+trace for c_5c2b08079638. Core run_backtest fails while constructing the deep
+model client, which is configured for openai and has no OPENAI_API_KEY. This
+establishes provider configuration as the cause of that invocation; it is not
+Yahoo throttling. Source inspection confirms package startup loads dotenv
+before DEFAULT_CONFIG and the backtest consumes server defaults independently
+of analysis-wizard choices. The user's actual environment file was not read.
+DeepSeek use requires matching server provider/model settings (and endpoint if
+applicable), followed by restart. No automatic provider switch or new core fix
+was made, and successful real-provider backtesting remains unverified.
+
+
+## 2026-11-21 — Editable model defaults in Web analysis
+
+**WEB-MODEL-20261121-DEFAULTS (implemented).** User configuration of provider
+and quick/deep model environment variables disabled the analysis selectors and
+forced those values back over explicit requests. The user clarified that these
+fields are defaults: preselect them, permit analysis changes, and keep backtests
+on server defaults. The user also confirmed official DeepSeek usage in the
+provider console, so the earlier routing concern is not treated as a continuing
+failure.
+
+Web config now distinguishes model defaults from execution locks. Analysis
+selection is restored after policy resolution, whose existing environment
+application would otherwise reapply model values. Budget/round and other locks
+remain effective. Provider switching requires explicit new models and cannot
+inherit another provider's endpoint or thinking options. Matching drafts retain
+intentional selections; a changed provider/model baseline invalidates stale
+selection fields. Existing retry setup remains explicit. Backtests copy current
+server defaults. No credential, core/CLI, trading or safety source changes.
+
+
+## 2026-11-21 — DeepSeek Flash forced-tool compatibility gap
+
+**CORE-DS-20261121-FLASH-CAPABILITIES (open; diagnosis only).** The user reported
+slow backtests with Research Manager and Trader HTTP 400 warnings stating that
+thinking mode does not support the submitted tool_choice, followed by a free-text
+fallback attempt. The current model catalogue exposes deepseek-flash, but
+llm_clients/capabilities.py has no exact match for that ID. Its patterns match
+deepseek-v followed by a digit or deepseek-reasoner, so deepseek-flash falls back
+to supports_tool_choice=True. NormalizedChatOpenAI then allows LangChain to force
+the ResearchPlan/TraderProposal tool. DeepSeek's current official Chat
+Completions documentation forbids required/named tool choices in thinking mode;
+thinking is enabled by default.
+
+An isolated offline probe, with a temporary dummy credential and dotenv disabled,
+constructed actual DeepSeekChatOpenAI structured bindings and request payloads.
+For deepseek-flash both schemas emitted a named tool_choice and one tool. The
+already-supported deepseek-v4-flash emitted one tool with no tool_choice. Four
+payloads were inspected; no invocation or network request occurred. This proves
+the local capability mismatch independently of the real provider logs.
+
+Recommended bounded repair: map deepseek-flash to the existing DeepSeek thinking
+capabilities and add alias/namespace payload regressions, preserving tools,
+reasoning-content roundtrip, fallback and budget accounting. This is a shared
+core client change that would also affect CLI; it was not implemented during the
+user's diagnostic request. Do not automatically disable thinking, replace models,
+raise retries or parallelize the backtest as part of this compatibility fix.
+
+Other contributing mechanisms: core backtests run ticker/date cells serially;
+each cell invokes the full multi-agent analysis and later settlement. The prior
+NVDA grid contained five dates. Quick/deep are role names and do not themselves
+turn off DeepSeek thinking. Structured failures may add a second free-text
+attempt, subject to affordability/admission checks; the logs cannot establish
+their share of total runtime or actual billing. The Web backtest API polls status
+but does not report per-cell stages. GET 200 status responses do not prove that
+the model has completed. Unknown total-duration attribution remains unverified.
+
+Primary references inspected on 2026-11-21:
+https://api-docs.deepseek.com/api/create-chat-completion/
+https://api-docs.deepseek.com/guides/thinking_mode/
+
+
+## 2026-11-21 — Per-date backtest progress verification findings
+
+**WEB-BT-20261121-MOBILE-GRID (fixed; focused browser verified).** The new progress
+table inherited history-table mobile card rules and its minimum content width
+expanded the parent single-column grid. Three responsive checks failed; the
+progress test's early failure also left a fixture task active for the next case.
+Scoped table semantics/local overflow plus min-width:0 on the results-grid child
+correct the layout without hiding date/status cells. All four affected browser
+cases passed after repair. Full offline/frontend suites passed before this CSS
+repair and were not repeated; the focused layout check covers the changed CSS.
+
+**CORE-BT-20261121-TYPES (open).** Explicit mypy of core backtest.py reports two
+optional-float arithmetic/sum errors in the existing summarize implementation.
+The progress change adds only observer hooks/imports; summarize is unmodified.
+The offline runtime suite passes, but type-checking that core file is not green.
+No suppression or unrelated calculation change was made for this progress task.

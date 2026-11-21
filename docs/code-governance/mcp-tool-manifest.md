@@ -1,8 +1,8 @@
-# Coding Agent Tool Manifest
+# OpenCode Tool Manifest
 
 ## 1. Authority and roles
 
-This manifest covers development tools, not the product LLM's data-tool registry. Product data tools remain defined by `src/tradingagents/agents/utils/`, `src/tradingagents/dataflows/`, and graph orchestration.
+This manifest covers OpenCode development tools, not the product LLM's data-tool registry. Product data tools remain defined by `src/tradingagents/agents/utils/`, `src/tradingagents/dataflows/`, and graph orchestration.
 
 Roles are Plan, Build, Verify, and Docs. They are permission profiles and working phases, not a requirement to run concurrent agents. Do not launch subagents, other conversations, or background automations without explicit user authorization.
 

@@ -246,3 +246,70 @@ def test_the_window_reported_is_the_one_the_outcomes_used(tmp_path):
     log.update_with_outcome("NVDA", "2026-01-05", 0.1, 0.04, 21, "note", "2026-02-01")
 
     assert "21 trading days" in summarize(log).render()
+
+
+@pytest.mark.unit
+def test_backtest_observer_reports_real_cells_resume_and_settlement(tmp_path):
+    """REQ-WEB-011/026, ADR-007-run-controls.md: observation preserves serial outcomes."""
+    from tradingagents.backtest import observe_backtest_progress
+
+    config = _config(tmp_path)
+    first = run_backtest(["NVDA"], ["2026-01-05"], config)
+    _FakeGraph.fail_on = {("NVDA", "2026-01-12")}
+    events = []
+    with observe_backtest_progress(events.append):
+        result = run_backtest(["NVDA"], ["2026-01-05", "2026-01-12"], config, run_id=first.run_id)
+    assert [(row["event"], row["date"]) for row in events] == [
+        ("initializing", None), ("cell.skipped", "2026-01-05"),
+        ("cell.started", "2026-01-12"), ("cell.failed", "2026-01-12"),
+        ("settlement.started", None), ("settlement.completed", None),
+    ]
+    assert result.skipped == 1 and result.cells_run == 0
+    assert result.failures == [("NVDA", "2026-01-12", "vendor exploded")]
+    assert _FakeGraph.instances[-1].settled == ["NVDA"]
+    assert not (tmp_path / "live_trading_memory.md").exists()
+
+
+@pytest.mark.unit
+def test_observer_failure_cannot_change_execution_and_is_removed_after_exit(tmp_path, caplog):
+    """REQ-WEB-026, INV-WEB-014: a display failure never changes business execution."""
+    from tradingagents.backtest import _notify_backtest_progress, observe_backtest_progress
+
+    calls = []
+
+    def broken(event):
+        calls.append(event)
+        raise RuntimeError("private observer detail")
+
+    with observe_backtest_progress(broken):
+        result = run_backtest(["NVDA"], ["2026-01-05"], _config(tmp_path))
+    assert result.cells_run == 1 and result.failures == []
+    count = len(calls)
+    _notify_backtest_progress("cell.started", "OTHER", "2026-01-05")
+    assert len(calls) == count
+    assert "private observer detail" not in caplog.text
+    with pytest.raises(ValueError), observe_backtest_progress(calls.append):
+        raise ValueError("context failed")
+    _notify_backtest_progress("initializing")
+    assert len(calls) == count
+
+
+@pytest.mark.unit
+def test_observers_are_nested_and_thread_context_isolated():
+    """REQ-WEB-026, ADR-007-run-controls.md: no process-wide observer mutation."""
+    import threading
+
+    from tradingagents.backtest import _notify_backtest_progress, observe_backtest_progress
+
+    outer, inner = [], []
+    with observe_backtest_progress(outer.append):
+        _notify_backtest_progress("outer")
+        with observe_backtest_progress(inner.append):
+            _notify_backtest_progress("inner")
+        thread = threading.Thread(target=lambda: _notify_backtest_progress("other_thread"))
+        thread.start()
+        thread.join(timeout=2)
+        assert not thread.is_alive()
+        _notify_backtest_progress("outer_again")
+    assert [row["event"] for row in outer] == ["outer", "outer_again"]
+    assert [row["event"] for row in inner] == ["inner"]

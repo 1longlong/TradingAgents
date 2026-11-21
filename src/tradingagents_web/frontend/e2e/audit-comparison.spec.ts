@@ -14,7 +14,9 @@ test("audit uses core artifacts, missing telemetry and sanitized previews/downlo
   await expect(
     page.getByRole("heading", { name: "Research audit", exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".audit-stat").first()).toContainText("degraded");
+  await expect(page.locator(".audit-verdict")).toContainText(
+    "Proceed with recorded limitations.",
+  );
   await expect(page.getByText("e2e-price", { exact: true })).toBeVisible();
   await page.getByLabel("Filter evidence").selectOption("excluded");
   await expect(page.getByText("e2e-price", { exact: true })).toHaveCount(0);
@@ -73,6 +75,10 @@ test("comparison replays D/E/F/G and refuses mismatched identities", async ({
   await expect(page.locator(".comparison-strategies")).not.toContainText(
     "Early stop",
   );
+  await expect(page.locator(".rubric-grid")).not.toBeVisible();
+  await page
+    .getByText("Human scoring & policy details", { exact: true })
+    .click();
   await expect(page.locator(".rubric-grid .audit-badge")).toHaveText([
     "Pending",
     "Pending",
@@ -84,6 +90,8 @@ test("comparison replays D/E/F/G and refuses mismatched identities", async ({
   expect((await pending).suggestedFilename()).toBe(
     "scripted-comparison-G.json",
   );
+  await expect(page.getByLabel("Pairing check")).not.toBeVisible();
+  await page.getByText("Pairing details", { exact: true }).click();
   await page.getByLabel("Pairing check").selectOption("mismatch");
   await expect(
     page.getByRole("heading", { name: "Comparison blocked." }),

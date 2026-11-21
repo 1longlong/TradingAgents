@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import secrets
+import sys
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -22,10 +23,12 @@ from tradingagents_web.api import (
     portfolio,
     runs,
     session,
+    simulation,
 )
 from tradingagents_web.errors import error_response
 from tradingagents_web.runtime.coordinator import RunCoordinator
 from tradingagents_web.runtime.graph_runner import GraphRunner
+from tradingagents_web.runtime.model_catalog import OpenRouterCatalog
 from tradingagents_web.security import (
     csrf_path,
     host_allowed,
@@ -52,6 +55,13 @@ def create_app(settings: WebSettings, runner_factory=None) -> FastAPI:
     app.state.csrf_token = secrets.token_urlsafe(32)
     app.state.coordinator = RunCoordinator(settings, runner_factory or GraphRunner)
     app.state.announcement_cache = None
+    app.state.openrouter_catalog = OpenRouterCatalog()
+    app.state.simulation = None
+    if sys.platform != "win32":
+        from tradingagents_web.runtime.simulation import SimulationService
+
+        app.state.simulation = SimulationService(settings, app.state.coordinator)
+        app.router.add_event_handler("shutdown", app.state.simulation.close)
 
     @app.middleware("http")
     async def _security_middleware(request: Request, call_next):
@@ -81,6 +91,7 @@ def create_app(settings: WebSettings, runner_factory=None) -> FastAPI:
         history.router,
         audit.router,
         comparisons.router,
+        simulation.router,
     ):
         app.include_router(router)
 

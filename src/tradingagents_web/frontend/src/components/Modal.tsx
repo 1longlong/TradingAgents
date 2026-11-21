@@ -1,3 +1,4 @@
+import { ui, useUILanguage } from "../i18n/ui";
 import { useEffect, useRef } from "react";
 import { Icon } from "./Icon";
 import type { ReactNode } from "react";
@@ -19,6 +20,7 @@ export function Modal({
   className,
   closeLabel = "Close dialog",
 }: ModalProps) {
+  useUILanguage();
   const ref = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
@@ -44,11 +46,11 @@ export function Modal({
       {open ? (
         <>
           <div className="modal-header">
-            <h2 id="modal-title">{title}</h2>
+            <h2 id="modal-title">{ui(title)}</h2>
             <button
               type="button"
               className="icon-button"
-              aria-label={closeLabel}
+              aria-label={ui(closeLabel)}
               onClick={onClose}
             >
               <Icon name="close" />

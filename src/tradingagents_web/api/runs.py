@@ -6,22 +6,42 @@ import json
 import os
 
 from fastapi import APIRouter, Query, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.routing import APIRoute
 
 from cli.utils import _llm_provider_table
 from tradingagents.dataflows.symbol_utils import normalize_symbol
 from tradingagents.dataflows.utils import safe_ticker_component
-from tradingagents.default_config import _apply_env_overrides
 from tradingagents.graph.analyst_execution import ANALYST_NODE_SPECS
 from tradingagents.graph.trading_graph import _validate_trade_date
 from tradingagents.llm_clients.api_key_env import PROVIDER_API_KEY_ENV
-from tradingagents_web.api.config import effective_defaults
+from tradingagents_web.api.config import MODEL_DEFAULT_KEYS, effective_defaults
 from tradingagents_web.api.portfolio import parse_portfolio
 from tradingagents_web.errors import error_response
 from tradingagents_web.models.requests import RunRequest
 from tradingagents_web.runtime.coordinator import RunConflict
+from tradingagents_web.runtime.debate_policy import configure_debate_policy, public_debate_policy
 
-router = APIRouter(prefix="/api", tags=["runs"])
+
+class AnalysisRoute(APIRoute):
+    """INV-WEB-003/013: reject bad typed inputs without echoing their values."""
+
+    def get_route_handler(self):
+        handler = super().get_route_handler()
+
+        async def validated(request: Request):
+            try:
+                return await handler(request)
+            except RequestValidationError:
+                return error_response(
+                    422, "validation", "Invalid analysis request fields or types."
+                )
+
+        return validated
+
+
+router = APIRouter(prefix="/api", tags=["runs"], route_class=AnalysisRoute)
 
 _KNOWN_ANALYSTS = set(ANALYST_NODE_SPECS)
 _KNOWN_PROVIDERS = {key for _, key, _ in _llm_provider_table()} | set(PROVIDER_API_KEY_ENV)
@@ -36,8 +56,9 @@ def _coordinator(request: Request):
 
 
 def _build_config(request, req: RunRequest) -> dict:
-    """Honor omitted values and server environment locks (REQ-WEB-013, ADR-001)."""
+    """Resolve editable model defaults and enforced limits (REQ-WEB-013, ADR-001-choice.md)."""
     config = effective_defaults()
+    default_provider = str(config["llm_provider"]).lower()
     config.update(
         {
             "results_dir": str(request.app.state.settings.results_dir),
@@ -60,11 +81,30 @@ def _build_config(request, req: RunRequest) -> dict:
             config[key] = supplied[key]
     if "checkpoint" in supplied:
         config["checkpoint_enabled"] = req.checkpoint
-    if "research_depth" in supplied:
-        config["max_debate_rounds"] = req.research_depth
-        config["max_risk_discuss_rounds"] = req.research_depth
-    _apply_env_overrides(config)
+    selection = {key: config[key] for key in MODEL_DEFAULT_KEYS}
+    switched = str(selection["llm_provider"]).lower() != default_provider
+    if switched and any(not supplied.get(key) for key in MODEL_DEFAULT_KEYS[1:]):
+        raise ValueError("Select both quick and deep models when changing the provider.")
+    # Policy resolution enforces the remaining environment settings.
+    config = configure_debate_policy(
+        config,
+        overrides=req.debate_termination.model_dump(exclude_unset=True)
+        if req.debate_termination is not None
+        else None,
+        legacy_depth=req.research_depth if "research_depth" in supplied else None,
+        risk_rounds=req.max_risk_discuss_rounds,
+    )
+    config.update(selection)
     config["llm_provider"] = config["llm_provider"].lower()
+    if switched:
+        # INV-WEB-003: never pair a new provider's key with an inherited endpoint.
+        for key in (
+            "backend_url",
+            "google_thinking_level",
+            "openai_reasoning_effort",
+            "anthropic_effort",
+        ):
+            config[key] = supplied.get(key)
     return config
 
 
@@ -82,8 +122,10 @@ def _validated_payload(request: Request, req: RunRequest) -> dict:
         if not analysts:
             raise ValueError("crypto analysis requires at least one non-fundamentals analyst")
 
-    if req.research_depth not in {1, 3, 5} and not os.environ.get(
-        "TRADINGAGENTS_MAX_DEBATE_ROUNDS"
+    if (
+        req.debate_termination is None
+        and req.research_depth not in {1, 3, 5}
+        and not os.environ.get("TRADINGAGENTS_MAX_DEBATE_ROUNDS")
     ):
         raise ValueError("research_depth must be 1, 3, or 5")
     if config["llm_provider"] not in _KNOWN_PROVIDERS:
@@ -104,6 +146,8 @@ def _validated_payload(request: Request, req: RunRequest) -> dict:
         "asset_type": req.asset_type,
         "analysts": analysts,
         "research_depth": config["max_debate_rounds"],
+        "debate_termination": public_debate_policy(config),
+        "max_risk_discuss_rounds": config["max_risk_discuss_rounds"],
         "llm_provider": config["llm_provider"],
         "quick_think_llm": config["quick_think_llm"],
         "deep_think_llm": config["deep_think_llm"],

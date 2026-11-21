@@ -1,3 +1,4 @@
+import { ui, uiHistoryTitle, useUILanguage } from "../i18n/ui";
 // REQ-WEB-003/006/010/012/013, ADR-003, INV-WEB-014: server-backed workspace controls.
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -11,13 +12,14 @@ import { CompanyLogo, Rating } from "../components/Research";
 import { AnnouncementsGate } from "../components/Announcements";
 import { Icon } from "../components/Icon";
 import { Modal } from "../components/Modal";
+import { LanguageSwitch } from "../components/LanguageSwitch";
 
 const NAV = [
   { route: "overview", label: "Overview", icon: "grid" },
   { route: "history", label: "Analysis history", icon: "clock" },
   { route: "backtest", label: "Backtesting", icon: "sliders" },
+  { route: "simulation", label: "Simulated trading", icon: "chart" },
   { route: "audit", label: "Research audit", icon: "shield" },
-  { route: "comparison", label: "Policy comparison", icon: "layers" },
   { route: "journal", label: "Decision journal", icon: "book" },
 ] as const;
 
@@ -34,6 +36,7 @@ const BREADCRUMBS: Record<string, string> = {
   overview: "Overview",
   history: "Analysis history",
   backtest: "Backtesting",
+  simulation: "Simulated trading",
   audit: "Research audit",
   comparison: "Policy comparison",
   journal: "Decision journal",
@@ -42,6 +45,7 @@ const BREADCRUMBS: Record<string, string> = {
 };
 
 export function AppShell({ children }: { children: ReactNode }) {
+  useUILanguage();
   const location = useLocation();
   const navigate = useNavigate();
   const previousPath = useRef(location.pathname);
@@ -67,7 +71,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
   const [search, setSearch] = useState("");
   const [confirmClear, setConfirmClear] = useState("");
-  const [clearState, setClearState] = useState<string | null>(null);
+  const [clearState, setClearState] = useState<string | number | null>(null);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -143,7 +147,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   const items = (history.data?.items ?? []).filter(
     (item) => item.source === "run" || item.source === "saved",
   );
-  const recent = items.slice(0, 3);
   const top = location.pathname.split("/")[1] || "overview";
   const activeRoute = top === "history" || top === "runs" ? "history" : top;
   const breadcrumb =
@@ -166,9 +169,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     setClearing(true);
     try {
       const result = await clearCheckpoints();
-      setClearState(
-        `${result.cleared} checkpoint ${result.cleared === 1 ? "file" : "files"} cleared.`,
-      );
+      setClearState(result.cleared);
       setConfirmClear("");
       setModal("settings");
     } catch (exc) {
@@ -181,13 +182,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main">
-        Skip to workspace
+        {ui("Skip to workspace")}
       </a>
       <aside
         className={`sidebar ${mobileOpen ? "open" : ""}`}
         id="sidebar"
         inert={mobile && !mobileOpen}
-        aria-label="Workspace navigation"
+        aria-label={ui("Workspace navigation")}
       >
         <Link className="brand" to="/overview">
           <span className="brand-mark" aria-hidden="true">
@@ -195,20 +196,8 @@ export function AppShell({ children }: { children: ReactNode }) {
               <path d="M5 23V10h7v13M14 23V5h7v18M23 23V14h5v9" />
             </svg>
           </span>
-          <span>
-            TradingAgents
-            <span className="brand-caption">A RESEARCH WORKSPACE</span>
-          </span>
+          <span>{ui("TradingAgents")}</span>
         </Link>
-        <div className="workspace-selector">
-          <span className="workspace-symbol">W</span>
-          <span>
-            Personal workspace
-            <small>Local · Single user</small>
-          </span>
-          <span className="workspace-dot" aria-hidden="true" />
-        </div>
-        <p className="nav-label">WORKSPACE</p>
         <nav className="nav-list">
           {NAV.map((item) => (
             <Link
@@ -218,24 +207,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               aria-current={activeRoute === item.route ? "page" : undefined}
             >
               <Icon name={item.icon} />
-              {item.label}
-              {item.route === "history" ? (
-                <span className="nav-count">{items.length}</span>
-              ) : null}
-            </Link>
-          ))}
-        </nav>
-        <div className="sidebar-divider" />
-        <div className="nav-label nav-label-row">
-          <span>RECENT RESEARCH</span>
-          <Icon name="layers" />
-        </div>
-        <nav className="research-links" aria-label="Recent research">
-          {recent.map((item) => (
-            <Link key={item.artifact_id} to={`/history/${item.artifact_id}`}>
-              <span className="research-symbol">{item.ticker}</span>
-              <span>{item.title}</span>
-              <Icon name="chevron" />
+              {ui(item.label)}
             </Link>
           ))}
         </nav>
@@ -246,7 +218,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             onClick={() => setModal("settings")}
           >
             <Icon name="settings" />
-            Workspace settings
+            {ui("Workspace settings")}
           </button>
           <button
             type="button"
@@ -254,14 +226,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             onClick={() => setModal("help")}
           >
             <Icon name="help" />
-            Help & shortcuts
-            <span className="nav-shortcut">?</span>
+            {ui("Help & shortcuts")}
+            <span className="nav-shortcut">{ui("?")}</span>
           </button>
-          <div className="sidebar-footer">
-            <span className="local-indicator" />
-            Runs locally. Thinks together.
-            <span className="version">v0.5</span>
-          </div>
         </div>
       </aside>
 
@@ -271,7 +238,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <button
               className="icon-button mobile-menu"
               type="button"
-              aria-label="Open navigation"
+              aria-label={ui("Open navigation")}
               aria-expanded={mobileOpen}
               onClick={() => setMobileOpen((open) => !open)}
             >
@@ -280,40 +247,29 @@ export function AppShell({ children }: { children: ReactNode }) {
             <span className="breadcrumb-icon">
               <Icon name="layers" />
             </span>
-            <span>Workspace</span>
-            <span className="breadcrumb-slash">/</span>
-            <span>{breadcrumb}</span>
+            <span>{ui("Workspace")}</span>
+            <span className="breadcrumb-slash">{ui("/")}</span>
+            <span>{ui(breadcrumb)}</span>
           </div>
           <div className="topbar-actions">
-            <span className="preview-badge">
-              <span />
-              Local workspace
-            </span>
+            <LanguageSwitch />
             <button
               className="search-trigger"
               type="button"
               onClick={() => setModal("search")}
             >
               <Icon name="search" />
-              <span>Find research...</span>
-              <kbd>⌘ K</kbd>
+              <span>{ui("Find research...")}</span>
+              <kbd>{"⌘ K"}</kbd>
             </button>
             <button
               className="icon-button notification-button"
               type="button"
-              aria-label="View announcements"
+              aria-label={ui("View announcements")}
               onClick={() => setModal("announcements")}
             >
               <Icon name="bell" />
               {announcements.data?.announcements.length ? <i /> : null}
-            </button>
-            <button
-              className="avatar-button"
-              type="button"
-              aria-label="Open local workspace settings"
-              onClick={() => setModal("settings")}
-            >
-              W
             </button>
           </div>
         </header>
@@ -324,46 +280,37 @@ export function AppShell({ children }: { children: ReactNode }) {
             {children}
           </div>
         </main>
-
-        <footer className="main-footer">
-          <span>Built for research. Decisions remain yours.</span>
-          <span>
-            <span className="local-indicator" /> Runs locally
-            <span className="footer-dot">·</span> Single user
-          </span>
-        </footer>
       </div>
 
       <Modal
         open={modal === "settings"}
-        title="Workspace settings"
+        title={ui("Workspace settings")}
         onClose={() => setModal(null)}
       >
-        <p>
-          Local preferences and server-owned configuration. No credentials are
-          read or accepted.
-        </p>
         <div className="setting-row">
-          <span>
-            Appearance
-            <small>Comfortable in daylight or after hours.</small>
-          </span>
+          <span>{ui("Appearance")}</span>
           <label className="sr-only" htmlFor="theme">
-            Appearance
+            {ui("Appearance")}
           </label>
           <select
             id="theme"
             value={theme}
             onChange={(event) => setTheme(event.target.value)}
           >
-            <option value="light">Light / paper</option>
-            <option value="dark">Dark / forest</option>
+            <option value="light">{ui("Light / paper")}</option>
+            <option value="dark">{ui("Dark / forest")}</option>
           </select>
         </div>
-        <p className="setting-section">MODEL PROVIDERS · SERVER STATUS</p>
-        {config.isLoading ? <p>Loading configuration...</p> : null}
+        <div className="setting-row">
+          <span>{ui("Interface language")}</span>
+          <LanguageSwitch />
+        </div>
+        <p className="setting-section">
+          {ui("MODEL PROVIDERS · SERVER STATUS")}
+        </p>
+        {config.isLoading ? <p>{ui("Loading configuration...")}</p> : null}
         {config.isError ? (
-          <p className="field-error">Configuration is unavailable.</p>
+          <p className="field-error">{ui("Configuration is unavailable.")}</p>
         ) : null}
         {config.data
           ? ["deepseek", "openai", "anthropic", "ollama"].map((provider) => {
@@ -371,34 +318,26 @@ export function AppShell({ children }: { children: ReactNode }) {
               return (
                 <div className="setting-row" key={provider}>
                   <span>
-                    {config.data?.providers.find(
-                      (item) => item.key === provider,
-                    )?.label ?? provider}
-                    <small>
-                      {provider === "ollama"
-                        ? "Local model runtime"
-                        : provider === config.data?.defaults.llm_provider
-                          ? "Selected research provider"
-                          : "Available provider"}
-                    </small>
+                    {ui(
+                      config.data?.providers.find(
+                        (item) => item.key === provider,
+                      )?.label ?? provider,
+                    )}
                   </span>
                   <span
                     className={`status-tag ${status === "configured" || status === "not_required" ? "" : "neutral"}`}
                   >
-                    {KEY_STATUS_LABELS[status] ?? status}
+                    {ui(KEY_STATUS_LABELS[status] ?? status)}
                   </span>
                 </div>
               );
             })
           : null}
-        <p className="setting-section">RECOVERY</p>
+        <p className="setting-section">{ui("RECOVERY")}</p>
         <div className="setting-row">
           <span>
-            Checkpoint storage
-            <small>
-              Clearing never removes saved reports. No pre-clear inventory is
-              exposed.
-            </small>
+            {ui("Checkpoint storage")}
+            <small>{ui("Saved reports are retained.")}</small>
           </span>
           <button
             className="button"
@@ -409,57 +348,71 @@ export function AppShell({ children }: { children: ReactNode }) {
               setModal("clear");
             }}
           >
-            Clear all checkpoints
+            {ui("Clear all checkpoints")}
           </button>
         </div>
-        {clearState ? <p className="inline-note">{clearState}</p> : null}
-        <p className="inline-note">
-          Provider configuration is server-owned. API keys and server filesystem
-          paths never belong in this interface.
-        </p>
+        {clearState !== null ? (
+          <p className="inline-note">
+            {typeof clearState === "number"
+              ? ui("{{count}} checkpoint files cleared.", { count: clearState })
+              : ui(clearState)}
+          </p>
+        ) : null}
       </Modal>
 
       <Modal
         open={modal === "help"}
-        title="A workspace for considered decisions"
+        title={ui("A workspace for considered decisions")}
         onClose={() => setModal(null)}
       >
         <p>
-          Choose an instrument, build an analyst team, follow the debate, then
-          read the final assessment. Backtesting and the decision journal help
-          you revisit your reasoning.
+          {ui(
+            "Choose an instrument, build an analyst team, follow the debate, then read the final assessment. Backtesting and the decision journal help you revisit your reasoning.",
+          )}
         </p>
+        <details className="disclosure">
+          <summary>{ui("Diagnostic tools")}</summary>
+          <p>
+            {ui(
+              "Replay preset cases to inspect debate rules. Your analysis results are not compared here.",
+            )}
+          </p>
+          <Link
+            className="text-button"
+            to="/comparison"
+            onClick={() => setModal(null)}
+          >
+            {ui("Policy comparison")}
+            <Icon name="arrow" />
+          </Link>
+        </details>
         <div className="keyboard-row">
-          <span>Find research</span>
-          <kbd>⌘ / Ctrl K</kbd>
+          <span>{ui("Find research")}</span>
+          <kbd>{ui("⌘ / Ctrl K")}</kbd>
         </div>
         <div className="keyboard-row">
-          <span>New analysis</span>
-          <kbd>N</kbd>
+          <span>{ui("New analysis")}</span>
+          <kbd>{"N"}</kbd>
         </div>
         <div className="keyboard-row">
-          <span>Close a dialog</span>
-          <kbd>Esc</kbd>
+          <span>{ui("Close a dialog")}</span>
+          <kbd>{ui("Esc")}</kbd>
         </div>
-        <p className="inline-note">
-          Choose an instrument and date, select the research team, then review
-          your setup. Reports, outcomes and reflections remain advisory.
-        </p>
       </Modal>
 
       <Modal
         open={modal === "search"}
-        title="Find a perspective"
+        title={ui("Find a perspective")}
         className="search-modal"
         onClose={() => setModal(null)}
       >
         <label className="sr-only" htmlFor="command-input">
-          Search research by ticker
+          {ui("Search research by ticker")}
         </label>
         <input
           className="input"
           id="command-input"
-          placeholder="Search a ticker..."
+          placeholder={ui("Search a ticker...")}
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
@@ -478,15 +431,15 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <CompanyLogo ticker={item.ticker} />
                 <span>
                   <strong>{item.ticker}</strong>
-                  <small>{item.title}</small>
+                  <small>{uiHistoryTitle(item.title, item.ticker)}</small>
                 </span>
                 <Rating value={item.rating} />
               </button>
             ))
           ) : (
             <div className="empty-state">
-              <strong>No matching research</strong>
-              <p>Try another ticker.</p>
+              <strong>{ui("No matching research")}</strong>
+              <p>{ui("Try another ticker.")}</p>
             </div>
           )}
         </div>
@@ -494,45 +447,48 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <Modal
         open={modal === "announcements"}
-        title="Workspace notes"
+        title={ui("Workspace notes")}
         onClose={() => setModal(null)}
       >
         {announcements.data?.announcements.length ? (
           announcements.data.announcements.map((item, index) => (
-            <p key={index}>{item}</p>
+            <p key={index}>{ui(item)}</p>
           ))
         ) : (
-          <p>No announcements are available.</p>
+          <p>{ui("No announcements are available.")}</p>
         )}
         <div className="modal-actions">
           <button className="button primary" onClick={() => setModal(null)}>
-            Got it
+            {ui("Got it")}
           </button>
         </div>
       </Modal>
       <Modal
         open={modal === "clear"}
-        title="Clear checkpoints?"
+        title={ui("Clear checkpoints?")}
         onClose={() => setModal("settings")}
       >
         <p>
-          Type CLEAR to remove all checkpoints. The number cleared is known only
-          after the action completes. Completed reports are retained.
+          {ui(
+            "Type CLEAR to remove all checkpoints. Completed reports are retained.",
+          )}
         </p>
         <div className="form-field">
-          <label htmlFor="clear-confirm">Confirmation</label>
+          <label htmlFor="clear-confirm">{ui("Confirmation")}</label>
           <input
             id="clear-confirm"
             autoComplete="off"
             spellCheck={false}
-            placeholder="CLEAR"
+            placeholder={ui("CLEAR")}
             value={confirmClear}
             onChange={(event) => setConfirmClear(event.target.value)}
           />
         </div>
-        {clearState ? (
+        {clearState !== null ? (
           <p className="field-error" role="alert">
-            {clearState}
+            {typeof clearState === "number"
+              ? ui("{{count}} checkpoint files cleared.", { count: clearState })
+              : ui(clearState)}
           </p>
         ) : null}
         <div className="modal-actions">
@@ -541,7 +497,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             disabled={clearing}
             onClick={() => setModal("settings")}
           >
-            Keep checkpoints
+            {ui("Keep checkpoints")}
           </button>
           <button
             className="button danger"
@@ -553,7 +509,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             }
             onClick={() => void handleClear()}
           >
-            {clearing ? "Clearing…" : "Clear checkpoints"}
+            {clearing ? ui("Clearing…") : ui("Clear checkpoints")}
           </button>
         </div>
       </Modal>

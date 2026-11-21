@@ -12,11 +12,17 @@ price and a cash ledger, none of which the system has; inventing them here would
 put an execution model behind an evaluation tool. Cells are therefore
 independent, and a portfolio, when given, is the same standing book for every
 cell rather than a position carried forward.
+
+REQ-WEB-011/026, INV-WEB-014, ADR-007-run-controls.md: optional progress
+observation preserves the existing serial execution and public run contract.
 """
 
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -27,6 +33,32 @@ from tradingagents.dataflows.utils import get_current_date, safe_ticker_componen
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 
 logger = logging.getLogger(__name__)
+
+# REQ-WEB-011/026, ADR-007-run-controls.md: optional observation, never execution authority.
+_progress_observer: ContextVar[Callable[[dict], None] | None] = ContextVar(
+    "backtest_progress_observer", default=None
+)
+
+
+@contextmanager
+def observe_backtest_progress(observer: Callable[[dict], None]) -> Iterator[None]:
+    """REQ-WEB-011/026, ADR-007-run-controls.md: scope optional observation to this context."""
+    token = _progress_observer.set(observer)
+    try:
+        yield
+    finally:
+        _progress_observer.reset(token)
+
+
+def _notify_backtest_progress(event: str, ticker: str | None = None, date: str | None = None):
+    """INV-WEB-014: observation cannot abort execution or change its result."""
+    observer = _progress_observer.get()
+    if observer is not None:
+        try:
+            observer({"event": event, "ticker": ticker, "date": date})
+        except Exception:
+            # An observer cannot abort a cell, alter its result, or spend a retry.
+            logger.warning("Backtest progress observer failed")
 
 
 def iter_grid(start_date: str, end_date: str, every_n_days: int = 1) -> list[str]:
@@ -138,6 +170,9 @@ def run_backtest(
     The live log stays untouched: a sweep would otherwise flood the context that
     real runs read back. Cells already in this run's log are skipped, so an
     interrupted sweep resumes by being run again.
+
+    REQ-WEB-011/026: context observers receive facts around existing calls;
+    arguments, ordering, scoring, exception handling and results stay unchanged.
     """
     # run_id becomes a path segment, so it is validated like a ticker: an
     # absolute or dotted value would otherwise place the run outside results_dir.
@@ -147,6 +182,7 @@ def run_backtest(
     run_config = {**config, "results_dir": str(run_dir),
                   "memory_log_path": str(run_dir / "trading_memory.md")}
 
+    _notify_backtest_progress("initializing")
     graph = TradingAgentsGraph(selected_analysts, config=run_config)
     result = BacktestResult(run_id=run_id, log_path=Path(run_config["memory_log_path"]))
     done = {(e["ticker"], e["date"]) for e in graph.memory_log.load_entries()}
@@ -155,22 +191,29 @@ def run_backtest(
         for date in dates:
             if (ticker, date) in done:
                 result.skipped += 1
+                _notify_backtest_progress("cell.skipped", ticker, date)
                 continue
+            _notify_backtest_progress("cell.started", ticker, date)
             try:
                 graph.propagate(ticker, date, asset_type, portfolio=portfolio)
                 result.cells_run += 1
+                _notify_backtest_progress("cell.completed", ticker, date)
             except Exception as exc:  # one unreachable vendor must not end the sweep
                 logger.warning("Backtest cell %s %s failed: %s", ticker, date, exc)
                 result.failures.append((ticker, date, str(exc)))
+                _notify_backtest_progress("cell.failed", ticker, date)
 
     # Settlement runs at the start of the next run for a ticker, so each ticker's
     # last cell would stay pending without this pass.
     for ticker in tickers:
+        _notify_backtest_progress("settlement.started", ticker)
         try:
             graph.settle_pending(ticker)
+            _notify_backtest_progress("settlement.completed", ticker)
         except Exception as exc:  # reflection calls an LLM; one failure is not the sweep's
             logger.warning("Settling %s failed: %s", ticker, exc)
             result.settlement_failures.append((ticker, str(exc)))
+            _notify_backtest_progress("settlement.failed", ticker)
     return result
 
 

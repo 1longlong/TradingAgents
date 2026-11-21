@@ -6,7 +6,7 @@ import json
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from fastapi.responses import JSONResponse
 
 from tradingagents.agents.utils.memory import TradingMemoryLog
@@ -14,6 +14,7 @@ from tradingagents.backtest import iter_grid, summarize
 from tradingagents.dataflows.symbol_utils import normalize_symbol
 from tradingagents.dataflows.utils import safe_ticker_component
 from tradingagents.graph.analyst_execution import ANALYST_NODE_SPECS
+from tradingagents_web.api.config import effective_defaults
 from tradingagents_web.api.portfolio import parse_portfolio
 from tradingagents_web.errors import error_response
 from tradingagents_web.models.backtest_requests import BacktestRequest
@@ -34,9 +35,8 @@ def _coordinator(request: Request):
 
 
 def _build_config(request: Request) -> dict:
-    from tradingagents.default_config import DEFAULT_CONFIG
-
-    config = DEFAULT_CONFIG.copy()
+    """REQ-WEB-011/013: backtests keep an isolated copy of server defaults."""
+    config = effective_defaults()
     config.update(
         {
             "results_dir": str(_settings(request).results_dir),
@@ -166,27 +166,35 @@ def start_backtest(request: Request, body: BacktestRequest):
 @router.get("/backtests")
 def list_backtests(request: Request):
     root = Path(_settings(request).results_dir) / "backtest"
-    items: list[dict] = []
-    seen: set[str] = set()
+    # Live records are authoritative; an already-written log is not task completion.
+    items: list[dict] = sorted(
+        _coordinator(request).backtest_snapshots(),
+        key=lambda item: item.get("started_at") or "", reverse=True,
+    )
+    seen = {item["run_id"] for item in items}
     if root.is_dir():
         for run_dir in sorted(root.iterdir(), key=lambda path: path.stat().st_mtime, reverse=True):
             if not run_dir.is_dir():
+                continue
+            if run_dir.name in seen:
                 continue
             snapshot = _disk_snapshot(request, run_dir)
             if snapshot is not None:
                 items.append(snapshot)
                 seen.add(snapshot["run_id"])
-    for snapshot in _coordinator(request).backtest_snapshots():
-        if snapshot["status"] in {"starting", "running"} and snapshot["run_id"] not in seen:
-            items.append(snapshot)
     return {"items": items}
 
 
 @router.get("/backtests/{run_id}")
-def get_backtest(request: Request, run_id: str):
+def get_backtest(
+    request: Request,
+    run_id: str,
+    cells_offset: int | None = Query(default=None, ge=0),
+    cells_limit: int = Query(default=25, ge=1, le=100),
+):
     record = _coordinator(request).get_backtest(run_id)
     if record is not None:
-        return record.to_snapshot()
+        return record.to_snapshot(cells_offset, cells_limit)
     try:
         run_dir = _run_dir(request, run_id)
     except ValueError:

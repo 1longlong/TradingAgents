@@ -125,7 +125,11 @@ it("keeps legacy absence distinct from a passed gate or zero usage", async () =>
     await screen.findByText("No structured audit recorded"),
   ).toBeInTheDocument();
   expect(screen.queryByRole("tab")).not.toBeInTheDocument();
-  expect(screen.getByText("Accounting · unknown")).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      "No audit data is available. Missing fields remain unknown.",
+    ),
+  ).toBeInTheDocument();
 });
 
 it("filters real records and previews only available families while unknown totals stay unknown", async () => {
@@ -231,6 +235,7 @@ it("uses core replay results, keeps input exhaustion distinct from early stop, a
   ).toBeInTheDocument();
   expect(screen.getAllByText("No early stop")).toHaveLength(2);
   expect(screen.getAllByText("Pending").length).toBeGreaterThan(0);
+  fireEvent.click(screen.getByText("Pairing details", { exact: true }));
   fireEvent.change(screen.getByLabelText("Pairing check"), {
     target: { value: "mismatch" },
   });

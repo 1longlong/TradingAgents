@@ -55,3 +55,64 @@ The core exposes a synchronous graph stream and a synchronous `run_backtest`. It
 3. Kill the worker thread — rejected; Python cannot safely kill threads, and it could corrupt checkpoints.
 4. Wrap `run_backtest` with a fake cancel flag — rejected; it would report a stop that did not happen.
 5. Persist run state to disk — deferred; new storage and recovery design.
+
+
+## Addendum — custom debate-policy checkpoint identity, 2026-11-20
+
+The user requested real-run debate configuration in web-debate-settings-20261120-v1.
+Core recovery identity includes round caps but omits convergence thresholds; the
+ledger additionally guards accounting parameters. Threshold-only policy changes
+therefore require a WebUI recovery boundary. Use a Web-only core-graph subclass
+that calls the existing _run_signature and appends a deterministic fingerprint
+for nondefault policies. Compare normalized policy fields excluding the round
+cap (already present in the core signature); include the full normalized policy
+in the fingerprint when needed. Keep the original signature for default policy
+settings at any valid legacy depth. No core signature, checkpoint store, graph
+algorithm or CLI/Python contract is changed. Existing ledger checks and cleanup
+remain authoritative. Verify default parity, fixed/dynamic separation, every
+threshold/budget difference and unchanged portfolio/round isolation before use.
+
+
+## Web integration refinement — 2026-11-21
+
+The user explicitly authorizes web-simulation-20261121-v1: frontend and necessary
+interfaces around the existing deterministic simulated-trading core. The
+blueprint/review memo define the bounded API, ownership, persistence, single-slot
+coordination, human-approval and negative-test contracts. Core models, clocks,
+sizing, pipeline, engine-issued authorization, audit chain and state store remain
+authoritative; no broker, safety/core rewrite or automatic human approval is
+introduced. Pending approval objects remain process-owned and cannot be restored
+from client JSON. Only one final verification phase is requested.
+
+
+## Backtest error diagnostics refinement — 2026-11-21
+
+web-backtest-errors-20261121-v1 closes a diagnostic gap: backtest exceptions must
+use the same redacted server traceback and correlated safe categories as analysis
+exceptions. The failure banner shows that correlation. Task labels distinguish
+backtests from analyses; missing provider-key configuration is reported safely.
+No model selection, data-vendor fallback, core cell semantics, credentials or
+execution permissions change. Server defaults remain the backtest configuration;
+analysis-wizard choices are not implicitly copied. A displayed generic failure
+alone cannot establish its runtime cause.
+
+
+## Per-date backtest observation — 2026-11-21
+
+web-backtest-progress-20261121-v1 implements the user's per-date progress request.
+A context-scoped optional observer in core backtest.py reports facts immediately
+around existing serial analysis/settlement calls. It adds no public run_backtest
+argument, result change, UI dependency, cancellation or memory write. Default
+execution has no observer; observer exceptions cannot change business results.
+The Web runner subscribes only in its worker context and releases the observer
+on exit. No graph-class monkeypatching or second backtest loop is permitted.
+
+runtime/backtest_progress.py owns only Web presentation state under the existing
+record lock. Counts distinguish completed, failed and skipped cells; current
+identity must belong to the validated requested grid. Duplicate/out-of-order or
+unknown events cannot invent completion. The snapshot returns bounded paginated
+cell details, timestamps and elapsed time without raw errors or credentials.
+Cell processing at 100% does not mean settlement/summarization is complete.
+The original slot remains held until the actual worker exits. Browser reload
+reattaches to process state; old disk summaries do not gain inferred per-cell
+status. No restart persistence, ETA or cancellation is promised.

@@ -41,7 +41,7 @@ def body(**changes):
     }
 
 
-def test_server_endpoint_and_locks_survive_browser_defaults(tmp_path, monkeypatch):
+def test_server_defaults_and_other_locks_survive_omitted_model_inputs(tmp_path, monkeypatch):
     for name, value in {
         "TRADINGAGENTS_LLM_PROVIDER": "openai_compatible",
         "TRADINGAGENTS_LLM_BACKEND_URL": "http://127.0.0.1:1234/v1",
@@ -58,10 +58,7 @@ def test_server_endpoint_and_locks_survive_browser_defaults(tmp_path, monkeypatc
     started = client.post(
         "/api/runs",
         json=body(
-            llm_provider="openai",
             backend_url=None,
-            quick_think_llm="wrong",
-            deep_think_llm="wrong",
             checkpoint=False,
             research_depth=4,
         ),
@@ -191,7 +188,11 @@ def test_resumed_run_is_running(tmp_path):
     assert wait_terminal(client, response["run_id"])["status"] == "cancelled"
 
 
-def test_real_graph_runner_through_core_graph_to_report(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    "debate_policy",
+    [None, {"enabled": False, "max_debate_rounds": 2, "no_new_evidence_patience": 2}],
+)
+def test_real_graph_runner_through_core_graph_to_report(tmp_path, monkeypatch, debate_policy):
     """Use real graph/state/memory/report code; replace only provider/data boundaries."""
     import pandas as pd
     from langchain_core.language_models.fake_chat_models import FakeListChatModel
@@ -219,12 +220,16 @@ def test_real_graph_runner_through_core_graph_to_report(tmp_path, monkeypatch):
     # Replace that I/O boundary too; keep the real gate and its restrictions.
     dates = pd.bdate_range("2025-10-01", "2026-10-30")
     closes = [100 + i / 10 for i in range(len(dates))]
-    frame = pd.DataFrame({
-        "Date": dates, "Open": closes,
-        "High": [price + 1 for price in closes],
-        "Low": [price - 1 for price in closes],
-        "Close": closes, "Volume": [1_000_000] * len(dates),
-    })
+    frame = pd.DataFrame(
+        {
+            "Date": dates,
+            "Open": closes,
+            "High": [price + 1 for price in closes],
+            "Low": [price - 1 for price in closes],
+            "Close": closes,
+            "Volume": [1_000_000] * len(dates),
+        }
+    )
     monkeypatch.setattr(validator, "load_ohlcv", lambda *args, **kwargs: frame.copy())
     monkeypatch.setattr(
         graph_module,
@@ -233,13 +238,43 @@ def test_real_graph_runner_through_core_graph_to_report(tmp_path, monkeypatch):
     )
     tree = build_fixture_tree(tmp_path)
     client = make_run_client(tree)  # No FakeGraphRunner: use actual GraphRunner.
-    response = client.post("/api/runs", json=body(checkpoint=True))
+    response = client.post(
+        "/api/runs",
+        json=body(
+            checkpoint=True,
+            **(
+                {"debate_termination": debate_policy, "max_risk_discuss_rounds": 1}
+                if debate_policy
+                else {}
+            ),
+        ),
+    )
     assert response.status_code == 201, response.text
     snapshot = wait_terminal(client, response.json()["run_id"], timeout=10)
     assert snapshot["status"] == "completed", snapshot
     assert snapshot["signal"] == "Buy"
     assert "Offline evidence" in snapshot["sections"]["final_trade_decision"]
     assert snapshot["stats"]["llm_calls"] > 0
+    assert snapshot["stats"]["reports_completed"] == snapshot["stats"]["reports_total"] == 4
+    assert snapshot["wall_times"]["Market Analyst"] >= 0
+    assert snapshot["stats"]["agents_completed"] == snapshot["stats"]["agents_total"] == 9
+    for role in [
+        "Bull Researcher",
+        "Bear Researcher",
+        "Research Manager",
+        "Aggressive Analyst",
+        "Conservative Analyst",
+        "Neutral Analyst",
+        "Portfolio Manager",
+    ]:
+        assert snapshot["agents"][role] == "completed"
+    if debate_policy:
+        assert snapshot["debate_termination"]["enabled"] is False
+        assert (
+            snapshot["debate_termination"]["max_debate_rounds"] == snapshot["research_depth"] == 2
+        )
+        assert snapshot["debate_termination"]["no_new_evidence_patience"] == 2
+        assert snapshot["max_risk_discuss_rounds"] == 1
     assert all(status == "completed" for status in snapshot["agents"].values())
     history = client.get(f"/api/history/{snapshot['artifact_id']}").json()
     assert history["status"] == "completed"
@@ -470,10 +505,16 @@ def test_stream_runner_preserves_merged_core_contexts(tmp_path, monkeypatch, mod
 
     monkeypatch.setattr(graph_runner, "TradingAgentsGraph", BoundariesGraph)
     events = []
-    graph_runner.GraphRunner().run({
-        "config": {"results_dir": str(tmp_path), "checkpoint_enabled": True},
-        "ticker": "NVDA", "trade_date": "2026-11-01", "analysts": ["market"],
-    }, events.append, cancel)
+    graph_runner.GraphRunner().run(
+        {
+            "config": {"results_dir": str(tmp_path), "checkpoint_enabled": True},
+            "ticker": "NVDA",
+            "trade_date": "2026-11-01",
+            "analysts": ["market"],
+        },
+        events.append,
+        cancel,
+    )
     assert trace[-1] == "end_checkpoint"
     assert get_active_capture() is None
     assert get_active_collector() is None
@@ -491,3 +532,89 @@ def test_stream_runner_preserves_merged_core_contexts(tmp_path, monkeypatch, mod
             assert terminals[-1]["type"] == "run.failed"
         if mode == "resume_failure":
             assert "sanitize" in trace and "stream" not in trace
+
+
+@pytest.mark.parametrize("provider", ["deepseek", "openai"])
+def test_explicit_analysis_models_override_environment_defaults_without_cross_provider_leak(
+    tmp_path, monkeypatch, provider
+):
+    """REQ-WEB-001/013, INV-WEB-003: model defaults are editable; endpoint ownership stays scoped."""
+    from copy import deepcopy
+
+    from tradingagents.default_config import DEFAULT_CONFIG
+
+    before = deepcopy(DEFAULT_CONFIG)
+    for name, value in {
+        "TRADINGAGENTS_LLM_PROVIDER": "deepseek",
+        "TRADINGAGENTS_QUICK_THINK_LLM": "deepseek-flash",
+        "TRADINGAGENTS_DEEP_THINK_LLM": "deepseek-flash",
+        "TRADINGAGENTS_LLM_BACKEND_URL": "https://default-provider.test/v1",
+        "TRADINGAGENTS_OPENAI_REASONING_EFFORT": "high",
+        "TRADINGAGENTS_OUTPUT_LANGUAGE": "Chinese",
+        "TRADINGAGENTS_CHECKPOINT_ENABLED": "true",
+        "TRADINGAGENTS_MAX_DEBATE_ROUNDS": "4",
+    }.items():
+        monkeypatch.setenv(name, value)
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "temporary-defaults-test-secret")
+    runner = FakeGraphRunner()
+    client = make_run_client(build_fixture_tree(tmp_path), runner_factory=runner)
+    projected = client.get("/api/config").json()
+    for field in ("llm_provider", "quick_think_llm", "deep_think_llm"):
+        assert projected["env_locks"][field] is False
+        assert projected["env_defaults"][field] is True
+    assert projected["defaults"]["llm_provider"] == "deepseek"
+    assert projected["env_locks"]["max_debate_rounds"] is True
+    assert "temporary-defaults-test-secret" not in str(projected)
+    assert "default-provider.test" not in str(projected)
+    started = client.post("/api/runs", json=body(
+        llm_provider=provider, quick_think_llm="chosen-quick", deep_think_llm="chosen-deep",
+        output_language="English", checkpoint=False, research_depth=4,
+    ))
+    assert started.status_code == 201
+    snapshot = wait_terminal(client, started.json()["run_id"])
+    effective = runner.received_request["config"]
+    assert snapshot["llm_provider"] == provider
+    assert snapshot["quick_think_llm"] == "chosen-quick"
+    assert snapshot["deep_think_llm"] == "chosen-deep"
+    assert snapshot["output_language"] == "Chinese"
+    assert snapshot["checkpoint_enabled"] is True
+    assert snapshot["research_depth"] == 4
+    if provider == "openai":
+        assert effective["backend_url"] is None
+        assert effective["openai_reasoning_effort"] is None
+    else:
+        assert effective["backend_url"] == "https://default-provider.test/v1"
+        assert effective["openai_reasoning_effort"] == "high"
+    assert before == DEFAULT_CONFIG
+
+
+@pytest.mark.parametrize("missing", ["quick_think_llm", "deep_think_llm"])
+def test_provider_switch_rejects_inherited_model_ids(tmp_path, monkeypatch, missing):
+    """REQ-WEB-005, INV-WEB-003: never carry a different provider's default models."""
+    monkeypatch.setenv("TRADINGAGENTS_LLM_PROVIDER", "deepseek")
+    monkeypatch.setenv("TRADINGAGENTS_QUICK_THINK_LLM", "deepseek-flash")
+    monkeypatch.setenv("TRADINGAGENTS_DEEP_THINK_LLM", "deepseek-flash")
+    client = make_run_client(build_fixture_tree(tmp_path), runner_factory=FakeGraphRunner())
+    data = body(llm_provider="openai", quick_think_llm="new-quick", deep_think_llm="new-deep")
+    data.pop(missing)
+    response = client.post("/api/runs", json=data)
+    assert response.status_code == 422
+    assert "Select both quick and deep models" in response.text
+    assert client.get("/api/runs/active").json()["run_id"] is None
+
+
+def test_provider_switch_can_use_its_explicit_endpoint_and_thinking(tmp_path, monkeypatch):
+    """REQ-WEB-003/013, ADR-001-choice.md: explicit new-provider settings are not old defaults."""
+    monkeypatch.setenv("TRADINGAGENTS_LLM_PROVIDER", "deepseek")
+    monkeypatch.setenv("TRADINGAGENTS_LLM_BACKEND_URL", "https://old-provider.test/v1")
+    monkeypatch.setenv("TRADINGAGENTS_OPENAI_REASONING_EFFORT", "high")
+    runner = FakeGraphRunner()
+    client = make_run_client(build_fixture_tree(tmp_path), runner_factory=runner)
+    response = client.post("/api/runs", json=body(
+        llm_provider="openai", quick_think_llm="chosen-quick", deep_think_llm="chosen-deep",
+        backend_url="https://new-provider.test/v1", openai_reasoning_effort="low",
+    ))
+    assert response.status_code == 201
+    wait_terminal(client, response.json()["run_id"])
+    assert runner.received_request["config"]["backend_url"] == "https://new-provider.test/v1"
+    assert runner.received_request["config"]["openai_reasoning_effort"] == "low"

@@ -1,3 +1,4 @@
+import { ui, useUILanguage } from "../i18n/ui";
 // REQ-WEB-006/011, ADR-003: reference sweep layout with real task and summary state.
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
@@ -13,12 +14,14 @@ import { Modal } from "../components/Modal";
 import { Icon } from "../components/Icon";
 import { validateBacktest } from "./Backtest/validation";
 import { BacktestSummary } from "./Backtest/BacktestSummary";
+import { BacktestProgress } from "./Backtest/BacktestProgress";
 import { downloadUrl } from "../api/client";
 import { ANALYST_LABELS, formatDate } from "../utils/workspace";
 
 const ANALYSTS = ["market", "social", "news", "fundamentals"] as const;
 
 export function BacktestPage() {
+  useUILanguage();
   const navigate = useNavigate();
   const { runId: selectedId } = useParams();
   const [tickers, setTickers] = useState("NVDA");
@@ -34,23 +37,44 @@ export function BacktestPage() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
+  const [progressPage, setProgressPage] = useState<{
+    runId: string;
+    offset: number;
+  } | null>(null);
 
   const existing = useQuery({
     queryKey: ["backtests", "page"],
     queryFn: listBacktests,
     retry: false,
+    refetchInterval: (query) =>
+      query.state.data?.items.some((item) =>
+        ["starting", "running"].includes(item.status),
+      )
+        ? 1000
+        : false,
   });
+  const activeFromList = existing.data?.items.find((item) =>
+    ["starting", "running"].includes(item.status),
+  );
+  const displayedId =
+    selectedId ?? progressPage?.runId ?? activeFromList?.run_id;
+  const progressOffset =
+    progressPage?.runId === displayedId ? progressPage?.offset : undefined;
   const selected = useQuery({
-    queryKey: ["backtest", selectedId],
-    queryFn: () => getBacktest(selectedId!),
-    enabled: Boolean(selectedId),
+    queryKey: ["backtest", displayedId, progressOffset],
+    queryFn: () => getBacktest(displayedId!, progressOffset),
+    enabled: Boolean(displayedId),
+    placeholderData: (previous) =>
+      previous?.run_id === displayedId ? previous : undefined,
     refetchInterval: (query) =>
       query.state.data &&
       ["completed", "failed"].includes(query.state.data.status)
         ? false
         : 1000,
   });
-  const recent = selectedId ? selected.data : existing.data?.items[0];
+  const recent = displayedId
+    ? (selected.data ?? (selectedId ? undefined : activeFromList))
+    : existing.data?.items[0];
   const running = Boolean(
     recent && ["starting", "running"].includes(recent.status),
   );
@@ -120,10 +144,9 @@ export function BacktestPage() {
     <>
       <section className="page-header">
         <div>
-          <p className="eyebrow">PUT THE THESIS TO THE TEST</p>
-          <h1>Backtesting</h1>
+          <h1>{ui("Backtesting")}</h1>
           <p className="page-description">
-            Revisit past decisions on a fixed grid of instruments and dates.
+            {ui("Evaluate historical ratings across instruments and dates.")}
           </p>
         </div>
         <div className="page-header-actions">
@@ -133,7 +156,7 @@ export function BacktestPage() {
               href={downloadUrl(summary.log_artifact_id, "log")}
             >
               <Icon name="download" />
-              Export log
+              {ui("Export log")}
             </a>
           ) : null}
         </div>
@@ -148,36 +171,41 @@ export function BacktestPage() {
           }}
           noValidate
         >
-          <h2>Configure a sweep</h2>
-          <p>
-            Uses server model, endpoint, language and depth defaults. Analysis
-            wizard choices do not configure a backtest.
-          </p>
+          <h2>{ui("Configure a sweep")}</h2>
+          <p>{ui("Uses server model defaults.")}</p>
           <div className="form-field">
-            <label htmlFor="bt-tickers">Instruments</label>
+            <label htmlFor="bt-tickers">{ui("Instruments")}</label>
             <input
               id="bt-tickers"
               value={tickers}
               onChange={(event) => setTickers(event.target.value)}
-              placeholder="NVDA,AAPL"
+              placeholder={ui("NVDA,AAPL")}
               required
             />
-            <small>Comma-separated ticker symbols.</small>
+            <small>{ui("Comma-separated ticker symbols.")}</small>
           </div>
           <div className="form-field">
-            <label htmlFor="bt-every">Sample every</label>
-            <select
+            <label htmlFor="bt-every">{ui("Sample every")}</label>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              list="bt-intervals"
               id="bt-every"
               value={every}
               onChange={(event) => setEvery(event.target.value)}
-            >
-              <option value="7">7 calendar days</option>
-              <option value="14">14 calendar days</option>
-              <option value="30">30 calendar days</option>
-            </select>
+            />
+            <datalist id="bt-intervals">
+              <option value="7" />
+              <option value="14" />
+              <option value="30" />
+            </datalist>
+            <small>
+              {ui("Enter a positive whole number of calendar days.")}
+            </small>
           </div>
           <div className="form-field">
-            <label htmlFor="bt-start">Start date</label>
+            <label htmlFor="bt-start">{ui("Start date")}</label>
             <input
               id="bt-start"
               type="date"
@@ -187,7 +215,7 @@ export function BacktestPage() {
             />
           </div>
           <div className="form-field">
-            <label htmlFor="bt-end">End date</label>
+            <label htmlFor="bt-end">{ui("End date")}</label>
             <input
               id="bt-end"
               type="date"
@@ -197,12 +225,12 @@ export function BacktestPage() {
             />
           </div>
           <details className="disclosure">
-            <summary>Analysts & advanced options</summary>
+            <summary>{ui("Analysts & advanced options")}</summary>
             <fieldset className="unstyled-fieldset">
-              <legend className="sr-only">Backtest analysts</legend>
+              <legend className="sr-only">{ui("Backtest analysts")}</legend>
               {ANALYSTS.map((name) => (
                 <label className="toggle-row" key={name}>
-                  <span>{ANALYST_LABELS[name]}</span>
+                  <span>{ui(ANALYST_LABELS[name])}</span>
                   <input
                     type="checkbox"
                     checked={
@@ -216,44 +244,52 @@ export function BacktestPage() {
               ))}
             </fieldset>
             <div className="form-field">
-              <label htmlFor="bt-asset">Asset type</label>
+              <label htmlFor="bt-asset">{ui("Asset type")}</label>
               <select
                 id="bt-asset"
                 value={asset}
                 onChange={(event) => setAsset(event.target.value)}
               >
-                <option value="stock">Stock</option>
-                <option value="crypto">Crypto</option>
+                <option value="stock">{ui("Stock")}</option>
+                <option value="crypto">{ui("Crypto")}</option>
               </select>
             </div>
             <div className="form-field">
-              <label htmlFor="bt-portfolio">Portfolio context (optional)</label>
+              <label htmlFor="bt-portfolio">
+                {ui("Portfolio context (optional)")}
+              </label>
               <textarea
                 id="bt-portfolio"
                 value={portfolio}
                 onChange={(event) => setPortfolio(event.target.value)}
-                placeholder='{"cash":10000,"positions":[]}'
+                placeholder={ui('{"cash":10000,"positions":[]}')}
               />
               <small>
-                Omitted and explicitly flat portfolios remain different inputs.
+                {ui(
+                  "Omitted and explicitly flat portfolios remain different inputs.",
+                )}
               </small>
             </div>
             <div className="form-field">
-              <label htmlFor="bt-resume">Existing run ID (optional)</label>
+              <label htmlFor="bt-resume">
+                {ui("Existing run ID (optional)")}
+              </label>
               <input
                 id="bt-resume"
                 value={runId}
                 onChange={(event) => setRunId(event.target.value)}
-                placeholder="Resume a previous sweep"
+                placeholder={ui("Resume a previous sweep")}
               />
               <small>
-                Recorded cells are skipped; pending outcomes are settled again.
+                {ui(
+                  "Recorded cells are skipped; pending outcomes are settled again.",
+                )}
               </small>
             </div>
           </details>
           {error ? (
             <p className="field-error" role="alert">
-              {error}
+              {ui(error)}
             </p>
           ) : null}
           <button
@@ -262,29 +298,41 @@ export function BacktestPage() {
             disabled={submitting || running}
           >
             <Icon name={submitting || running ? "activity" : "play"} />
-            {submitting || running ? "Sweep in progress" : "Run backtest"}
+            {submitting || running
+              ? ui("Sweep in progress")
+              : ui("Run backtest")}
           </button>
-          <p className="inline-note">
-            Backtests run to completion. Cancellation is not available.
-          </p>
         </form>
 
         <div>
           {selected.isError || existing.isError ? (
             <div className="panel empty-state" role="alert">
-              <strong>Backtest unavailable</strong>
-              <p>{(selected.error ?? existing.error)?.message}</p>
+              <strong>{ui("Backtest unavailable")}</strong>
+              <p>{ui((selected.error ?? existing.error)?.message)}</p>
             </div>
           ) : null}
-          {running ? (
+          {recent?.progress ? (
+            <BacktestProgress
+              snapshot={recent}
+              offset={progressOffset}
+              onPage={(offset) =>
+                setProgressPage(
+                  offset === undefined
+                    ? null
+                    : { runId: recent.run_id, offset },
+                )
+              }
+            />
+          ) : running ? (
             <div className="report-state-banner">
               <Icon name="activity" />
               <div>
-                <strong>Sweep in progress</strong>
+                <strong>{ui("Sweep in progress")}</strong>
                 <p>
-                  The fixed-date sweep runs to completion; cancellation is not
-                  available. Expected cells:{" "}
-                  {recent?.expected_cells ?? "Not recorded"}.
+                  {ui("Runs to completion · Expected cells:")}
+                  {ui(" ")}
+                  {ui(recent?.expected_cells ?? "Not recorded")}
+                  {ui(".")}
                 </p>
               </div>
             </div>
@@ -293,11 +341,16 @@ export function BacktestPage() {
             <div className="report-state-banner warning" role="alert">
               <Icon name="warning" />
               <div>
-                <strong>Backtest failed</strong>
+                <strong>{ui("Backtest failed")}</strong>
                 <p>
-                  {String(
-                    recent.error.message ?? "The sweep could not finish.",
+                  {ui(
+                    String(
+                      recent.error.message ?? "The sweep could not finish.",
+                    ),
                   )}
+                  {recent.error.correlation_id
+                    ? ` (${String(recent.error.correlation_id)})`
+                    : null}
                 </p>
               </div>
             </div>
@@ -305,56 +358,56 @@ export function BacktestPage() {
           {recent && summary ? (
             <BacktestSummary
               summary={summary}
-              description={`Displayed result: ${recent.run_id} · Cells run ${recent.cells_run ?? "Not recorded"} · Skipped ${recent.skipped ?? "Not recorded"} · ${formatDate(recent.start)} – ${formatDate(recent.end)} · ${recent.tickers?.join(", ") ?? ""} · Cell failures ${summary.failures?.length ?? 0} · Settlement failures ${summary.settlement_failures?.length ?? 0}`}
+              description={ui("{{tickers}} · {{start}} – {{end}}", {
+                tickers: recent.tickers?.join(", ") ?? "",
+                start: formatDate(recent.start),
+                end: formatDate(recent.end),
+              })}
             />
-          ) : (
+          ) : !recent?.error && !running ? (
             <div className="panel empty-state">
               <Icon name="sliders" />
-              <strong>No backtest sweeps yet</strong>
+              <strong>{ui("No backtest sweeps yet")}</strong>
               <p>
-                Configure a sweep to create the first read-only backtest
-                artifact.
+                {ui(
+                  "Configure a sweep to create the first read-only backtest artifact.",
+                )}
               </p>
             </div>
-          )}
+          ) : null}
 
           <details className="panel chart-panel past-sweeps">
-            <summary>Saved results</summary>
-            <div className="chart-heading">
-              <div>
-                <p className="eyebrow">PAST SWEEPS</p>
-                <h2>Saved results</h2>
-              </div>
-            </div>
+            <summary>{ui("Saved results")}</summary>
             {existing.isLoading ? (
-              <p className="inline-note">Loading backtests...</p>
+              <p className="inline-note">{ui("Loading backtests...")}</p>
             ) : existing.data?.items.length ? (
               <div className="table-wrap">
                 <table>
                   <thead>
                     <tr>
-                      <th>Run ID</th>
-                      <th>Tickers</th>
-                      <th>Status</th>
+                      <th>{ui("Run ID")}</th>
+                      <th>{ui("Tickers")}</th>
+                      <th>{ui("Status")}</th>
                       <th>
-                        <span className="sr-only">Open</span>
+                        <span className="sr-only">{ui("Open")}</span>
                       </th>
                     </tr>
                   </thead>
                   <tbody>
                     {existing.data.items.map((item) => (
                       <tr key={item.run_id}>
-                        <td className="strong-cell">{item.run_id}</td>
+                        <td className="strong-cell">{ui(item.run_id)}</td>
                         <td>
-                          {item.tickers?.join(", ") ?? item.ticker ?? "—"}
+                          {ui(item.tickers?.join(", ") ?? item.ticker ?? "—")}
                         </td>
-                        <td>{item.status}</td>
+                        <td>{ui(item.status)}</td>
                         <td>
                           <Link
                             className="text-button"
                             to={`/backtest/${item.run_id}`}
                           >
-                            Open <Icon name="arrow" />
+                            {ui("Open ")}
+                            <Icon name="arrow" />
                           </Link>
                         </td>
                       </tr>
@@ -363,23 +416,24 @@ export function BacktestPage() {
                 </table>
               </div>
             ) : (
-              <p className="inline-note">No previous sweeps.</p>
+              <p className="inline-note">{ui("No previous sweeps.")}</p>
             )}
           </details>
         </div>
       </div>
       <Modal
         open={Boolean(activeRunId)}
-        title="One perspective at a time."
+        title={ui("One perspective at a time.")}
         onClose={() => setActiveRunId(null)}
       >
         <p>
-          An analysis or backtest is already running. There is no hidden queue.
-          Open the active run, or finish it before starting another.
+          {ui(
+            "An analysis or backtest is already running. There is no hidden queue. Open the active run, or finish it before starting another.",
+          )}
         </p>
         <div className="modal-actions">
           <button className="button" onClick={() => setActiveRunId(null)}>
-            Keep exploring
+            {ui("Keep exploring")}
           </button>
           <button
             className="button primary"
@@ -389,9 +443,11 @@ export function BacktestPage() {
                   if (run.run_id) {
                     setActiveRunId(null);
                     navigate(
-                      run.kind === "backtest"
-                        ? `/backtest/${run.run_id}`
-                        : `/runs/${run.run_id}`,
+                      run.kind === "simulation"
+                        ? "/simulation"
+                        : run.kind === "backtest"
+                          ? `/backtest/${run.run_id}`
+                          : `/runs/${run.run_id}`,
                     );
                   } else {
                     setActiveRunId(null);
@@ -406,7 +462,7 @@ export function BacktestPage() {
                 })
             }
           >
-            Open active run
+            {ui("Open active run")}
           </button>
         </div>
       </Modal>

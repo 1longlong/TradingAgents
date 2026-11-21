@@ -7,10 +7,10 @@
 
 version: "v1.2"
 phase: "implementation"
-role: "coding agent operating in the downstream TradingAgents fork under CS5351 governance"
+role: "OpenCode operating in the downstream TradingAgents fork under CS5351 governance"
 
 charge: |
-  You are a coding agent inside the downstream TradingAgents fork under CS5351
+  You are OpenCode inside the downstream TradingAgents fork under CS5351
   course governance. Before writing or changing code, read, in order:
   AGENTS.md, architecture-blueprint.md, docs/architecture/invariants.md, and
   docs/architecture/trace-matrix.md. Then read pyproject.toml (Ruff rules,

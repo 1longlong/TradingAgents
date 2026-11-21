@@ -69,6 +69,64 @@ The user authorized repairing the reviewed WebUI defects while preserving the co
 
 Web analyses now write `results_dir/web_runs/<run_id>/` rather than sharing a ticker/date directory with earlier runs or the CLI. Existing report formats are retained. A small atomic `run.json` sidecar records identity, analysis date, and lifecycle status. The read-only artifact scanner accepts this additional source while retaining all legacy readers. Interrupted nonterminal sidecars appear as partial artifacts after a restart; they do not restore active tasks. Saved report trees append the run ID to the existing timestamp-based filename.
 
-A complete, consistent display snapshot accompanies the SSE cursor. Expired cursors receive a snapshot; terminal snapshots need no new stream. Server environment overrides remain authoritative over browser defaults. Correlated failure details are safe for the browser, while diagnostics are redacted on the server. The single-run slot stays owned until worker cleanup finishes.
+A complete, consistent display snapshot accompanies the SSE cursor. Expired cursors receive a snapshot; terminal snapshots need no new stream. Server execution limits remain authoritative; provider/model selection follows the model-defaults refinement below. Correlated failure details are safe for the browser, while diagnostics are redacted on the server. The single-run slot stays owned until worker cleanup finishes.
 
 These refinements avoid stale mixed reports and missing reload results without modifying `src/cli/` or `src/tradingagents/`, adding a database, or changing business analysis semantics.
+
+
+## Addendum — real-run debate configuration, 2026-11-20
+
+The user authorized web-debate-settings-20261120-v1 on feature/webui. Extend the
+existing WebUI request surface with a typed optional debate_termination subset
+and independent risk-round cap. The core resolver validates effective policy;
+WebUI code only merges defaults/requests/environment locks and projects public
+fields. Environment round locks outrank per-run overrides. Effective caps are
+synchronized before creating the core graph. Default/legacy calls retain their
+meaning and no arbitrary config/path/state selectors are accepted. Record public
+effective settings in snapshots and existing per-run metadata. See ADR-007's
+addendum for the necessary Web-only checkpoint-identity extension. No dependency,
+core algorithm, provider, live benchmark, trading operation or release is added.
+
+
+## TUI parity refinement — 2026-11-20
+
+Under web-tui-parity-20261120-v1, extend existing events/snapshots and controls
+for observed role status, analyst timing, finalized reports and custom backtest
+spacing. New runtime/model_catalog.py owns bounded, application-cached public
+OpenRouter discovery; config API adds optional refresh and safe stale/custom-ID
+fallback. Keep core algorithms, CLI, credentials/preferences, language options
+and simulated trading unchanged. See the blueprint/review memo for contracts
+and prior negative-test strategy.
+
+
+## Web integration refinement — 2026-11-21
+
+The user explicitly authorizes web-simulation-20261121-v1: frontend and necessary
+interfaces around the existing deterministic simulated-trading core. The
+blueprint/review memo define the bounded API, ownership, persistence, single-slot
+coordination, human-approval and negative-test contracts. Core models, clocks,
+sizing, pipeline, engine-issued authorization, audit chain and state store remain
+authoritative; no broker, safety/core rewrite or automatic human approval is
+introduced. Pending approval objects remain process-owned and cannot be restored
+from client JSON. Only one final verification phase is requested.
+
+
+## Model defaults refinement — 2026-11-21
+
+The user authorizes web-model-defaults-20261121-v1. In Web analysis only,
+TRADINGAGENTS_LLM_PROVIDER, TRADINGAGENTS_QUICK_THINK_LLM and
+TRADINGAGENTS_DEEP_THINK_LLM are non-secret defaults, preselected but editable.
+Explicit analysis choices override those defaults. Omission and backtests retain
+server defaults. Other existing environment locks, core/CLI behavior and
+server-owned credentials remain unchanged. This supersedes prior blanket
+environment-precedence statements only for those three selection fields.
+
+Provider-dependent values are scoped to their configured provider. Switching
+requires both model IDs and clears inherited endpoint/thinking values; an
+explicit endpoint may use the existing override capability. A configured server
+endpoint remains authoritative when using that same server-default provider.
+No provider's credential is inferred from model name or sent to an inherited
+endpoint belonging to another provider. UI source labels distinguish editable
+defaults from enforced risk/round/other settings. Draft model selections are
+bound to a non-secret server provider/model baseline; changed defaults invalidate
+stale selection fields without persisting endpoints, credentials or portfolios.

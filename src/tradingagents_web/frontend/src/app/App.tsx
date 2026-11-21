@@ -1,3 +1,4 @@
+import { useUILanguage } from "../i18n/ui";
 // REQ-WEB-001/008/010/021, ADR-003: keep the workspace behind the reference analysis sheet.
 import { useEffect, useRef } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
@@ -11,9 +12,11 @@ import { HistoryPage } from "../pages/HistoryPage";
 import { JournalPage } from "../pages/JournalPage";
 import { LiveRunPage } from "../pages/LiveRunPage";
 import { NewAnalysisPage } from "../pages/NewAnalysisPage";
+import { SimulationPage } from "../pages/SimulationPage";
 import { OverviewPage } from "../pages/OverviewPage";
 
 export function App() {
+  useUILanguage();
   const location = useLocation();
   const previous = useRef(
     location.pathname === "/new"
@@ -36,6 +39,7 @@ export function App() {
         <Route path="/backtest/:runId" element={<BacktestPage />} />
         <Route path="/runs/:runId" element={<LiveRunPage />} />
         <Route path="/audit" element={<AuditPage />} />
+        <Route path="/simulation" element={<SimulationPage />} />
         <Route path="/comparison" element={<ComparisonPage />} />
         <Route path="*" element={<Navigate to="/overview" replace />} />
       </Routes>

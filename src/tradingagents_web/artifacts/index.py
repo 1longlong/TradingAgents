@@ -16,6 +16,7 @@ from pathlib import Path
 from tradingagents.agents.utils.memory import TradingMemoryLog
 from tradingagents.agents.utils.rating import RATING_REVIEW, extract_rating
 from tradingagents.dataflows.utils import safe_ticker_component
+from tradingagents_web.runtime.debate_policy import recorded_debate_policy
 
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 SAVED_DATE_RE = re.compile(r"_(\d{8})_")
@@ -69,6 +70,12 @@ def _presentation_metadata(value) -> dict:
         value["research_depth"], bool
     ):
         result["research_depth"] = value["research_depth"]
+    policy = recorded_debate_policy(value.get("debate_termination"))
+    if policy is not None:
+        result["debate_termination"] = policy
+    risk_rounds = value.get("max_risk_discuss_rounds")
+    if isinstance(risk_rounds, int) and not isinstance(risk_rounds, bool) and risk_rounds > 0:
+        result["max_risk_discuss_rounds"] = risk_rounds
     analysts = value.get("analysts")
     if isinstance(analysts, list) and all(
         isinstance(item, str) and item in {"market", "social", "news", "fundamentals"}

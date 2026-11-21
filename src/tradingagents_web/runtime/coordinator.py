@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import threading
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -13,6 +14,7 @@ from tradingagents_web.errors import run_failure
 from tradingagents_web.security import redact_obj
 
 from .artifacts_writer import RunArtifactWriter
+from .backtest_progress import BacktestProgress
 from .event_buffer import EventBuffer
 
 TERMINAL_STATUSES = {"completed", "failed", "cancelled"}
@@ -70,6 +72,8 @@ class RunRecord:
                 "asset_type": request.get("asset_type", "stock"),
                 "analysts": request.get("analysts", []),
                 "research_depth": request.get("research_depth"),
+                "debate_termination": dict(request.get("debate_termination") or {}),
+                "max_risk_discuss_rounds": request.get("max_risk_discuss_rounds"),
                 "llm_provider": request.get("llm_provider"),
                 "output_language": request.get("output_language"),
                 "quick_think_llm": request.get("quick_think_llm"),
@@ -105,8 +109,22 @@ class BacktestRecord:
     cells_run: int = 0
     skipped: int = 0
     lock: threading.Lock = field(default_factory=threading.Lock)
+    progress: BacktestProgress = field(init=False)
 
-    def to_snapshot(self) -> dict:
+    def __post_init__(self):
+        self.progress = BacktestProgress(
+            list(self.request.get("tickers") or []), list(self.request.get("dates") or [])
+        )
+
+    def update_progress(self, event: dict):
+        with self.lock:
+            self.progress.update(event)
+
+    def to_snapshot(self, cells_offset: int | None = None, cells_limit: int = 25) -> dict:
+        with self.lock:
+            return self._snapshot(cells_offset, cells_limit)
+
+    def _snapshot(self, cells_offset: int | None, cells_limit: int) -> dict:
         request = self.request
         tickers = list(request.get("tickers") or [])
         dates = list(request.get("dates") or [])
@@ -129,7 +147,19 @@ class BacktestRecord:
             "finished_at": self.finished_at,
             "summary": self.summary,
             "error": self.error,
+            "progress": self.progress.snapshot(cells_offset, cells_limit),
         }
+
+
+@dataclass
+class ExternalRunRecord:
+    """FR-TRD-005, ADR-007-run-controls.md: share the existing serial slot."""
+
+    run_id: str
+    snapshot: dict
+
+    def to_snapshot(self) -> dict:
+        return {"run_id": self.run_id, "kind": "simulation", **self.snapshot}
 
 
 class RunCoordinator:
@@ -137,10 +167,25 @@ class RunCoordinator:
         self.settings = settings
         self.runner_factory = runner_factory
         self._lock = threading.Lock()
-        self._active: RunRecord | BacktestRecord | None = None
+        self._active: RunRecord | BacktestRecord | ExternalRunRecord | None = None
         self._records: dict[str, RunRecord] = {}
         self._backtests: dict[str, BacktestRecord] = {}
         self._request_ids: dict[str, str] = {}
+
+    @contextmanager
+    def external_run(self, run_id: str, snapshot: dict):
+        """Hold the shared slot for a simulated transaction or background run."""
+        record = ExternalRunRecord(run_id, snapshot)
+        with self._lock:
+            if self._active is not None:
+                raise RunConflict(self._active.run_id)
+            self._active = record
+        try:
+            yield record
+        finally:
+            with self._lock:
+                if self._active is record:
+                    self._active = None
 
     def start(self, request: dict, client_request_id: str) -> RunRecord:
         with self._lock:
@@ -186,25 +231,27 @@ class RunCoordinator:
             return record
 
     def _execute_backtest(self, record: BacktestRecord) -> None:
-        record.status = "running"
+        with record.lock:
+            record.status = "running"
         try:
             from .backtest_runner import BacktestRunner
 
-            outcome = BacktestRunner(self.settings).execute(record.request)
+            outcome = BacktestRunner(self.settings).execute(record.request, record.update_progress)
             with record.lock:
                 record.summary = outcome["summary"]
                 record.cells_run = int(outcome.get("cells_run") or 0)
                 record.skipped = int(outcome.get("skipped") or 0)
                 record.status = "completed"
                 record.finished_at = _now()
-        except Exception:
+                record.progress.finish("completed")
+        except Exception as exc:
+            # REQ-WEB-011, ADR-007: retain safe diagnostics before releasing the slot.
+            failure = run_failure(exc, "backtest")
             with record.lock:
                 record.status = "failed"
-                record.error = {
-                    "category": "internal",
-                    "message": "backtest failed; check the server log",
-                }
+                record.error = failure
                 record.finished_at = _now()
+                record.progress.finish("failed")
         finally:
             with self._lock:
                 if self._active is record:
@@ -290,7 +337,7 @@ class RunCoordinator:
                 payload["review"] = bool(payload.get("review", is_review(signal)))
                 record.signal = signal
                 record.review = bool(payload["review"])
-                record.wall_times = payload.get("wall_times") or {}
+                record.wall_times.update(payload.get("wall_times") or {})
                 payload["artifact_id"] = record.artifact_id
             elif event_type == "message" and record.writer is not None:
                 record.writer.on_message(payload)
@@ -313,6 +360,8 @@ class RunCoordinator:
                 record.sections[str(payload.get("section", ""))] = str(payload.get("content", ""))
             elif event_type == "agent.status":
                 record.agents[str(payload.get("agent", ""))] = str(payload.get("status", ""))
+            elif event_type == "analyst.timing":
+                record.wall_times.update(payload.get("wall_times") or {})
             elif event_type == "stats":
                 record.stats = payload
             elif event_type in {"run.preparing", "run.phase"}:

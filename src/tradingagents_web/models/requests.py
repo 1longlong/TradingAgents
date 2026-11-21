@@ -4,7 +4,26 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictFloat, StrictInt
+
+
+class DebatePolicyRequest(BaseModel):
+    """REQ-WEB-001/013, FR-DDT-004, ADR-001: public overrides only."""
+
+    model_config = ConfigDict(extra="forbid", strict=True, allow_inf_nan=False)
+
+    enabled: StrictBool | None = None
+    max_debate_rounds: StrictInt | None = Field(default=None, ge=1)
+    no_new_evidence_patience: StrictInt | None = Field(default=None, ge=1)
+    stance_distance_threshold: StrictFloat | None = Field(default=None, ge=0, le=4)
+    confidence_delta_threshold: StrictFloat | None = Field(default=None, ge=0, le=1)
+    max_calls: StrictInt | None = Field(default=None, ge=1)
+    max_tokens: StrictInt | None = Field(default=None, ge=1)
+    max_time: StrictFloat | None = Field(default=None, gt=0)
+    reserved_summary_tokens: StrictInt | None = Field(default=None, ge=0)
+    reserved_summary_seconds: StrictFloat | None = Field(default=None, ge=0)
+    next_round_estimate_tokens: StrictInt | None = Field(default=None, ge=0)
+    next_round_estimate_seconds: StrictFloat | None = Field(default=None, ge=0)
 
 
 class RunRequest(BaseModel):
@@ -19,6 +38,8 @@ class RunRequest(BaseModel):
         default_factory=lambda: ["market", "social", "news", "fundamentals"]
     )
     research_depth: int = 1
+    debate_termination: DebatePolicyRequest | None = None
+    max_risk_discuss_rounds: StrictInt | None = Field(default=None, ge=1)
     llm_provider: str = "openai"
     backend_url: str | None = None
     quick_think_llm: str | None = None

@@ -7,11 +7,18 @@ never points a backtest at the live decision log: the run gets its own
 
 from __future__ import annotations
 
+import logging
+from collections.abc import Callable
 from hashlib import sha256
 from pathlib import Path
 
 from tradingagents.agents.utils.memory import TradingMemoryLog
-from tradingagents.backtest import BacktestSummary, run_backtest, summarize
+from tradingagents.backtest import (
+    BacktestSummary,
+    observe_backtest_progress,
+    run_backtest,
+    summarize,
+)
 from tradingagents.dataflows.utils import safe_ticker_component
 from tradingagents_web.settings import WebSettings
 
@@ -57,7 +64,7 @@ class BacktestRunner:
     def __init__(self, settings: WebSettings):
         self.settings = settings
 
-    def execute(self, request: dict) -> dict:
+    def execute(self, request: dict, on_progress: Callable[[dict], None] | None = None) -> dict:
         run_id = safe_ticker_component(str(request["run_id"]))
         run_dir = Path(self.settings.results_dir) / "backtest" / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
@@ -66,15 +73,24 @@ class BacktestRunner:
         config["results_dir"] = str(self.settings.results_dir)
         config["memory_log_path"] = str(run_dir / "trading_memory.md")
 
-        result = run_backtest(
-            list(request["tickers"]),
-            list(request["dates"]),
-            config,
-            asset_type=request.get("asset_type", "stock"),
-            portfolio=request.get("portfolio"),
-            selected_analysts=tuple(request.get("selected_analysts") or ()),
-            run_id=request.get("backtest_run_id"),
-        )
+        def publish(event: dict):
+            if on_progress:
+                try:
+                    on_progress(event)
+                except Exception:
+                    logging.getLogger(__name__).warning("Backtest progress observer failed")
+
+        with observe_backtest_progress(publish):
+            result = run_backtest(
+                list(request["tickers"]),
+                list(request["dates"]),
+                config,
+                asset_type=request.get("asset_type", "stock"),
+                portfolio=request.get("portfolio"),
+                selected_analysts=tuple(request.get("selected_analysts") or ()),
+                run_id=request.get("backtest_run_id"),
+            )
+        publish({"event": "summarizing"})
         log_path = Path(result.log_path)
         summary = summarize(
             TradingMemoryLog({"memory_log_path": str(log_path)})

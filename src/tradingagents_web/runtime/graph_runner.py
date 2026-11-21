@@ -11,19 +11,63 @@ from tradingagents.debate.config import resolve_debate_termination_config
 from tradingagents.debate.usage_capture import UsageCapture, use_usage_capture
 from tradingagents.debate.usage_ledger import LedgerError, policy_signature
 from tradingagents.evidence.ingest import use_collector
-from tradingagents.graph.trading_graph import TradingAgentsGraph
+from tradingagents.graph.analyst_execution import (
+    ANALYST_NODE_SPECS,
+    AnalystWallTimeTracker,
+    build_analyst_execution_plan,
+)
 from tradingagents_web.errors import run_failure
 
+from .analysis_graph import WebAnalysisGraph as TradingAgentsGraph
 from .projector import StreamProjector
 
 
 class LiveStats(StatsCallbackHandler):
     """Publish real callback counters, including during provider waits (REQ-WEB-002)."""
 
-    def __init__(self, emit, started):
+    def __init__(self, emit, started, projector):
         super().__init__()
         self.emit = emit
         self.started = started
+        self.projector = projector
+        self.tracker = AnalystWallTimeTracker(build_analyst_execution_plan(projector.analysts))
+        self._nodes = {}
+        self._analyst_keys = {spec.agent_node: key for key, spec in ANALYST_NODE_SPECS.items()}
+
+    def on_chain_start(self, serialized, inputs, *, run_id, metadata=None, name=None, **kwargs):
+        node = (metadata or {}).get("langgraph_node")
+        if name != node or node not in self.projector.roles:
+            return
+        self._nodes[run_id] = node
+        if node in self._analyst_keys:
+            self.tracker.mark_started(self._analyst_keys[node])
+        for event in self.projector.node_status(node, "in_progress"):
+            self.emit(event)
+        self.publish()
+
+    def on_chain_end(self, outputs, *, run_id, **kwargs):
+        node = self._nodes.pop(run_id, None)
+        if node is None:
+            return
+        if node in self._analyst_keys:
+            key = self._analyst_keys[node]
+            # Tool requests can revisit an analyst several times before its report.
+            if not isinstance(outputs, dict) or not outputs.get(ANALYST_NODE_SPECS[key].report_key):
+                return
+            self.tracker.mark_completed(key)
+            self.emit({"type": "analyst.timing", "payload": {"wall_times": self.wall_times()}})
+        for event in self.projector.node_status(node, "completed"):
+            self.emit(event)
+        self.publish()
+
+    def on_chain_error(self, error, *, run_id, **kwargs):
+        self._nodes.pop(run_id, None)
+
+    def wall_times(self):
+        return {
+            ANALYST_NODE_SPECS[key].agent_node: round(value, 3)
+            for key, value in self.tracker.get_wall_times().items()
+        }
 
     def publish(self):
         self.emit(
@@ -31,6 +75,7 @@ class LiveStats(StatsCallbackHandler):
                 "type": "stats",
                 "payload": {
                     **self.get_stats(),
+                    **self.projector.counts(),
                     "elapsed": round(time.perf_counter() - self.started, 3),
                 },
             }
@@ -66,7 +111,8 @@ class GraphRunner:
         outcome = None
         contexts = ExitStack()
         phase = "configuration"
-        stats = LiveStats(emit, started)
+        projector = StreamProjector(analysts)
+        stats = LiveStats(emit, started, projector)
         emit({"type": "run.preparing", "payload": {"phase": phase}})
         try:
             if cancel_event.is_set():
@@ -95,8 +141,12 @@ class GraphRunner:
                 graph._sanitize_confidence_on_resume(args, prior_state)
             run_id, ledger_path = graph._usage_run_identity(ticker, trade_date, prior_state)
             init_state = graph.create_run_state(
-                ticker, trade_date, asset_type, portfolio,
-                run_id=run_id, usage_ledger_path=ledger_path,
+                ticker,
+                trade_date,
+                asset_type,
+                portfolio,
+                run_id=run_id,
+                usage_ledger_path=ledger_path,
             )
             ledger = graph._open_usage_ledger(ledger_path, strict_resume=resuming)
             debate_config = resolve_debate_termination_config(graph.config)
@@ -130,7 +180,6 @@ class GraphRunner:
                 }
             )
             phase = "analysis"
-            projector = StreamProjector(analysts)
             for event in projector.project(init_state):
                 emit(event)
             final_state = {}
@@ -147,13 +196,18 @@ class GraphRunner:
             graph._attach_whole_run_usage(final_state, capture, run_id)
             graph.record_decision(ticker, trade_date, final_state)
             graph.clear_checkpoint_on_success(ticker, trade_date, asset_type, portfolio)
-            signal = graph.process_signal(final_state.get("final_trade_decision", ""), state=final_state)
+            signal = graph.process_signal(
+                final_state.get("final_trade_decision", ""), state=final_state
+            )
             outcome = {
                 "type": "run.completed",
                 "payload": {
                     "signal": signal,
                     "review": is_review(signal),
-                    "wall_times": {"total": round(time.perf_counter() - started, 3)},
+                    "wall_times": {
+                        **stats.wall_times(),
+                        "total": round(time.perf_counter() - started, 3),
+                    },
                     "final_state": final_state,
                 },
             }

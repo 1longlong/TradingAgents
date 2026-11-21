@@ -453,3 +453,43 @@ Iterations 1, 2, and 3 are implemented; Iteration 1 received a human implementat
 - **Enforcer:** `src/trading/audit.py` (hash chain + `.head` truncation anchor).
 - **Verification:** `test/offline/trading/test_audit.py`, `test/offline/trading/test_invariants.py`, `test/offline/trading/test_negative.py`.
 - **Fallback:** `AuditIntegrityError`; modification, truncation, and deletion are detected.
+
+
+## Simulated-trading Web entry enforcement — 2026-11-21
+
+web-simulation-20261121-v1 maps the existing INV-TRD-001/002/003 and
+INV-WEB-001/003/006/009/012/013/014 to the new Web composition. No invariant or
+requirement ID/status is replaced. runtime/simulation.py invokes the existing
+pipeline, issued approval gate and engine; no Web module imports the executor.
+models/simulation_requests.py forbids arbitrary config, paths, quantity and
+execution-authority fields; money is strict Decimal text. Account generation
+and portfolio version jointly prevent reset ABA/stale requests. Pending human
+approvals are process-owned, bound to issued evaluations, expiry and quote
+freshness; persisted JSON cannot recreate execution authority. Account/audit
+uncertainty blocks mutation and remains inspectable through the verified audit
+read path. Fixed-root path checks, process ownership and the coordinator serial
+lease protect state ownership. Each walk-forward run has separate core state,
+audit, memory and cursor. No automatic human approval, fake cancellation or
+real broker capability is exposed. Violation checks are in
+`test/offline/test_web_simulation.py`, the unchanged trading suite, frontend
+`tests/simulation.test.tsx` and local Chromium `e2e/simulation.spec.ts`.
+Execution evidence will be recorded only after the requested final test phase.
+
+
+## Backtest observation enforcement — 2026-11-21
+
+web-backtest-progress-20261121-v1 maps REQ-WEB-011/026 and INV-WEB-003/009/014
+without introducing new IDs. Optional core observation carries only event kind,
+requested ticker/date and cannot alter a result or trigger a retry. Context reset
+isolates subscribers; observer exceptions do not abort serial execution. Web
+progress transitions require requested identities and valid prior states;
+terminal outcomes are counted once. Record locking makes counters/current cell
+and paginated rows consistent. Progress snapshots contain no raw exceptions,
+keys or paths. Process records outrank disk log inference while running.
+
+A processed-cell fraction includes failed/skipped cells and is not task success
+or a time estimate. Settlement/summarization still owns the active slot. Missing
+historical progress stays absent, and browser refresh is process-lifetime
+reattachment only. The core/public signature, CLI, scoring, memory boundaries,
+models, budgets and absence of cancellation remain unchanged. Verification is
+linked in the trace matrix and results in the evaluation logbook.

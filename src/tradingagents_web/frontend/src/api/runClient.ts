@@ -3,6 +3,7 @@ export type RunConfig = {
   defaults: Record<string, unknown>;
   providers: Array<{ key: string; label: string; default_url: string | null }>;
   env_locks: Record<string, boolean>;
+  env_defaults?: Record<string, boolean>;
   key_status: Record<string, string>;
   prefs: Record<string, unknown>;
   backend_url_configured?: boolean;
@@ -18,6 +19,8 @@ export type RunSnapshot = {
   asset_type?: string;
   analysts?: string[];
   research_depth?: number;
+  debate_termination?: Record<string, unknown>;
+  max_risk_discuss_rounds?: number;
   llm_provider?: string;
   quick_think_llm?: string;
   deep_think_llm?: string;
@@ -89,9 +92,17 @@ export function getRunConfig() {
   return jsonRequest<RunConfig>("/api/config");
 }
 
-export function getRunModels(provider: string, mode: "quick" | "deep") {
-  return jsonRequest<{ models: Array<{ value: string; label: string }> }>(
-    `/api/config/models?provider=${encodeURIComponent(provider)}&mode=${mode}`,
+export function getRunModels(
+  provider: string,
+  mode: "quick" | "deep",
+  refresh = false,
+) {
+  return jsonRequest<{
+    models: Array<{ value: string; label: string }>;
+    source?: string;
+    warning?: string;
+  }>(
+    `/api/config/models?provider=${encodeURIComponent(provider)}&mode=${mode}${refresh ? "&refresh=true" : ""}`,
   );
 }
 

@@ -1,78 +1,80 @@
-// REQ-WEB-001/002/010/021, ADR-003: reference geometry and real local API interactions.
+// REQ-WEB-001/002/010/021, ADR-003: simplified information hierarchy and real local API interactions.
 import { expect, test } from "@playwright/test";
-import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
 
-test("workspace and three-step sheet retain the demo geometry", async ({
+test("simplified workspace keeps primary flows and moves preset comparisons into help", async ({
   page,
-  browser,
 }) => {
-  const reference = await browser.newPage({
-    viewport: { width: 1512, height: 1060 },
-  });
   await page.setViewportSize({ width: 1512, height: 1060 });
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  await reference.emulateMedia({ reducedMotion: "reduce" });
-  await reference.goto(pathToFileURL(resolve("../../../demo/index.html")).href);
   await page.goto("/overview");
   await expect(
-    page.getByRole("heading", { name: "Research overview" }),
+    page.getByRole("heading", { name: "Research overview", exact: true }),
   ).toBeVisible();
-  for (const selector of [
-    ".brand",
-    ".topbar",
-    ".page-header",
-    ".stats-strip",
-  ]) {
-    const actual = await page.locator(selector).boundingBox(),
-      expected = await reference.locator(selector).boundingBox();
-    expect(actual).not.toBeNull();
-    expect(expected).not.toBeNull();
-    for (const field of ["x", "y", "width", "height"] as const)
-      expect(
-        Math.abs(actual![field] - expected![field]),
-        `${selector}.${field}`,
-      ).toBeLessThan(0.75);
-  }
-  await reference
-    .getByRole("button", { name: "New analysis", exact: true })
-    .click();
-  await page
-    .getByRole("link", { name: "New analysis", exact: true })
-    .first()
-    .click();
   await expect(
-    page.getByRole("button", { name: "Continue", exact: true }),
-  ).toBeEnabled();
-  for (let step = 0; step < 3; step++) {
-    for (const selector of [
-      ".sheet",
-      ".sheet-header",
-      ".wizard-steps",
-      ".sheet-footer",
-    ]) {
-      const actual = await page.locator(selector).boundingBox(),
-        expected = await reference.locator(selector).boundingBox();
-      for (const field of ["x", "y", "width", "height"] as const)
-        expect(
-          Math.abs(actual![field] - expected![field]),
-          `step ${step}: ${selector}.${field}`,
-        ).toBeLessThan(0.75);
-    }
-    if (step === 0) {
-      await page.getByLabel(/ticker symbol/i).fill("NVDA");
-      await reference.getByLabel(/ticker symbol/i).fill("NVDA");
-    }
-    if (step < 2) {
-      await page.getByRole("button", { name: "Continue", exact: true }).click();
-      await reference
-        .getByRole("button", { name: "Continue", exact: true })
-        .click();
-    }
-  }
+    page.locator(
+      ".stats-strip, .bottom-grid, .pipeline, .workspace-selector, .avatar-button",
+    ),
+  ).toHaveCount(0);
+  await expect(
+    page.locator(".nav-list").getByRole("link", { name: "Policy comparison" }),
+  ).toHaveCount(0);
+  await page.getByRole("link", { name: "New analysis", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "New analysis", exact: true }),
+  ).toBeVisible();
+  await page.getByLabel(/ticker symbol/i).fill("NVDA");
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(
+    page.getByLabel("Model provider", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "Review setup", exact: true }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Save draft and close" }).click();
   await expect(page).toHaveURL(/\/overview$/);
-  await reference.close();
+  await page.getByRole("button", { name: "Help & shortcuts" }).click();
+  const help = page.getByRole("dialog");
+  await expect(
+    help.getByRole("link", { name: "Policy comparison" }),
+  ).not.toBeVisible();
+  await help.getByText("Diagnostic tools", { exact: true }).click();
+  await help.getByRole("link", { name: "Policy comparison" }).click();
+  await expect(page).toHaveURL(/\/comparison$/);
+  await expect(help).not.toBeVisible();
+  await expect(
+    page.getByText("Preset cases only · fixed rounds vs dynamic termination"),
+  ).toBeVisible();
+});
+
+// REQ-WEB-002/006, ADR-003-frontend-stack.md: an external task is not an analysis stream.
+test("overview opens a simulated task without requesting its ID as an analysis", async ({
+  page,
+}) => {
+  let wrongRequests = 0;
+  await page.route("**/api/runs/sim_overview", (route) => {
+    wrongRequests++;
+    return route.fulfill({ status: 404, json: {} });
+  });
+  await page.route("**/api/runs/active", (route) =>
+    route.fulfill({
+      json: {
+        run_id: "sim_overview",
+        kind: "simulation",
+        status: "running",
+        ticker: "NVDA",
+      },
+    }),
+  );
+  await page.goto("/overview");
+  const link = page.getByRole("link", { name: "Open active run", exact: true });
+  await expect(link).toBeVisible();
+  await expect(link).toHaveAttribute("href", "/simulation");
+  expect(wrongRequests).toBe(0);
+  await link.click();
+  await expect(page).toHaveURL(/\/simulation$/);
+  await expect(
+    page.getByRole("heading", { name: "Simulated trading", exact: true }),
+  ).toBeVisible();
 });
 
 test("sheet keeps errors, explicit asset selection, thinking controls and private drafts", async ({
@@ -143,9 +145,7 @@ test("history, journal, settings and supported downloads are interactive", async
     .first()
     .getByRole("link", { name: /Read .* analysis/ })
     .click();
-  await expect(
-    page.getByText("Evidence, examined from every angle."),
-  ).toBeVisible();
+  await expect(page.locator(".document-panel")).toBeVisible();
   await expect(page.getByRole("link", { name: "Export report" })).toHaveCount(
     0,
   );
@@ -174,9 +174,7 @@ test("history, journal, settings and supported downloads are interactive", async
     page.getByRole("heading", { name: "Reflection", exact: true }),
   ).toBeVisible();
   await page.keyboard.press("Escape");
-  await page
-    .getByRole("button", { name: "Open local workspace settings" })
-    .click();
+  await page.getByRole("button", { name: "Workspace settings" }).click();
   await page.getByLabel("Appearance").selectOption("dark");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await page.getByRole("button", { name: "Clear all checkpoints" }).click();

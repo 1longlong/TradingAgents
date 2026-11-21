@@ -56,3 +56,103 @@ The user explicitly selected TypeScript, React, and a suitable UI technology. Th
 4. **Redux Toolkit** — more ceremony than needed for one active run.
 5. **Plain CSS** — faster initially, but Tailwind tokens and Radix components improve consistency and accessibility.
 6. **No i18n library** — a custom dictionary is possible for two languages, but pluralization, interpolation, and key checking are better served by react-i18next.
+
+## Addendum — local Vite development mode, 2026-11-20
+
+The user approved one-command `--dev` / `--build` startup in
+`web-startup-20261120-v1`. Vite is an owned loopback-only development process;
+its `/api` proxy uses the launcher's validated backend port and never a remote
+backend URL. Frontend HMR is development-only; backend run transport remains
+SSE and the API retains one worker. Backend changes require restarting the
+launcher. Built/static operation still needs only the Python service. This adds
+no dependency, production Node service, deployment step or frontend feature.
+
+
+## Addendum — stage-based live activity, 2026-11-20
+
+The user's `web-activity-20261120-v1` request replaces the oversized live-run
+hero and explanatory banner with a compact activity workspace. Its progress
+labels are keyboard-accessible tabs for four actual graph groups: analyst team,
+research debate, trading plan and risk review/final assessment. New stage entry
+selects the corresponding tab without moving focus; same-stage updates retain
+manual selection. Each tab shows its own recorded messages and available report
+sections. All activity retains legacy messages without stage provenance.
+
+Use existing SSE messages, tool calls, agent statuses and reports. Optional
+stage/speaker metadata is presentation-only. Public text and existing debate
+histories are rendered without exposing private reasoning blocks. Messages
+remain visible in terminal snapshots. Long content expands on demand; scrolling
+older messages pauses following. Completed runs offer a separate complete-report
+view to avoid duplicating reports. Dependencies, ratings, agent logic, run
+lifecycle, privacy/redaction and cancellation contracts are unchanged.
+
+
+## Addendum — English/Chinese interface, 2026-11-20
+
+The user requested `web-i18n-20261120-v1`. Reuse existing i18next and
+react-i18next; add a workspace namespace to the existing English/Chinese JSON
+resources. `i18n/ui.ts` performs local lookup with explicit interpolation,
+English fallback and reactive subscriptions. Source phrases are literal keys
+with separators disabled; persisted locale input is normalized to en/zh.
+Document language and date formatting follow the selected interface locale.
+Local storage failure does not prevent switching.
+
+The top bar, settings and wizard footer expose the same accessible control.
+Language changes do not remount routes, reset drafts, restart runs, change API
+query identities or reconnect SSE. Form options retain explicit canonical
+values; ratings and REVIEW retain their original domain identity. Shared
+Markdown localizes its table-region label, while report/decision/reflection
+content, tool messages and artifact previews remain source data. Known generated
+history titles and holding-window labels have presentation-only formatters;
+custom values remain untouched. No translation service, dependency, backend
+endpoint or runtime-prompt change is introduced. Final human acceptance pending.
+
+## Addendum — per-analysis debate controls, 2026-11-20
+
+For web-debate-settings-20261120-v1, use a collapsed native details section in
+the existing Research setup step. Public policy defaults come from the config
+endpoint; never duplicate core defaults in the browser. Group controls into
+round limits, convergence thresholds and debate budgets/reserves. Keep fixed
+mode thresholds editable with an explicit scope note. Present environment locks
+with native disabled controls. Preserve independent risk rounds after explicit
+editing and restore only typed, allowlisted draft policy fields. Use the existing
+linked error summary and inline translated errors; opening an error link expands
+the section and focuses its field. Selected settings appear in the review step;
+normalized effective settings appear in live and saved reports. Historical runs
+without settings are not assigned current defaults. Native details and numeric
+inputs retain keyboard behavior; two columns become one on narrow screens.
+
+
+## TUI parity refinement — 2026-11-20
+
+Under web-tui-parity-20261120-v1, extend existing events/snapshots and controls
+for observed role status, analyst timing, finalized reports and custom backtest
+spacing. New runtime/model_catalog.py owns bounded, application-cached public
+OpenRouter discovery; config API adds optional refresh and safe stale/custom-ID
+fallback. Keep core algorithms, CLI, credentials/preferences, language options
+and simulated trading unchanged. See the blueprint/review memo for contracts
+and prior negative-test strategy.
+
+
+## Web integration refinement — 2026-11-21
+
+The user explicitly authorizes web-simulation-20261121-v1: frontend and necessary
+interfaces around the existing deterministic simulated-trading core. The
+blueprint/review memo define the bounded API, ownership, persistence, single-slot
+coordination, human-approval and negative-test contracts. Core models, clocks,
+sizing, pipeline, engine-issued authorization, audit chain and state store remain
+authoritative; no broker, safety/core rewrite or automatic human approval is
+introduced. Pending approval objects remain process-owned and cannot be restored
+from client JSON. Only one final verification phase is requested.
+
+
+## Information hierarchy refinement — 2026-11-21
+
+The user authorizes web-ui-simplify-20261121-v1 to reduce nonessential information
+and duplicate navigation. This updates the presentation of existing features,
+not their requirements, routing contracts or stack. The overview prioritizes
+latest/recent research; secondary counters and diagnostic policy/identity data
+use accessible native disclosures. Error, partial/REVIEW, pending approval,
+financial-input/source limitations and destructive confirmations remain explicit.
+Existing demo geometry is historical reference where this new simplification
+changes content. Backend and deterministic business authority are unchanged.

@@ -1,3 +1,4 @@
+import i18n from "../i18n";
 export const ANALYST_LABELS: Record<string, string> = {
   market: "Market",
   social: "Sentiment",
@@ -30,23 +31,29 @@ export function formatDate(value?: string | null): string {
   if (!value) return "Not recorded";
   const parsed = new Date(`${value}T00:00:00`);
   if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return parsed.toLocaleDateString(
+    i18n.language.startsWith("zh") ? "zh-CN" : "en-US",
+    {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    },
+  );
 }
 
 export function formatTimestamp(value?: string | null): string {
   if (!value) return "Not recorded";
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return parsed.toLocaleString(
+    i18n.language.startsWith("zh") ? "zh-CN" : "en-US",
+    {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    },
+  );
 }
 
 export function ratingClass(rating?: string | null): string {
