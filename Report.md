@@ -701,7 +701,7 @@ regression-tested offline:
   validator additions); it is technically verified offline (validator PASS 42/42;
   governance 48 passed; mapped+focused 1000 passed; strict-offline 4 failed / 1768
   passed with 1 intercepted attempt) and **awaits human acceptance**. Independent
-  Codex verification of the current files recorded the same final result (see
+  OpenCode verification of the current files recorded the same final result (see
   logbook 072).
 
 ### Verification evidence (provided, not re-run in this environment)

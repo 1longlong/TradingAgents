@@ -306,7 +306,7 @@ def _experiment_root(out_root: Path | None = None) -> str:
     against a tree that is not the tree that generated them.
     """
     root = Path(__file__).resolve().parents[1]
-    if not (root / "tradingagents").is_dir():
+    if not (root / "tradingagents").is_dir() and not (root / "src" / "tradingagents").is_dir():
         raise RefusedError(
             f"generator is not inside a repository root: {root} has no "
             f"tradingagents/ package"

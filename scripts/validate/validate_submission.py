@@ -396,6 +396,16 @@ def _manual_requirement_errors(data) -> list[str]:
         if not isinstance(req, dict):
             errors.append(f"{where}: must be a mapping")
             continue
+        if "fit_criteria" in req:
+            # Release 1.1-format row: the real Draft 2020-12 schema (ci path)
+            # and the shared completeness checks own the field contract. Do not
+            # apply the legacy personal fit_criterion/manual field list here.
+            for key in ("type", "statement", "priority", "status"):
+                if key not in req:
+                    errors.append(f"{where}: missing field {key!r}")
+            if not isinstance(req.get("fit_criteria"), list) or not req["fit_criteria"]:
+                errors.append(f"{where}: fit_criteria must be a non-empty list")
+            continue
         for key in REQUIREMENT_KEYS:
             if key not in req:
                 errors.append(f"{where}: missing field {key!r}")
@@ -603,7 +613,7 @@ def check_trace_matrix(errors: list[str], warnings: list[str]) -> None:
     # personal-registry IDs (FR-001, NFR-003) deliberately do NOT match: they are
     # historical aliases mapped in the reconciliation table, not registry rows.
     referenced = set(
-        re.findall(r"\b(?:FR-[A-Z]+|INV-TRD|NFR-[A-Z]+)-[0-9]{3}\b", text)
+        re.findall(r"\b(?:REQ-[A-Z]+(?:-[A-Z0-9]+)?|FR-[A-Z]+|INV-TRD|NFR-[A-Z]+)-[0-9]{3}\b", text)
     )
     for rid in sorted(referenced - known):
         errors.append(f"docs/architecture/trace-matrix.md: unresolved requirement id {rid}")

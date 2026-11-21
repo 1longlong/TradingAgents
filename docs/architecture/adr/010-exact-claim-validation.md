@@ -1,7 +1,7 @@
 # ADR-010 — Exact Claim Date/Value/Unit Validation Against Cited Evidence
 
 - **Status:** Proposed (Stage 3 implementation complete in the working tree;
-  offline verification run; independent Codex review pending; human acceptance
+  offline verification run; independent OpenCode review pending; human acceptance
   NOT claimed). Plan + test cases for the four-item repair were explicitly
   approved by WANG Yiwen (60536848) in the controlling conversation on
   2026-11-11; that approval authorizes the plan and the test cases (cap 0.60)
@@ -30,7 +30,7 @@
   explicitly NON-AUTHORITATIVE (see §D).
 - **Date:** 2026-11-11
 - **Deciders:** CS5351 project (student); coding-agent (OpenCode Builder);
-  independent reviewer (Codex); human review required before acceptance
+  independent reviewer (OpenCode); human review required before acceptance
 - **Trace:** `FR-DDT-002` (valid-new-evidence manifest / citation allowlist),
   `FR-DDT-005` (deterministic ConflictRecord lifecycle — evidence validation),
   `NFR-PIT-001` (point-in-time integrity), `NFR-AUD-001` (auditability),
@@ -397,7 +397,7 @@ Locked `EvidenceRecord`(20)/`SourceAttempt`(7) unchanged.
 ### Status update (2026-11-11) — independent technical review COMPLETE
 
 The Defect-1 origin-authority fix (and its no-resurrection tombstone addendum) has
-been independently verified by Codex: full strict-offline 2190 passed / 0 sockets;
+been independently verified by OpenCode: full strict-offline 2190 passed / 0 sockets;
 focused 18 passed / 0 sockets; the stale-map + state-tombstone reproduction now
 yields `gate_retrusted=False`, `direct_consumer_retrusted=False` (previously
 True/True); Ruff clean; governance 43/43. This is **offline technical review only —
@@ -477,7 +477,7 @@ validation (it was NOT proof that wrong claims were verified).
 - **Scope/limits:** offline, deterministic verification only; extraction ≠ trust;
   arbitrary prose semantics are NOT claimed proven. This is an ADR-010 amendment,
   NOT human acceptance and NOT a live retest.
-- **Status (2026-11-12):** independent Codex technical review **COMPLETE**
+- **Status (2026-11-12):** independent OpenCode technical review **COMPLETE**
   (full strict-offline 2290 passed / 0 sockets; independent OFFLINE replay of the
   actual prior-school Bear text recovers all 8 claims as 1 verified (volume) /
   5 rejected (unknown optional evidence) / 2 unverified (price currency/unit
@@ -579,7 +579,7 @@ rejection (not missing vendor evidence).
 - **Scope/limits:** offline, deterministic verification only. Prior 26-call /
   202,941-token school run remains historical bug evidence; this is NOT a live
   rerun and NOT a claim that all defects are fixed.
-- **Status (2026-11-12):** independent Codex FINAL technical review **COMPLETE**
+- **Status (2026-11-12):** independent OpenCode FINAL technical review **COMPLETE**
   (covered OFFLINE scope): full strict-offline 2367 passed / 0 sockets; focused
   specified 8 modules 556 / 0 sockets (different subset from the 716 related suite;
   not conflated); exhaustive 4320 format cases (720 field orders × 6 formats incl.

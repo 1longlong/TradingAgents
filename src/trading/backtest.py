@@ -1,5 +1,7 @@
 """Walk-forward calendar and deterministic decision/quote providers."""
 
+# ADR-012-error-handling-merge-integration.md: preserve INV-TRD-001/002 and NFR-TRD-001.
+
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator, Mapping
@@ -133,6 +135,7 @@ class MockDecisionProvider:
         self._quantity = (
             to_decimal(quantity, field="quantity") if quantity is not None else None
         )
+        self._schedule: dict[date, DecisionAction] | None
         if isinstance(decisions, Mapping):
             self._schedule = {
                 _coerce_day_key(key): _coerce_action(value)
@@ -206,6 +209,7 @@ class MockQuoteProvider:
     """Fixed daily closes; timestamps come from the simulation clock."""
 
     def __init__(self, prices: Mapping[date, Decimal] | Decimal) -> None:
+        self._prices: dict[date, Decimal] | None
         if isinstance(prices, Mapping):
             self._prices = {
                 _coerce_day_key(key): to_decimal(value, field="price")

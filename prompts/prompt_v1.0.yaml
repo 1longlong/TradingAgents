@@ -8,7 +8,7 @@
 
 version: "v1.0"
 phase: "analysis"
-role: "coding agent operating in the downstream TradingAgents fork under CS5351 governance"
+role: "OpenCode operating in the downstream TradingAgents fork under CS5351 governance"
 
 # Charge: read-only analysis, produce frozen requirements, no code changes.
 charge: |

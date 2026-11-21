@@ -8,8 +8,13 @@ contains no test code.
 
 Run the subsystem's live smoke test only with explicit opt-in:
 
+# Live and external-service tests
+
+External-service tests live here and require explicit network, credential and
+cost authorization before execution. Offline runs must not be reported as live
+verification. From the repository root, when separately authorized:
 ```bash
-RUN_LIVE_TRADING_TESTS=1 pytest tests/trading/live -q -s
+python -m pytest -q test/live
 ```
 
 That smoke test executes the real graph against historical quotes while keeping
@@ -58,3 +63,14 @@ pytest -q        # no network, no paid call
 See [`test/offline/README.md`](../offline/README.md) for the offline suite and
 [`docs/code-governance/verification-constraints.md`](../../docs/code-governance/verification-constraints.md)
 for the evidence rules.
+
+## Simulated-trading smoke test
+
+After separate external-service and cost authorization, the imported three-day
+simulated-execution smoke test is explicitly enabled with:
+
+```bash
+RUN_LIVE_TRADING_TESTS=1 python -m pytest -q test/live/trading -s
+```
+
+It remains opt-in and is not part of the default offline regression.

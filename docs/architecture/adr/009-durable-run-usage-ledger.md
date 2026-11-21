@@ -1,7 +1,7 @@
 # ADR-009 — Durable Run-Scoped Usage Ledger and Truthful Whole-Run Aggregation
 
 - **Status:** Proposed (Stage 2 implementation complete in the working tree;
-  offline verification run; independent Codex review pending; human acceptance
+  offline verification run; independent OpenCode review pending; human acceptance
   NOT claimed). Plan + test cases for the four-item repair were explicitly
   approved by WANG Yiwen (60536848) in the controlling conversation on
   2026-11-11; that approval authorizes the plan and the test cases ONLY and is
@@ -18,7 +18,7 @@
   acceptance.
 - **Date:** 2026-11-11
 - **Deciders:** CS5351 project (student); coding-agent (OpenCode Builder);
-  independent reviewer (Codex); human review required before acceptance
+  independent reviewer (OpenCode); human review required before acceptance
 - **Trace:** `FR-DDT-003` (budget-safe termination with summary reserve),
   `NFR-BUD-001` (budget safety), `NFR-AUD-001` (auditability), `FR-DQG-005`
   (report artifacts), `NFR-BC-001` (backward compatibility), `INV-6`/`INV-7`/
@@ -289,7 +289,7 @@ settlement, cap 0.60. Offline only; NOT a live proof.
 ### Status update (2026-11-11) — independent technical review COMPLETE
 
 The Defect-2 structured-raw-usage fix (include_raw settlement + binding-only
-fallback + mixed aggregate label) has been independently verified by Codex: full
+fallback + mixed aggregate label) has been independently verified by OpenCode: full
 strict-offline 2190 passed / 0 sockets; focused 18 passed / 0 sockets; Ruff clean;
 governance 43/43. The prior independent block-fixture metadata replay (22,600
 accounted = 22,600 expected, 6 provider calls, no double count) remains **OFFLINE

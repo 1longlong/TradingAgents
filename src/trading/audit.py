@@ -1,5 +1,7 @@
 """Append-only, hash-chained JSONL audit log."""
 
+# ADR-012-error-handling-merge-integration.md: preserve INV-TRD-001/002 and NFR-TRD-001.
+
 from __future__ import annotations
 
 import fcntl
@@ -163,7 +165,7 @@ class AuditLog:
             os.O_WRONLY | os.O_CREAT | os.O_APPEND, fcntl.LOCK_EX
         ) as fd:
             self._ensure_verified_locked()
-            core = {
+            core: dict[str, Any] = {
                 "event_id": event_id,
                 "run_id": run_id,
                 "timestamp": timestamp.isoformat(),

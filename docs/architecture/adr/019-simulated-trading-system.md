@@ -53,3 +53,15 @@ reset persisted state without modifying the frozen graph.
   reset removes portfolio state but never truncates history.
 - There is no real market execution, so live tests validate orchestration and
   audit integrity rather than broker behaviour.
+
+
+## Web integration refinement — 2026-11-21
+
+The user explicitly authorizes web-simulation-20261121-v1: frontend and necessary
+interfaces around the existing deterministic simulated-trading core. The
+blueprint/review memo define the bounded API, ownership, persistence, single-slot
+coordination, human-approval and negative-test contracts. Core models, clocks,
+sizing, pipeline, engine-issued authorization, audit chain and state store remain
+authoritative; no broker, safety/core rewrite or automatic human approval is
+introduced. Pending approval objects remain process-owned and cannot be restored
+from client JSON. Only one final verification phase is requested.

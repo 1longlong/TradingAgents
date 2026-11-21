@@ -1,3 +1,19 @@
+> Current policy — 2026-11-21 (ADR-012-error-handling-merge-integration.md):
+> human merge reviews belong to GitHub branch protection. Custom test-only commit
+> chronology and special approval markers are retired. Semantic evaluation with
+> an absent/empty base policy reports NOT RUN without blocking; partial/invalid
+> configuration and configured failures block. AI-use coverage, schema, static,
+> security, regression and aggregate checks remain blocking. The matrix below
+> is the imported historical design; its ACTUAL/TARGET labels do not describe
+> the current workflow. See verification-constraints.md for the active policy.
+
+> Integration note — 2026-11-19: the observations and proposals below describe
+> the imported release snapshot. The current workflow retains the WebUI
+> `blocking-gate` and adds the release governance job to its prerequisites. The
+> unified registry has 48 requirements in format 1.1. Both local schema entry
+> points have passed; this is not evidence of remote GitHub CI or branch
+> protection. Historical counts and debt below keep their recorded scope.
+
 # CI Gate Matrix — Implementation-Ready Design (DOCUMENT ONLY)
 
 > **Status:** This document is a **design/specification**, not enforcement.
@@ -309,8 +325,9 @@ a category with no genuine instance is marked so — no debt is invented.
 
 ## Source/test folder mapping
 
-The approved simulated-trading subsystem uses `src/trading/` and `src/safety/`
-as source and `tests/trading/` as its canonical tests. Main-system source
-remains `tradingagents/` + `cli/`, and all tests are under `tests/`. This is an
-explicitly approved independent-subsystem exception, not a relocation or
-duplication of the main-system trees.
+The merged source packages are under `src/`: `tradingagents/`, `cli/`,
+`tradingagents_web/`, and the imported `trading/` and `safety/` subsystem.
+Deterministic tests live under `test/offline/`, including `trading/`; external-
+service tests live under `test/live/`, including the opt-in trading smoke test.
+No duplicate root source/test tree is introduced. Historical root paths in
+older evidence above do not redefine this current layout.

@@ -1,0 +1,515 @@
+# ADR-012-error-handling-merge-integration.md: contract typing/security, NFR-BC-001, INV-1.
+# TradingAgents/graph/setup.py
+
+from collections.abc import Hashable
+from typing import Any
+
+from langgraph.graph import END, START, StateGraph
+from langgraph.prebuilt import ToolNode
+
+from tradingagents.agents import (
+    create_aggressive_debator,
+    create_bear_researcher,
+    create_bull_researcher,
+    create_conservative_debator,
+    create_fundamentals_analyst,
+    create_market_analyst,
+    create_msg_delete,
+    create_neutral_debator,
+    create_news_analyst,
+    create_portfolio_manager,
+    create_research_manager,
+    create_sentiment_analyst,
+    create_sentiment_prefetch_node,
+    create_trader,
+)
+from tradingagents.agents.utils.agent_states import AgentState
+from tradingagents.dataflows.config import get_config
+from tradingagents.debate.confidence_policy import (
+    create_confidence_state_sanitize_node,
+    with_sanitized_state,
+)
+from tradingagents.debate.config import (
+    DEFAULT_DEBATE_TERMINATION_CONFIG,
+    DebateTerminationConfig,
+)
+from tradingagents.debate.evaluator_node import create_debate_evaluator_node
+from tradingagents.observability import (
+    agent_id_for_node,
+    analyst_agent_id_for_key,
+    attrib_agent_node,
+    attrib_tool_round,
+)
+
+from .analyst_execution import build_analyst_execution_plan
+from .conditional_logic import ConditionalLogic
+from .data_quality_gate import create_data_quality_gate_node
+from .evidence_tool_node import EvidenceCapturingAnalystNode, EvidenceCapturingToolNode
+from .fundamentals_governance import parse_fundamentals_tool_governance
+from .fundamentals_tool_governance import create_fundamentals_governance_nodes
+from .market_governance import parse_market_tool_governance
+from .market_tool_governance import create_market_governance_nodes
+from .news_governance import parse_news_tool_governance
+from .news_tool_governance import create_news_governance_nodes
+from .sentiment_prefetch import PREFETCH_NODE, parse_sentiment_prefetch
+
+# Every target a shared conditional router can return. Each edge driven by the
+# router maps all of them, so a fall-through return (e.g. under prompt/i18n/
+# refactor drift in the speaker labels) can never hit a missing path_map entry
+# and crash LangGraph mid-run (#1088).
+DEBATE_PATH_MAP: dict[Hashable, str] = {
+    "Bull Researcher": "Bull Researcher",
+    "Bear Researcher": "Bear Researcher",
+    "Research Manager": "Research Manager",
+}
+# The Debate Evaluator routes back to a speaker (continue) or to the Research
+# Manager (summarize/stop). Complete map so a fall-through return can never hit
+# a missing entry (#1088).
+DEBATE_EVALUATOR_PATH_MAP: dict[Hashable, str] = {
+    "Bull Researcher": "Bull Researcher",
+    "Bear Researcher": "Bear Researcher",
+    "Research Manager": "Research Manager",
+}
+# After a researcher: either the next debate step (Bear / Debate Evaluator) or a
+# safe skip to the Research Manager when a pre-call budget guard refused the
+# call. Complete map so a fall-through never crashes LangGraph (#1088).
+RESEARCHER_STEP_PATH_MAP: dict[Hashable, str] = {
+    "Bear Researcher": "Bear Researcher",
+    "Debate Evaluator": "Debate Evaluator",
+    "Research Manager": "Research Manager",
+}
+RISK_ANALYSIS_PATH_MAP: dict[Hashable, str] = {
+    "Aggressive Analyst": "Aggressive Analyst",
+    "Conservative Analyst": "Conservative Analyst",
+    "Neutral Analyst": "Neutral Analyst",
+    "Portfolio Manager": "Portfolio Manager",
+}
+# The Data Quality Gate routes to exactly two targets: Bull Researcher (the
+# gate deemed the market data normal or degraded, so the debate may proceed with
+# restrictions) or Research Manager (the gate blocked the debate, forcing an
+# evidence-insufficient restricted conclusion). Complete map so a fall-through
+# can never hit a missing entry (#1088).
+GATE_PATH_MAP: dict[Hashable, str] = {
+    "Bull Researcher": "Bull Researcher",
+    "Research Manager": "Research Manager",
+}
+
+
+class GraphSetup:
+    """Handles the setup and configuration of the agent graph."""
+
+    def __init__(
+        self,
+        quick_thinking_llm: Any,
+        deep_thinking_llm: Any,
+        tool_nodes: dict[str, ToolNode],
+        conditional_logic: ConditionalLogic,
+        data_quality_gate_factory: Any = None,
+        debate_termination_config: DebateTerminationConfig | None = None,
+        debate_evaluator_factory: Any = None,
+        config: dict | None = None,
+    ):
+        """Initialize with required components.
+
+        The four optional arguments are keyword arguments, so every existing
+        caller that passes only the four required components keeps working, and
+        a positional call in the Release argument order also stays working.
+
+        ``data_quality_gate_factory`` is an optional node factory (defaults to
+        :func:`create_data_quality_gate_node`) so tests can inject a fixed
+        snapshot / deterministic clock without touching a network. It must be
+        callable with no arguments and return a LangGraph node.
+
+        ``debate_termination_config`` is the validated Phase 3B configuration
+        group; when ``None`` the built-in defaults are used and the evaluator
+        resolves the config from the state on first run. ``debate_evaluator_factory``
+        is an optional node factory so tests can inject a deterministic evaluator
+        node; it defaults to :func:`create_debate_evaluator_node`.
+
+        ``config`` carries the ablation feature switches. It defaults to None so
+        existing callers and tests keep working; a missing key is treated as
+        enabled, which is the shipped behaviour.
+        """
+        self.quick_thinking_llm = quick_thinking_llm
+        self.deep_thinking_llm = deep_thinking_llm
+        self.tool_nodes = tool_nodes
+        self.conditional_logic = conditional_logic
+        # The run config decides whether market tool governance is on. ``None``
+        # falls back to the configuration the run installed (``get_config``).
+        self.config: dict[str, Any] = config or {}
+        self.debate_termination_config = (
+            debate_termination_config or DEFAULT_DEBATE_TERMINATION_CONFIG
+        )
+        self.data_quality_gate_node = (
+            data_quality_gate_factory()
+            if data_quality_gate_factory is not None
+            else create_data_quality_gate_node()
+        )
+        self.debate_evaluator_node = (
+            debate_evaluator_factory()
+            if debate_evaluator_factory is not None
+            else create_debate_evaluator_node(config=self.debate_termination_config)
+        )
+
+    def setup_graph(
+        self, selected_analysts=("market", "social", "news", "fundamentals")
+    ):
+        """Set up and compile the agent workflow graph.
+
+        Args:
+            selected_analysts (list): List of analyst types to include. Options are:
+                - "market": Market analyst
+                - "social": Social media analyst
+                - "news": News analyst
+                - "fundamentals": Fundamentals analyst
+        """
+        plan = build_analyst_execution_plan(selected_analysts)
+
+        # CAND-01: only meaningful together with the structured switch, so an
+        # ablation arm cannot enable it on a free-text analyst.
+        single_pass = (
+            self.config.get("single_pass_finalization_enabled", False)
+            and self.config.get("structured_analyst_output_enabled", True)
+        )
+
+        # Analyst tool governance is opt-in per analyst (default off), each with
+        # its own config section. With one on, that analyst routes through its
+        # own prepare/execute/wrap-up nodes; nothing else in the graph changes,
+        # and the other analysts stay on today's path.
+        run_config = get_config() if self.config is None else self.config
+        governed = {
+            "market": parse_market_tool_governance(run_config).enabled
+            and any(spec.key == "market" for spec in plan.specs),
+            "fundamentals": parse_fundamentals_tool_governance(run_config).enabled
+            and any(spec.key == "fundamentals" for spec in plan.specs),
+            "news": parse_news_tool_governance(run_config).enabled
+            and any(spec.key == "news" for spec in plan.specs),
+        }
+        governance_nodes: dict[str, dict[str, Any]] = {}
+        if governed["market"]:
+            governance_nodes["market"] = create_market_governance_nodes(
+                llm=self.quick_thinking_llm, tool_node=self.tool_nodes["market"]
+            )
+        if governed["fundamentals"]:
+            governance_nodes["fundamentals"] = create_fundamentals_governance_nodes(
+                llm=self.quick_thinking_llm, tool_node=self.tool_nodes["fundamentals"]
+            )
+        if governed["news"]:
+            governance_nodes["news"] = create_news_governance_nodes(
+                llm=self.quick_thinking_llm, tool_node=self.tool_nodes["news"]
+            )
+
+        # The sentiment prefetch split (opt-in, default off) adds one node in
+        # front of the sentiment analyst: it saves the three source blocks, and
+        # the analyst then consumes them instead of fetching. With it off the
+        # analyst is its original single node.
+        prefetch_split = (
+            parse_sentiment_prefetch(run_config).enabled
+            and any(spec.key == "social" for spec in plan.specs)
+        )
+
+        analyst_factories = {
+            "market": lambda: create_market_analyst(
+                self.quick_thinking_llm,
+                structured=self.config.get("structured_analyst_output_enabled", True),
+                single_pass=single_pass,
+            ),
+            "social": lambda: create_sentiment_analyst(
+                self.quick_thinking_llm, prefetch_split=prefetch_split
+            ),
+            "news": lambda: create_news_analyst(
+                self.quick_thinking_llm,
+                batch_macro=self.config.get("batch_macro_enabled", True),
+                structured=self.config.get("structured_analyst_output_enabled", True),
+                single_pass=single_pass,
+            ),
+            "fundamentals": lambda: create_fundamentals_analyst(
+                self.quick_thinking_llm,
+                structured=self.config.get("structured_analyst_output_enabled", True),
+                single_pass=single_pass,
+            ),
+        }
+
+        # Create researcher and manager nodes
+        bull_researcher_node = create_bull_researcher(
+            self.quick_thinking_llm, self.debate_termination_config
+        )
+        bear_researcher_node = create_bear_researcher(
+            self.quick_thinking_llm, self.debate_termination_config
+        )
+        research_manager_node = create_research_manager(self.deep_thinking_llm)
+        trader_node = create_trader(self.quick_thinking_llm)
+
+        # Create risk analysis nodes
+        aggressive_analyst = create_aggressive_debator(self.quick_thinking_llm)
+        neutral_analyst = create_neutral_debator(self.quick_thinking_llm)
+        conservative_analyst = create_conservative_debator(self.quick_thinking_llm)
+        portfolio_manager_node = create_portfolio_manager(self.deep_thinking_llm)
+
+        # Create workflow
+        workflow = StateGraph(AgentState)
+
+        def wrap_agent_node(node_name: str, fn):
+            """Attach the stable agent id to a business-agent node."""
+            agent_id = agent_id_for_node(node_name)
+            if agent_id is None:
+                return fn
+            return attrib_agent_node(agent_id, fn, node_name)
+
+        def wrap_tool_round(node_name: str, tool_node, *, key: str | None = None):
+            """Scope a ToolNode to the analyst that owns it and record rounds.
+
+            ``node_name`` is the owning analyst's graph node name; ``key`` is the
+            analyst's wire key (``market``/``news``/…), used to resolve the agent
+            id for the spec-keyed analyst nodes whose graph names differ from the
+            user-facing labels.
+            """
+            agent_id = agent_id_for_node(node_name)
+            if agent_id is None and key is not None:
+                agent_id = analyst_agent_id_for_key(key)
+            if agent_id is None:
+                return tool_node
+            return attrib_tool_round(agent_id, tool_node)
+
+        # Add analyst nodes to the graph. Each analyst is the evidence-capturing
+        # wrapper (ADR-008: captures made *inside* the analyst are persisted at
+        # the post-analyst checkpoint) inside the attribution wrapper, so the
+        # provider calls it makes are attributed to its stable agent id and its
+        # node timing is recorded. Both wrappers pass the state through
+        # unchanged; the scan recovers the tool node's spec key.
+        tool_keys = {id(node): key for key, node in self.tool_nodes.items()}
+        for spec in plan.specs:
+            workflow.add_node(
+                spec.agent_node,
+                wrap_agent_node(
+                    spec.agent_node,
+                    EvidenceCapturingAnalystNode(
+                        analyst_factories[spec.key](), name=spec.agent_node),
+                ),
+            )
+            workflow.add_node(spec.clear_node, create_msg_delete())
+            # Wrap the tool node so captured vendor evidence is written into
+            # state at the tool-boundary checkpoint itself (ADR-008 durability;
+            # the ContextVar alone is not durable and the analyst loop means a
+            # later clear node is not sufficient), inside the attribution wrapper
+            # that scopes the round to the owning analyst and records it.
+            tool_node = self.tool_nodes[spec.key]
+            key = tool_keys.get(id(tool_node), spec.key) if tool_keys else spec.key
+            workflow.add_node(
+                spec.tool_node,
+                wrap_tool_round(
+                    spec.agent_node,
+                    EvidenceCapturingToolNode(tool_node, name=spec.tool_node),
+                    key=key,
+                ),
+            )
+            if spec.key == "social" and prefetch_split:
+                workflow.add_node(
+                    PREFETCH_NODE, EvidenceCapturingAnalystNode(
+                        create_sentiment_prefetch_node(), name=PREFETCH_NODE
+                    ),
+                )
+            if spec.key in governance_nodes:
+                prefix = spec.key
+                workflow.add_node(f"{prefix}_tool_prepare", governance_nodes[spec.key]["prepare"])
+                workflow.add_node(
+                    f"{prefix}_tool_execute", EvidenceCapturingAnalystNode(
+                        governance_nodes[spec.key]["execute"], name=f"{prefix}_tool_execute"
+                    ),
+                )
+                workflow.add_node(f"{prefix}_finish", governance_nodes[spec.key]["finish"])
+                workflow.add_node(f"{prefix}_wrap_up", governance_nodes[spec.key]["wrap_up"])
+
+        # Add other nodes. Every POST-gate node is wrapped so the analyst reports /
+        # plans / debate+risk histories interpolated into its prompt are capped on a
+        # degraded run BEFORE the model reads them (ADR-011). The reports are written
+        # by the analysts BEFORE the gate verdict is known, so this read-boundary
+        # sanitizer — not an analyst-time rewrite — is what keeps a raw over-cap
+        # confidence out of downstream prompts on every entry path (graph, direct
+        # GraphSetup, API and CLI). A no-op on a normal/blocked run.
+        workflow.add_node("Data Quality Gate", self.data_quality_gate_node, input_schema=AgentState)
+        # A deterministic POST-gate node that PERSISTS the capped analyst-report /
+        # plan / history fields (and turn/stance numeric confidence) back into the
+        # state, so the RETURNED state and any _log_state / public JSON export carry
+        # the effective values — not only the protected model prompts. No model call.
+        workflow.add_node(
+            "Confidence Sanitizer", create_confidence_state_sanitize_node()
+        )
+        workflow.add_node(
+            "Bull Researcher",
+            wrap_agent_node("Bull Researcher", with_sanitized_state(bull_researcher_node, name="bull")),
+        )
+        workflow.add_node(
+            "Bear Researcher",
+            wrap_agent_node("Bear Researcher", with_sanitized_state(bear_researcher_node, name="bear")),
+        )
+        workflow.add_node(
+            "Debate Evaluator",
+            with_sanitized_state(self.debate_evaluator_node, name="debate_evaluator"),
+        )
+        workflow.add_node(
+            "Research Manager",
+            wrap_agent_node(
+                "Research Manager",
+                with_sanitized_state(research_manager_node, name="research_manager"),
+            ),
+        )
+        workflow.add_node(
+            "Trader", wrap_agent_node("Trader", with_sanitized_state(trader_node, name="trader"))
+        )
+        workflow.add_node(
+            "Aggressive Analyst",
+            wrap_agent_node(
+                "Aggressive Analyst",
+                with_sanitized_state(aggressive_analyst, name="aggressive"),
+            ),
+        )
+        workflow.add_node(
+            "Neutral Analyst",
+            wrap_agent_node(
+                "Neutral Analyst", with_sanitized_state(neutral_analyst, name="neutral")
+            ),
+        )
+        workflow.add_node(
+            "Conservative Analyst",
+            wrap_agent_node(
+                "Conservative Analyst",
+                with_sanitized_state(conservative_analyst, name="conservative"),
+            ),
+        )
+        workflow.add_node(
+            "Portfolio Manager",
+            wrap_agent_node(
+                "Portfolio Manager",
+                with_sanitized_state(portfolio_manager_node, name="portfolio"),
+            ),
+        )
+
+        def entry_node(spec) -> str:
+            # The sentiment analyst is always entered through its prefetch node
+            # when the split is on -- first in the plan or behind another
+            # analyst -- because that node is what saves its sources.
+            if spec.key == "social" and prefetch_split:
+                return PREFETCH_NODE
+            return spec.agent_node
+
+        # Define edges
+        # Start with the first analyst
+        workflow.add_edge(START, entry_node(plan.specs[0]))
+
+        # Connect analysts in sequence
+        for i, spec in enumerate(plan.specs):
+            current_analyst = spec.agent_node
+            current_tools = spec.tool_node
+            current_clear = spec.clear_node
+
+            if spec.key in governed and governed[spec.key]:
+                # A governed analyst. The analyst either asked for tools
+                # (prepare registers the round) or stopped (wrap-up). The
+                # prepare node then either lets it run or, once the allowance is
+                # spent, sends it to the single wrap-up. The path never
+                # re-enters the analyst's plain tool node.
+                prefix = spec.key
+                workflow.add_conditional_edges(
+                    current_analyst,
+                    getattr(
+                        self.conditional_logic, f"should_continue_{prefix}_governed"
+                    ),
+                    [
+                        f"{prefix}_tool_prepare",
+                        f"{prefix}_wrap_up",
+                        f"{prefix}_finish",
+                    ],
+                )
+                workflow.add_conditional_edges(
+                    f"{prefix}_tool_prepare",
+                    getattr(
+                        self.conditional_logic, f"should_execute_{prefix}_prepared"
+                    ),
+                    [f"{prefix}_tool_execute", f"{prefix}_wrap_up", current_analyst],
+                )
+                # After execute the batch is complete and paired; only now is
+                # the next step decided. A spent allowance wraps up directly
+                # instead of asking the analyst again.
+                workflow.add_conditional_edges(
+                    f"{prefix}_tool_execute",
+                    getattr(
+                        self.conditional_logic,
+                        f"should_continue_{prefix}_after_execute",
+                    ),
+                    [current_analyst, f"{prefix}_wrap_up"],
+                )
+                workflow.add_edge(f"{prefix}_finish", current_clear)
+                workflow.add_edge(f"{prefix}_wrap_up", current_clear)
+            else:
+                # Add conditional edges for current analyst
+                workflow.add_conditional_edges(
+                    current_analyst,
+                    getattr(self.conditional_logic, f"should_continue_{spec.key}"),
+                    [current_tools, current_clear],
+                )
+                workflow.add_edge(current_tools, current_analyst)
+
+            # Connect to next analyst or to the Data Quality Gate if this is the
+            # last analyst. The gate then conditionally routes to Bull Researcher
+            # (normal/degraded) or straight to Research Manager (blocked).
+            if i < len(plan.specs) - 1:
+                workflow.add_edge(current_clear, entry_node(plan.specs[i + 1]))
+            else:
+                workflow.add_edge(current_clear, "Data Quality Gate")
+
+        if prefetch_split:
+            # Prefetch has no branch and no tools: success flows straight into
+            # the generation node, and a failure propagates out (nothing saved).
+            workflow.add_edge(PREFETCH_NODE, "Sentiment Analyst")
+
+        # After the gate, persist the capped report/history/plan deltas (degraded)
+        # then route to the Bull Researcher (normal/degraded) or the Research
+        # Manager (blocked). The sanitizer is a no-op on a normal/blocked run and the
+        # router is re-evaluated on the same (unchanged-verdict) state, failing
+        # closed in the router (#1088).
+        workflow.add_edge("Data Quality Gate", "Confidence Sanitizer")
+        workflow.add_conditional_edges(
+            "Confidence Sanitizer",
+            self.conditional_logic.should_continue_after_data_gate,
+            GATE_PATH_MAP,
+        )
+
+        # The debate runs Bull -> Bear -> Debate Evaluator, and the evaluator is
+        # the single authoritative dynamic router (Phase 3B): it either returns
+        # to a speaker (continue) or routes to the Research Manager
+        # (summarize/stop). The old per-turn fixed-count router is retained as a
+        # helper for the disabled baseline mode but is not a graph edge, so the
+        # evaluator owns every routing decision (#1088).
+        # Pre-call budget guards may refuse an optional call before it runs; the
+        # conditional steps below let a refused Bull/Bear skip safely to the
+        # Research Manager with budget_exhausted instead of executing over
+        # budget (the normal route is Bull -> Bear -> Debate Evaluator).
+        workflow.add_conditional_edges(
+            "Bull Researcher",
+            self.conditional_logic.should_continue_after_bull,
+            RESEARCHER_STEP_PATH_MAP,
+        )
+        workflow.add_conditional_edges(
+            "Bear Researcher",
+            self.conditional_logic.should_continue_after_bear,
+            RESEARCHER_STEP_PATH_MAP,
+        )
+        workflow.add_conditional_edges(
+            "Debate Evaluator",
+            self.conditional_logic.should_continue_after_debate_evaluator,
+            DEBATE_EVALUATOR_PATH_MAP,
+        )
+        workflow.add_edge("Research Manager", "Trader")
+        workflow.add_edge("Trader", "Aggressive Analyst")
+        # All three risk edges share the complete RISK_ANALYSIS_PATH_MAP (#1088).
+        for risk_node in ("Aggressive Analyst", "Conservative Analyst", "Neutral Analyst"):
+            workflow.add_conditional_edges(
+                risk_node,
+                self.conditional_logic.should_continue_risk_analysis,
+                RISK_ANALYSIS_PATH_MAP,
+            )
+
+        workflow.add_edge("Portfolio Manager", END)
+
+        return workflow
