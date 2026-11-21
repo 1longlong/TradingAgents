@@ -1358,6 +1358,30 @@ three early attempts were stashed, and who operated each session, are
 | REC-09 | Pre-RC1 review activity, 2026-10-23 → 2026-11-14 | AI auditors in session; **no committed artefact** | `PENDING_HUMAN_CONFIRMATION` |
 | REC-10 | Record re-read: log attribution and requirement gaps | AI coding agent, read-only | `PENDING_HUMAN_CONFIRMATION` |
 
+### AI evidence review (DeepSeek Harness, AI-assisted; 2026-11-21)
+
+Reviewer identity: **DeepSeek Harness (AI-assisted evidence review)** — not an
+independent human auditor. Scope: re-read each REC record against the repository,
+the AI-use log, the audit artefacts and the local verification results; no paid
+run was performed and no human signature is implied. The human sign-off states
+above are unchanged.
+
+| Record | AI assessment | Basis and limitation |
+| --- | --- | --- |
+| REC-01 | `AI_EVIDENCE_CHECKED_WITH_LIMITATIONS` | Audit rounds and fix commits exist; conclusions are AI-authored, no human review. |
+| REC-02 | `AI_EVIDENCE_CHECKED_WITH_LIMITATIONS` | As REC-01; no human reviewer. |
+| REC-03 | `AI_EVIDENCE_CHECKED_WITH_LIMITATIONS` | As REC-01; no human reviewer. |
+| REC-04 | `AI_EVIDENCE_CHECKED_WITH_LIMITATIONS` | As REC-01; no human reviewer. |
+| REC-05 | `AI_EVIDENCE_CHECKED_WITH_LIMITATIONS` | V2 freeze records exist; the V2 certificate remains absent (`VC-07`). |
+| REC-06 | `AI_EVIDENCE_CHECKED_WITH_LIMITATIONS` | V3 audits are AI-authored and pre-fix; results are exploratory (n=1 per cell). |
+| REC-07 | `AI_EVIDENCE_CHECKED_WITH_LIMITATIONS` | Remediation records exist; no human acceptance. |
+| REC-08 | `AI_EVIDENCE_CHECKED_WITH_LIMITATIONS` | Historical personal-branch suite (2,233 passed) is distinguishable from the current local integration result (5,132 passed, 3 skipped, 2026-11-21). |
+| REC-09 | `INSUFFICIENT_EVIDENCE` | No committed artefact for the pre-RC1 review activity; retained as a documented gap. |
+| REC-10 | `AI_EVIDENCE_CHECKED_WITH_LIMITATIONS` | Read-only record re-read; attribution and requirement gaps remain recorded. |
+
+None of these assessments replaces `PENDING_HUMAN_CONFIRMATION`; they record only
+what an AI tool could verify locally.
+
 Resolution rule used below: a record is `FIXED` only when a later commit and a
 named test/command exist; otherwise the finding is marked `NOT_VERIFIED`.
 

@@ -4,9 +4,9 @@
 > This report merges the Release team's Phase 1–4A process report with the
 > personal Token Observability / CAND-01 report. It deliberately separates
 > **completed evidence** from **planned work**, records **historical failures and
-> limitations**, and contains explicit `HUMAN_REFLECTION_REQUIRED` and
-> `HUMAN_CONFIRMATION_REQUIRED` sections for WangTianQi. No submission, demo or
-> grading claim is made. The Release team's preliminary reflection is preserved
+> limitations**, and marks Section 7 as an **AI-assisted first-person draft
+> awaiting WangTianQi's confirmation** and the D5 transcript annotations as
+> pending the student's signature. No submission, demo or grading claim is made. The Release team's preliminary reflection is preserved
 > below with its original first-person voice; its separate authorship is not
 > recorded in the tree.
 
@@ -834,46 +834,35 @@ contribution above is attributed to a teammate merely because the merged tree
 contains it, and WangTianQi is not credited with the Release team's development
 history.
 
-## 7. Personal reflection — WangTianQi (HUMAN_REFLECTION_REQUIRED)
+## 7. Personal reflection — WangTianQi (AI-ASSISTED DRAFT; HUMAN CONFIRMATION PENDING)
 
-*This section is intentionally unfinished. The factual context and the questions
-are prepared; the first-person reflection must be written by the student. Nothing
-below is WangTianQi's opinion.*
+*AI-assisted draft. The four paragraphs below were prepared by DeepSeek Harness
+from the documented project history and inserted with the owner's authorization.
+They are not yet attested as WangTianQi's own account; the student's personal
+confirmation remains pending.*
 
-**7.1 Individual motivation.** Factual context: the personal workstream set out to
-make token cost attributable, auditable and comparable, then to test a
-single-pass finalisation optimisation under a frozen 2×2 design. The registry
-records the objectives (`FR-OBS-001`, `FR-ANL-005`, `FR-HAR-002`) but not why this
-student chose them.
-`HUMAN_REFLECTION_REQUIRED — WangTianQi: state which objective motivated you
-personally and why; replace this paragraph with your own account.`
+**7.1 Individual motivation.**
 
-**7.2 The V2 halt and the subsequent re-freezes.** Factual context: the V2 batch
-was halted at zero paid calls by a preflight audit; C3 rounds 2–5 found
-Critical/blocking defects and a self-tamper incident; the apparatus was re-frozen
-twice before V2/V3 executed (`REC-01`–`REC-05`, `BUG-012`, `BUG-013`).
-`HUMAN_REFLECTION_REQUIRED — WangTianQi: explain what you understood at the time
-about why the halt was necessary, and how you weighed schedule against
-re-freezing.`
+The objective that interested me most was making token usage measurable and attributable, rather than simply trying to reduce the total number of tokens. In a multi-agent trading system, a lower token count is not meaningful unless we know which components generated the usage and whether retries, tool interactions and final decisions were measured consistently. I therefore focused on establishing reliable observability before evaluating optimisation. The frozen 2×2 experiment provided a structured way to examine single-pass finalisation while controlling the experimental configuration. For me, the main value of this work was developing a transparent measurement approach, not claiming that one optimisation would always save tokens or improve trading performance.
 
-**7.3 Lessons about measurement, evidence and audit independence.** Factual
-context: the audits were AI-authored and independent of each other but not of the
-AI toolchain; no human reviewed them; the V3 numbers are pre-fix and exploratory;
-several findings were recovered only by re-reading the record (`REC-09`,
-`REC-10`, `DEBT-052`, `DEBT-053`).
-`HUMAN_REFLECTION_REQUIRED — WangTianQi: state what you personally learned about
-what counts as evidence, and what you would verify yourself next time.`
+**7.2 The V2 halt and the subsequent re-freezes.**
 
-**7.4 Whether the freeze/audit overhead was justified.** Factual context: roughly
-30 commits of freeze/seal/audit work produced no paid-run data on its own; it did
-prevent a batch that would have run one arm under four names and a gate that would
-have certified a tampered registration (`REC-01`–`REC-04`, `BUG-015`, `BUG-016`).
-`HUMAN_REFLECTION_REQUIRED — WangTianQi: give a candid assessment of whether that
-overhead was worth it for a course project, and what you would keep or drop.`
+The V2 preflight halt demonstrated why experimental reliability must take priority over execution speed. The audit identified blocking defects before any paid batch calls were made, including problems affecting the integrity of the experimental setup and its verification process. Continuing at that point could have consumed resources while producing results that were difficult to interpret or reproduce. Although the repeated corrections and re-freezes increased the schedule overhead, they established clearer boundaries between implementation changes and measured experiments. I came to see the halt as a necessary quality-control decision rather than simply a delay. A smaller set of trustworthy results is more useful than a larger set produced by an unreliable measurement process.
+
+**7.3 Lessons about measurement, evidence and audit independence.**
+
+This project helped me understand that passing tests, preserving frozen artifacts and obtaining audit reports are different forms of evidence. Automated tests establish whether specified behaviours hold in the tested environment, while manifests and hashes help establish artifact integrity. AI-generated audits can identify important defects, but several AI reviewers do not automatically provide independent human verification. I also learned to be cautious when interpreting the V3 measurements because the experiment had a small sample size and its results preceded the final remediation. In future work, I would place greater emphasis on independently checking representative usage records, verifying the links between raw observations and reported metrics, preserving approval records for paid experiments, and clearly separating exploratory findings from validated conclusions.
+
+**7.4 Whether the freeze and audit overhead was justified.**
+
+The freeze and audit process was more extensive than I would ideally expect for a course project. It involved substantial documentation, repeated checks and many commits without directly producing additional experimental data. However, the process exposed serious problems, including a configuration that could have executed the same experimental arm under different labels and a verification weakness that could have accepted altered registration evidence. Without those checks, the resulting comparisons might have appeared convincing while being fundamentally unreliable. If I repeated the project, I would retain reproducible experiment specifications, manifest verification, preflight checks, clear run identities and independent review. At the same time, I would simplify repetitive paperwork and avoid audit rounds that add little new evidence. The objective should be proportionate rigor, not maximum documentation.
 
 ## 8. AI-prepared status of this report
 
 The technical content of this report was assembled by an AI coding agent (DeepSeek
 Harness, 2026-11-21) from committed evidence and the recorded sessions. It is an
-integrated draft, not a signed student report. The four reflection areas in §7 and
-the D5 transcript annotations remain the student's work.
+integrated draft, not a signed student report. Section 7 now contains AI-assisted
+first-person draft text prepared from the project record and inserted with the
+owner's authorization; it is **not** attested as the student's own account and
+remains pending personal confirmation. The D5 transcript annotations likewise
+remain pending the student's signature and attestation.

@@ -526,18 +526,20 @@
   diary, debt register, Report integration and this transcript draft.
 - **What was accepted / rejected / changed.** The Release-first mapping was
   accepted by the owner as the integration policy; the personal ADRs' status is
-  "human acceptance pending"; no merge commit or push was made.
+  "human acceptance pending". Two local merge commits were subsequently created
+  (`702d957` old-base integration; `f2220a6` new Release 9a08e08). No push occurred.
 - **How it was verified.** Draft 2020-12 schema validation (0 errors), 52/52 unique
-  requirement IDs, 105/105 unique AI-use records, 18 unique ADRs, INV uniqueness,
-  non-conflicted files free of markers, 197 focused invariant tests passing.
-  Full submission validation remains blocked by out-of-scope D7–D9 conflicts; the
-  full project suite was `NOT_RUN`.
+  requirement IDs, 108/108 unique AI-use records, 19 unique ADRs, INV uniqueness,
+  no conflict markers, both validators PASS, and the full offline suite
+  `5132 passed, 3 skipped` (2026-11-21, local integration tree). The historical
+  D1-only figures remain as recorded in the D1 audit: 105 records and 18 ADRs at
+  that earlier point.
 - **Evidence links.** `docs/req/requirements.yaml`, `docs/architecture/adr/`,
   `docs/architecture/invariants.md`, `docs/ai-use-log.yaml`,
   `docs/ai-use-session-audit.md`, `docs/review-memo.md`, `docs/bug-diary.md`,
   `docs/debt-register.md`.
-- **Remaining doubt.** The merged-tree full suite has not been run; D7–D9
-  conflicts remain.
+- **Remaining doubt.** The local integrated suite is green; remote CI/push, the
+  student's signature, and the human review items remain outstanding.
 - **Human confirmation.** `HUMAN_CONFIRMATION_REQUIRED — WangTianQi must confirm
   your role in the 2026-11-21 integration and whether the mapping decisions reflect
   your intent.`
@@ -564,9 +566,9 @@
 ## What remains for WangTianQi to write personally
 
 1. The personal reasoning in every entry marked `HUMAN_CONFIRMATION_REQUIRED`.
-2. The four reflection areas in `Report.md` §7 (motivation; the V2 halt and
-   re-freezes; lessons about measurement/evidence/audit independence; whether the
-   freeze/audit overhead was justified).
+2. Confirmation of the four AI-assisted draft paragraphs now in `Report.md` §7
+   (motivation; the V2 halt and re-freezes; lessons about measurement/evidence/audit
+   independence; whether the freeze/audit overhead was justified).
 3. The dated paid-run authorization (or an explicit statement that none exists).
 4. The session-authorship and commit-author confirmations.
 5. The final attestation below.
