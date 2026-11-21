@@ -54,13 +54,14 @@ import re
 import time
 from datetime import datetime, timedelta, timezone
 
+from tradingagents.evidence.models import SourceResultStatus
+
 from .config import get_config
 from .date_window import to_utc
 from .evidence_capture import capture_news_articles
 from .news_relevance import is_about_company
 from .news_status import NewsStatus, render_status
 from .symbol_utils import normalize_symbol
-from tradingagents.evidence.models import SourceResultStatus
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +128,7 @@ _ATTEMPT_FAILED_STATUSES = frozenset({
 
 
 def _capture_attempt_outcome(
-    ticker: str, start_date: str, end_date: str, outcome: "_Outcome"
+    ticker: str, start_date: str, end_date: str, outcome: _Outcome
 ) -> None:
     """Record the Finnhub call as ONE news source attempt (ADR-008).
 
@@ -162,8 +163,8 @@ def _capture_attempt_outcome(
 
 
 def _capture_attempt_and_return(
-    ticker: str, start_date: str, end_date: str, outcome: "_Outcome"
-) -> "_Outcome":
+    ticker: str, start_date: str, end_date: str, outcome: _Outcome
+) -> _Outcome:
     """Record the source attempt once, then hand the outcome to the caller."""
     _capture_attempt_outcome(ticker, start_date, end_date, outcome)
     return outcome
@@ -594,7 +595,6 @@ def fetch_news_finnhub(
     chunks = _day_chunks(start_dt, end_dt)
     payload: list = []
     truncated_chunks = 0
-    status: NewsStatus | None = None
     detail = ""
     for chunk_start, chunk_end in chunks:
         chunk_payload, chunk_status, chunk_detail = _fetch_range(
@@ -765,7 +765,7 @@ def get_news_finnhub(
 
 
 def _safe_call(provider: str, func, ticker: str, start_date: str, end_date: str,
-               /, **kwargs) -> "ProviderOutcome":
+               /, **kwargs) -> ProviderOutcome:  # noqa: F821
     """Call one provider and turn any failure into an explicit outcome.
 
     A provider raising is *not* allowed to hide the other provider: the

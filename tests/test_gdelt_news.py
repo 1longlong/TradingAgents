@@ -108,7 +108,7 @@ def test_rate_limit_is_its_own_type_after_a_bounded_retry():
     with patch.object(gn, "_request", return_value=(429, "", "")) as request, \
             patch.object(gn, "_throttle", lambda: None), \
             patch.object(gn.time, "sleep") as sleep, \
-            patch.object(gn, "get_config", return_value={"news_verify_budget": 8}):
+            patch.object(gn, "get_config", return_value={"news_verify_budget": 8}):  # noqa: SIM117
         with pytest.raises(VendorRateLimitError):
             gn.get_news_gdelt("NVDA", START, END)
     # Bounded: exactly one retry, never more.
@@ -393,9 +393,8 @@ def test_a_ticker_scoped_macro_query_requires_the_company_name():
 
 
 def test_every_default_macro_query_builds_a_parenthesis_free_string():
-    from tradingagents.default_config import DEFAULT_CONFIG
-
     import tradingagents.dataflows.gdelt_news as gn
+    from tradingagents.default_config import DEFAULT_CONFIG
 
     for query in DEFAULT_CONFIG["global_news_queries"]:
         built = gn._global_query(query, None)

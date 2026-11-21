@@ -15,7 +15,6 @@ from typing import Literal
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
-from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from pydantic import BaseModel
 
@@ -88,7 +87,7 @@ def _pairing_errors(messages) -> list[str]:
     """Every tool_call id that has no ToolMessage right after its turn."""
     errors, pending = [], set()
     for message in messages:
-        if pending and not (getattr(message, "type", None) == "tool"):
+        if pending and getattr(message, "type", None) != "tool":
             errors.extend(sorted(pending))
             pending = set()
         if getattr(message, "tool_calls", None):

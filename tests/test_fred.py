@@ -263,8 +263,15 @@ class TestKeyKeptOutOfErrors:
             fred._request("series", {"series_id": "DGS10"})
         exc = caught.value
         assert _KEY not in str(exc) and _KEY not in repr(exc)
-        # The response and request carry the full URL, so they are not attached.
-        assert exc.response is None and exc.request is None
+        # The live response and request carry the full keyed URL, so they are
+        # not attached. Only a bare status is kept (so a caller can still tell
+        # a 401 from a 502) -- and it holds no URL, headers or request.
+        assert exc.request is None
+        if exc.response is not None:
+            assert exc.response.status_code == 502
+            assert exc.response.url is None
+            assert getattr(exc.response, "request", None) is None
+        assert _KEY not in repr(exc.response)
         assert exc.__cause__ is None and exc.__context__ is None  # no chain holds the key
 
     def test_connection_error_before_any_response_carries_no_key(self):

@@ -9,16 +9,17 @@ from __future__ import annotations
 import sys
 from typing import Literal
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from pydantic import BaseModel
 
 sys.path.insert(0, ".")
 from tradingagents import observability as o  # noqa: E402
 from tradingagents.agents.utils.structured import (  # noqa: E402
-    finalize_single_pass, run_data_tools,
+    _schema_tool_name,  # noqa: E402
+    finalize_single_pass,
+    run_data_tools,
 )
-from tradingagents.agents.utils.structured import _schema_tool_name  # noqa: E402
 
 
 class Stance(BaseModel):
@@ -74,9 +75,11 @@ def main() -> int:
                          agent_name="market_analyst", run_tools=lambda b: [], state={})
     retry = llm.seen[1]
     if dangling(retry):
-        print("DETECTED: retry carries dangling tool_call ids", dangling(retry)); detected += 1
+        print("DETECTED: retry carries dangling tool_call ids", dangling(retry))
+        detected += 1
     if not any(isinstance(m, SystemMessage) for m in retry):
-        print("DETECTED: retry dropped the system prompt"); detected += 1
+        print("DETECTED: retry dropped the system prompt")
+        detected += 1
 
     # 2. DSML: a markup-only fallback is stored verbatim as the report.
     markup = ('<｜｜DSML｜｜ calls> <｜｜DSML｜｜ invoke name="get_verified_market_snapshot"> '
@@ -94,7 +97,8 @@ def main() -> int:
         render=lambda r: r.summary, agent_name="market_analyst",
         run_tools=lambda b: [], state={})
     if "｜｜DSML｜｜" in text:
-        print("DETECTED: protocol markup reached the report text"); detected += 1
+        print("DETECTED: protocol markup reached the report text")
+        detected += 1
 
     # 3. tool_rounds: in-process tool execution records no round.
     collector = o.RunMetricsCollector()
@@ -110,7 +114,8 @@ def main() -> int:
     with o.run_scoped(collector), o.agent_scoped("market_analyst"):
         runner([{"name": "t", "args": {}, "id": "1"}])
     if len(collector.tool_rounds) == 0:
-        print("DETECTED: tool round was not recorded"); detected += 1
+        print("DETECTED: tool round was not recorded")
+        detected += 1
 
     print(f"defects detected: {detected}/4")
     return 0 if detected >= 3 else 1

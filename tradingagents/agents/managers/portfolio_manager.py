@@ -119,7 +119,9 @@ Write these sections, in this order, starting with the rating on its own line:
             "Portfolio Manager",
             # ADR-011 typed cap (post-settlement, pre-render) and the CAND-01
             # structured prompt (free-text "## Output" section withheld from
-            # the schema-bound call only; the fallback keeps it).
+            # the schema-bound call only; the fallback keeps it). The schema
+            # enables Release local recovery from the raw response.
+            schema=PortfolioDecision,
             sanitize_result=_cap_typed,
             structured_prompt=split_free_text_guidance(prompt),
         )

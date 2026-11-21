@@ -1747,3 +1747,15 @@ decision for each item.
 - [ ] Confirm the RISK-036…049 and DEBT-042…051 mappings.
 - [ ] Complete the D5 transcript annotations and the final attestation in
   `transcripts/60726054-WangTianQi.md`.
+
+## 2026-11-21 — PR #5 merge integration
+
+The repository user approved the concrete merge/conflict/test plan in chat with
+an explicit confirmation, then instructed Codex to continue after an
+interruption. This authorizes implementation, corresponding test adjustments,
+verification, commit/push and continuation of the requested PR merge.
+It is NOT another contributor's GitHub approval and NOT final acceptance of the
+result. Preserve release Gate/SourceAttempt, debate/run-budget, confidence cap,
+trusted-output and simulated-trading semantics. ADR-012 records the integration
+choices. Another contributor's review and Linux CI remain required before final
+merge; no human review is impersonated or backfilled.

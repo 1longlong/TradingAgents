@@ -420,7 +420,6 @@ def test_protocol_freeze_verification_passes():
     """
     import subprocess
     import sys
-
     from pathlib import Path
 
     root = Path(__file__).resolve().parent.parent

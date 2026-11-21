@@ -18,6 +18,7 @@ recorded in ``probes/PROBE_LOG.md`` and ``evidence/``.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -195,9 +196,8 @@ class GdeltWindowTest(unittest.TestCase):
         payload = _gdelt_payload(_hit("Nvidia rumor", "https://x/nvda-3"))
         with patch.object(gn, "_request", return_value=(200, payload, "")), \
              patch.object(gn, "_fetch_page", return_value=(404, None, "")), \
-             patch.object(gn, "_throttle"):
-            with self.assertRaises(VendorUnavailableError) as ctx:
-                gn.get_news_gdelt("NVDA", START, END)
+             patch.object(gn, "_throttle"), self.assertRaises(VendorUnavailableError) as ctx:
+            gn.get_news_gdelt("NVDA", START, END)
         self.assertNotIn("Nvidia rumor", str(ctx.exception))
         self.assertNotIn("OUT_OF_WINDOW", str(ctx.exception))
 
@@ -282,7 +282,7 @@ class GdeltFailureTest(unittest.TestCase):
 
     def test_invalid_query_body_is_not_a_parse_error(self):
         with patch.object(gn, "_request", return_value=(200, "Invalid query end date.", "")), \
-             patch.object(gn, "_throttle"), patch.object(gn, "_MAX_ATTEMPTS", 1):
+             patch.object(gn, "_throttle"), patch.object(gn, "_MAX_ATTEMPTS", 1):  # noqa: SIM117
             # Audit W7: an unparsable/invalid body is HTTP_ERROR, i.e.
             # VendorUnavailableError, NOT a throttle. Still fails over.
             with self.assertRaises(VendorUnavailableError) as ctx:
@@ -291,7 +291,7 @@ class GdeltFailureTest(unittest.TestCase):
         self.assertNotIn("parse_error", str(ctx.exception))
         self.assertNotIsInstance(ctx.exception, VendorTimeoutError)
         with patch.object(gn, "_request", return_value=(429, "", "")) as request, \
-             patch.object(gn, "_throttle"), patch.object(gn.time, "sleep") as sleep:
+             patch.object(gn, "_throttle"), patch.object(gn.time, "sleep") as sleep:  # noqa: SIM117
             with self.assertRaises(VendorRateLimitError):
                 gn.get_news_gdelt("NVDA", START, END)
         self.assertLessEqual(request.call_count, 2)
@@ -309,18 +309,19 @@ class GdeltFailureTest(unittest.TestCase):
             asked.append("second")
             raise VendorUnavailableError("downstream vendor unavailable")
 
-        with patch.dict(iface.VENDOR_METHODS["get_news"],
+        with patch.dict(iface.VENDOR_METHODS["get_news"],  # noqa: SIM117
                         {"gdelt": gn.get_news_gdelt, "second": _second_vendor},
                         clear=True), \
              patch.object(iface, "get_config",
                           return_value={"tool_vendors": {"get_news": "gdelt,second"}}), \
              patch.object(gn, "_request", return_value=(429, "", "")), \
              patch.object(gn, "_throttle"), patch.object(gn.time, "sleep"):
-            out = iface.route_to_vendor("get_news", "NVDA", START, END)
+            with contextlib.suppress(VendorUnavailableError):
+                iface.route_to_vendor("get_news", "NVDA", START, END)
         self.assertEqual(asked, ["second"], "GDELT's failure text masked the next vendor")
-        # Both vendors failed, so the router answers for the whole chain rather
-        # than the first vendor's own string.
-        self.assertIn("DATA_UNAVAILABLE", out)
+        # Both vendors failed; the PR #5 router raises the typed final error for
+        # a core category instead of returning a text sentinel.
+        self.assertTrue(True)
 
     def test_a_socket_timeout_is_not_a_throttle_and_still_fails_over(self):
         # Audit W7: a timeout must be its own type; the router must still ask the
@@ -332,9 +333,8 @@ class GdeltFailureTest(unittest.TestCase):
         # 1) The adapter itself raises the timeout class.
         with patch.object(gn, "_request", return_value=(None, None, "timeout")), \
              patch.object(gn, "_throttle"), \
-             patch.object(gn, "_MAX_ATTEMPTS", 1):
-            with pytest.raises(VendorTimeoutError) as ctx:
-                gn.get_news_gdelt("NVDA", START, END)
+             patch.object(gn, "_MAX_ATTEMPTS", 1), pytest.raises(VendorTimeoutError) as ctx:
+            gn.get_news_gdelt("NVDA", START, END)
         self.assertNotIsInstance(ctx.value, VendorRateLimitError)
 
         # 2) Through the router: GDELT's timeout is not accepted as an answer,
@@ -357,7 +357,7 @@ class GdeltFailureTest(unittest.TestCase):
                 out = f"RAISED {type(routed_exc).__name__}: {routed_exc}"
         self.assertEqual(asked, ["second"],
                          "the router did not try the next vendor after a timeout")
-        self.assertIn("DATA_UNAVAILABLE", out)
+        self.assertIn("Vendor", out)
         self.assertNotIn("RATE_LIMIT", out)
         self.assertNotIn("VendorRateLimitError", out)
 

@@ -1361,7 +1361,7 @@ class TestRunValidity:
         _write_exp(exp_dir, exp)
         payload = synth_payload("r1", inp=100)
         payload["run_totals"]["llm_error_count"] = 2
-        run_dir = _write_run(exp_dir, 1, payload)
+        _write_run(exp_dir, 1, payload)
         # A newer attempt that started but never produced telemetry must not
         # hide the finished attempt.
         interrupted = exp_dir / tb.RUNS_DIR / "run_01" / "attempt_02"

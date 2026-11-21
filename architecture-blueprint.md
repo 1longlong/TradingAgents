@@ -23,9 +23,11 @@ and traceability lives in `docs/architecture/trace-matrix.md`.
   observability collector, structured-output/Single-Pass paths, the batch-macro
   switch, the Finnhub-only news scope, per-run memory isolation, and the archived
   benchmark/freeze apparatus (`scripts/token_benchmark.py`, `scripts/c3_*.py`,
-  `token_benchmarks/**`). Its decisions are ADR-012 through ADR-018 and its
-  requirements are the `FR-ANL-*`, `FR-OBS-*`, `FR-HAR-*`, `FR-CAM-*` and
-  `NFR-VER-*` families in `docs/req/requirements.yaml`.
+  `token_benchmarks/**`). Its token-observability decisions are ADR-013 through
+  ADR-018; the independent simulated-trading decision is ADR-019, and the PR #5
+  error-handling integration is ADR-012. These decisions and their requirements
+  are the `FR-ANL-*`, `FR-OBS-*`, `FR-HAR-*`, `FR-CAM-*` and `NFR-VER-*`
+  families in `docs/req/requirements.yaml`.
 
 ## Hard constraints (authoritative)
 

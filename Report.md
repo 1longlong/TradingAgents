@@ -29,7 +29,7 @@ workstreams that are integrated in this tree but have distinct provenance:
    isolation for experiments, and a frozen 2×2 measurement apparatus with
    pre-spend gates.
 
-The Release work is the canonical baseline and is recorded in ADR-001–ADR-012 and
+The Release work is the canonical baseline and is recorded in ADR-001–ADR-012 and ADR-019, and
 `FR-DQG-*`/`FR-DDT-*`/`FR-TRD-*`; the personal work is recorded retrospectively in
 ADR-013–ADR-018 and `FR-ANL-*`/`FR-OBS-*`/`FR-HAR-*`/`FR-CAM-*`/`NFR-VER-*`.
 
@@ -822,7 +822,7 @@ wrong contributor.
 | Contribution | Provenance | Evidence |
 | --- | --- | --- |
 | Upstream TradingAgents v0.5.0 (graph topology, prompts scaffold, CLI, vendor router, PIT corpus) | inherited, not this project | `2d17df8`; `architecture-blueprint.md` |
-| Data Quality Gate, dynamic debate termination, evidence capture, durable usage ledger, confidence cap, Phase 4A comparison, simulated trading | **Release team** (WANG Yiwen 60536848 and the Release history) | ADR-001–ADR-012; `FR-DQG-*`, `FR-DDT-*`, `FR-TRD-*`, `NFR-CMP-*` |
+| Data Quality Gate, dynamic debate termination, evidence capture, durable usage ledger, confidence cap, Phase 4A comparison, simulated trading | **Release team** (WANG Yiwen 60536848 and the Release history) | ADR-001–ADR-012, ADR-019; `FR-DQG-*`, `FR-DDT-*`, `FR-TRD-*`, `NFR-CMP-*` |
 | Token observability and attribution, Single-Pass, batch macro, Finnhub-only news, per-run memory isolation, measurement harness/freeze, V2/V3 campaigns | **WangTianQi's personal feature** (submitted through the token-observability line) | ADR-013–ADR-018; `FR-ANL-*`, `FR-OBS-*`, `FR-HAR-*`, `FR-CAM-*`, `NFR-VER-*` |
 | AI-assisted implementation, tests, audits and documentation | OpenCode sessions (2026-10-20 → 2026-11-15) and DeepSeek Harness sessions (2026-11-16 → 2026-11-20, and the 2026-11-21 documentation rounds) | `docs/ai-use-log.yaml` `AUL-074`–`AUL-105`; `docs/ai-use-session-audit.md` |
 | Human decisions and approvals | recorded where evidenced; otherwise explicitly absent | `docs/review-memo.md`; `AUL-102`; paid-run authorization gap `DEBT-052` |

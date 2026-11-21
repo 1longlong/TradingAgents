@@ -10,8 +10,6 @@ requiring the verifier to fire.
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
 
 import tradingagents.graph.setup as setup_mod

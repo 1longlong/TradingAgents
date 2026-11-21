@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import unittest
 from datetime import datetime, timezone
+from unittest.mock import patch
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
@@ -34,7 +35,6 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import RunnableLambda
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
-from unittest.mock import patch
 
 import tradingagents.dataflows.finnhub_news as fhnews
 from tradingagents.agents.analysts.news_analyst import (
@@ -60,14 +60,13 @@ NEWS_SOURCE_AVAILABLE_NOTE = getattr(
     lambda status: "<no-live-status-line>")(
         __import__("tradingagents.agents.schemas",
                    fromlist=["NewsSourceStatus"]).NewsSourceStatus.AVAILABLE)
-from tradingagents.agents.schemas import (
-    AnalystStance,
+from tradingagents.agents.schemas import (  # noqa: E402
     NewsSourceStatus,
     classify_news_source_availability,
 )
-from tradingagents.agents.utils.agent_states import AgentState
-from tradingagents.agents.utils.news_data_tools import get_global_news, get_news
-from tradingagents.graph.conditional_logic import ConditionalLogic
+from tradingagents.agents.utils.agent_states import AgentState  # noqa: E402
+from tradingagents.agents.utils.news_data_tools import get_global_news, get_news  # noqa: E402
+from tradingagents.graph.conditional_logic import ConditionalLogic  # noqa: E402
 
 TRADE_DATE = "2026-09-23"
 WINDOW = ("2026-09-16", "2026-09-23")
@@ -849,7 +848,8 @@ class ProvenanceStatusTest(unittest.TestCase):
         # Decision: never match text. The guard and the status line must be
         # pure functions of the classifier verdict, identical for every body.
         from tradingagents.agents.analysts.news_analyst import (
-            _guard_news_unavailable, _news_available_note,
+            _guard_news_unavailable,
+            _news_available_note,
         )
 
         asserting = (

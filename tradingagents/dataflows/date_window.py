@@ -37,37 +37,29 @@ def coverage_gap(
 ) -> str | None:
     """Placeholder for a window a feed did not fully observe, else None.
 
-    Yahoo news and the Reddit and StockTwits feeds return their latest items
-    whatever window is asked for, so "none found" over a window they never
-    observed would claim an absence nobody saw. A window is observed when
-    coverage reaches its first day and it ends by today; an empty result is then
-    a real absence and this returns None.
-
-    ``dates`` are the returned items' timestamps, plus the lookback start for a
-    feed with a fixed lookback. The oldest one bounds coverage only for a feed
-    returned newest-first and unbroken in time; a merged or relevance-ranked
-    result passes no dates, leaving only the present as the bound.
+    An *observed* window is: coverage reaches its first day, and the window
+    ends by today. An empty result over a window ending today is a real
+    absence; an empty result over a past window says only that no dated item
+    was observed (never a clock-derived date), and a future window is refused.
     """
     now = datetime.now(timezone.utc)
+    now_date = now.date()
     observed = [to_utc(d) for d in dates if d is not None]
     oldest = min(observed, default=None)
-    if datetime.strptime(end_date, "%Y-%m-%d").date() > now.date():
+    end_d = datetime.strptime(end_date, "%Y-%m-%d").date()
+    if end_d > now_date:
         reason = "the window extends past today"
     elif oldest is not None and oldest.date() <= datetime.strptime(start_date, "%Y-%m-%d").date():
         return None
     elif oldest is not None:
-        # A real item bounds coverage: the feed reached back only this far, and
-        # that date was observed, so it is safe to state.
         reason = f"it only serves recent items (coverage starts {oldest:%Y-%m-%d})"
+    elif end_d == now_date:
+        # The feed's latest items are today's; an empty current window is an
+        # observed absence, and no fabricated coverage date is introduced.
+        return None
     else:
-        # No item at all came back, so when coverage begins was never observed.
-        # The old code substituted ``now`` here, which put the run's wall-clock
-        # date into the analyst's input as a vendor fact (non-reproducible, and
-        # read as "deliberately withheld" rather than "not archived"). Say only
-        # what was measured.
         reason = "it only serves newer items, none in this window"
     return f"<{source} unavailable for {start_date}..{end_date}: {reason}, so this is not an absence of {subject}>"
-
 
 def parse_publication_time(value: str | None) -> datetime | None:
     """Parse a vendor publication timestamp into an aware UTC datetime.

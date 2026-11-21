@@ -381,3 +381,20 @@ criterion expressed through a named test is traceable to that file.
   self-reports; they are not re-derived here (`FR-CAM-001`).
 - `docs/ai-use-session-audit.md` is new in the D1 integration and remains
   `PENDING_HUMAN_REVIEW`; no human approval is implied by this matrix.
+
+## PR #5 integration maintenance (2026-11-21)
+
+ADR-012 preserves existing requirements rather than defining new Gate or budget
+policies. NFR-AUD-001 / NFR-BUD-001 map to `agents/utils/structured.py`,
+`graph/setup.py`, the three `graph/*_tool_governance.py` wrap-ups and
+`tests/test_merge_execution_boundaries.py` (real SQLite evidence retention and
+ledger events); `tests/test_structured_raw_usage.py` and
+`tests/test_durable_usage_ledger.py` retain raw usage/admission assertions.
+NFR-BC-001 maps to `graph/run_identity.py` v2 and the effective debate policy,
+`tests/test_checkpoint_config_compat.py` and the new integration tests.
+NFR-PIT-001 / NFR-OFF-001 map to the combined cache/no-data tests, including the
+summer/winter UTC/Hong Kong/New York matrix without process-global tzset.
+FR-DQG-006 maps to the retained Gate/Confidence Sanitizer/evaluator edges and
+trusted-report transformations, with the existing confidence/output-guard tests.
+Verification is offline only; complete Windows collection remains blocked by
+`src/trading/audit.py` importing POSIX `fcntl` (see evaluation logbook).

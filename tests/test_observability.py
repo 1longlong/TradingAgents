@@ -13,6 +13,7 @@ import uuid
 from typing import TypedDict
 
 import pytest
+from langchain_core.exceptions import OutputParserException
 from langchain_core.language_models.fake_chat_models import FakeListChatModel
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, LLMResult
@@ -691,7 +692,7 @@ class TestAttribAgentNode:
         ev = collector.node_events[0]
         # context_bytes only holds whitelisted field sizes (counts/sizes, no text).
         assert "market_report" in ev.context_bytes
-        for key, value in ev.context_bytes.items():
+        for _key, value in ev.context_bytes.items():
             assert isinstance(value, int)
 
     def test_wraps_functools_partial_and_executes(self):
@@ -785,7 +786,8 @@ class TestAttribToolRound:
             return a + b
 
         collector = o.RunMetricsCollector()
-        tool_node = lambda state: {"messages": state.get("messages", [])}
+        def tool_node(state):
+            return {"messages": state.get("messages", [])}
         wrapped = o.attrib_tool_round(o.AGENT_MARKET_ANALYST, tool_node)
 
         ai = AIMessage(content="", tool_calls=[
@@ -811,9 +813,9 @@ class TestAttribToolRound:
         was not directly callable. That broke real end-to-end CLI runs before
         graph compilation.
         """
+        from langchain_core.tools import tool
         from langgraph.graph import END, StateGraph
         from langgraph.prebuilt import ToolNode
-        from langchain_core.tools import tool
 
         @tool
         def increment(a: int) -> int:
@@ -1112,7 +1114,7 @@ class TestStructuredOutput:
 
         class Structured:
             def invoke(self, prompt):
-                raise ValueError("malformed")
+                raise OutputParserException("malformed")
 
         class Plain:
             def invoke(self, prompt):
@@ -1129,7 +1131,7 @@ class TestStructuredOutput:
         ev = collector.structured_events[0]
         assert ev.kind == "failure"
         assert ev.used_fallback is True
-        assert ev.error_type == "ValueError"
+        assert ev.error_type == "OutputParserException"
 
     def test_invoke_unsupported_freetext_records_runtime_unsupported(self):
         # When bind_structured reported the provider does not support structured
@@ -1160,7 +1162,7 @@ class TestStructuredOutput:
 
         class Structured:
             def invoke(self, prompt):
-                raise ValueError("x")
+                raise OutputParserException("x")
 
         class Plain:
             def invoke(self, prompt):
@@ -1214,7 +1216,7 @@ class TestNodeContextDiagnostics:
             wrapped(secret_state)
         blob = json.dumps(vars(collector.node_events[0]), default=repr)
         assert "NOT-A-SECRET" not in blob
-        for key, value in collector.node_events[0].context_bytes.items():
+        for _key, value in collector.node_events[0].context_bytes.items():
             assert isinstance(value, int)
 
 
@@ -1473,7 +1475,7 @@ class TestRunLifecycle:
     def test_run_telemetry_failed_still_writes_and_reraises(self, tmp_path):
         collector = o.RunMetricsCollector()
         handler = o.ObservabilityCallbackHandler(collector=collector)
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError):  # noqa: SIM117
             with o.run_telemetry([handler], results_dir=str(tmp_path), ticker="AAPL", trade_date="2026-01-01"):
                 raise ValueError("app boom")
         assert collector.is_run_finished() is True

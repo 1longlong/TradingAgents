@@ -430,3 +430,13 @@ The weakest claims are causal and external: a single run per cell on one date
 cannot establish an arm effect, and no quality ground truth exists. Risks
 RISK-043 through RISK-047 are the reason the evaluation table uses
 `EXPLORATORY` and refuses to rank arms by decision quality.
+
+## PR #5 integration verification boundary (2026-11-21)
+
+An incomplete platform check must not be promoted to a full-suite claim:
+Windows lacks POSIX `fcntl` for the unchanged simulated-trading subtree, and
+strict socket denial intercepts asyncio's local socketpair setup. Owner:
+repository maintainers; action: require Linux CI plus another contributor's PR
+review before merge. Main-system offline regression, focused SQLite/ledger
+checks and the schema/lint checks are separate evidence, not substitutes for
+that missing result. No Gate, safety lock or branch protection is bypassed.

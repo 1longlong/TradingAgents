@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 
+from langchain_core.exceptions import OutputParserException
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableLambda
 from langgraph.prebuilt import ToolNode
@@ -246,7 +247,7 @@ class TestStructuredFallbackCounting:
 
         class _Structured:
             def invoke(self, prompt):
-                raise RuntimeError("structured boom")
+                raise OutputParserException("structured boom")
 
         class _Plain:
             def invoke(self, prompt):
@@ -393,7 +394,7 @@ class TestFourAnalystWholeRun:
                 class _S:
                     def invoke(self, prompt):
                         owner._structured_invoke_calls += 1
-                        raise RuntimeError("structured miss")
+                        raise OutputParserException("structured miss")
 
                 return _S()
 

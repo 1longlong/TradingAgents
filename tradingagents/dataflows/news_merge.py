@@ -36,8 +36,12 @@ from __future__ import annotations
 
 import re
 
-from .news_status import ABSENCE_CLASSES as _ABSENCE_CLASSES
-from .news_status import PROVES_REAL_NEWS, NewsStatus, is_status_token
+from .news_status import (
+    ABSENCE_CLASSES as _ABSENCE_CLASSES,
+    PROVES_REAL_NEWS,
+    NewsStatus,
+    is_status_token,
+)
 
 __all__ = ["ProviderOutcome", "combine_status", "merge_news_sections"]
 

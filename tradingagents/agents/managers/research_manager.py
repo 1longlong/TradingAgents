@@ -403,6 +403,8 @@ Write these sections, in this order, starting with the recommendation on its own
                 # ADR-011 typed cap (runs after settlement, before render) and the
                 # CAND-01 structured prompt (the free-text "## Output" section is
                 # withheld from the schema-bound call only; the fallback keeps it).
+                # The schema enables Release local recovery from the raw response.
+                schema=ResearchPlan,
                 sanitize_result=_cap_typed,
                 structured_prompt=split_free_text_guidance(prompt),
             )

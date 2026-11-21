@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import uuid
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -47,14 +48,20 @@ from tradingagents.debate.usage_ledger import (
 )
 from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.evidence.ingest import use_collector
+from tradingagents.file_io import write_text_atomic
 from tradingagents.llm_clients import create_llm_client
 from tradingagents.observability import analyst_agent_id_for_key, run_telemetry
 from tradingagents.reporting import write_report_tree
 
 from .checkpointer import checkpoint_step, clear_checkpoint, get_checkpointer, thread_id
 from .conditional_logic import ConditionalLogic
+from .fundamentals_governance import parse_fundamentals_tool_governance
+from .market_governance import parse_market_tool_governance
+from .news_governance import parse_news_tool_governance
 from .propagation import Propagator
 from .reflection import Reflector
+from .run_identity import IDENTITY_VERSION, execution_digest
+from .sentiment_prefetch import parse_sentiment_prefetch
 from .setup import GraphSetup
 from .signal_processing import SignalProcessor
 
@@ -218,8 +225,8 @@ class TradingAgentsGraph:
             self.deep_thinking_llm,
             self.tool_nodes,
             self.conditional_logic,
-            debate_termination_config=resolve_debate_termination_config(self.config),
             config=self.config,
+            debate_termination_config=resolve_debate_termination_config(self.config),
         )
 
         self.propagator = Propagator(
@@ -487,19 +494,52 @@ class TradingAgentsGraph:
         return td if td < datetime.now().strftime("%Y-%m-%d") else None
 
     def _run_signature(self, asset_type: str, portfolio=None) -> str:
-        """Graph-shape inputs that must invalidate a checkpoint if changed.
+        """Inputs that make a checkpoint a *different run* if changed.
 
-        Keyed into the checkpoint thread ID so a resume under a different analyst
-        selection, debate/risk depth, or asset mode starts fresh instead of
-        silently continuing the previous graph (#1089).
+        Keyed into the checkpoint thread ID, so any change starts a fresh run
+        instead of silently continuing work computed under other settings:
+
+        * the graph shape (analyst selection, debate/risk depth, asset mode,
+          the governance and prefetch switches, #1089);
+        * the portfolio, where None / empty / a changed book are three runs;
+        * the normalized **execution identity** (tool allowances, vendor chains,
+          news inputs, models, output language) as a digest, so a checkpoint is
+          never resumed under settings that would execute different work.
+
+        The execution identity carries an explicit version. A checkpoint whose
+        thread id was built without it (``run_version=0``) can never collide
+        with a signature that has it, so an older checkpoint is not treated as
+        compatible: it stays on disk, reachable only by the exact signature
+        that created it.
         """
         return "|".join([
+            f"run_version={IDENTITY_VERSION}",
             "analysts=" + ",".join(self.selected_analysts),
             f"debate={self.config['max_debate_rounds']}",
             f"risk={self.config['max_risk_discuss_rounds']}",
             f"asset={asset_type}",
+            # The analyst tool-governance switches add/remove graph nodes, so a
+            # resume must not continue a thread built with another shape. Each
+            # switch is named on its own: the two are independent config.
+            "market_gov=" + str(
+                parse_market_tool_governance(self.config).enabled
+            ),
+            "fundamentals_gov=" + str(
+                parse_fundamentals_tool_governance(self.config).enabled
+            ),
+            "news_gov=" + str(
+                parse_news_tool_governance(self.config).enabled
+            ),
+            # The sentiment prefetch split adds a node in front of the
+            # sentiment analyst, so its switch is part of the graph shape too.
+            "sentiment_prefetch=" + str(
+                parse_sentiment_prefetch(self.config).enabled
+            ),
             # None, an empty book and a changed book are three different runs.
             f"portfolio={portfolio.fingerprint() if portfolio is not None else 'none'}",
+            # The execution settings, as a digest: the values themselves (which
+            # may include an endpoint-ish string) never reach the thread id.
+            "exec=" + execution_digest(self.config),
         ])
 
     def propagate(self, company_name, trade_date, asset_type: str = "stock", portfolio=None):
@@ -521,7 +561,7 @@ class TradingAgentsGraph:
         trade_date = _validate_trade_date(trade_date)
         self.ticker = company_name
 
-        with run_telemetry(
+        with run_telemetry(  # noqa: SIM117
             self.callbacks,
             results_dir=self.config["results_dir"],
             **self._observability_metadata(company_name, trade_date, asset_type, portfolio),
@@ -576,7 +616,17 @@ class TradingAgentsGraph:
         if step is not None:
             logger.info("Resuming from step %d for %s on %s", step, company_name, trade_date)
         else:
-            logger.info("Starting fresh for %s on %s", company_name, trade_date)
+            # A fresh start may be the first run for this ticker+date, or a
+            # different signature: a graph-shape or execution-settings change
+            # (another tool allowance, vendor chain, news input, model, language,
+            # date or portfolio). That previous checkpoint, if any, is kept on
+            # disk under its own thread id and is never touched. Only the digest
+            # names the configuration -- its values are never logged.
+            logger.info(
+                "Starting fresh for %s on %s (execution settings %s; any "
+                "previous run under other settings is kept on disk)",
+                company_name, trade_date, execution_digest(self.config),
+            )
         return thread_id(company_name, str(trade_date), signature)
 
     def checkpoint_input(self, init_state):
@@ -822,7 +872,7 @@ class TradingAgentsGraph:
         the usage capture scopes spend to exactly this execution.
         """
         self._resolve_pending_entries(company_name)
-        return self.propagator.create_initial_state(
+        state = self.propagator.create_initial_state(
             company_name,
             trade_date,
             asset_type=asset_type,
@@ -835,6 +885,11 @@ class TradingAgentsGraph:
             run_id=run_id,
             usage_ledger_path=usage_ledger_path,
         )
+        # Tool governance (when enabled) keys its per-run record by a unique id
+        # and reads the run's config from the state. Both are plain data.
+        state["tool_governance"] = {"run_id": f"run-{uuid.uuid4().hex}"}
+        state["run_config"] = dict(self.config)
+        return state
 
     def settle_pending(self, company_name):
         """Settle this ticker's decisions whose holding window has now traded.
@@ -1048,8 +1103,15 @@ class TradingAgentsGraph:
         final_state["whole_run_usage"] = whole
 
     def _log_state(self, trade_date, final_state):
-        """Log the final state to a JSON file."""
-        self.log_states_dict[str(trade_date)] = {
+        """Log the final state to a JSON file.
+
+        The entry is serialised in full first, then written through
+        ``write_text_atomic`` so a failure never truncates the previous log.
+        ``log_states_dict`` is updated only after the file is on disk; if saving
+        fails the error propagates and memory keeps no entry for this date, so it
+        never claims a save that did not happen.
+        """
+        entry = {
             "company_of_interest": final_state["company_of_interest"],
             "trade_date": final_state["trade_date"],
             "market_report": final_state["market_report"],
@@ -1086,9 +1148,10 @@ class TradingAgentsGraph:
         directory.mkdir(parents=True, exist_ok=True)
 
         log_path = directory / f"full_states_log_{trade_date}.json"
-        with open(log_path, "w", encoding="utf-8") as f:
-            # Reports can be in any language and this file is read by a person.
-            json.dump(self.log_states_dict[str(trade_date)], f, indent=4, ensure_ascii=False)
+        # Reports can be in any language and this file is read by a person.
+        payload = json.dumps(entry, indent=4, ensure_ascii=False)
+        write_text_atomic(log_path, payload, encoding="utf-8")
+        self.log_states_dict[str(trade_date)] = entry
 
     def process_signal(self, full_signal, state=None):
         """Process a signal to extract the core decision.

@@ -376,7 +376,7 @@
 # D1 duplicate-ID repair (2026-11-21): this record was previously emitted with the
 # duplicate id AUL-020 (second occurrence). Reassigned to AUL-071; the earlier
 # AUL-020 record (2026-11-06) keeps its id. See docs/ai-use-session-audit.md §4.
-- id: AUL-071
+- id: AUL-106
   date: "2026-11-11"
   tool: OpenCode
   phase: implementation
@@ -387,7 +387,7 @@
 # D1 duplicate-ID repair (2026-11-21): this record was previously emitted with the
 # duplicate id AUL-021 (second occurrence). Reassigned to AUL-072; the earlier
 # AUL-021 record (2026-11-06) keeps its id. See docs/ai-use-session-audit.md §4.
-- id: AUL-072
+- id: AUL-107
   date: "2026-11-11"
   tool: Codex
   phase: verification
@@ -398,7 +398,7 @@
 # D1 duplicate-ID repair (2026-11-21): this record was previously emitted with the
 # duplicate id AUL-022 (second occurrence). Reassigned to AUL-073; the earlier
 # AUL-022 record (2026-11-06) keeps its id. See docs/ai-use-session-audit.md §4.
-- id: AUL-073
+- id: AUL-108
   date: "2026-11-11"
   tool: Codex
   phase: verification
@@ -590,6 +590,29 @@
   scope: 'Merge release into feature/trading-system: unified 32-ID registry with FR-TRD/INV-TRD/NFR-TRD, independent simulated-trading source in src/trading + src/safety, tests migrated to tests/trading, path-based permissions with src/safety approval guard, and fixture-isolated live test.'
   outcome: Conflict resolution completed. Full suite 2650 passed, 3 skipped; live 3-day test 1 passed; validate_requirements PASS; ruff clean.
   human_review: requested
+
+- id: AUL-071
+  date: '2026-11-21'
+  tool: Codex
+  phase: implementation
+  scope: 'PR 5 conflict integration: bounded execution protection with release Gate, evidence checkpoints, usage ledger and trusted outputs; ADR-012.'
+  outcome: 'User approved the concrete conflict/test plan in chat (confirmation followed by an instruction to continue). Integration and offline verification performed; platform restrictions and exact results recorded in the evaluation logbook. No live API or trading call; final PR review/acceptance not fabricated.'
+  human_review: requested
+
+- id: AUL-072
+  date: '2026-11-21'
+  tool: Codex
+  phase: verification
+  scope: 'PR 5 remote CI diagnosis and deterministic test-only portability repair within the approved integration/test plan.'
+  outcome: 'First Linux CI exposed real-clock tolerance, Python 3.10 asyncio API, nullable-schema version, snapshot-clock and parallel completion-order assumptions. Kept exact numeric/call/ID assertions; 316 focused tests pass locally. Remote rerun pending; no product or workflow change.'
+  human_review: requested
+
+- id: AUL-073
+  date: '2026-11-21'
+  tool: Codex
+  phase: verification
+  scope: 'PR 5 remote Linux CI results for c7ba992, run 44859668089.'
+  outcome: 'All 7 jobs PASS; Python 3.10/3.11/3.12/3.13 each 3799 passed, 9 skipped, 92 subtests. Complete offline tree includes simulated trading; no live test. Separate collaborator approval and final merge remain pending.'
 
 # ---- D1 integration: 31 personal AIU records integrated (AUL-074..AUL-104) ----
 - id: AUL-074
@@ -814,5 +837,5 @@
   tool: DeepSeek Harness (dsh)
   phase: implementation + verification — D1 Release-first integration
   scope: D1 documentation integration of the token-observability work into the Release registry, performed in the in-progress merge worktree /home/sky/cs5351/TradingAgents-release on branch integrate/token-into-release-20261121 (HEAD 24adf97, MERGE_HEAD 57b93df, merge base 2d17df8). Resolved the four conflicted D1 paths (docs/req/requirements.yaml, docs/req/req-schema.json, docs/ai-use-log.yaml, docs/architecture/trace-matrix.md), created docs/ai-use-session-audit.md, repaired the duplicate AUL IDs and adapted the four D1 validators/tests. Release kept canonical for structure, IDs, schema, priorities and verification; personal contributions integrated into it. D2-D9 conflicts were not touched.
-  outcome: 'D1 integration completed in /home/sky/cs5351/TradingAgents-release at HEAD 24adf97 with MERGE_HEAD 57b93df still active: 32 Release requirement IDs preserved and 20 retrospective IDs added (52 total); all 21 personal requirements and all 64 personal acceptance criteria mapped; 73 Release AUL records preserved with AUL-020/021/022 repaired to AUL-071/072/073; 31 personal AIU records integrated as AUL-074..AUL-104; docs/ai-use-session-audit.md created. Actual validation results are recorded in that audit document; the merged-tree full suite was NOT_RUN while D2-D9 conflicts remain. No merge commit and no push were performed.'
+  outcome: 'D1 integration completed in /home/sky/cs5351/TradingAgents-release at HEAD 24adf97 with MERGE_HEAD 57b93df still active: 32 Release requirement IDs preserved and 20 retrospective IDs added (52 total); all 21 personal requirements and all 64 personal acceptance criteria mapped; 73 Release AUL records preserved with AUL-020/021/022 repaired to AUL-106/107/108 (the new Release uses AUL-071/072/073); 31 personal AIU records integrated as AUL-074..AUL-104; docs/ai-use-session-audit.md created. Actual validation results are recorded in that audit document; the merged-tree full suite was NOT_RUN while D2-D9 conflicts remain. No merge commit and no push were performed.'
   human_review: requested

@@ -12,13 +12,9 @@ The classification itself now lives inside each provider adapter
 """
 
 import unittest
-import urllib.request
 from unittest.mock import patch
 
-import pytest
-
-from tradingagents.dataflows import finnhub_news as fn
-from tradingagents.dataflows import interface as iface
+from tradingagents.dataflows import finnhub_news as fn, interface as iface
 from tradingagents.dataflows.errors import (
     NoMarketDataError,
     VendorRateLimitError,

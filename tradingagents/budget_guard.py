@@ -30,8 +30,8 @@ all (a negative or non-integer cap), and raises at construction.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Iterable
 
 OK = "OK"
 UNCAPPED = "UNCAPPED"

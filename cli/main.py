@@ -23,13 +23,6 @@ from rich.text import Text
 from cli.announcements import display_announcements, fetch_announcements
 from cli.prefs import load_last_run, sanitize, save_last_run
 from cli.stats_handler import StatsCallbackHandler
-from tradingagents.observability import (
-    analyst_agent_id_for_key,
-    begin_observability_run,
-    bind_run_scope,
-    finalize_observability_run,
-    unbind_run_scope,
-)
 from cli.utils import (
     ask_anthropic_effort,
     ask_gemini_thinking_config,
@@ -62,6 +55,13 @@ from tradingagents.graph.analyst_execution import (
     sync_analyst_tracker_from_chunk,
 )
 from tradingagents.graph.trading_graph import TradingAgentsGraph
+from tradingagents.observability import (
+    analyst_agent_id_for_key,
+    begin_observability_run,
+    bind_run_scope,
+    finalize_observability_run,
+    unbind_run_scope,
+)
 from tradingagents.portfolio import load_portfolio
 from tradingagents.reporting import write_report_tree
 
@@ -1571,7 +1571,7 @@ def run_analysis(checkpoint: bool | None = None, portfolio=None):
 
     # Post-run observability summary: compact per-agent totals, coverage,
     # structured fallback and the written telemetry artifact path.
-    try:
+    try:  # noqa: SIM105
         _print_observability_summary(stats_handler, console)
     except Exception:  # noqa: BLE001
         # The summary is best-effort and must never fail the run.

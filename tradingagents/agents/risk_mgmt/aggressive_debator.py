@@ -5,8 +5,8 @@ from tradingagents.agents.utils.agent_utils import (
     opponent_argument_without_repetition,
     report_or_absent,
 )
-from tradingagents.debate.usage_capture import instrumented_model_call
 from tradingagents.agents.utils.s2_context import risk_context_block, routed_report
+from tradingagents.debate.usage_capture import instrumented_model_call
 
 
 def create_aggressive_debator(llm):

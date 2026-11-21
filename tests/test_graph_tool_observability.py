@@ -14,10 +14,8 @@ from __future__ import annotations
 
 import ast
 import json
-import sys
 from pathlib import Path
 
-import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.tools import tool
 from langgraph.graph import END, START, MessagesState, StateGraph
@@ -100,7 +98,7 @@ class TestGraphInvocationPassesCallbacks:
                             lambda *a, **k: state, raising=False)
         monkeypatch.setattr(tg.TradingAgentsGraph, "_log_state",
                             lambda *a, **k: None, raising=False)
-        try:
+        try:  # noqa: SIM105
             # The remaining post-run steps are irrelevant to callback wiring.
             graph._run_graph("NVDA", "2026-09-23")
         except Exception:  # noqa: BLE001 - only the callback hand-off is under test

@@ -6,13 +6,6 @@ from tradingagents.agents.schemas import (
     classify_news_source_availability,
     render_news_analyst_report,
 )
-from tradingagents.agents.utils.structured import (
-    bind_structured,
-    finalize_analyst_report,
-    finalize_single_pass,
-    run_data_tools,
-)
-
 from tradingagents.agents.utils.agent_utils import (
     get_global_news,
     get_instrument_context_from_state,
@@ -21,6 +14,13 @@ from tradingagents.agents.utils.agent_utils import (
     get_macro_indicators_batch,
     get_news,
     get_prediction_markets,
+)
+from tradingagents.agents.utils.structured import (
+    _schema_tool_name,
+    bind_structured,
+    finalize_analyst_report,
+    finalize_single_pass,
+    run_data_tools,
 )
 from tradingagents.debate.usage_capture import instrument_analyst_invoke
 
@@ -269,18 +269,27 @@ def create_news_analyst(llm, batch_macro: bool = True, structured: bool = True,
 
         report = ""
         if len(result.tool_calls) == 0:
-            news_status, render = make_render(state["messages"])
-
-            report, _ = finalize_analyst_report(
-                llm=llm,
-                structured_llm=structured_llm,
-                messages=prompt.format_prompt(messages=state["messages"]).to_messages() + [result],
-                render=render,
-                agent_name="News Analyst",
-                free_text_block=result.content,
+            governed = bool(
+                (state.get("run_config") or {}).get("news_tool_governance", {}).get("enabled")
             )
-            report = _guard_news_unavailable(report, news_status)
-            report = _news_available_note(news_status) + report
+            schema_tool = _schema_tool_name(NewsAnalystReport)
+            if governed or any(tc.get("name") == schema_tool for tc in (result.tool_calls or [])):
+                from tradingagents.agents.utils.tool_governance import analyst_report
+
+                report = analyst_report(result)
+            else:
+                news_status, render = make_render(state["messages"])
+
+                report, _ = finalize_analyst_report(
+                    llm=llm,
+                    structured_llm=structured_llm,
+                    messages=prompt.format_prompt(messages=state["messages"]).to_messages() + [result],
+                    render=render,
+                    agent_name="News Analyst",
+                    free_text_block=result.content,
+                )
+                report = _guard_news_unavailable(report, news_status)
+                report = _news_available_note(news_status) + report
 
         return {
             "messages": [result],

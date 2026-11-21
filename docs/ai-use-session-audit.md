@@ -269,9 +269,9 @@ the earlier 2026-11-06 occurrence kept its ID.
 
 | Old occurrence | Distinguishing activity | New ID | Preserved? |
 | --- | --- | --- | --- |
-| `AUL-020` #2 (46th) | OpenCode implementation: the two confirmed 2026-11-11 live-run defects (origin authority, structured raw usage) under plan/test approval | `AUL-071` | yes — only the ID changed |
-| `AUL-021` #2 (47th) | Codex independent OFFLINE verification of Defect-1/Defect-2 metadata replay | `AUL-072` | yes — only the ID changed |
-| `AUL-022` #2 (48th) | Codex independent technical review of the repaired tree; tombstone edge | `AUL-073` | yes — only the ID changed |
+| `AUL-020` #2 (46th) | OpenCode implementation: the two confirmed 2026-11-11 live-run defects (origin authority, structured raw usage) under plan/test approval | `AUL-106` | yes — only the ID changed |
+| `AUL-021` #2 (47th) | Codex independent OFFLINE verification of Defect-1/Defect-2 metadata replay | `AUL-107` | yes — only the ID changed |
+| `AUL-022` #2 (48th) | Codex independent technical review of the repaired tree; tombstone edge | `AUL-108` | yes — only the ID changed |
 
 Deterministic check: the 73 original records were deep-compared against the
 stage-2 list. Exactly three records differ, and in each case the only changed
@@ -435,7 +435,7 @@ is claimed that was not executed; everything not run is labelled `NOT_RUN`.
 | 4. Original 32 Release IDs preserved | **PASS** | 32/32 retained; only `NFR-PIT-001` and `NFR-SEC-001` differ, and only in `source_files`/`tests`/`verification_evidence` (additive) |
 | 5. Exact 21 personal-requirement mapping | **PASS** | 21/21 personal IDs mapped; every destination resolves to a registry ID |
 | 6. All 64 personal acceptance criteria covered | **PASS** | 64/64 AC IDs, 64 unique rows, every destination resolves |
-| 7. AUL uniqueness and original history | **PASS** | 105 records, 105 unique; 73 originals preserved; only `AUL-020/021/022` occurrence #2 changed ID (to `AUL-071/072/073`) |
+| 7. AUL uniqueness and original history | **PASS** | 108 records, 108 unique after the PR #5 merge; 73 originals preserved; `AUL-020/021/022` occurrence #2 now maps to `AUL-106/107/108`, while the PR #5 Release records use `AUL-071/072/073` |
 | 8. All 31 AIU entries mapped | **PASS** | 31/31 map to existing `AUL` IDs (`AUL-074`…`AUL-104`) |
 | 9. Traceability to real files | **PASS** | every `source_files` / `design_artifacts` / `tests` / `verification.references` path exists |
 | 10. Submission-validator D1 functions | **PASS** | `check_requirements` + `check_trace_matrix`: 0 errors, 0 warnings |

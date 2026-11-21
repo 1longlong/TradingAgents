@@ -18,8 +18,6 @@ Two defects closed in campaign 20260808/final_quality_closure:
 
 from __future__ import annotations
 
-import pytest
-
 from tradingagents.agents.analysts.sentiment_analyst import create_sentiment_analyst
 from tradingagents.agents.schemas import (
     SentimentBand,

@@ -382,7 +382,6 @@ def check_news_scope(spec: dict) -> None:
 
 def check_finnhub(ticker: str, trade_date: str) -> None:
     import os
-
     from datetime import date, timedelta
 
     from tradingagents.dataflows.finnhub_news import get_news_finnhub_only

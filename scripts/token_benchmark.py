@@ -48,7 +48,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from tradingagents.dataflows.utils import safe_ticker_component
+from tradingagents.dataflows.utils import safe_ticker_component  # noqa: E402
 
 # Kept in sync with the telemetry payload consumers expect. Bump only when the
 # experiment/summary format changes deliberately.
@@ -677,11 +677,10 @@ def usage_verdict(payload: dict, *, replay_used: int | None = None) -> dict:
             mismatch.append(
                 f"per-call output tokens sum to {event_out}, totals say {totals_out}")
     if replay_used is not None and totals_in is not None and totals_out is not None \
-            and events_recorded:
-        if replay_used != totals_in + totals_out:
-            mismatch.append(
-                f"usage replay counted {replay_used} tokens, telemetry totals "
-                f"say {totals_in + totals_out}")
+            and events_recorded and replay_used != totals_in + totals_out:
+        mismatch.append(
+            f"usage replay counted {replay_used} tokens, telemetry totals "
+            f"say {totals_in + totals_out}")
 
     # --- absence ----------------------------------------------------------
     if calls is None or calls == 0:
@@ -4805,8 +4804,8 @@ def verify_measurement(exp_dir: Path, summary: dict) -> dict:
             continue
         payload = _load_json(path)
         events = payload.get("llm_call_events") or []
-        ev_in = sum(int((e.get("reported_input_tokens") or 0)) for e in events)
-        ev_out = sum(int((e.get("reported_output_tokens") or 0)) for e in events)
+        ev_in = sum(int(e.get("reported_input_tokens") or 0) for e in events)
+        ev_out = sum(int(e.get("reported_output_tokens") or 0) for e in events)
         record(f"{tag}_events_match_tokens",
                ev_in == (m.get("reported_input_tokens_sum") or 0)
                and ev_out == (m.get("reported_output_tokens_sum") or 0),
@@ -5006,9 +5005,9 @@ def _cmd_measure(args) -> int:
             result = run_experiment(exp_dir, experiment, dry_run=True)
         except RunRefused as exc:
             print(f"refused: {exc}", file=sys.stderr)
-            print(f"dry run refused; nothing was written")
+            print("dry run refused; nothing was written")
             return 2
-        print(f"dry run completed; no LLM called, no telemetry produced")
+        print("dry run completed; no LLM called, no telemetry produced")
         print(f"planned runs: {len(result.get('metrics') or [])}")
         return 0
 
@@ -5061,8 +5060,8 @@ def _print_measure_epilogue(exp_dir: Path, summary_path: Path | None) -> None:
 def _positive_int(raw: str) -> int:
     try:
         value = int(raw)
-    except (TypeError, ValueError):
-        raise argparse.ArgumentTypeError(f"expected a positive integer, got {raw!r}")
+    except (TypeError, ValueError) as exc:
+        raise argparse.ArgumentTypeError(f"expected a positive integer, got {raw!r}") from exc
     if value <= 0:
         raise argparse.ArgumentTypeError(f"expected a positive integer, got {raw!r}")
     return value

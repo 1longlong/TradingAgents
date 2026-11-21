@@ -37,7 +37,8 @@ text before editing source or tests.
     recorded human review before proceeding.
 12. **Scope discipline** — the delivered tree contains Phase 1–3B, the approved
     Phase 4A comparison, and the token-observability delivery documented as
-    ADR-012–ADR-018. Phase 4B, production threshold tuning, and unrequested
+    ADR-013–ADR-018; the simulated-trading subsystem is ADR-019 and PR #5 is
+    ADR-012. Phase 4B, production threshold tuning, and unrequested
     features remain prohibited by default; the token-observability paid campaigns
     ran under dated, run-specific authorizations that do not authorize further
     spend. Do not add unrequested features or duplicate/relocate source trees.

@@ -307,12 +307,7 @@ def _is_sector_roundup(headline: str, ticker: str = "") -> bool:
     # our name follows them ("Oil majors Exxon, Chevron…").
     alias = _alias_patterns((ticker or "").upper())
     appositive = _APPOSITIVE_RE.search(headline)
-    if appositive is not None and any(
-        p.match(headline[appositive.end():appositive.end() + 40].lstrip())
-        for p in alias
-    ):
-        return False
-    return True
+    return not (appositive is not None and any(p.match(headline[appositive.end():appositive.end() + 40].lstrip()) for p in alias))
 
 
 #: Sector/group nouns that frame a whole group. When one of these introduces a
@@ -654,11 +649,7 @@ def is_about_company(headline: str, summary: str, url: str, ticker: str) -> bool
         # A competitor named before us still wins: "AMD Stock Has Blown Past
         # Nvidia" carries our symbol and is AMD's story. So does a bare ticker
         # list that starts with peers ("INTC, AMD, MU, NVDA: Chip Stocks Rally").
-        if _another_company_comes_first(headline, symbol) or _peer_ticker_list_first(
-            headline, symbol
-        ):
-            return False
-        return True
+        return not (_another_company_comes_first(headline, symbol) or _peer_ticker_list_first(headline, symbol))
 
     named = any(p.search(headline) or p.search(url) for p in alias)
     if named and _another_company_comes_first(headline, symbol):

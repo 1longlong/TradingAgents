@@ -33,6 +33,7 @@ import threading
 from pathlib import Path
 
 import pytest
+from langchain_core.exceptions import OutputParserException
 from langchain_core.messages import AIMessage
 from langchain_core.runnables import RunnableLambda
 from langgraph.prebuilt import ToolNode
@@ -561,7 +562,7 @@ class TestSummaryReserveProtection:
 
         class _Structured:
             def invoke(self, prompt):
-                raise RuntimeError("structured miss")
+                raise OutputParserException("structured miss")
 
         def _admit():
             from tradingagents.debate.researcher_accounting import admit_summary_attempt

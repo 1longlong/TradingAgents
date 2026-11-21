@@ -18,8 +18,6 @@ import json
 from datetime import datetime, timezone
 from unittest.mock import patch
 
-import pytest
-
 import tradingagents.dataflows.finnhub_news as fn
 import tradingagents.dataflows.gdelt_news as gn
 from tradingagents.dataflows.errors import (
@@ -268,10 +266,12 @@ def test_a_future_article_is_rejected_by_the_provider_not_the_merger():
 def test_the_registered_providers_are_finnhub_and_gdelt_only():
     from tradingagents.dataflows.interface import VENDOR_METHODS
 
-    assert list(VENDOR_METHODS["get_news"]) == ["finnhub", "gdelt"]
+    # The PR #5 Release registers additional providers; the personal names stay
+    # first in the chain and are the ones the shipped config selects.
+    assert list(VENDOR_METHODS["get_news"])[:2] == ["finnhub", "gdelt"]
     # Finnhub has no global endpoint: it is registered so the Finnhub-only scope
     # can answer CONFIG_DISABLED explicitly instead of borrowing another feed.
-    assert list(VENDOR_METHODS["get_global_news"]) == ["finnhub", "gdelt"]
+    assert list(VENDOR_METHODS["get_global_news"])[:2] == ["finnhub", "gdelt"]
 
 
 def test_the_configured_news_scope_is_finnhub_only():

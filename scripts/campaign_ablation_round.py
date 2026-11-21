@@ -39,6 +39,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
+import contextlib  # noqa: E402
+
 import token_benchmark as tb  # noqa: E402
 
 TS = "20261106_195007"
@@ -135,10 +137,8 @@ def main() -> int:
         n = sum(1 for r in range(1, args.rounds + 1) if slot_is_valid(arm, r))
         print(f"{arm:3} valid={n} / target={args.rounds}")
         ok = ok and n == args.rounds
-        try:
+        with contextlib.suppress(SystemExit):
             write_summaries(arm)
-        except SystemExit:
-            pass
     return 0 if ok else 1
 
 

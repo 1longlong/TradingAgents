@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import json
 import re
-import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -103,7 +102,7 @@ def main() -> int:
             failures.append(f"{spec_dir.name}: ticker {case['ticker']} disagrees with directory")
 
         # The declared arm must be where the pre-registered order puts it.
-        line = next((l for l in order.splitlines() if l.startswith(f"{case['ticker']}:")), "")
+        line = next((line for line in order.splitlines() if line.startswith(f"{case['ticker']}:")), "")
         block = re.findall(r"'([A-Z0-9]+)'", line)
         if block and label not in block:
             failures.append(f"{spec_dir.name}: arm {label} not in the order for {case['ticker']}")
@@ -115,7 +114,7 @@ def main() -> int:
         failures.append(f"expected 16 run IDs, found {len(seen)}")
 
     # Every arm × stock pair appears exactly once.
-    pairs = {a: 0 for a in table}
+    pairs = dict.fromkeys(table, 0)
     for spec_dir in sorted((BATCH_DIR / "specs").iterdir()):
         if not spec_dir.is_dir():
             continue
@@ -131,8 +130,8 @@ def main() -> int:
         return 1
 
     print("ok    arm table: parsed 4 rows from the protocol (the authority)")
-    print(f"ok    16 registrations: switches match their arm's protocol row")
-    print(f"ok    constants: structured=true and s2_downstream=true in all 16")
+    print("ok    16 registrations: switches match their arm's protocol row")
+    print("ok    constants: structured=true and s2_downstream=true in all 16")
     print(f"ok    trade date: {TRADE_DATE} in all 16")
     print(f"ok    coverage: {len(STOCKS)} arms x {len(STOCKS)} stocks = 16, each arm once per stock")
     print("ok    order: every arm appears in its stock's pre-registered block")

@@ -10,7 +10,6 @@ Numbering follows the audit's finding ids where one exists.
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 from unittest.mock import patch
 
@@ -289,7 +288,7 @@ def test_the_sentiment_prefetch_passes_the_trade_date_as_the_cutoff():
     node = mod.create_sentiment_analyst(_LLM())
     with patch.object(mod, "record_prefetch_call", side_effect=fake_prefetch), \
             patch.object(mod, "get_instrument_context_from_state", return_value="ctx"):
-        try:
+        try:  # noqa: SIM105
             node(state)
         except Exception:  # noqa: BLE001 - the LLM stub is deliberately minimal
             pass

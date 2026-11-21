@@ -117,9 +117,8 @@ def test_rate_limit_retries_once_then_raises_the_throttle_type():
     with patch.object(fn, "_request", return_value=(429, "", "")) as request, \
             patch.object(fn, "get_api_key", return_value="test-key"), \
             patch.object(fn, "get_config", return_value={"news_article_limit": 5}), \
-            patch.object(fn.time, "sleep"):
-        with pytest.raises(VendorRateLimitError):
-            fn.fetch_news_finnhub("NVDA", START, END)
+            patch.object(fn.time, "sleep"), pytest.raises(VendorRateLimitError):
+        fn.fetch_news_finnhub("NVDA", START, END)
     assert request.call_count == fn._MAX_ATTEMPTS
 
 
@@ -308,7 +307,7 @@ def test_a_later_cutoff_admits_what_an_earlier_one_rejected():
 def test_a_missing_credential_is_not_configured_not_an_empty_day():
     with patch.object(fn, "_request", return_value=(200, "[]", "")), \
             patch.object(fn, "get_config", return_value={"news_article_limit": 5}), \
-            patch.dict("os.environ", {"FINNHUB_API_KEY": ""}):
+            patch.dict("os.environ", {"FINNHUB_API_KEY": ""}):  # noqa: SIM117
         with pytest.raises(VendorNotConfiguredError):
             fn.fetch_news_finnhub("NVDA", START, END)
 
@@ -435,9 +434,8 @@ def test_a_failure_on_one_day_chunk_raises_rather_than_reporting_partial():
     with patch.object(fn, "_request", side_effect=_fake_request), \
             patch.object(fn, "get_api_key", return_value="test-key"), \
             patch.object(fn, "get_config", return_value={"news_article_limit": 50}), \
-            patch.object(fn.time, "sleep"):
-        with pytest.raises(VendorUnavailableError):
-            fn.fetch_news_finnhub("NVDA", START, END, as_of_cutoff=CUTOFF)
+            patch.object(fn.time, "sleep"), pytest.raises(VendorUnavailableError):
+        fn.fetch_news_finnhub("NVDA", START, END, as_of_cutoff=CUTOFF)
 
 
 def test_chunk_count_is_bounded_for_a_very_wide_range():
@@ -449,7 +447,7 @@ def test_chunk_count_is_bounded_for_a_very_wide_range():
     assert len(chunks) <= fn._MAX_CHUNKS
     assert chunks[-1][1] == "2026-01-01"
     # Ranges tile the window without gaps.
-    for (_, prev_to), (next_from, _) in zip(chunks, chunks[1:]):
+    for (_, prev_to), (next_from, _) in zip(chunks, chunks[1:], strict=False):
         assert prev_to < next_from
 
 

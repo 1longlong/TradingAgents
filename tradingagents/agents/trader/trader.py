@@ -138,6 +138,8 @@ def create_trader(llm):
             "Trader",
             # ADR-011 typed cap (post-settlement, pre-render) and the CAND-01
             # structured prompt built above for the schema-bound call only.
+            # The schema enables Release local recovery from the raw response.
+            schema=TraderProposal,
             sanitize_result=_cap_typed,
             structured_prompt=structured_messages,
         )

@@ -389,20 +389,19 @@ class TestSinglePassAccounting:
         binding = _with_settlement(
             model.with_structured_output(_schema()), "market_analyst", "Market Analyst"
         )
-        with use_usage_capture(cap):
-            with pytest.raises(BudgetDeniedError):
-                finalize_single_pass(
-                    llm=_SchemaAdapter(binding),
-                    structured_llm=binding,
-                    prompt=_prompt(),
-                    messages=[("human", "Analyze AAPL")],
-                    tools=[],
-                    schema=_schema(),
-                    render=None,
-                    agent_name="Market Analyst",
-                    run_tools=run_data_tools([]),
-                    accept=lambda report: "rendered",
-                )
+        with use_usage_capture(cap), pytest.raises(BudgetDeniedError):
+            finalize_single_pass(
+                llm=_SchemaAdapter(binding),
+                structured_llm=binding,
+                prompt=_prompt(),
+                messages=[("human", "Analyze AAPL")],
+                tools=[],
+                schema=_schema(),
+                render=None,
+                agent_name="Market Analyst",
+                run_tools=run_data_tools([]),
+                accept=lambda report: "rendered",
+            )
         assert model.cursor == 1, (
             "exactly one attempt is dispatched to the transport: the denial is "
             "not answered with an approved-looking fallback"

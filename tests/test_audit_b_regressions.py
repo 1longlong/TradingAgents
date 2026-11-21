@@ -199,9 +199,9 @@ def test_the_constructed_setup_reproduces_every_delivered_arm(spec_path):
 
 def test_a_mismatched_spec_is_rejected_after_a_real_build(monkeypatch):
     """Non-vacuity: the verifier is not a formality over the right answer."""
-    import tradingagents.graph.setup as setup_mod
     from langchain_core.language_models.fake_chat_models import FakeListChatModel
 
+    import tradingagents.graph.setup as setup_mod
     from tradingagents.graph.conditional_logic import ConditionalLogic
     from tradingagents.graph.trading_graph import TradingAgentsGraph
 

@@ -12,9 +12,10 @@ source, partial, genuine neutral, bullish, bearish, timeout, rate limit,
 historical no-coverage, and the downstream UNKNOWN-vs-Neutral distinction.
 """
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: I001
 
 import pytest
+from pydantic import ValidationError
 from langchain_core.messages import AIMessage
 
 from tradingagents.agents.analysts.sentiment_analyst import create_sentiment_analyst
@@ -25,7 +26,6 @@ from tradingagents.agents.schemas import (
     classify_sentiment_sources,
     render_sentiment_report,
 )
-
 
 # --- The exact placeholder strings the fetchers produce ---------------------
 COVERAGE_ST = (
@@ -47,12 +47,12 @@ REAL_NEWS = "## NVDA News, from 2026-09-16 to 2026-09-23:\n\n### Nvidia ships x 
 
 
 def _report(**kw):
-    base = dict(
-        overall_band=SentimentBand.NEUTRAL,
-        overall_score=5.0,
-        confidence="low",
-        narrative="body",
-    )
+    base = {
+        "overall_band": SentimentBand.NEUTRAL,
+        "overall_score": 5.0,
+        "confidence": "low",
+        "narrative": "body",
+    }
     base.update(kw)
     return SentimentReport(**base)
 
@@ -244,7 +244,7 @@ class TestDownstream:
         assert "5.0" not in passed
 
     def test_schema_rejects_out_of_range_score(self):
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             SentimentReport(
                 overall_band=SentimentBand.BULLISH, overall_score=11.0,
                 confidence="low", narrative="x",

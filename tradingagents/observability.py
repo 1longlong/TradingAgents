@@ -49,11 +49,12 @@ import os
 import threading
 import time
 import uuid
+from collections.abc import Callable
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import AIMessage, ToolMessage
@@ -257,11 +258,11 @@ def size_agent_state_context(state: Any) -> dict[str, int]:
     context: dict[str, int] = {}
     if not isinstance(state, dict):
         return context
-    for field in AGENT_STATE_CONTEXT_WHITELIST:
-        value = state.get(field)
+    for state_field in AGENT_STATE_CONTEXT_WHITELIST:
+        value = state.get(state_field)
         if value is None:
             continue
-        context[field] = utf8_byte_size(value)
+        context[state_field] = utf8_byte_size(value)
 
     invest = state.get("investment_debate_state")
     if isinstance(invest, dict):
@@ -1084,7 +1085,7 @@ def bind_run_scope(collector: RunMetricsCollector | None):
 def unbind_run_scope(token) -> None:
     """Reset a :func:`bind_run_scope` token (idempotent, never raises)."""
     if token is not None:
-        try:
+        try:  # noqa: SIM105
             _run_var.reset(token)
         except (ValueError, RuntimeError):  # noqa: BLE001 — already reset / wrong context.
             pass
@@ -2455,10 +2456,7 @@ def attrib_tool_round(agent_id: str, tool_node: Callable | None = None):
             error_type = None
             with agent_scoped(agent_id):
                 try:
-                    if use_invoke:
-                        result = node.invoke(*args, **kwargs)
-                    else:
-                        result = node(*args, **kwargs)
+                    result = node.invoke(*args, **kwargs) if use_invoke else node(*args, **kwargs)
                 except BaseException as exc:  # noqa: BLE001 — re-raised unchanged
                     status = "error"
                     error_type = _sanitized_error_class(exc)

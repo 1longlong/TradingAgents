@@ -14,14 +14,12 @@ from __future__ import annotations
 
 import pytest
 
-import tradingagents.graph.setup as setup_mod
 from tradingagents.graph.switch_verification import (
     ANALYST_CONSUMERS,
     SwitchNotConsumed,
     consume_switches_from_setup,
     verify_switches_consumed,
 )
-
 
 # --- C-1: a completion-model call must reach telemetry ---------------------
 

@@ -516,9 +516,9 @@ are two artifacts with two scopes, not two copies of one number.
   (`FR-ANL-*`, `FR-OBS-*`, `FR-HAR-*`, `FR-CAM-*`, `NFR-VER-*`) — see
   [`docs/req/requirements.yaml`](docs/req/requirements.yaml) and
   [`docs/req/req-schema.json`](docs/req/req-schema.json).
-- ADR-001–ADR-018: ADR-012 is the simulated trading system; ADR-013 observability;
+- ADR-001–ADR-019: ADR-012 is the PR #5 error-handling/usage integration; ADR-013 observability;
   ADR-014 Single-Pass; ADR-015 batch macro; ADR-016 Finnhub-only news; ADR-017
-  memory isolation; ADR-018 structured fallback.
+  memory isolation; ADR-018 structured fallback; ADR-019 simulated trading.
 - INV-1–INV-27 plus INV-TRD-001–003 — see
   [`docs/architecture/invariants.md`](docs/architecture/invariants.md).
 - Risks `RISK-036`–`RISK-049` and debt `DEBT-042`–`DEBT-055` are the renumbered
@@ -564,7 +564,7 @@ not runtime configuration.
 | [`Report.md`](Report.md) | Process | Integrated team process report + personal reflection sections. |
 | [`docs/req/requirements.yaml`](docs/req/requirements.yaml) | Requirements | Machine-readable PRD + 52-requirement registry. |
 | [`docs/req/req-schema.json`](docs/req/req-schema.json) | Schema | Draft 2020-12 validation schema. |
-| [`docs/architecture/adr/012-simulated-trading-system.md`](docs/architecture/adr/012-simulated-trading-system.md) | ADR | Simulated trading system. |
+| [`docs/architecture/adr/019-simulated-trading-system.md`](docs/architecture/adr/019-simulated-trading-system.md) | ADR | Simulated trading system. |
 | [`docs/architecture/adr/013-provider-usage-observability.md`](docs/architecture/adr/013-provider-usage-observability.md) | ADR | Provider-usage observability and attribution. |
 | [`docs/architecture/adr/014-single-pass-finalization.md`](docs/architecture/adr/014-single-pass-finalization.md) | ADR | Single-Pass structured finalisation. |
 | [`docs/architecture/adr/015-batch-macro-switch.md`](docs/architecture/adr/015-batch-macro-switch.md) | ADR | Batch-macro ablation switch. |

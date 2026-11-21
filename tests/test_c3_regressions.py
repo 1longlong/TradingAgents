@@ -14,18 +14,18 @@ this study actually calls reports ``prompt_tokens_details.cached_tokens`` and
 ``prompt_cache_hit_tokens``, so genuine cache hits were recorded as ``0`` --
 a measured quantity reported as unmeasured.
 """
+import pathlib  # noqa: I001
 import inspect
-import textwrap
+from pathlib import Path
 
 import pytest
-from pathlib import Path
 
 #: The registered batch this round runs. Specs fixtures point at a real
 #: registered directory because the gate derives a run's arm from it.
 SPECS_FIXTURE = (Path(__file__).resolve().parent.parent
                  / "token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/specs")
 
-from tradingagents.observability import _extract_usage_metadata
+from tradingagents.observability import _extract_usage_metadata  # noqa: E402
 
 
 def _run_single_source() -> str:
@@ -180,6 +180,8 @@ def test_run_single_writes_effective_config_before_propagating():
 
 
 def test_prepare_run_spec_pins_the_experiment_root(tmp_path):
+    import json
+
     import scripts.token_benchmark as tb
 
     exp = tmp_path / "exp"
@@ -187,7 +189,6 @@ def test_prepare_run_spec_pins_the_experiment_root(tmp_path):
     case = {"ticker": "NVDA", "trade_date": "2026-09-23", "case_id": "c1",
             "analysts": ["market"], "research_rounds": 1, "risk_rounds": 1}
     spec_path = tb.prepare_run_spec(exp, {"experiment_id": "e"}, case, 1)
-    import json
 
     spec = json.loads(spec_path.read_text())
     assert spec["experiment_root"] == str(tb._PROJECT_ROOT)
@@ -255,8 +256,9 @@ def _conforming_spec(**overrides):
     hand-written: hand-writing it merely tested a spec that disagrees with the
     study.
     """
-    import scripts.token_benchmark as tb
     import json
+
+    import scripts.token_benchmark as tb
 
     registration_dir = SPECS_FIXTURE / "R01_NVDA_C0"
     registration = json.loads((registration_dir / "experiment.json").read_text())
@@ -491,8 +493,7 @@ def test_registration_hash_is_recomputed_not_trusted(tmp_path):
 def test_registration_hash_fields_agree_across_modules():
     """Three modules must hash the same subset or the verification is theatre."""
     import scripts.token_benchmark as tb
-    from scripts import c3_preflight_gate as gate
-    from scripts import gen_cand01_batch_16run_specs_v2 as gen
+    from scripts import c3_preflight_gate as gate, gen_cand01_batch_16run_specs_v2 as gen
 
     # V3 extends the shared field set with ``memory``; the V2 tuple must stay
     # exactly as registered, and the harness must be its superset.
@@ -509,7 +510,6 @@ def test_all_registered_specs_verify_against_their_registration():
     from pathlib import Path
 
     import scripts.token_benchmark as tb
-    from scripts import c3_preflight_gate as gate
     from scripts import gen_cand01_batch_16run_specs_v2 as gen
 
     batch = (Path(__file__).resolve().parent.parent / "token_benchmarks" /
@@ -539,7 +539,6 @@ def test_all_registered_specs_verify_against_their_registration():
 
 def test_refused_registration_consumes_no_attempt(tmp_path):
     """A refused run must not burn ``attempt_01``."""
-    import json
 
     import scripts.token_benchmark as tb
 
@@ -741,6 +740,7 @@ def test_gate_refuses_an_arm_swapped_in_place_with_a_consistent_rehash(
 
     # Swap R01 (named C0) to the CC switches, consistently rehashed.
     import json
+
     import scripts.token_benchmark as tb
     ep = specs / "R01_NVDA_C0" / "experiment.json"
     reg = json.loads(ep.read_text())
@@ -1078,7 +1078,6 @@ def test_a_sealed_release_is_not_resealed_by_accident(tmp_path):
     """
     import os
     import re
-    import shutil
     import subprocess
 
     source_path = (Path(__file__).resolve().parent.parent / "scripts" /

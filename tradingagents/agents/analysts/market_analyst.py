@@ -4,19 +4,19 @@ from tradingagents.agents.schemas import (
     MarketAnalystReport,
     render_market_analyst_report,
 )
-from tradingagents.agents.utils.structured import (
-    bind_structured,
-    finalize_analyst_report,
-    finalize_single_pass,
-    run_data_tools,
-)
-
 from tradingagents.agents.utils.agent_utils import (
     get_indicators,
     get_instrument_context_from_state,
     get_language_instruction,
     get_stock_data,
     get_verified_market_snapshot,
+)
+from tradingagents.agents.utils.structured import (
+    _schema_tool_name,
+    bind_structured,
+    finalize_analyst_report,
+    finalize_single_pass,
+    run_data_tools,
 )
 from tradingagents.debate.usage_capture import instrument_analyst_invoke
 
@@ -141,14 +141,25 @@ Where the evidence supports it, lay out Bull, Base and Bear branches for the tra
         report_obj = None
 
         if len(result.tool_calls) == 0:
-            report, report_obj = finalize_analyst_report(
-                llm=llm,
-                structured_llm=structured_llm,
-                messages=prompt.format_prompt(messages=state["messages"]).to_messages() + [result],
-                render=render_market_analyst_report,
-                agent_name="Market Analyst",
-                free_text_block=result.content,
+            governed = bool(
+                (state.get("run_config") or {}).get("market_tool_governance", {}).get("enabled")
             )
+            schema_tool = _schema_tool_name(MarketAnalystReport)
+            if governed or any(tc.get("name") == schema_tool for tc in (result.tool_calls or [])):
+                # Governed path: extract the emitted schema tool call; do not
+                # spend a second generation on finalisation.
+                from tradingagents.graph.market_tool_governance import analyst_report
+
+                report = analyst_report(result)
+            else:
+                report, report_obj = finalize_analyst_report(
+                    llm=llm,
+                    structured_llm=structured_llm,
+                    messages=prompt.format_prompt(messages=state["messages"]).to_messages() + [result],
+                    render=render_market_analyst_report,
+                    agent_name="Market Analyst",
+                    free_text_block=result.content,
+                )
 
         return {
             "messages": [result],

@@ -24,13 +24,17 @@ back to free-text generation for providers that lack native support, so
 the sentiment header (band + score + confidence) is deterministic across
 runs and providers instead of free-form per-model prose.
 
+The optional prefetch split (``config["sentiment_prefetch"]``, see
+:mod:`tradingagents.graph.sentiment_prefetch`) puts the three fetches in their
+own graph node, so a checkpoint taken between fetching and generating lets a
+failed model call resume without fetching the sources again.
+
 See: https://github.com/TauricResearch/TradingAgents/issues/557
 See: https://github.com/TauricResearch/TradingAgents/issues/796
 """
 
-from datetime import datetime, timedelta
-
 import logging
+from datetime import datetime, timedelta
 
 from langchain_core.messages import AIMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -52,6 +56,12 @@ from tradingagents.agents.utils.structured import (
     bind_structured,
     invoke_structured_or_freetext,
 )
+from tradingagents.dataflows.errors import (
+    NoMarketDataError,
+    VendorRateLimitError,
+    VendorTimeoutError,
+    VendorUnavailableError,
+)
 from tradingagents.dataflows.reddit import fetch_reddit_posts
 from tradingagents.dataflows.stocktwits import fetch_stocktwits_messages
 from tradingagents.observability import record_prefetch_call
@@ -59,30 +69,121 @@ from tradingagents.observability import record_prefetch_call
 logger = logging.getLogger(__name__)
 
 
+def _prefetch_module():
+    """The prefetch module, imported lazily.
+
+    ``tradingagents.graph`` imports the agents package (graph setup), and this
+    agent is imported *by* that package, so a module-level import of the graph
+    package here would be circular.
+    """
+    from tradingagents.graph import sentiment_prefetch
+
+    return sentiment_prefetch
+
+
 def _seven_days_back(trade_date: str) -> str:
     return (datetime.strptime(trade_date, "%Y-%m-%d") - timedelta(days=7)).strftime("%Y-%m-%d")
 
 
-def _prefetch_or_degrade(label: str, fetch) -> str:
-    """Run a prefetch, turning any escaping exception into a sentinel string.
+def _analysis_window(state):
+    """The ticker, trade date and 7-day start date this analyst analyses."""
+    ticker = state["company_of_interest"]
+    end_date = state["trade_date"]
+    return ticker, end_date, _seven_days_back(end_date)
 
-    Typed vendor failures are already converted to ``DATA_UNAVAILABLE`` text by
-    ``route_to_vendor``; this only covers the residual case of an *untyped*
-    exception from a core-category vendor (``news_data`` is not optional), which
-    ``route_to_vendor`` re-raises and ``record_prefetch_call`` re-raises again.
-    A failed news prefetch must degrade the sentiment node, not abort the run
-    (audit D-5). The sentinel keeps the failure visible to the model instead of
-    silently reading as "no news".
+
+def _fetch_sources(
+    ticker: str, start_date: str, end_date: str, fetch_parameters
+) -> dict[str, str]:
+    """Fetch the three sentiment sources exactly once, for one window.
+
+    ``fetch_parameters`` (from the snapshot this call runs under) carries the
+    limits the fetches use, so the saved identity names the news article count
+    and the vendor chain the request will actually receive. The news tool's
+    vendor reads ``news_article_limit`` from ``get_config()`` at call time;
+    inside :func:`fetch_snapshot` that read returns the snapshot's value.
+
+    StockTwits and Reddit degrade on any transport or parse failure and return
+    a placeholder string; news does NOT — a rejected credential, a refused
+    request or an internal error still propagates through route_to_vendor, so
+    no source is treated as "no data" when it was never observed.
     """
-    try:
-        return fetch()
-    except Exception as exc:  # noqa: BLE001 - a prefetch must never abort the node
-        logger.warning("Sentiment %s prefetch failed (%s); degrading", label, exc)
-        return (
-            f"DATA_UNAVAILABLE: the {label} prefetch raised "
-            f"{type(exc).__name__}. Treat this source as unavailable; do not "
-            "infer that the instrument is quiet in any direction."
+    prefetch = _prefetch_module()
+    if prefetch.news_article_limit_now() != fetch_parameters.news_article_limit:
+        raise prefetch.SentimentInputError(
+            "the news article limit changed between snapshot and fetch "
+            f"({fetch_parameters.news_article_limit!r} -> "
+            f"{prefetch.news_article_limit_now()!r}); "
+            "refusing to label the fetched text with a stale limit"
         )
+    return {
+        "news": get_news.func(ticker, start_date, end_date, trade_date=end_date),
+        # Pass the analysis window so a historical run trims social posts to it
+        # instead of leaking today's chatter into a backtest (#1220).
+        "stocktwits": fetch_stocktwits_messages(
+            ticker,
+            limit=fetch_parameters.stocktwits_limit,
+            start_date=start_date,
+            end_date=end_date,
+        ),
+        "reddit": fetch_reddit_posts(ticker, start_date=start_date, end_date=end_date),
+    }
+
+
+def create_sentiment_prefetch_node():
+    """Create the ``Sentiment Prefetch`` graph node (prefetch-split path).
+
+    Makes the same three calls as the single-node path and returns them, with
+    their identity, under ``sentiment_inputs``. Nothing else in the state is
+    written, so the checkpoint after this node is what lets a failed model call
+    resume without fetching again. A fetch error propagates unchanged: nothing
+    is saved, and a resume fetches again.
+    """
+
+    def sentiment_prefetch_node(state):
+        prefetch = _prefetch_module()
+        ticker, end_date, start_date = _analysis_window(state)
+        # One context-local snapshot of the run's config is used for the
+        # request parameters, the vendor chain the fetch routes through and
+        # the identity the result is saved under. Nothing global is written,
+        # so a concurrent set_config cannot change this request and is not
+        # overwritten when the block exits (normally, on an error or on
+        # cancellation). The blocks are fetched and saved inside the block so
+        # the label is read from the same snapshot that served the request.
+        with prefetch.fetch_snapshot(_run_config(state)) as snapshot:
+            blocks = _fetch_sources(
+                ticker, start_date, end_date, snapshot.parameters
+            )
+            # Refuse if the context's snapshot is no longer the one that
+            # fetched: the label is never corrected from a later read.
+            prefetch.refuse_changed_fetch_parameters(
+                snapshot, prefetch.current_fetch_parameters()
+            )
+            update = {
+                prefetch.STATE_KEY: prefetch.save_inputs(
+                    state,
+                    ticker=ticker,
+                    start_date=start_date,
+                    end_date=end_date,
+                    snapshot=snapshot,
+                    news_block=blocks["news"],
+                    stocktwits_block=blocks["stocktwits"],
+                    reddit_block=blocks["reddit"],
+                )
+            }
+        return update
+
+    return sentiment_prefetch_node
+
+
+def _run_config(state):
+    """The config this run was started with (``run_config``), else the live one."""
+    config = state.get("run_config")
+    if isinstance(config, dict) and config:
+        return config
+    from tradingagents.dataflows.config import get_config
+
+    return get_config()
 
 
 def _render_without_measurement(report: SentimentReport) -> str:
@@ -110,49 +211,96 @@ def _render_without_measurement(report: SentimentReport) -> str:
     )
 
 
-def create_sentiment_analyst(llm):
+#: Conditions the legacy single-node path may degrade to a sentinel. A typed
+#: throttle/timeout/unavailability/absence is "could not answer", not "no news";
+#: an untyped ``RuntimeError`` is the historical prefetch-failure shape the
+#: legacy contract documents. Fatal/auth/rejected/unknown-internal errors are
+#: NOT in this set and propagate to the caller (Release-first policy).
+_RECOVERABLE_PREFETCH_ERRORS = (
+    VendorRateLimitError,
+    VendorTimeoutError,
+    VendorUnavailableError,
+    NoMarketDataError,
+    RuntimeError,
+)
+
+
+def _prefetch_or_degrade(label: str, fetch) -> str:
+    """Run a prefetch, degrading only the documented recoverable failures."""
+    try:
+        return fetch()
+    except _RECOVERABLE_PREFETCH_ERRORS as exc:
+        logger.warning("Sentiment %s prefetch failed (%s); degrading", label, exc)
+        return (
+            f"DATA_UNAVAILABLE: the {label} prefetch raised "
+            f"{type(exc).__name__}. Treat this source as unavailable; do not "
+            "infer that the instrument is quiet in any direction."
+        )
+
+
+def create_sentiment_analyst(llm, prefetch_split: bool = False):
     """Create a sentiment analyst node for the trading graph.
 
     Pre-fetches news + StockTwits + Reddit data, injects them into the
     prompt as structured blocks, and produces a deterministic sentiment
     report via structured output (with a free-text fallback for providers
     that do not support it).
+
+    ``prefetch_split`` selects the two-node path (default off, which is the
+    original one-node path): ``True`` makes this node consume only the three
+    blocks already saved under ``sentiment_inputs`` by
+    :func:`create_sentiment_prefetch_node`, never fetching sources itself.
     """
     structured_llm = bind_structured(llm, SentimentReport, "Sentiment Analyst")
 
     def sentiment_analyst_node(state):
-        ticker = state["company_of_interest"]
-        end_date = state["trade_date"]
-        start_date = _seven_days_back(end_date)
+        ticker, end_date, start_date = _analysis_window(state)
         instrument_context = get_instrument_context_from_state(state)
 
-        # Pre-fetch all three sources. Each fetcher is wrapped so a failure
-        # degrades to a sentinel string instead of aborting the node: the LLM
-        # always sees something — either real data or a clear placeholder.
-        # The news fetcher is the risky one: `route_to_vendor` re-raises an
-        # *untyped* vendor exception for a core category (`news_data` is not
-        # optional), and `record_prefetch_call` faithfully re-raises too. Typed
-        # vendor failures already become DATA_UNAVAILABLE text; this guard only
-        # catches the residual untyped case (audit D-5).
-        news_block = _prefetch_or_degrade(
-            "news",
-            lambda: record_prefetch_call(
-                "news", get_news.func, ticker, start_date, end_date,
-                trade_date=end_date,
-            ),
-        )
-        # Pass the analysis window so a historical run trims social posts to it
-        # instead of leaking today's chatter into a backtest (#1220).
-        stocktwits_block = record_prefetch_call(
-            "stocktwits",
-            fetch_stocktwits_messages,
-            ticker, limit=30, start_date=start_date, end_date=end_date,
-        )
-        reddit_block = record_prefetch_call(
-            "reddit",
-            fetch_reddit_posts,
-            ticker, start_date=start_date, end_date=end_date,
-        )
+        if prefetch_split:
+            # Saved blocks only. A missing/partial/mismatched input raises
+            # before the model is called; it never re-fetches, and an
+            # "<... unavailable ...>" placeholder is used exactly as saved.
+            # The expected values are read inside the same context-local
+            # snapshot of the run config the prefetch used, so this run's
+            # config -- not the global one -- decides whether the saved input
+            # still matches. No fetch happens here.
+            prefetch = _prefetch_module()
+            with prefetch.fetch_snapshot(_run_config(state)) as snapshot:
+                blocks = prefetch.load_inputs(
+                    state,
+                    ticker=ticker,
+                    start_date=start_date,
+                    end_date=end_date,
+                    snapshot=snapshot,
+                )
+        else:
+            # Personal single-node path: fetch all three, degrading an untyped
+            # failure to a visible sentinel so a prefetch cannot abort the node.
+            news_block = _prefetch_or_degrade(
+                "news",
+                lambda: record_prefetch_call(
+                    "news", get_news.func, ticker, start_date, end_date,
+                    trade_date=end_date,
+                ),
+            )
+            stocktwits_block = record_prefetch_call(
+                "stocktwits", fetch_stocktwits_messages,
+                ticker, limit=30, start_date=start_date, end_date=end_date,
+            )
+            reddit_block = record_prefetch_call(
+                "reddit", fetch_reddit_posts,
+                ticker, start_date=start_date, end_date=end_date,
+            )
+            blocks = {
+                "news": news_block,
+                "stocktwits": stocktwits_block,
+                "reddit": reddit_block,
+            }
+
+        news_block = blocks["news"]
+        stocktwits_block = blocks["stocktwits"]
+        reddit_block = blocks["reddit"]
 
         system_message = _build_system_message(
             ticker=ticker,
@@ -220,6 +368,7 @@ def create_sentiment_analyst(llm):
             formatted_messages,
             render,
             "Sentiment Analyst",
+            schema=SentimentReport,
         )
         if data_status is SentimentDataStatus.UNAVAILABLE and not report_text.startswith(
             "**Overall Sentiment:** **Unknown**"

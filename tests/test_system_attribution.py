@@ -156,12 +156,12 @@ class TestReflectorAttribution:
 
 class TestAttributionIntegrityGuards:
     def test_an_agent_id_cannot_be_used_as_a_system_component(self):
-        with pytest.raises(ValueError, match="is an agent id"):
+        with pytest.raises(ValueError, match="is an agent id"):  # noqa: SIM117
             with o.system_component_scoped(o.AGENT_MARKET_ANALYST):
                 pass
 
     def test_a_system_component_id_cannot_be_used_as_an_agent(self):
-        with pytest.raises(ValueError, match="is a system component"):
+        with pytest.raises(ValueError, match="is a system component"):  # noqa: SIM117
             with o.agent_scoped(o.SYSTEM_COMPONENT_PRE_GRAPH_REFLECTOR):
                 pass
 

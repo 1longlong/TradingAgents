@@ -1702,7 +1702,7 @@ requirements:
     - src/safety/engine.py
     design_artifacts: &id002
     - architecture-blueprint.md
-    - docs/architecture/adr/012-simulated-trading-system.md
+    - docs/architecture/adr/019-simulated-trading-system.md
     - docs/architecture/invariants.md
     - docs/architecture/trace-matrix.md
     tests: *id001

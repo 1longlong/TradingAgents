@@ -588,7 +588,7 @@ def fetch_news_gdelt(
     as_of_cutoff: str | None = None,
     limit: int | None = None,
     verify_budget: int | None = None,
-) -> "_Outcome":
+) -> _Outcome:
     """Core GDELT call: returns verified articles or raises a typed failure."""
     start_dt = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
     end_dt = datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
@@ -823,7 +823,6 @@ def get_global_news_gdelt(
         ``NEWS_STATUS=...`` line. Request-level failures raise so the router can
         fail over (see :func:`get_news_gdelt`).
     """
-    from .errors import VendorUnavailableError
 
     config = get_config()
     if look_back_days is None:

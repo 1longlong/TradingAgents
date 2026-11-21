@@ -18,9 +18,11 @@ from tradingagents.agents import (
     create_portfolio_manager,
     create_research_manager,
     create_sentiment_analyst,
+    create_sentiment_prefetch_node,
     create_trader,
 )
 from tradingagents.agents.utils.agent_states import AgentState
+from tradingagents.dataflows.config import get_config
 from tradingagents.debate.confidence_policy import (
     create_confidence_state_sanitize_node,
     with_sanitized_state,
@@ -30,7 +32,6 @@ from tradingagents.debate.config import (
     DebateTerminationConfig,
 )
 from tradingagents.debate.evaluator_node import create_debate_evaluator_node
-
 from tradingagents.observability import (
     agent_id_for_node,
     analyst_agent_id_for_key,
@@ -42,6 +43,13 @@ from .analyst_execution import build_analyst_execution_plan
 from .conditional_logic import ConditionalLogic
 from .data_quality_gate import create_data_quality_gate_node
 from .evidence_tool_node import EvidenceCapturingAnalystNode, EvidenceCapturingToolNode
+from .fundamentals_governance import parse_fundamentals_tool_governance
+from .fundamentals_tool_governance import create_fundamentals_governance_nodes
+from .market_governance import parse_market_tool_governance
+from .market_tool_governance import create_market_governance_nodes
+from .news_governance import parse_news_tool_governance
+from .news_tool_governance import create_news_governance_nodes
+from .sentiment_prefetch import PREFETCH_NODE, parse_sentiment_prefetch
 
 # Every target a shared conditional router can return. Each edge driven by the
 # router maps all of them, so a fall-through return (e.g. under prompt/i18n/
@@ -124,6 +132,9 @@ class GraphSetup:
         self.deep_thinking_llm = deep_thinking_llm
         self.tool_nodes = tool_nodes
         self.conditional_logic = conditional_logic
+        # The run config decides whether market tool governance is on. ``None``
+        # falls back to the configuration the run installed (``get_config``).
+        self.config = config
         self.debate_termination_config = (
             debate_termination_config or DEFAULT_DEBATE_TERMINATION_CONFIG
         )
@@ -160,13 +171,51 @@ class GraphSetup:
             and self.config.get("structured_analyst_output_enabled", True)
         )
 
+        # Analyst tool governance is opt-in per analyst (default off), each with
+        # its own config section. With one on, that analyst routes through its
+        # own prepare/execute/wrap-up nodes; nothing else in the graph changes,
+        # and the other analysts stay on today's path.
+        run_config = get_config() if self.config is None else self.config
+        governed = {
+            "market": parse_market_tool_governance(run_config).enabled
+            and any(spec.key == "market" for spec in plan.specs),
+            "fundamentals": parse_fundamentals_tool_governance(run_config).enabled
+            and any(spec.key == "fundamentals" for spec in plan.specs),
+            "news": parse_news_tool_governance(run_config).enabled
+            and any(spec.key == "news" for spec in plan.specs),
+        }
+        governance_nodes: dict[str, dict[str, Any]] = {}
+        if governed["market"]:
+            governance_nodes["market"] = create_market_governance_nodes(
+                llm=self.quick_thinking_llm, tool_node=self.tool_nodes["market"]
+            )
+        if governed["fundamentals"]:
+            governance_nodes["fundamentals"] = create_fundamentals_governance_nodes(
+                llm=self.quick_thinking_llm, tool_node=self.tool_nodes["fundamentals"]
+            )
+        if governed["news"]:
+            governance_nodes["news"] = create_news_governance_nodes(
+                llm=self.quick_thinking_llm, tool_node=self.tool_nodes["news"]
+            )
+
+        # The sentiment prefetch split (opt-in, default off) adds one node in
+        # front of the sentiment analyst: it saves the three source blocks, and
+        # the analyst then consumes them instead of fetching. With it off the
+        # analyst is its original single node.
+        prefetch_split = (
+            parse_sentiment_prefetch(run_config).enabled
+            and any(spec.key == "social" for spec in plan.specs)
+        )
+
         analyst_factories = {
             "market": lambda: create_market_analyst(
                 self.quick_thinking_llm,
                 structured=self.config.get("structured_analyst_output_enabled", True),
                 single_pass=single_pass,
             ),
-            "social": lambda: create_sentiment_analyst(self.quick_thinking_llm),
+            "social": lambda: create_sentiment_analyst(
+                self.quick_thinking_llm, prefetch_split=prefetch_split
+            ),
             "news": lambda: create_news_analyst(
                 self.quick_thinking_llm,
                 batch_macro=self.config.get("batch_macro_enabled", True),
@@ -253,6 +302,22 @@ class GraphSetup:
                     key=key,
                 ),
             )
+            if spec.key == "social" and prefetch_split:
+                workflow.add_node(
+                    PREFETCH_NODE, EvidenceCapturingAnalystNode(
+                        create_sentiment_prefetch_node(), name=PREFETCH_NODE
+                    ),
+                )
+            if spec.key in governance_nodes:
+                prefix = spec.key
+                workflow.add_node(f"{prefix}_tool_prepare", governance_nodes[spec.key]["prepare"])
+                workflow.add_node(
+                    f"{prefix}_tool_execute", EvidenceCapturingAnalystNode(
+                        governance_nodes[spec.key]["execute"], name=f"{prefix}_tool_execute"
+                    ),
+                )
+                workflow.add_node(f"{prefix}_finish", governance_nodes[spec.key]["finish"])
+                workflow.add_node(f"{prefix}_wrap_up", governance_nodes[spec.key]["wrap_up"])
 
         # Add other nodes. Every POST-gate node is wrapped so the analyst reports /
         # plans / debate+risk histories interpolated into its prompt are capped on a
@@ -319,9 +384,17 @@ class GraphSetup:
             ),
         )
 
+        def entry_node(spec) -> str:
+            # The sentiment analyst is always entered through its prefetch node
+            # when the split is on -- first in the plan or behind another
+            # analyst -- because that node is what saves its sources.
+            if spec.key == "social" and prefetch_split:
+                return PREFETCH_NODE
+            return spec.agent_node
+
         # Define edges
         # Start with the first analyst
-        workflow.add_edge(START, plan.specs[0].agent_node)
+        workflow.add_edge(START, entry_node(plan.specs[0]))
 
         # Connect analysts in sequence
         for i, spec in enumerate(plan.specs):
@@ -329,21 +402,65 @@ class GraphSetup:
             current_tools = spec.tool_node
             current_clear = spec.clear_node
 
-            # Add conditional edges for current analyst
-            workflow.add_conditional_edges(
-                current_analyst,
-                getattr(self.conditional_logic, f"should_continue_{spec.key}"),
-                [current_tools, current_clear],
-            )
-            workflow.add_edge(current_tools, current_analyst)
+            if spec.key in governed and governed[spec.key]:
+                # A governed analyst. The analyst either asked for tools
+                # (prepare registers the round) or stopped (wrap-up). The
+                # prepare node then either lets it run or, once the allowance is
+                # spent, sends it to the single wrap-up. The path never
+                # re-enters the analyst's plain tool node.
+                prefix = spec.key
+                workflow.add_conditional_edges(
+                    current_analyst,
+                    getattr(
+                        self.conditional_logic, f"should_continue_{prefix}_governed"
+                    ),
+                    [
+                        f"{prefix}_tool_prepare",
+                        f"{prefix}_wrap_up",
+                        f"{prefix}_finish",
+                    ],
+                )
+                workflow.add_conditional_edges(
+                    f"{prefix}_tool_prepare",
+                    getattr(
+                        self.conditional_logic, f"should_execute_{prefix}_prepared"
+                    ),
+                    [f"{prefix}_tool_execute", f"{prefix}_wrap_up", current_analyst],
+                )
+                # After execute the batch is complete and paired; only now is
+                # the next step decided. A spent allowance wraps up directly
+                # instead of asking the analyst again.
+                workflow.add_conditional_edges(
+                    f"{prefix}_tool_execute",
+                    getattr(
+                        self.conditional_logic,
+                        f"should_continue_{prefix}_after_execute",
+                    ),
+                    [current_analyst, f"{prefix}_wrap_up"],
+                )
+                workflow.add_edge(f"{prefix}_finish", current_clear)
+                workflow.add_edge(f"{prefix}_wrap_up", current_clear)
+            else:
+                # Add conditional edges for current analyst
+                workflow.add_conditional_edges(
+                    current_analyst,
+                    getattr(self.conditional_logic, f"should_continue_{spec.key}"),
+                    [current_tools, current_clear],
+                )
+                workflow.add_edge(current_tools, current_analyst)
 
             # Connect to next analyst or to the Data Quality Gate if this is the
             # last analyst. The gate then conditionally routes to Bull Researcher
             # (normal/degraded) or straight to Research Manager (blocked).
             if i < len(plan.specs) - 1:
-                workflow.add_edge(current_clear, plan.specs[i + 1].agent_node)
+                workflow.add_edge(current_clear, entry_node(plan.specs[i + 1]))
             else:
                 workflow.add_edge(current_clear, "Data Quality Gate")
+
+        if prefetch_split:
+            # Prefetch has no branch and no tools: success flows straight into
+            # the generation node, and a failure propagates out (nothing saved).
+            workflow.add_edge(PREFETCH_NODE, "Sentiment Analyst")
 
         # After the gate, persist the capped report/history/plan deltas (degraded)
         # then route to the Bull Researcher (normal/degraded) or the Research

@@ -24,9 +24,8 @@ All LLMs here are scripted fakes: no network, no provider usage.
 
 from __future__ import annotations
 
-import pathlib
-
 import inspect
+import pathlib
 import unittest
 
 
@@ -36,16 +35,16 @@ def _source(*parts: str) -> str:
 
     return (pathlib.Path(_ta.__file__).resolve().parent.joinpath(*parts[1:])
             ).read_text(encoding="utf-8")
-from typing import Annotated
+from typing import Annotated  # noqa: E402
 
-from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
-from langchain_core.outputs import ChatGeneration, ChatResult
-from langchain_core.runnables import RunnableLambda
-from langgraph.prebuilt.tool_node import InjectedState
+from langchain_core.language_models.chat_models import BaseChatModel  # noqa: E402
+from langchain_core.messages import AIMessage, HumanMessage  # noqa: E402
+from langchain_core.outputs import ChatGeneration, ChatResult  # noqa: E402
+from langchain_core.runnables import RunnableLambda  # noqa: E402
+from langgraph.prebuilt.tool_node import InjectedState  # noqa: E402
 
-from tradingagents.agents import schemas as S
-from tradingagents.agents.utils.structured import (
+from tradingagents.agents import schemas as S  # noqa: E402
+from tradingagents.agents.utils.structured import (  # noqa: E402
     SINGLE_PASS_MAX_ROUNDS,
     finalize_single_pass,
     run_data_tools,
@@ -671,7 +670,9 @@ class RegressionTest(unittest.TestCase):
 
     def test_analyst_factories_default_to_the_two_call_path(self):
         from tradingagents.agents.analysts import (
-            fundamentals_analyst, market_analyst, news_analyst,
+            fundamentals_analyst,
+            market_analyst,
+            news_analyst,
         )
 
         for mod, factory in (
@@ -685,7 +686,7 @@ class RegressionTest(unittest.TestCase):
     def test_sentiment_analyst_is_untouched(self):
         from tradingagents.agents.analysts import sentiment_analyst
 
-        src = open(sentiment_analyst.__file__).read()
+        src = open(sentiment_analyst.__file__).read()  # noqa: SIM115
         self.assertNotIn("single_pass", src)
         self.assertIn("bind_structured", src)
 
@@ -713,7 +714,9 @@ class RegressionTest(unittest.TestCase):
 class ModeCompatibilityTest(unittest.TestCase):
     def _node(self, kind, single_pass):
         from tradingagents.agents.analysts import (
-            fundamentals_analyst, market_analyst, news_analyst,
+            fundamentals_analyst,
+            market_analyst,
+            news_analyst,
         )
 
         factory = {"market": market_analyst, "news": news_analyst,
@@ -789,7 +792,7 @@ class TradeDatePrecedenceTest(unittest.TestCase):
         original = tool.func
         try:
             tool.func = lambda *a, **kw: (seen.update(kw, **dict(zip(
-                ["symbol", "start_date", "end_date", "trade_date"], a))), "rows")[1]
+                ["symbol", "start_date", "end_date", "trade_date"], a, strict=False))), "rows")[1]
             run_data_tools([tool], state=state if state is not None else {"trade_date": self.RUN})(
                 [{"name": "get_stock_data", "id": "x1", "args": args}])
         finally:
@@ -1043,14 +1046,14 @@ class CompiledGraphLoopTest(unittest.TestCase):
     """
 
     def _graph(self, llm, executed):
+        from unittest.mock import patch
+
         from langgraph.graph import END, START, StateGraph
         from langgraph.prebuilt import ToolNode
 
         from tradingagents.agents.analysts.market_analyst import create_market_analyst
         from tradingagents.agents.utils.agent_states import AgentState
         from tradingagents.graph.conditional_logic import ConditionalLogic
-
-        from unittest.mock import patch
 
         node = create_market_analyst(llm, structured=True, single_pass=True)
 

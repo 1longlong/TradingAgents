@@ -186,8 +186,10 @@ subsystem really lives in `src/trading/` and `src/safety/`, with canonical tests
 - The delivered tree contains the Release Phase 1–3B feature work, the Phase 4A
   deterministic offline baseline comparison (completed and human-approved with
   limitations: WANG Yiwen 60536848, 2026-10-23), and the token-observability
-  delivery (2026-10-20 → 2026-11-16, documented retrospectively as ADR-012–ADR-018
-  and requirements `FR-ANL-*`/`FR-OBS-*`/`FR-HAR-*`/`FR-CAM-*`/`NFR-VER-*`).
+  delivery (2026-10-20 → 2026-11-16, documented retrospectively as ADR-013–ADR-018
+  and requirements `FR-ANL-*`/`FR-OBS-*`/`FR-HAR-*`/`FR-CAM-*`/`NFR-VER-*`). The
+  independent simulated-trading subsystem is ADR-019; the PR #5 error-handling
+  integration is ADR-012.
 - **Phase 4B** (live-provider benchmarking), **production threshold tuning**, and
   **unrequested features** remain prohibited by default. The token-observability
   delivery's paid 16-run campaigns ran under dated, run-specific human

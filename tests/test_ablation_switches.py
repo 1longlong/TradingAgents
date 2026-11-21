@@ -16,6 +16,7 @@ These tests assert the observable binding, which is the thing the model sees:
 
 from __future__ import annotations
 
+import contextlib
 import unittest
 from unittest import mock
 
@@ -48,7 +49,7 @@ class _FakeLLM:
 
 def _news_tools(**kw):
     cap = {}
-    try:
+    with contextlib.suppress(_Stop):
         news_analyst.create_news_analyst(_FakeLLM(cap), **kw)(
             {
                 "trade_date": "2026-09-23",
@@ -57,8 +58,6 @@ def _news_tools(**kw):
                 "messages": [],
             }
         )
-    except _Stop:
-        pass
     return cap.get("tools", [])
 
 
@@ -94,7 +93,7 @@ class StructuredSwitchTest(unittest.TestCase):
     def _bind_called(self, factory, **kw):
         cap = {}
         llm = _FakeLLM(cap)
-        try:
+        try:  # noqa: SIM105
             factory(llm, **kw)(
                 {
                     "trade_date": "2026-09-23",

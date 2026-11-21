@@ -5,6 +5,14 @@ portfolio) plus a consolidated ``complete_report.md`` under ``save_path``. The
 CLI and ``TradingAgentsGraph.save_reports`` both call this, so a headless / API
 run produces the same on-disk report tree a CLI run does.
 
+Each markdown file is written by :func:`tradingagents.file_io.write_text_atomic`,
+so a failed write leaves that file's previous contents intact instead of a
+truncated file. This is a per-file guarantee, not a transaction over the report
+directory: ``complete_report.md`` is still written last, but if a write fails
+partway through the tree, sections already replaced keep their new contents and
+the rest keep their previous ones, so the tree is not guaranteed to hold a
+single version. The error propagates instead of being reported as a save.
+Nothing is deleted or rolled back here.
 Stage 2: the writer additionally emits the shared quality/debate artifacts
 (``0_quality/*``, ``2_research/debate_trace.json``, ``run_summary.json``) via
 :func:`tradingagents.report_artifacts.write_report_artifacts`, and adds concise
@@ -14,6 +22,7 @@ Stage 2: the writer additionally emits the shared quality/debate artifacts
 from datetime import datetime
 from pathlib import Path
 
+from tradingagents.file_io import write_text_atomic
 from tradingagents.report_artifacts import (
     build_data_quality_section,
     build_run_summary_section,
@@ -67,6 +76,8 @@ def _trusted_text(
 def write_report_tree(final_state: dict, ticker: str, save_path) -> Path:
     """Save a completed run's reports to ``save_path``; return the complete-report path.
 
+    Errors from writing any file propagate; on failure the target directory is
+    left as it was up to the failing file (see the module docstring).
     Trusted sections (analyst reports, Research Manager, Trader, risk analysts,
     Portfolio Manager and the consolidated plan/decision) are passed through
     :func:`_trusted_text` so a rejected exact fact is redacted at the report
@@ -87,22 +98,22 @@ def write_report_tree(final_state: dict, ticker: str, save_path) -> Path:
     if final_state.get("market_report"):
         analysts_dir.mkdir(exist_ok=True)
         text = _trusted_text(final_state, final_state["market_report"], section="market", audit_sink=report_audit)
-        (analysts_dir / "market.md").write_text(text, encoding="utf-8")
+        write_text_atomic(analysts_dir / "market.md", text, encoding="utf-8")
         analyst_parts.append(("Market Analyst", text))
     if final_state.get("sentiment_report"):
         analysts_dir.mkdir(exist_ok=True)
         text = _trusted_text(final_state, final_state["sentiment_report"], section="sentiment", audit_sink=report_audit)
-        (analysts_dir / "sentiment.md").write_text(text, encoding="utf-8")
+        write_text_atomic(analysts_dir / "sentiment.md", text, encoding="utf-8")
         analyst_parts.append(("Sentiment Analyst", text))
     if final_state.get("news_report"):
         analysts_dir.mkdir(exist_ok=True)
         text = _trusted_text(final_state, final_state["news_report"], section="news", audit_sink=report_audit)
-        (analysts_dir / "news.md").write_text(text, encoding="utf-8")
+        write_text_atomic(analysts_dir / "news.md", text, encoding="utf-8")
         analyst_parts.append(("News Analyst", text))
     if final_state.get("fundamentals_report"):
         analysts_dir.mkdir(exist_ok=True)
         text = _trusted_text(final_state, final_state["fundamentals_report"], section="fundamentals", audit_sink=report_audit)
-        (analysts_dir / "fundamentals.md").write_text(text, encoding="utf-8")
+        write_text_atomic(analysts_dir / "fundamentals.md", text, encoding="utf-8")
         analyst_parts.append(("Fundamentals Analyst", text))
     if analyst_parts:
         content = "\n\n".join(f"### {name}\n{text}" for name, text in analyst_parts)
@@ -117,17 +128,17 @@ def write_report_tree(final_state: dict, ticker: str, save_path) -> Path:
         if debate.get("bull_history"):
             research_dir.mkdir(exist_ok=True)
             raw = f"{_NON_AUTHORITATIVE_NOTICE}\n\n{debate['bull_history']}"
-            (research_dir / "bull.md").write_text(raw, encoding="utf-8")
+            write_text_atomic(research_dir / "bull.md", raw, encoding="utf-8")
             research_parts.append(("Bull Researcher (non-authoritative transcript)", raw))
         if debate.get("bear_history"):
             research_dir.mkdir(exist_ok=True)
             raw = f"{_NON_AUTHORITATIVE_NOTICE}\n\n{debate['bear_history']}"
-            (research_dir / "bear.md").write_text(raw, encoding="utf-8")
+            write_text_atomic(research_dir / "bear.md", raw, encoding="utf-8")
             research_parts.append(("Bear Researcher (non-authoritative transcript)", raw))
         if debate.get("judge_decision"):
             research_dir.mkdir(exist_ok=True)
             text = _trusted_text(final_state, debate["judge_decision"], section="research_manager", audit_sink=report_audit)
-            (research_dir / "manager.md").write_text(text, encoding="utf-8")
+            write_text_atomic(research_dir / "manager.md", text, encoding="utf-8")
             research_parts.append(("Research Manager", text))
         if research_parts:
             content = "\n\n".join(f"### {name}\n{text}" for name, text in research_parts)
@@ -138,7 +149,7 @@ def write_report_tree(final_state: dict, ticker: str, save_path) -> Path:
         trading_dir = save_path / "3_trading"
         trading_dir.mkdir(exist_ok=True)
         text = _trusted_text(final_state, final_state["trader_investment_plan"], section="trader", audit_sink=report_audit)
-        (trading_dir / "trader.md").write_text(text, encoding="utf-8")
+        write_text_atomic(trading_dir / "trader.md", text, encoding="utf-8")
         sections.append(f"## III. Trading Team Plan\n\n### Trader\n{text}")
 
     # 4. Risk Management
@@ -149,17 +160,17 @@ def write_report_tree(final_state: dict, ticker: str, save_path) -> Path:
         if risk.get("aggressive_history"):
             risk_dir.mkdir(exist_ok=True)
             text = _trusted_text(final_state, risk["aggressive_history"], section="risk_aggressive", audit_sink=report_audit)
-            (risk_dir / "aggressive.md").write_text(text, encoding="utf-8")
+            write_text_atomic(risk_dir / "aggressive.md", text, encoding="utf-8")
             risk_parts.append(("Aggressive Analyst", text))
         if risk.get("conservative_history"):
             risk_dir.mkdir(exist_ok=True)
             text = _trusted_text(final_state, risk["conservative_history"], section="risk_conservative", audit_sink=report_audit)
-            (risk_dir / "conservative.md").write_text(text, encoding="utf-8")
+            write_text_atomic(risk_dir / "conservative.md", text, encoding="utf-8")
             risk_parts.append(("Conservative Analyst", text))
         if risk.get("neutral_history"):
             risk_dir.mkdir(exist_ok=True)
             text = _trusted_text(final_state, risk["neutral_history"], section="risk_neutral", audit_sink=report_audit)
-            (risk_dir / "neutral.md").write_text(text, encoding="utf-8")
+            write_text_atomic(risk_dir / "neutral.md", text, encoding="utf-8")
             risk_parts.append(("Neutral Analyst", text))
         if risk_parts:
             content = "\n\n".join(f"### {name}\n{text}" for name, text in risk_parts)
@@ -170,7 +181,7 @@ def write_report_tree(final_state: dict, ticker: str, save_path) -> Path:
             portfolio_dir = save_path / "5_portfolio"
             portfolio_dir.mkdir(exist_ok=True)
             text = _trusted_text(final_state, risk["judge_decision"], section="portfolio", audit_sink=report_audit)
-            (portfolio_dir / "decision.md").write_text(text, encoding="utf-8")
+            write_text_atomic(portfolio_dir / "decision.md", text, encoding="utf-8")
             sections.append(f"## V. Portfolio Manager Decision\n\n### Portfolio Manager\n{text}")
 
     # Stage 2: shared quality/debate/run artifacts (redacted, structured only).
@@ -198,5 +209,5 @@ def write_report_tree(final_state: dict, ticker: str, save_path) -> Path:
     header = f"# Trading Analysis Report: {ticker}\n\nGenerated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
     sections.append(build_data_quality_section(artifact_state))
     sections.append(build_run_summary_section(artifact_state, ticker, artifact_paths))
-    (save_path / "complete_report.md").write_text(header + "\n\n".join(sections), encoding="utf-8")
+    write_text_atomic(save_path / "complete_report.md", header + "\n\n".join(sections), encoding="utf-8")
     return save_path / "complete_report.md"

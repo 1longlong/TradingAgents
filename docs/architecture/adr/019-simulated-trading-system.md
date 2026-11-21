@@ -1,6 +1,10 @@
-# ADR-012: Simulated Trading System
+# ADR-019: Simulated Trading System
 
 Status: Accepted.
+
+**Renumbering (2026-11-21):** the Release PR #5 merge introduced a different
+ADR-012 (`012-error-handling-merge-integration.md`). This decision is therefore
+canonical as ADR-019; its substantive content is unchanged.
 
 ## Context
 

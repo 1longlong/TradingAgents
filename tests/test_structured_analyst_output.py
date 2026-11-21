@@ -43,13 +43,13 @@ class _FakeStructured:
 
 
 def _market(**over):
-    base = dict(
-        stance=S.AnalystStance.BULLISH,
-        key_evidence=EVIDENCE,
-        key_levels=[S.PriceLevel(label="Resistance", price="179.88", why="session high")],
-        risks=["ATR rising"],
-        interpretation="Trend intact above both averages.",
-    )
+    base = {
+        "stance": S.AnalystStance.BULLISH,
+        "key_evidence": EVIDENCE,
+        "key_levels": [S.PriceLevel(label="Resistance", price="179.88", why="session high")],
+        "risks": ["ATR rising"],
+        "interpretation": "Trend intact above both averages.",
+    }
     base.update(over)
     return S.MarketAnalystReport(**base)
 
@@ -306,7 +306,7 @@ class WiringTest(unittest.TestCase):
             (fundamentals_analyst, "FundamentalsAnalystReport"),
             (news_analyst, "NewsAnalystReport"),
         ):
-            src = open(mod.__file__).read()
+            src = open(mod.__file__).read()  # noqa: SIM115
             self.assertIn("finalize_analyst_report", src, mod.__name__)
             self.assertIn(schema_name, src, mod.__name__)
             self.assertIn("bind_structured", src, mod.__name__)
@@ -432,31 +432,31 @@ class WiringTest(unittest.TestCase):
 
 
 def _cond(**over):
-    base = dict(
-        condition="weekly close below the 50-day SMA",
-        observable_signal="close vs close_50_sma in get_indicators",
-        threshold="171.90",
-        evidence_basis="close=178.42 vs 50d SMA 171.90",
-        invalidates="the trend-intact stance",
-    )
+    base = {
+        "condition": "weekly close below the 50-day SMA",
+        "observable_signal": "close vs close_50_sma in get_indicators",
+        "threshold": "171.90",
+        "evidence_basis": "close=178.42 vs 50d SMA 171.90",
+        "invalidates": "the trend-intact stance",
+    }
     base.update(over)
     return S.InvalidationCondition(**base)
 
 
 def _scenario(name, weight, **over):
-    base = dict(
-        name=S.ScenarioType(name),
-        weight=weight,
-        supporting_evidence="hyperscaler capex guidance up",
-        trigger_conditions="close above 179.88 resistance",
-        invalidation_conditions="close back below the 50d SMA",
-    )
+    base = {
+        "name": S.ScenarioType(name),
+        "weight": weight,
+        "supporting_evidence": "hyperscaler capex guidance up",
+        "trigger_conditions": "close above 179.88 resistance",
+        "invalidation_conditions": "close back below the 50d SMA",
+    }
     base.update(over)
     return S.Scenario(**base)
 
 
 def _market_with(**over):
-    kwargs = dict(stance=S.AnalystStance.MILDLY_BULLISH, key_evidence=EVIDENCE, interpretation="Trend intact")
+    kwargs = {"stance": S.AnalystStance.MILDLY_BULLISH, "key_evidence": EVIDENCE, "interpretation": "Trend intact"}
     kwargs.update(over)
     return S.MarketAnalystReport(**kwargs)
 

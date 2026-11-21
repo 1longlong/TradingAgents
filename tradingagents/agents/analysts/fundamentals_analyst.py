@@ -4,13 +4,6 @@ from tradingagents.agents.schemas import (
     FundamentalsAnalystReport,
     render_fundamentals_analyst_report,
 )
-from tradingagents.agents.utils.structured import (
-    bind_structured,
-    finalize_analyst_report,
-    finalize_single_pass,
-    run_data_tools,
-)
-
 from tradingagents.agents.utils.agent_utils import (
     get_balance_sheet,
     get_cashflow,
@@ -18,6 +11,13 @@ from tradingagents.agents.utils.agent_utils import (
     get_income_statement,
     get_instrument_context_from_state,
     get_language_instruction,
+)
+from tradingagents.agents.utils.structured import (
+    _schema_tool_name,
+    bind_structured,
+    finalize_analyst_report,
+    finalize_single_pass,
+    run_data_tools,
 )
 from tradingagents.debate.usage_capture import instrument_analyst_invoke
 
@@ -109,14 +109,25 @@ def create_fundamentals_analyst(llm, structured: bool = True, single_pass: bool 
         report_obj = None
 
         if len(result.tool_calls) == 0:
-            report, report_obj = finalize_analyst_report(
-                llm=llm,
-                structured_llm=structured_llm,
-                messages=prompt.format_prompt(messages=state["messages"]).to_messages() + [result],
-                render=render_fundamentals_analyst_report,
-                agent_name="Fundamentals Analyst",
-                free_text_block=result.content,
+            governed = bool(
+                (state.get("run_config") or {}).get("fundamentals_tool_governance", {}).get("enabled")
             )
+            schema_tool = _schema_tool_name(FundamentalsAnalystReport)
+            if governed or any(tc.get("name") == schema_tool for tc in (result.tool_calls or [])):
+                # Governed path: the execute node already emitted the schema
+                # tool call; extract it without another model generation.
+                from tradingagents.agents.utils.tool_governance import analyst_report
+
+                report = analyst_report(result)
+            else:
+                report, report_obj = finalize_analyst_report(
+                    llm=llm,
+                    structured_llm=structured_llm,
+                    messages=prompt.format_prompt(messages=state["messages"]).to_messages() + [result],
+                    render=render_fundamentals_analyst_report,
+                    agent_name="Fundamentals Analyst",
+                    free_text_block=result.content,
+                )
 
         return {
             "messages": [result],

@@ -284,6 +284,8 @@ def _df():
 @pytest.fixture
 def snapshot(monkeypatch):
     monkeypatch.setattr(validator, "load_ohlcv", lambda s, d, fill_gaps=True: _df())
+    # Snapshot fetched_at is another clock input, separate from Gate decided_at.
+    monkeypatch.setattr(validator, "_now_iso", lambda: FETCHED)
 
 
 class TestEngine:

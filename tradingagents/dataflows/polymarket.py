@@ -14,8 +14,11 @@ import logging
 from datetime import datetime, timezone
 
 import requests
+from requests.adapters import HTTPAdapter
 
-from .utils import get_current_date
+from .errors import VendorError, VendorRateLimitError, retryable_status, retryable_transport_error
+from .retry_session import request_timeout, stop_before_request
+from .utils import get_current_date, retry_after_seconds
 
 logger = logging.getLogger(__name__)
 
@@ -28,12 +31,51 @@ REQUEST_TIMEOUT = 30
 DEFAULT_LIMIT = 6
 
 
+# A bare ``requests.Session`` retries nothing on its own in requests 2.x, but an
+# adapter can be configured to; build one explicitly with zero retries so the
+# router's budget is the only retry loop this vendor runs.
+def _session() -> requests.Session:
+    session = requests.Session()
+    adapter = HTTPAdapter(max_retries=0)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
+
+
 def _request(path: str, params: dict) -> dict:
-    response = requests.get(
-        f"{GAMMA_BASE}/{path}", params=params, timeout=REQUEST_TIMEOUT
-    )
-    response.raise_for_status()
-    return response.json()
+    what = f"a Polymarket request ({path})"
+    timeout = request_timeout(REQUEST_TIMEOUT, what)
+    if timeout is None:
+        stop_before_request(what, VendorRateLimitError)
+    try:
+        response = _session().get(
+            f"{GAMMA_BASE}/{path}",
+            params=params,
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as exc:
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+        retry_after = retry_after_seconds(getattr(getattr(exc, "response", None), "headers", None))
+        recoverable = retryable_status(status, retry_after)
+        if recoverable is None:
+            # No status: a transport failure, judged by type (a TLS/URL problem
+            # is configuration, never a momentary outage).
+            recoverable = retryable_transport_error(exc)
+        # A vendor fault, raised rather than returned as prose: prose would read
+        # as success and end the chain at the vendor that failed.
+        error = VendorRateLimitError(
+            f"Polymarket request failed ({status or type(exc).__name__})"
+        ).with_retry_evidence(
+            status=status, retry_after=retry_after, retry=bool(recoverable)
+        )
+        raise error from exc
+    except ValueError as exc:
+        # An unreadable body is not momentarily missing: do not retry it.
+        error = VendorRateLimitError("Polymarket returned an unreadable response")
+        error.retry = False
+        raise error from exc
 
 
 def _parse_json_list(value) -> list:
@@ -94,12 +136,16 @@ def get_prediction_markets(topic: str, limit: int | None = None, curr_date: str 
 
     try:
         data = _request("public-search", {"q": topic, "limit_per_type": 20})
+    except VendorError:
+        # Already typed by ``_request``; the router decides whether to retry
+        # and how to report it.
+        raise
     except requests.RequestException as e:
-        logger.warning("Polymarket search failed for %r: %s", topic, e)
-        return (
-            f"Polymarket data is currently unavailable (network error: {e}). "
-            f"Proceed without prediction-market signal for '{topic}'."
-        )
+        # A failure that escaped ``_request``'s classification (e.g. the request
+        # was built but the client raised something else) is still a vendor
+        # fault, raised typed so the router can classify and retry it.
+        logger.warning("Polymarket search failed for %r: %s", topic, type(e).__name__)
+        raise VendorRateLimitError(f"Polymarket search failed ({type(e).__name__})") from e
 
     now = datetime.now(timezone.utc)
     candidates = [

@@ -398,3 +398,14 @@ or record a reviewed baseline), then restore a whole-repo blocking lint job.
 - **Owner:** `PENDING_HUMAN_CONFIRMATION` (WangTianQi).
 - **Next action:** complete and sign the transcript; do not ship it as final
   before that.
+
+## PR #5 verification follow-up (2026-11-21)
+
+TODO (repository maintainers): verify the integrated full tree on Linux CI.
+Windows cannot collect 13 simulated-trading modules because `fcntl` is absent;
+that subtree was not modified or stubbed. The strict socket harness also blocks
+Windows asyncio's local socketpair setup (two context-isolation tests), while
+those tests pass in ordinary offline mocked execution. These are explicit
+verification limits, not waived failures or evidence of a complete green suite.
+TODO (another contributor): review PR #5 before final merge. See ADR-012 and the
+integration entry in the evaluation logbook for exact results.

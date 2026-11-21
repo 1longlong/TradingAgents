@@ -7,6 +7,7 @@ from tradingagents.agents.utils.agent_utils import (
     opponent_argument_without_repetition,
     report_or_absent,
 )
+from tradingagents.agents.utils.s2_context import bear_context_block, routed_report
 from tradingagents.debate import researcher_accounting as accounting
 from tradingagents.debate.budget import (
     budget_admission_decision,
@@ -25,7 +26,6 @@ from tradingagents.debate.failure_audit import (
 )
 from tradingagents.debate.state import append_debate_turn
 from tradingagents.debate.turn import METADATA_INSTRUCTION, parse_turn_metadata
-from tradingagents.agents.utils.s2_context import bear_context_block, routed_report
 
 
 class InvalidClockError(RuntimeError):

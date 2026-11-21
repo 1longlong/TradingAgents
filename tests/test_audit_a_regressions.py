@@ -22,7 +22,6 @@ from pathlib import Path
 
 import pytest
 
-from tradingagents.dataflows import interface
 from tradingagents.dataflows.news_status import NewsStatus, render_status
 
 REPO_ROOT = Path(__file__).resolve().parent.parent

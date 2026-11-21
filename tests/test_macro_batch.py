@@ -259,22 +259,22 @@ class SafetyNetTest(unittest.TestCase):
 
 class BindingTest(unittest.TestCase):
     def test_tool_reachable_from_agent_and_tool_node(self):
-        from tradingagents.agents.utils import agent_utils
         from tradingagents.agents.analysts import news_analyst
+        from tradingagents.agents.utils import agent_utils
         from tradingagents.graph import trading_graph
 
         self.assertIn("get_macro_indicators_batch", agent_utils.__all__)
-        na_src = open(news_analyst.__file__).read()
+        na_src = open(news_analyst.__file__).read()  # noqa: SIM115
         self.assertIn("get_macro_indicators_batch", na_src)
         self.assertIn("prefer the batch", na_src)
-        tg_src = open(trading_graph.__file__).read()
+        tg_src = open(trading_graph.__file__).read()  # noqa: SIM115
         self.assertIn("get_macro_indicators_batch", tg_src)
 
     def test_single_series_tool_still_bound_as_fallback(self):
         # The brief requires the single-indicator tool to remain available.
         from tradingagents.agents.analysts import news_analyst
 
-        self.assertIn("get_macro_indicators,", open(news_analyst.__file__).read())
+        self.assertIn("get_macro_indicators,", open(news_analyst.__file__).read())  # noqa: SIM115
 
 
 if __name__ == "__main__":

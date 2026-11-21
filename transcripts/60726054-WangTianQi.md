@@ -17,7 +17,7 @@
 | Submission date | `PENDING_HUMAN_CONFIRMATION` (not yet supplied) |
 | Repository | `TradingAgents`; integration worktree branch `integrate/token-into-release-20261121`, base `24adf97`, merging personal feature `57b93df` (personal final code `50b2ca3`) |
 | AI tools used | **OpenCode** (2026-10-20 → 2026-11-15) and **DeepSeek Harness / dsh** (2026-11-16 → 2026-11-21), as separate coding applications. The model id `CS5351/DeepSeek-V4-Flash` is a model, not a tool. |
-| Evidence basis | `docs/ai-use-log.yaml` (`AUL-074`–`AUL-105`), `docs/ai-use-session-audit.md`, `docs/architecture/evaluation-logbook.md`, `docs/bug-diary.md`, `docs/review-memo.md`, `git log` of `2d17df8..50b2ca3`, and the recorded sessions |
+| Evidence basis | `docs/ai-use-log.yaml` (`AUL-074`–`AUL-108`), `docs/ai-use-session-audit.md`, `docs/architecture/evaluation-logbook.md`, `docs/bug-diary.md`, `docs/review-memo.md`, `git log` of `2d17df8..50b2ca3`, and the recorded sessions |
 
 ## How to read this draft
 
@@ -518,8 +518,9 @@
   complete mapping, keep both AI-use histories and fix duplicate record IDs, audit
   the architecture/ADR/invariant collisions, and integrate the governance rules.
 - **What the AI produced.** The D1–D3 documentation set now in this worktree:
-  52 requirements (32 Release + 20 retrospective), 105 unique AI-use records
-  (with `AUL-020/021/022` repaired to `AUL-071/072/073`), ADR-001–ADR-018,
+  52 requirements (32 Release + 20 retrospective), 108 unique AI-use records
+  after the PR #5 merge (the D1-repaired records are `AUL-106/107/108`; the
+  Release PR #5 records use canonical `AUL-071/072/073`), ADR-001–ADR-019,
   INV-1–INV-27 plus INV-TRD, the merged architecture/governance documents and
   `docs/ai-use-session-audit.md`. D4–D6 (this round) added the review memo, bug
   diary, debt register, Report integration and this transcript draft.
