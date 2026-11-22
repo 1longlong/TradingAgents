@@ -95,6 +95,18 @@ ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
 "**/__init__.py" = ["F401"]   # intentional re-exports
+"token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/logs/audit/ast_proof.py" = ["B905", "SIM102"]
+"token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/logs/audit/check_env_delivery.py" = ["E402", "F401", "I001"]
+"token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/logs/audit/check_guard.py" = ["E402", "I001"]
+"token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/logs/audit/env_credential_check.py" = ["E741", "F401"]
+"token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/logs/audit/independent_check.py" = ["B007", "C408", "E702", "F541"]
+"token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/logs/audit/pit_check.py" = ["E402", "E741", "I001"]
+"token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/logs/audit/probe_blast_radius.py" = ["E402"]
+"token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/logs/audit/probe_harness_delivery.py" = ["E402"]
+"token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/logs/audit/probe_hash_scope.py" = ["E401", "E702", "F401", "I001"]
+"token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/logs/audit/quantify.py" = ["E402", "E741", "F401", "I001"]
+"token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/logs/audit/runtime_proof.py" = ["E402", "E741", "F401", "I001"]
+"token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/logs/audit/runtime_proof2.py" = ["E402", "E741", "I001", "SIM105"]
 
 [tool.ruff.lint.isort]
 # Keep multiple aliased names from one module in a single combined import block

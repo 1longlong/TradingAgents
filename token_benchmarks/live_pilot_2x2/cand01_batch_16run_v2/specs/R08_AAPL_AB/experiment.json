@@ -1,0 +1,44 @@
+{
+  "budget": {
+    "budget_mode": "uncapped_authorized",
+    "max_total_tokens": null
+  },
+  "cache_policy": "preserve_existing",
+  "cases": [
+    {
+      "analysts": [
+        "market",
+        "news",
+        "fundamentals"
+      ],
+      "case_id": "aapl_2026_09_23",
+      "research_rounds": 1,
+      "risk_rounds": 1,
+      "ticker": "AAPL",
+      "trade_date": "2026-09-23"
+    }
+  ],
+  "checkpoint_enabled": false,
+  "config_sha256": "617d2b3c850a9a56f288ed590f1d8ea5f45964557cae1e295bb087d2ae6981c9",
+  "deep_model": "CS5351/DeepSeek-V4-Flash",
+  "description": "CAND-01 x batch-macro 2x2, arm AB on AAPL (execution position 8); protocol V2.1",
+  "experiment_id": "R08",
+  "measured_runs": 1,
+  "news_scope": {
+    "company_news": "finnhub",
+    "gdelt": "excluded",
+    "global_news": "finnhub:CONFIG_DISABLED"
+  },
+  "output_language": "English",
+  "protocol_version": "V2.1",
+  "provider": "openai_compatible",
+  "quick_model": "CS5351/DeepSeek-V4-Flash",
+  "schema_version": 2,
+  "switches": {
+    "batch_macro": true,
+    "s2_downstream": true,
+    "single_pass": false,
+    "structured": true
+  },
+  "switches_required": true
+}

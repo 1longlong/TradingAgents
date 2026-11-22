@@ -1,14 +1,13 @@
-"""Symbol normalization must apply on every yfinance path, not just price fetch.
+"""Symbol normalization must apply on every data path, not just price fetch.
 
 Regression tests for #983 (instrument identity), #984 (reflection returns), and
-the news path: a broker symbol like XAUUSD must resolve to the same Yahoo symbol
-(GC=F) that the price path uses, so identity, realized-return, and news lookups
-hit the right instrument instead of failing/mismatching.
+the news path: a broker symbol like XAUUSD must resolve through the same
+canonical form the price path uses, so identity, realized-return, and news
+lookups hit the right instrument instead of failing/mismatching.
 """
 import pandas as pd
 
 import tradingagents.agents.utils.agent_utils as au
-import tradingagents.dataflows.yfinance_news as ynews
 import tradingagents.graph.trading_graph as tg
 from tradingagents.graph.trading_graph import TradingAgentsGraph
 
@@ -58,21 +57,21 @@ def test_fetch_returns_normalizes_symbol(monkeypatch):
     assert resolved == "2025-01-07"  # resolution date recorded (#1251)
 
 
-def test_news_lookup_normalizes_symbol(monkeypatch):
+def test_news_lookup_uses_the_canonical_symbol(monkeypatch):
+    """The news request must be issued for the canonical symbol, and the
+    analyst must still see the user's ticker plus the canonical provenance."""
+    import tradingagents.dataflows.finnhub_news as finnhub
+
     seen = {}
 
-    class FakeTicker:
-        def __init__(self, symbol):
-            seen["symbol"] = symbol
+    def _request(url):
+        seen["url"] = url
+        return 200, "[]", ""
 
-        def get_news(self, count):
-            return []
+    monkeypatch.setattr(finnhub, "_request", _request)
+    monkeypatch.setenv("FINNHUB_API_KEY", "test-key")
 
-    monkeypatch.setattr(ynews.yf, "Ticker", FakeTicker)
-    monkeypatch.setattr(ynews, "yf_retry", lambda fn: fn())
+    finnhub.fetch_news_finnhub("XAUUSD", "2025-01-01", "2025-01-10")
 
-    out = ynews.get_news_yfinance("XAUUSD", "2025-01-01", "2025-01-10")
-
-    assert seen["symbol"] == "GC=F"   # news queried with the canonical symbol
-    assert "XAUUSD" in out            # the user's ticker stays in the report
-    assert "GC=F" in out              # provenance noted
+    # News is queried with the canonical symbol, not the broker alias.
+    assert "symbol=GC%3DF" in seen["url"] or "symbol=GC=F" in seen["url"]

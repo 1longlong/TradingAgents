@@ -2,6 +2,11 @@
 
 from typing import Any
 
+from tradingagents.observability import (
+    SYSTEM_COMPONENT_PRE_GRAPH_REFLECTOR,
+    system_component_scoped,
+)
+
 
 class Reflector:
     """Handles reflection on trading decisions."""
@@ -60,4 +65,9 @@ class Reflector:
                 ),
             ),
         ]
-        return self.quick_thinking_llm.invoke(messages).content
+        # This call legitimately runs before the graph (resolving a pending
+        # decision log entry), so no Agent node scope exists. It is attributed
+        # to a declared system component instead of being silently recorded as
+        # an unattributed call; the prompt, model and call logic are unchanged.
+        with system_component_scoped(SYSTEM_COMPONENT_PRE_GRAPH_REFLECTOR):
+            return self.quick_thinking_llm.invoke(messages).content

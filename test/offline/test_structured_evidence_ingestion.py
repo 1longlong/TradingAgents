@@ -749,6 +749,7 @@ from langchain_core.messages import AIMessage  # noqa: E402
 from langgraph.graph import END, StateGraph  # noqa: E402
 from langgraph.prebuilt import ToolNode  # noqa: E402
 
+import tradingagents.dataflows.finnhub_news as finnhub_news  # noqa: E402
 import tradingagents.dataflows.sec_edgar as sec_edgar  # noqa: E402
 from tradingagents.agents.utils.agent_utils import create_msg_delete  # noqa: E402
 from tradingagents.agents.utils.fundamental_data_tools import (  # noqa: E402
@@ -818,6 +819,38 @@ def _companyfacts_payload() -> dict:
     }
 
 
+def _raw_finnhub_news() -> list[dict]:
+    """Finnhub ``company-news`` records (the shape ``_fetch_range`` returns)."""
+    return [
+        {
+            "headline": "AAPL beats Q1 earnings",
+            "summary": "Apple reported quarterly results above expectations.",
+            "source": "Reuters",
+            "url": "https://news.example.com/aapl?token=SECRET123",
+            "datetime": _epoch("2026-05-10"),
+            "related": "AAPL",
+        },
+        # Syndicated copy of the same article under a different URL (dedupe).
+        {
+            "headline": "AAPL beats Q1 earnings",
+            "summary": "Apple reported quarterly results above expectations.",
+            "source": "Yahoo Syndication",
+            "url": "https://synd.example.com/aapl-copy?utm=abc",
+            "datetime": _epoch("2026-05-10"),
+            "related": "AAPL",
+        },
+        # Future-published: must be excluded (look-ahead).
+        {
+            "headline": "AAPL future event",
+            "summary": "Something that has not happened yet.",
+            "source": "Future",
+            "url": "https://news.example.com/future",
+            "datetime": _epoch("2026-06-01"),
+            "related": "AAPL",
+        },
+    ]
+
+
 def _install_transport_mocks(monkeypatch):
     """Mock every optional-vendor transport at the RAW source (no network)."""
     # Route fundamentals to the SEC EDGAR vendor (structured facts with filing
@@ -825,8 +858,15 @@ def _install_transport_mocks(monkeypatch):
     from tradingagents.dataflows.config import set_config
 
     set_config({"tool_vendors": {"get_income_statement": "sec_edgar"}})
-    # News (real get_news -> get_news_yfinance -> yf.Ticker.get_news)
-    monkeypatch.setattr(ynews.yf, "Ticker", lambda *a, **k: _FakeTicker(_raw_yahoo_news()))
+    # News: the only route for ``get_news`` is Finnhub's company feed, so the
+    # HTTP transport (``_request``) is mocked and the real parse / point-in-time
+    # filter / capture path runs. A placeholder key keeps the call configured.
+    monkeypatch.setenv("FINNHUB_API_KEY", "placeholder")
+    monkeypatch.setattr(
+        finnhub_news,
+        "_request",
+        lambda url: (200, json.dumps(_raw_finnhub_news()), ""),
+    )
     # Fundamentals (real get_income_statement -> sec_edgar.structured_statement_facts)
     monkeypatch.setattr(sec_edgar, "cik_for", lambda t: "0000320193")
     monkeypatch.setattr(sec_edgar, "_cached_json", lambda url, name: _companyfacts_payload())
@@ -1184,7 +1224,7 @@ class TestResumeCorrectness:
 
         from tradingagents.agents.analysts.sentiment_analyst import create_sentiment_analyst
 
-        monkeypatch.setattr(ynews.yf, "Ticker", lambda *a, **k: _FakeTicker(_raw_yahoo_news()))
+        _install_transport_mocks(monkeypatch)
         monkeypatch.setattr(stocktwits, "urlopen", lambda *a, **k: _JsonResp({"messages": _raw_stocktwits()}))
         monkeypatch.setattr(reddit, "_fetch_subreddit_rss",
                             lambda *a, **k: [{"title": "AAPL talk", "created_utc": _epoch("2026-05-09"),

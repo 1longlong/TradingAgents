@@ -155,34 +155,75 @@ def test_request_error_message_carries_no_key(monkeypatch):
 
 @pytest.mark.unit
 def test_global_news_omitted_optionals_use_the_configured_defaults(monkeypatch):
-    """The tool passes None for an omitted look_back_days or limit (#1326)."""
-    from tradingagents.dataflows import alpha_vantage_news
+    """The tool passes None for an omitted look_back_days or limit (#1326).
 
-    monkeypatch.setattr(alpha_vantage_news, "get_config",
-                        lambda: {"global_news_lookback_days": 3, "global_news_article_limit": 9})
-    seen = {}
-    monkeypatch.setattr(alpha_vantage_news, "_make_api_request", lambda fn, params: seen.update(params) or "{}")
+    The macro-news vendor is GDELT since the Finnhub + GDELT migration; the
+    contract is unchanged: an omitted optional must fall back to the configured
+    default rather than silently becoming "today only" or unlimited. The window
+    must stay inside GDELT's ~3-month archive, so a recent date is used.
+    """
+    from datetime import datetime, timedelta, timezone
 
-    alpha_vantage_news.get_global_news("2026-08-14", None, None)
+    from tradingagents.dataflows import gdelt_news
 
-    assert seen["time_from"].startswith("20260811") and seen["limit"] == "9"
+    curr = (datetime.now(timezone.utc) - timedelta(days=2)).strftime("%Y-%m-%d")
+    captured = {}
+
+    def _fake_fetch(query, start_dt, end_dt, limit):
+        captured.update({"start": start_dt, "end": end_dt, "limit": limit})
+        return [], None, ""
+
+    monkeypatch.setattr(gdelt_news, "_fetch_articles", _fake_fetch)
+    monkeypatch.setattr(gdelt_news, "_fetch_page", lambda *a, **k: (None, None, "transport"))
+    monkeypatch.setattr(gdelt_news, "_throttle", lambda: None)
+    monkeypatch.setattr(
+        gdelt_news, "get_config",
+        lambda: {
+            "global_news_lookback_days": 3,
+            "global_news_article_limit": 9,
+            "global_news_queries": ["Federal Reserve interest rates"],
+        },
+    )
+
+    gdelt_news.get_global_news_gdelt(curr, None, None)
+
+    # 3 configured look-back days ending on the analysis date.
+    assert (captured["end"] - captured["start"]).days == 3
+    assert captured["limit"] == 9
 
 
 @pytest.mark.unit
 def test_the_news_window_includes_the_analysis_day(monkeypatch):
     """time_to was midnight at the start of the end date, so everything
     published during the analysis day, the most decision-relevant day, was
-    excluded. The yfinance path includes it."""
-    from tradingagents.dataflows import alpha_vantage_news
+    excluded. The live chain includes the whole analysis day.
 
-    seen = {}
-    monkeypatch.setattr(alpha_vantage_news, "_make_api_request",
-                        lambda fn, params: seen.update(params) or "{}")
+    The window is now fetched as a series of per-day ranges (Finnhub's 250-record
+    cap truncates the oldest end of a wide range), so the assertion is made over
+    every requested range rather than only the last one.
+    """
+    from tradingagents.dataflows import finnhub_news as fn
 
-    alpha_vantage_news.get_news("AAPL", "2026-03-10", "2026-03-14")
+    requested: list[str] = []
 
-    assert seen["time_from"] == "20260310T0000"
-    assert seen["time_to"] == "20260314T2359"
+    def _request(url):
+        requested.append(url)
+        return 200, "[]", ""
+
+    monkeypatch.setattr(fn, "_request", _request)
+    monkeypatch.setattr(fn, "get_api_key", lambda: "test-key")
+    monkeypatch.setattr(fn, "get_config", lambda: {"news_article_limit": 20})
+
+    fn.fetch_news_finnhub("AAPL", "2026-03-10", "2026-03-14")
+
+    assert requested, "no request was made"
+    # Every day of the window is covered, including the analysis day itself.
+    starts = [u.split("from=")[1].split("&")[0] for u in requested]
+    ends = [u.split("to=")[1].split("&")[0] for u in requested]
+    assert "2026-03-10" in starts
+    assert "2026-03-14" in ends
+    assert min(starts) == "2026-03-10"
+    assert max(ends) == "2026-03-14"
 
 
 @pytest.mark.unit
@@ -199,15 +240,20 @@ def test_an_indicator_this_vendor_lacks_lets_the_next_one_serve_it(indicator):
 
 @pytest.mark.unit
 def test_ticker_news_asks_for_only_as_many_articles_as_configured(monkeypatch):
-    """The endpoint returns 50 articles with per-article sentiment arrays by
-    default, and the whole payload went into the prompt."""
-    from tradingagents.dataflows import alpha_vantage_news
+    """The vendor's default page size reaches the prompt in full; the adapter
+    must ask for, and keep, only the configured number of articles."""
+    from tradingagents.dataflows import finnhub_news as fn
 
-    monkeypatch.setattr(alpha_vantage_news, "get_config", lambda: {"news_article_limit": 8})
-    seen = {}
-    monkeypatch.setattr(alpha_vantage_news, "_make_api_request",
-                        lambda fn, params: seen.update(params) or "{}")
+    articles = [
+        {"headline": f"NVDA story {i}", "datetime": 1790173800 + i,
+         "source": "Reuters", "url": f"https://x/{i}", "summary": "Nvidia news.",
+         "related": "NVDA"}
+    for i in range(20)]
+    monkeypatch.setattr(fn, "_request", lambda url: (200, json.dumps(articles), ""))
+    monkeypatch.setattr(fn, "get_api_key", lambda: "test-key")
+    # ``finnhub_news`` binds ``get_config`` at import, so patch it there.
+    monkeypatch.setattr(fn, "get_config", lambda: {"news_article_limit": 8})
 
-    alpha_vantage_news.get_news("AAPL", "2026-03-10", "2026-03-14")
+    outcome = fn.fetch_news_finnhub("NVDA", "2026-09-16", "2026-09-23")
 
-    assert seen["limit"] == "8"
+    assert len(outcome.articles) == 8

@@ -1,0 +1,16 @@
+=== FINNHUB-ONLY EXECUTION PROOF (re-run after audit remediation) ===
+date: 2026-11-15T19:37:25+08:00  worktree: /tmp/opencode/planC2_wt  HEAD: 9948bf8545cceeb0d7a60cda913a04826a06c007
+
+Finnhub news provider failed: RuntimeError
+[isolation] tradingagents.__file__ = /tmp/opencode/planC2_wt/tradingagents/__init__.py
+[config] tool_vendors = {'get_news': 'finnhub', 'get_global_news': 'finnhub'}
+[routing] get_news['finnhub'] = get_news_finnhub_only
+[routing] get_global_news['finnhub'] = get_global_news_finnhub
+[ast] get_news_finnhub_only: gdelt imports = 0
+[ast] get_global_news_finnhub: gdelt imports = 0
+[ast] VIOLATIONS: 0
+[A] answered -> True | gdelt calls: 0
+[B] finnhub raised -> gdelt calls: 0 | status: ['NEWS_STATUS=HTTP_ERROR: no verifiable NVDA news reached this window from the configured provider (Finnhub: HTTP_ERROR). DATA_UNAVAILABLE: Finnhub (HTTP_ERROR) could not answer. This is not a confirmed absence of news about the instrument; report news as unavailable rather than neutral.']
+[C] global news -> CONFIG_DISABLED: True | gdelt calls: 0 | says 'no error occurred': True
+
+TOTAL GDELT CALLS ACROSS ALL SCENARIOS: 0  -> PASS

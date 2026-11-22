@@ -1,0 +1,40 @@
+tests/test_cand01_news_positive_path.py::NewsFailurePathTest::test_n1_timeout_is_unknown PASSED [ 83%]
+tests/test_cand01_news_positive_path.py::NewsFailurePathTest::test_n2_auth_missing_keeps_the_taxonomy_token PASSED [ 84%]
+tests/test_cand01_news_positive_path.py::NewsFailurePathTest::test_n3_empty_article_list_is_not_available PASSED [ 85%]
+tests/test_cand01_news_positive_path.py::NewsFailurePathTest::test_n4_placeholder_is_not_available 
+tests/test_cand01_news_positive_path.py::NewsFailurePathTest::test_n4_placeholder_is_not_available PASSED [ 85%]
+tests/test_cand01_news_positive_path.py::NewsFailurePathTest::test_n5_global_news_cannot_stand_in_for_company_news PASSED [ 86%]
+tests/test_cand01_news_positive_path.py::NewsFailurePathTest::test_n6_broken_tool_status_still_closes_the_graph PASSED [ 86%]
+tests/test_cand01_news_positive_path.py::GraphHistoryIntegrityTest::test_g1_real_toolmessage_reaches_the_final_analysis PASSED [ 87%]
+tests/test_cand01_news_positive_path.py::GraphHistoryIntegrityTest::test_g2_every_tool_call_has_result_and_g3_no_rerun PASSED [ 87%]
+tests/test_cand01_news_positive_path.py::GraphHistoryIntegrityTest::test_g3_b_mixed_turn_runs_the_data_call_once PASSED [ 88%]
+tests/test_cand01_news_positive_path.py::GraphHistoryIntegrityTest::test_g4_one_node_visit_and_one_structured_answer PASSED [ 88%]
+tests/test_cand01_news_positive_path.py::GraphHistoryIntegrityTest::test_g6_unknown_path_stays_closed PASSED [ 89%]
+tests/test_cand01_news_positive_path.py::ProseFallbackTest::test_budget_exhaustion_over_dead_news_gets_the_header PASSED [ 89%]
+tests/test_cand01_news_positive_path.py::ProseFallbackTest::test_budget_exhaustion_over_real_news_keeps_available PASSED [ 90%]
+tests/test_cand01_news_positive_path.py::ProseFallbackTest::test_prose_with_dead_news_gets_the_header PASSED [ 90%]
+tests/test_cand01_news_positive_path.py::ProseFallbackTest::test_prose_with_real_news_states_available PASSED [ 91%]
+tests/test_cand01_news_positive_path.py::Rc1ParityTest::test_rc1_forced_header_only_on_dead_feeds PASSED [ 91%]
+tests/test_cand01_news_positive_path.py::Rc1ParityTest::test_rc1_prose_ending_is_empty_exactly_as_before PASSED [ 92%]
+tests/test_cand01_news_positive_path.py::Rc1ParityTest::test_rc1_sees_real_news_as_available PASSED [ 93%]
+tests/test_cand01_news_positive_path.py::ProvenanceStatusTest::test_agreeing_report_gets_the_same_status_line PASSED [ 93%]
+tests/test_cand01_news_positive_path.py::ProvenanceStatusTest::test_dead_feed_exposes_unknown_via_the_system_banner 
+tests/test_cand01_news_positive_path.py::ProvenanceStatusTest::test_dead_feed_exposes_unknown_via_the_system_banner PASSED [ 94%]
+tests/test_cand01_news_positive_path.py::ProvenanceStatusTest::test_dead_feed_keeps_quoted_evidence_intact PASSED [ 94%]
+tests/test_cand01_news_positive_path.py::ProvenanceStatusTest::test_guard_is_idempotent_and_uses_only_its_own_banner PASSED [ 95%]
+tests/test_cand01_news_positive_path.py::ProvenanceStatusTest::test_live_feed_states_availability_without_reading_the_text 
+tests/test_cand01_news_positive_path.py::ProvenanceStatusTest::test_live_feed_states_availability_without_reading_the_text PASSED [ 95%]
+tests/test_cand01_news_positive_path.py::ProvenanceStatusTest::test_node_never_reads_the_report_text_for_status 
+tests/test_cand01_news_positive_path.py::ProvenanceStatusTest::test_node_never_reads_the_report_text_for_status PASSED [ 96%]
+tests/test_cand01_news_positive_path.py::ProvenanceStatusTest::test_real_news_never_injects_the_banner 
+tests/test_cand01_news_positive_path.py::ProvenanceStatusTest::test_real_news_never_injects_the_banner PASSED [ 96%]
+tests/test_cand01_news_positive_path.py::ProvenanceStatusTest::test_real_news_preserves_model_text_verbatim 
+tests/test_cand01_news_positive_path.py::ProvenanceStatusTest::test_real_news_preserves_model_text_verbatim PASSED [ 97%]
+tests/test_cand01_news_positive_path.py::ProvenanceStatusTest::test_valid_bullish_and_bearish_stances_survive_real_news 
+tests/test_cand01_news_positive_path.py::ProvenanceStatusTest::test_valid_bullish_and_bearish_stances_survive_real_news PASSED [ 97%]
+tests/test_cand01_news_positive_path.py::StanceInvariantsTest::test_forced_unknown_never_becomes_neutral PASSED [ 98%]
+tests/test_cand01_news_positive_path.py::StanceInvariantsTest::test_model_unknown_stance_with_real_news_is_not_rewritten PASSED [ 98%]
+tests/test_cand01_news_positive_path.py::ClassifierUnitFenceTest::test_global_news_alone_is_unavailable PASSED [ 99%]
+tests/test_cand01_news_positive_path.py::ClassifierUnitFenceTest::test_no_messages_is_unavailable PASSED [100%]
+
+=================== 187 passed, 86 subtests passed in 1.72s ====================

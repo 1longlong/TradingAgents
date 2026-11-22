@@ -34,6 +34,12 @@ from tradingagents.debate.config import (
     DebateTerminationConfig,
 )
 from tradingagents.debate.evaluator_node import create_debate_evaluator_node
+from tradingagents.observability import (
+    agent_id_for_node,
+    analyst_agent_id_for_key,
+    attrib_agent_node,
+    attrib_tool_round,
+)
 
 from .analyst_execution import build_analyst_execution_plan
 from .conditional_logic import ConditionalLogic
@@ -98,12 +104,16 @@ class GraphSetup:
         deep_thinking_llm: Any,
         tool_nodes: dict[str, ToolNode],
         conditional_logic: ConditionalLogic,
-        config: dict[str, Any] | None = None,
         data_quality_gate_factory: Any = None,
         debate_termination_config: DebateTerminationConfig | None = None,
         debate_evaluator_factory: Any = None,
+        config: dict | None = None,
     ):
         """Initialize with required components.
+
+        The four optional arguments are keyword arguments, so every existing
+        caller that passes only the four required components keeps working, and
+        a positional call in the Release argument order also stays working.
 
         ``data_quality_gate_factory`` is an optional node factory (defaults to
         :func:`create_data_quality_gate_node`) so tests can inject a fixed
@@ -115,6 +125,10 @@ class GraphSetup:
         resolves the config from the state on first run. ``debate_evaluator_factory``
         is an optional node factory so tests can inject a deterministic evaluator
         node; it defaults to :func:`create_debate_evaluator_node`.
+
+        ``config`` carries the ablation feature switches. It defaults to None so
+        existing callers and tests keep working; a missing key is treated as
+        enabled, which is the shipped behaviour.
         """
         self.quick_thinking_llm = quick_thinking_llm
         self.deep_thinking_llm = deep_thinking_llm
@@ -122,7 +136,7 @@ class GraphSetup:
         self.conditional_logic = conditional_logic
         # The run config decides whether market tool governance is on. ``None``
         # falls back to the configuration the run installed (``get_config``).
-        self.config = config
+        self.config: dict[str, Any] = config or {}
         self.debate_termination_config = (
             debate_termination_config or DEFAULT_DEBATE_TERMINATION_CONFIG
         )
@@ -150,6 +164,13 @@ class GraphSetup:
                 - "fundamentals": Fundamentals analyst
         """
         plan = build_analyst_execution_plan(selected_analysts)
+
+        # CAND-01: only meaningful together with the structured switch, so an
+        # ablation arm cannot enable it on a free-text analyst.
+        single_pass = (
+            self.config.get("single_pass_finalization_enabled", False)
+            and self.config.get("structured_analyst_output_enabled", True)
+        )
 
         # Analyst tool governance is opt-in per analyst (default off), each with
         # its own config section. With one on, that analyst routes through its
@@ -188,12 +209,25 @@ class GraphSetup:
         )
 
         analyst_factories = {
-            "market": lambda: create_market_analyst(self.quick_thinking_llm),
+            "market": lambda: create_market_analyst(
+                self.quick_thinking_llm,
+                structured=self.config.get("structured_analyst_output_enabled", True),
+                single_pass=single_pass,
+            ),
             "social": lambda: create_sentiment_analyst(
                 self.quick_thinking_llm, prefetch_split=prefetch_split
             ),
-            "news": lambda: create_news_analyst(self.quick_thinking_llm),
-            "fundamentals": lambda: create_fundamentals_analyst(self.quick_thinking_llm),
+            "news": lambda: create_news_analyst(
+                self.quick_thinking_llm,
+                batch_macro=self.config.get("batch_macro_enabled", True),
+                structured=self.config.get("structured_analyst_output_enabled", True),
+                single_pass=single_pass,
+            ),
+            "fundamentals": lambda: create_fundamentals_analyst(
+                self.quick_thinking_llm,
+                structured=self.config.get("structured_analyst_output_enabled", True),
+                single_pass=single_pass,
+            ),
         }
 
         # Create researcher and manager nodes
@@ -215,23 +249,59 @@ class GraphSetup:
         # Create workflow
         workflow = StateGraph(AgentState)
 
-        # Add analyst nodes to the graph
+        def wrap_agent_node(node_name: str, fn):
+            """Attach the stable agent id to a business-agent node."""
+            agent_id = agent_id_for_node(node_name)
+            if agent_id is None:
+                return fn
+            return attrib_agent_node(agent_id, fn, node_name)
+
+        def wrap_tool_round(node_name: str, tool_node, *, key: str | None = None):
+            """Scope a ToolNode to the analyst that owns it and record rounds.
+
+            ``node_name`` is the owning analyst's graph node name; ``key`` is the
+            analyst's wire key (``market``/``news``/…), used to resolve the agent
+            id for the spec-keyed analyst nodes whose graph names differ from the
+            user-facing labels.
+            """
+            agent_id = agent_id_for_node(node_name)
+            if agent_id is None and key is not None:
+                agent_id = analyst_agent_id_for_key(key)
+            if agent_id is None:
+                return tool_node
+            return attrib_tool_round(agent_id, tool_node)
+
+        # Add analyst nodes to the graph. Each analyst is the evidence-capturing
+        # wrapper (ADR-008: captures made *inside* the analyst are persisted at
+        # the post-analyst checkpoint) inside the attribution wrapper, so the
+        # provider calls it makes are attributed to its stable agent id and its
+        # node timing is recorded. Both wrappers pass the state through
+        # unchanged; the scan recovers the tool node's spec key.
+        tool_keys = {id(node): key for key, node in self.tool_nodes.items()}
         for spec in plan.specs:
-            # Wrap analysts that prefetch vendor data in-node (e.g. the Sentiment
-            # Analyst) so a checkpoint right after the analyst retains captures
-            # (ADR-008). A no-op when the analyst captured nothing.
             workflow.add_node(
                 spec.agent_node,
-                EvidenceCapturingAnalystNode(analyst_factories[spec.key](), name=spec.agent_node),
+                wrap_agent_node(
+                    spec.agent_node,
+                    EvidenceCapturingAnalystNode(
+                        analyst_factories[spec.key](), name=spec.agent_node),
+                ),
             )
             workflow.add_node(spec.clear_node, create_msg_delete())
             # Wrap the tool node so captured vendor evidence is written into
             # state at the tool-boundary checkpoint itself (ADR-008 durability;
             # the ContextVar alone is not durable and the analyst loop means a
-            # later clear node is not sufficient).
+            # later clear node is not sufficient), inside the attribution wrapper
+            # that scopes the round to the owning analyst and records it.
+            tool_node = self.tool_nodes[spec.key]
+            key = tool_keys.get(id(tool_node), spec.key) if tool_keys else spec.key
             workflow.add_node(
                 spec.tool_node,
-                EvidenceCapturingToolNode(self.tool_nodes[spec.key], name=spec.tool_node),
+                wrap_tool_round(
+                    spec.agent_node,
+                    EvidenceCapturingToolNode(tool_node, name=spec.tool_node),
+                    key=key,
+                ),
             )
             if spec.key == "social" and prefetch_split:
                 workflow.add_node(
@@ -265,30 +335,54 @@ class GraphSetup:
         workflow.add_node(
             "Confidence Sanitizer", create_confidence_state_sanitize_node()
         )
-        workflow.add_node("Bull Researcher", with_sanitized_state(bull_researcher_node, name="bull"))
-        workflow.add_node("Bear Researcher", with_sanitized_state(bear_researcher_node, name="bear"))
+        workflow.add_node(
+            "Bull Researcher",
+            wrap_agent_node("Bull Researcher", with_sanitized_state(bull_researcher_node, name="bull")),
+        )
+        workflow.add_node(
+            "Bear Researcher",
+            wrap_agent_node("Bear Researcher", with_sanitized_state(bear_researcher_node, name="bear")),
+        )
         workflow.add_node(
             "Debate Evaluator",
             with_sanitized_state(self.debate_evaluator_node, name="debate_evaluator"),
         )
         workflow.add_node(
             "Research Manager",
-            with_sanitized_state(research_manager_node, name="research_manager"),
+            wrap_agent_node(
+                "Research Manager",
+                with_sanitized_state(research_manager_node, name="research_manager"),
+            ),
         )
-        workflow.add_node("Trader", with_sanitized_state(trader_node, name="trader"))
         workflow.add_node(
-            "Aggressive Analyst", with_sanitized_state(aggressive_analyst, name="aggressive")
+            "Trader", wrap_agent_node("Trader", with_sanitized_state(trader_node, name="trader"))
         )
         workflow.add_node(
-            "Neutral Analyst", with_sanitized_state(neutral_analyst, name="neutral")
+            "Aggressive Analyst",
+            wrap_agent_node(
+                "Aggressive Analyst",
+                with_sanitized_state(aggressive_analyst, name="aggressive"),
+            ),
+        )
+        workflow.add_node(
+            "Neutral Analyst",
+            wrap_agent_node(
+                "Neutral Analyst", with_sanitized_state(neutral_analyst, name="neutral")
+            ),
         )
         workflow.add_node(
             "Conservative Analyst",
-            with_sanitized_state(conservative_analyst, name="conservative"),
+            wrap_agent_node(
+                "Conservative Analyst",
+                with_sanitized_state(conservative_analyst, name="conservative"),
+            ),
         )
         workflow.add_node(
             "Portfolio Manager",
-            with_sanitized_state(portfolio_manager_node, name="portfolio"),
+            wrap_agent_node(
+                "Portfolio Manager",
+                with_sanitized_state(portfolio_manager_node, name="portfolio"),
+            ),
         )
 
         def entry_node(spec) -> str:

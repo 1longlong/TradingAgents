@@ -130,3 +130,23 @@ The merged layout uses `test/offline/trading/` and `test/live/trading/` for the
 imported tests. These replace release's `tests/trading/` references; there is no
 duplicate root test tree. Preserve `FR-TRD-*`, `INV-TRD-*`, `NFR-TRD-*` alongside
 existing core/WebUI IDs and retain historical evidence as historical.
+
+## PR #8 integration safeguards — human maintainer decision (2026-11-21)
+
+This integration adopts the latest Release src/ and test/ layout while
+preserving the personal token-observability implementation and evidence.
+
+- Preserve token attribution, Single-Pass, Batch-Macro, Finnhub-only
+  routing, memory isolation, and retry/telemetry correctness.
+- Do not modify frozen V2/V3 protocols, registered specs, SHA-256
+  manifests, original benchmark results, or canonical prompts.
+- No new paid-provider runs or live trading without separate approval.
+- Preserve AI provenance, student-confirmed documentation review,
+  unresolved historical evidence gaps, and genuine human sign-off boundaries.
+- Do not self-approve AI audits, change protected governance configurations,
+  weaken tests, or rewrite Git history.
+- Use the Release WebUI, src/, test/, and security contracts as the
+  canonical integration baseline.
+- Ordinary integration work and matching regression-test maintenance are
+  authorized within the approved scope; changes to safety policy,
+  dependencies, or human-only files require separate human action.

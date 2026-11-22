@@ -40,26 +40,64 @@ def coverage_gap(
 ) -> str | None:
     """Placeholder for a window a feed did not fully observe, else None.
 
-    Yahoo news and the Reddit and StockTwits feeds return their latest items
-    whatever window is asked for, so "none found" over a window they never
-    observed would claim an absence nobody saw. A window is observed when
-    coverage reaches its first day and it ends by today; an empty result is then
-    a real absence and this returns None.
-
-    ``dates`` are the returned items' timestamps, plus the lookback start for a
-    feed with a fixed lookback. The oldest one bounds coverage only for a feed
-    returned newest-first and unbroken in time; a merged or relevance-ranked
-    result passes no dates, leaving only the present as the bound.
+    An *observed* window is: coverage reaches its first day, and the window
+    ends by today. An empty result over a window ending today is a real
+    absence; an empty result over a past window says only that no dated item
+    was observed (never a clock-derived date), and a future window is refused.
     """
     now = datetime.now(timezone.utc)
-    oldest = min((to_utc(d) for d in dates if d is not None), default=now)
-    if datetime.strptime(end_date, "%Y-%m-%d").date() > now.date():
+    now_date = now.date()
+    observed = [to_utc(d) for d in dates if d is not None]
+    oldest = min(observed, default=None)
+    end_d = datetime.strptime(end_date, "%Y-%m-%d").date()
+    if end_d > now_date:
         reason = "the window extends past today"
-    elif oldest.date() > datetime.strptime(start_date, "%Y-%m-%d").date():
-        reason = f"it only serves recent items (coverage starts {oldest:%Y-%m-%d})"
-    else:
+    elif oldest is not None and oldest.date() <= datetime.strptime(start_date, "%Y-%m-%d").date():
         return None
+    elif oldest is not None:
+        reason = f"it only serves recent items (coverage starts {oldest:%Y-%m-%d})"
+    elif end_d == now_date:
+        # The feed's latest items are today's; an empty current window is an
+        # observed absence, and no fabricated coverage date is introduced.
+        return None
+    else:
+        reason = "it only serves newer items, none in this window"
     return f"<{source} unavailable for {start_date}..{end_date}: {reason}, so this is not an absence of {subject}>"
+
+def parse_publication_time(value: str | None) -> datetime | None:
+    """Parse a vendor publication timestamp into an aware UTC datetime.
+
+    Accepts the shapes the news vendors actually emit: Alpha Vantage's compact
+    ``YYYYMMDDTHHMMSS``, ISO 8601 with a ``Z`` or numeric offset, and a bare
+    ``YYYY-MM-DD`` date (midnight UTC). Returns None for anything else, so an
+    unplaceable article is dropped rather than assumed to be in the window.
+    """
+    if not value:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    # Alpha Vantage's compact form is exactly ``YYYYMMDDTHHMMSS``: 8 date
+    # digits, the separator, 6 time digits. Only that literal shape is parsed
+    # this way — blanket-stripping "-" and ":" would also eat a trailing UTC
+    # offset (``10:30-04:00``) and silently shift the instant by hours, which
+    # for a cutoff comparison would admit post-decision news.
+    if (len(text) == 15 and text[8] == "T" and text[:8].isdigit()
+            and text[9:].isdigit()):
+        try:
+            return datetime.strptime(text, "%Y%m%dT%H%M%S").replace(tzinfo=timezone.utc)
+        except ValueError:
+            return None
+    iso = text.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(iso)
+    except ValueError:
+        try:
+            parsed = datetime.strptime(text, "%Y-%m-%d")
+        except ValueError:
+            return None
+        return parsed.replace(tzinfo=timezone.utc)
+    return to_utc(parsed)
 
 
 def _parse(date: str | None) -> datetime | None:
@@ -110,6 +148,30 @@ def as_of_window(start_date: str, end_date: str, trade_date: str) -> tuple[str, 
     span = (old_end - start) if old_end is not None and old_end >= start else timedelta(0)
     assert parsed_end is not None
     return f"{parsed_end - span:%Y-%m-%d}", end
+
+
+def publication_cutoff(trade_date: str | None) -> str | None:
+    """The exclusive publication cutoff a news vendor should be given, or None.
+
+    A trading decision dated ``D`` may use anything published up to the end of
+    ``D`` (UTC), but *not* anything published during ``D`` after the decision
+    was taken. The date-only window cannot express that: a vendor asked for
+    ``end_date=D`` legitimately returns a story filed at 21:15 that day, which
+    is future information for a decision made before it.
+
+    The cutoff is therefore the first instant *after* ``trade_date`` — midnight
+    UTC of the following day — so every timestamp inside the trading day is
+    admitted and nothing on a later day can be. This is deliberately the
+    earliest defensible boundary: it never drops same-day news, and it never
+    admits news from the next day.
+
+    Returns None when there is no run date (a direct call outside a graph run),
+    which leaves the vendor's own end-of-window default in force.
+    """
+    parsed = _parse(trade_date)
+    if parsed is None:
+        return None
+    return f"{parsed + timedelta(days=1):%Y-%m-%d}T00:00:00Z"
 
 
 def withhold_live_profile(curr_date: str | None, label: str) -> str | None:

@@ -155,6 +155,15 @@ def _config(**overrides):
     cfg["data_cache_dir"] = tempfile.mkdtemp()
     cfg["results_dir"] = tempfile.mkdtemp()
     cfg.update(overrides)
+    # The merged personal default pins `tool_vendors.get_news` to Finnhub, and
+    # tool-level configuration takes precedence in `get_vendor`. Keep a test
+    # that overrides `data_vendors.news_data` effective at the tool level too,
+    # so the asserted chain is the one the router actually uses.
+    news_override = (overrides.get("data_vendors") or {}).get("news_data")
+    if news_override:
+        cfg.setdefault("tool_vendors", {})["get_news"] = news_override
+        if "get_global_news" in cfg["tool_vendors"]:
+            cfg["tool_vendors"]["get_global_news"] = news_override
     return cfg
 
 
@@ -541,7 +550,7 @@ class _NewsVendor:
     def __init__(self):
         self.asked = []
 
-    def route(self, method, ticker, start_date, end_date):
+    def route(self, method, ticker, start_date, end_date, **kwargs):
         assert method == "get_news"
         count = _news_article_limit_now()
         self.asked.append((ticker, start_date, end_date, count))
@@ -729,7 +738,9 @@ def test_snapshot_and_identity_agree_when_global_changes_mid_request(monkeypatch
     def change_global_then_read(*args, **kwargs):
         # A concurrent caller updates the global config just before the read.
         set_config({**_split_config(news_article_limit=1), "news_article_limit": 1,
-                    "data_vendors": {"news_data": "alpha_vantage"}})
+                    "data_vendors": {"news_data": "alpha_vantage"},
+                    "tool_vendors": {"get_news": "alpha_vantage",
+                                     "get_global_news": "alpha_vantage"}})
         return _NewsVendor.route(vendor, *args, **kwargs)
 
     monkeypatch.setattr(
@@ -841,7 +852,9 @@ def test_prefetch_failure_releases_snapshot_and_keeps_global_update(monkeypatch)
 
     def failing_news(*args, **kwargs):
         set_config({**_split_config(news_article_limit=3), "news_article_limit": 3,
-                    "data_vendors": {"news_data": "alpha_vantage"}})
+                    "data_vendors": {"news_data": "alpha_vantage"},
+                    "tool_vendors": {"get_news": "alpha_vantage",
+                                     "get_global_news": "alpha_vantage"}})
         raise RuntimeError("news exploded")
 
     monkeypatch.setattr(
@@ -871,7 +884,9 @@ def test_saved_vendor_chain_comes_from_the_fetch_snapshot(monkeypatch):
     monkeypatch.setattr(sentiment, "fetch_reddit_posts", lambda *a, **k: "RD")
     base = _initial(cfg)
     # The global config now names a different vendor chain.
-    _activate({**cfg, "data_vendors": {"news_data": "yfinance"}})
+    _activate({**cfg, "data_vendors": {"news_data": "yfinance"},
+               "tool_vendors": {"get_news": "yfinance",
+                                "get_global_news": "yfinance"}})
 
     saved = sentiment.create_sentiment_prefetch_node()(base)
     assert saved[sp.STATE_KEY]["identity"]["news_vendor_chain"] == ("alpha_vantage",)
@@ -942,7 +957,10 @@ def test_run_config_vendor_chain_change_is_refused(monkeypatch):
     assert saved[sp.STATE_KEY]["identity"]["news_vendor_chain"] == ("yfinance",)
 
     _activate(cfg)
-    changed = {**base, "run_config": {**cfg, "data_vendors": {"news_data": "alpha_vantage"}}}
+    changed = {**base, "run_config": {**cfg,
+        "data_vendors": {"news_data": "alpha_vantage"},
+        "tool_vendors": {"get_news": "alpha_vantage",
+                         "get_global_news": "alpha_vantage"}}}
     model = _ScriptedModel()
     with pytest.raises(sp.SentimentInputError, match="news_vendor_chain"):
         sentiment.create_sentiment_analyst(model, True)(_state_with_saved(saved, changed))
@@ -962,7 +980,9 @@ def test_global_vendor_chain_change_does_not_affect_consumption(monkeypatch):
     base = _initial(cfg)
     saved = _saved_for(base)
 
-    _activate({**cfg, "data_vendors": {"news_data": "alpha_vantage"}})
+    _activate({**cfg, "data_vendors": {"news_data": "alpha_vantage"},
+               "tool_vendors": {"get_news": "alpha_vantage",
+                                "get_global_news": "alpha_vantage"}})
     model = _ScriptedModel()
     out = sentiment.create_sentiment_analyst(model, True)({**base, **saved})
     assert "REPORT from the model" in out["sentiment_report"]
@@ -1149,7 +1169,9 @@ def test_real_checkpoint_resume_after_model_failure_fetches_once(tmp_path, monke
     # config. The resumed run keeps its own run config from the checkpoint, so
     # the saved input is still consumed.
     _activate({**cfg, "news_article_limit": 1,
-               "data_vendors": {"news_data": "alpha_vantage"}})
+               "data_vendors": {"news_data": "alpha_vantage"},
+               "tool_vendors": {"get_news": "alpha_vantage",
+                                "get_global_news": "alpha_vantage"}})
 
     # Run 2: a fresh graph + the real saved checkpoint. The model succeeds
     # this time and no source is fetched again. The saved state was produced

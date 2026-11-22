@@ -32,6 +32,30 @@ def _home(tmp_path, monkeypatch):
     return tmp_path
 
 
+#: Selection env vars that turn the interactive flow into a non-interactive
+#: one. The wiring tests below drive the prompts, so an operator's shell or
+#: checkout ``.env`` must not skip them. Only these variables are cleared;
+#: the global ``HOME`` and the suite-wide environment are untouched.
+_SELECTION_ENV_VARS = (
+    "TRADINGAGENTS_OUTPUT_LANGUAGE",
+    "TRADINGAGENTS_MAX_DEBATE_ROUNDS",
+    "TRADINGAGENTS_MAX_RISK_ROUNDS",
+    "TRADINGAGENTS_LLM_PROVIDER",
+    "TRADINGAGENTS_LLM_BACKEND_URL",
+    "TRADINGAGENTS_QUICK_THINK_LLM",
+    "TRADINGAGENTS_DEEP_THINK_LLM",
+    "TRADINGAGENTS_GOOGLE_THINKING_LEVEL",
+    "TRADINGAGENTS_OPENAI_REASONING_EFFORT",
+    "TRADINGAGENTS_ANTHROPIC_EFFORT",
+)
+
+
+@pytest.fixture(autouse=True)
+def _no_ambient_selection_env(monkeypatch):
+    for name in _SELECTION_ENV_VARS:
+        monkeypatch.delenv(name, raising=False)
+
+
 @pytest.mark.unit
 def test_round_trip():
     save_last_run(SAVED)
@@ -149,6 +173,10 @@ def test_a_remembered_endpoint_is_offered_back(monkeypatch):
     remembered and validated, then never read."""
     import cli.main as m
 
+    # DEFAULT_CONFIG is built at import time from the process environment; an
+    # ambient TRADINGAGENTS_LLM_BACKEND_URL would supply a URL and skip the
+    # prompt this test exercises. Clear only that imported value.
+    monkeypatch.setitem(m.DEFAULT_CONFIG, "backend_url", None)
     save_last_run({"llm_provider": "openai_compatible", "backend_url": "http://localhost:1234/v1"})
     offered = {}
     monkeypatch.setattr(m, "select_llm_provider", lambda default=None: ("openai_compatible", None))

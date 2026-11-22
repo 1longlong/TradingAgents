@@ -1,0 +1,15 @@
+=== worktree suite from a .env-free cwd (/tmp/opencode) ===
+=========================== short test summary info ============================
+SKIPPED [1] planC2_wt/tests/test_bedrock_provider.py:74: could not import 'langchain_aws': No module named 'langchain_aws'
+SKIPPED [1] planC2_wt/tests/test_deepseek_reasoning.py:209: DEEPSEEK_API_KEY not set (or placeholder); skipping live API call
+FAILED planC2_wt/tests/test_cand01_single_pass_finalization.py::RegressionTest::test_rc1_two_call_functions_are_unchanged_and_still_exported
+FAILED planC2_wt/tests/test_cand01_single_pass_finalization.py::RegressionTest::test_setup_requires_structured_before_enabling_single_pass
+2 failed, 1990 passed, 2 skipped, 26 warnings, 319 subtests passed in 8.99s
+
+=== the 2 failures are cwd-relative reads in a PRE-EXISTING (not this round's) test file ===
+file: tests/test_cand01_single_pass_finalization.py
+mtime: 2026-11-15T14:59:47+08:00
+sha256: be23326942c97b41b32cdeafe4d9711fd9c5968f0925729ebb4473f2b0dfceed
+it fails only because it opens 'tradingagents/graph/setup.py' relative to cwd; from the repo cwd:
+...............                                                          [100%]
+71 passed, 16 subtests passed in 0.67s

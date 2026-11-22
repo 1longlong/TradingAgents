@@ -1,0 +1,28 @@
+=== PROTECTED STATE — final verification ===
+date: 2026-11-15T19:37:34+08:00
+
+-- main repo --
+HEAD            : 9948bf8545cceeb0d7a60cda913a04826a06c007
+rc1 tag         : 1a27a857ac6296c42cdbcbdba1ce1104e10ae77e (tag)
+CAND-01 72ae0f8 : 72ae0f820ff8c1b9b96241cd35a63f2f50d8b5f6 exists=yes
+PF-01  2e62ccb  : 2e62ccbbd36c4d141f82ffe7a71075beaa25b56c exists=yes
+branch          : feature/token-observability
+staged changes  : 0
+stash count     : 3
+  stash@{0}: On feature/token-observability: observability-attempt-2-before-phased-restart
+  stash@{1}: On feature/token-observability: observability-attempt-2-before-v2-clean-restart
+  stash@{2}: On feature/token-observability: observability-attempt-before-clean-restart
+.env sha256     : 2eea649149af1d4c269603802abb830b57f9f6ed71061c7c30a1fa91a1d29645
+reflog top      : 9948bf8545cceeb0d7a60cda913a04826a06c007 commit: release(rc1): freeze validated TradingAgents baseline
+commits this rnd: none (see reflog top == 9948bf8)
+
+-- V1 artefacts (must be byte-identical to the pre-work backup) --
+old_specs OK: 66
+historical OK: 2446
+
+-- original protocol untouched --
+-rw-r--r-- 1 sky sky 20280 Nov 14 23:56 token_benchmarks/live_pilot_2x2/cand01_batch_16run/CAND01_BATCH_2X2_PROTOCOL.md
+
+-- nothing pushed / no new commits --
+9948bf8545cceeb0d7a60cda913a04826a06c007 release(rc1): freeze validated TradingAgents baseline
+dirty entries in main repo: 44

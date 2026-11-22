@@ -25,6 +25,7 @@ from tradingagents.agents.utils.agent_utils import (
     get_indicators,
     get_insider_transactions,
     get_macro_indicators,
+    get_macro_indicators_batch,
     get_news,
     get_prediction_markets,
     get_stock_data,
@@ -51,6 +52,7 @@ from tradingagents.default_config import DEFAULT_CONFIG
 from tradingagents.evidence.ingest import use_collector
 from tradingagents.file_io import write_text_atomic
 from tradingagents.llm_clients import create_llm_client
+from tradingagents.observability import analyst_agent_id_for_key, run_telemetry
 from tradingagents.reporting import write_report_tree
 
 from .checkpointer import checkpoint_step, clear_checkpoint, get_checkpointer, thread_id
@@ -106,6 +108,11 @@ def _open_usage_ledger(ledger_path, *, strict_resume: bool = False):
             "Could not open usage ledger (%s); accounting unreadable", type(exc).__name__
         )
         return None
+
+
+def _analyst_key_to_agent(key: str) -> str:
+    """Return the stable observability agent id for an analyst wire key."""
+    return analyst_agent_id_for_key(key)
 
 
 def _validate_trade_date(trade_date) -> str:
@@ -314,6 +321,12 @@ class TradingAgentsGraph:
                     get_global_news,
                     get_insider_transactions,
                     get_macro_indicators,
+                    # Batch macro is ablation-switchable. The ToolNode must agree
+                    # with the analyst, or an OFF run could still execute a batch
+                    # call the model somehow produced.
+                    *([get_macro_indicators_batch]
+                      if (getattr(self, "config", None) or {}).get(
+                          "batch_macro_enabled", True) else []),
                     get_prediction_markets,
                 ]
             ),
@@ -551,11 +564,34 @@ class TradingAgentsGraph:
         trade_date = _validate_trade_date(trade_date)
         self.ticker = company_name
 
-        with self.checkpoint_scope(company_name, trade_date, asset_type, portfolio) as thread_id_value:
-            return self._run_graph(
-                company_name, trade_date, asset_type=asset_type,
-                checkpoint_thread_id=thread_id_value, portfolio=portfolio,
-            )
+        with run_telemetry(  # noqa: SIM117
+            self.callbacks,
+            results_dir=self.config["results_dir"],
+            **self._observability_metadata(company_name, trade_date, asset_type, portfolio),
+        ):
+            with self.checkpoint_scope(company_name, trade_date, asset_type, portfolio) as thread_id_value:
+                return self._run_graph(
+                    company_name, trade_date, asset_type=asset_type,
+                    checkpoint_thread_id=thread_id_value, portfolio=portfolio,
+                )
+
+    def _observability_metadata(self, company_name, trade_date, asset_type, portfolio) -> dict:
+        """Run metadata recorded on the single observability collector."""
+        selected = []
+        for key in self.selected_analysts:
+            # Normalize wire key ("social") to the stable analyst id.
+            selected.append(_analyst_key_to_agent(key))
+        return {
+            "ticker": company_name,
+            "trade_date": str(trade_date),
+            "asset_type": asset_type,
+            "selected_analysts": selected,
+            "llm_provider": self.config.get("llm_provider"),
+            "quick_think_model": self.config.get("quick_think_llm"),
+            "deep_think_model": self.config.get("deep_think_llm"),
+            "max_debate_rounds": self.config.get("max_debate_rounds"),
+            "max_risk_rounds": self.config.get("max_risk_discuss_rounds"),
+        }
 
     def begin_checkpoint(self, company_name, trade_date, asset_type: str = "stock", portfolio=None) -> str | None:
         """Recompile the graph with a per-ticker checkpointer and return the
@@ -925,7 +961,14 @@ class TradingAgentsGraph:
     def _run_graph(self, company_name, trade_date, asset_type: str = "stock",
                    checkpoint_thread_id: str | None = None, portfolio=None):
         """Execute the graph and write the resulting state to disk and memory log."""
-        args = self.propagator.get_graph_args()
+        # Pass the run callbacks into the graph invocation so tool-execution
+        # callbacks (on_tool_start/end/error) reach the handlers. LangGraph does
+        # not propagate callbacks attached to the LLM constructor down to
+        # ToolNode, so without this the observability handler records tool
+        # rounds but zero tool_calls / tool-result bytes. The CLI stream path
+        # already passes them via ``get_graph_args(callbacks=...)``.
+        # ``getattr`` keeps partially constructed graphs (tests) working.
+        args = self.propagator.get_graph_args(callbacks=getattr(self, "callbacks", None))
 
         # Inject the checkpoint thread_id (from checkpoint_scope) so the same
         # ticker+date+graph-shape resumes; a different one starts fresh (#1089).

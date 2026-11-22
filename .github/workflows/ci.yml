@@ -146,6 +146,54 @@ jobs:
       - run: python -m pip install -e '.[dev]'
       - run: python -m test.ci_gates schema
 
+  frontend:
+    name: frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/tradingagents_web/frontend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: src/tradingagents_web/frontend/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run build
+
+  frontend-e2e:
+    name: frontend-e2e
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: src/tradingagents_web/frontend/package-lock.json
+      - run: python -m venv .venv
+      - run: .venv/bin/python -m pip install -e '.[dev,web]'
+      - run: npm ci
+        working-directory: src/tradingagents_web/frontend
+      - run: npm run build
+        working-directory: src/tradingagents_web/frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: src/tradingagents_web/frontend
+      - run: npm run e2e
+        working-directory: src/tradingagents_web/frontend
+
   review-and-log:
     name: ai-use-log
     needs: context
@@ -216,7 +264,7 @@ jobs:
     # Push/manual runs cannot satisfy the merge gate or overwrite a PR verdict.
     name: ${{ (github.event_name == 'pull_request' || github.event_name == 'pull_request_review') && 'blocking-gate' || 'branch-checks' }}
     if: always()
-    needs: [context, regression, static-analysis, architecture-security, requirements, review-and-log, semantic-evaluation, smoke-install, governance-validation]
+    needs: [context, regression, static-analysis, architecture-security, requirements, frontend, frontend-e2e, review-and-log, semantic-evaluation, smoke-install, governance-validation]
     runs-on: ubuntu-latest
     steps:
       - name: Reject failed, cancelled, or skipped prerequisites

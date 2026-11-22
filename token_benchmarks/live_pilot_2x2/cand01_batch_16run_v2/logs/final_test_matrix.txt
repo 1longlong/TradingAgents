@@ -1,0 +1,16 @@
+=== FINAL TEST MATRIX ===
+
+1) Full suite, repo cwd, shipped shell env:
+2 failed, 1990 passed, 2 skipped, 26 warnings, 319 subtests passed in 8.93s
+
+2) Full suite, repo cwd, 4 TRADINGAGENTS_* selection keys unset:
+2 failed, 1990 passed, 2 skipped, 26 warnings, 319 subtests passed in 9.02s
+
+3) Full suite, fully scrubbed env (env -i), cwd-independent:
+2 failed, 1990 passed, 2 skipped, 26 warnings, 319 subtests passed in 9.11s
+
+4) RC1 baseline (control), same interpreter:
+2 failed, 1471 passed, 2 skipped, 26 warnings, 240 subtests passed in 9.36s
+
+5) RC1 baseline from a .env-free cwd:
+1473 passed, 2 skipped, 26 warnings, 240 subtests passed in 9.34s

@@ -224,6 +224,7 @@ def test_workflow_retains_blocking_checks_without_duplicate_review_logic():
     required = {"context", "regression", "static-analysis", "architecture-security",
                 "requirements", "review-and-log", "semantic-evaluation", "smoke-install",
                 "governance-validation"}
+    required.update({"frontend", "frontend-e2e"})
     assert set(jobs["blocking-gate"]["needs"]) == required
     assert any("ci_gates semantic" in step.get("run", "")
                for step in jobs["semantic-evaluation"]["steps"])

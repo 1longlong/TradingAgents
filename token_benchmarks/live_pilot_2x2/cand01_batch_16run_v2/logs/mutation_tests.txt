@@ -1,0 +1,88 @@
+===================================================================
+MUTATION: drop 'switches' from HASHED_FIELDS
+file: scripts/gen_cand01_batch_16run_specs_v2.py
+===================================================================
+sha256 before: 7f28bf6a94902c95a010c26dc208ada550de807a864ca4fd708d749dc49d3828
+edited
+sha256 mutated: 9db7aa75187693d206244035004dd50f01db4642a8ef6e874692316d0cea1a49
+--- test result ---
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE KeyError
+
+tests/test_cand01_batch_16run_v2_infra.py:403: Failed
+=========================== short test summary info ============================
+FAILED tests/test_cand01_batch_16run_v2_infra.py::test_hash_input_fields_are_recorded_explicitly
+FAILED tests/test_cand01_batch_16run_v2_infra.py::test_flipping_any_switch_changes_the_hash[batch_macro]
+FAILED tests/test_cand01_batch_16run_v2_infra.py::test_flipping_any_switch_changes_the_hash[single_pass]
+FAILED tests/test_cand01_batch_16run_v2_infra.py::test_flipping_any_switch_changes_the_hash[structured]
+FAILED tests/test_cand01_batch_16run_v2_infra.py::test_flipping_any_switch_changes_the_hash[s2_downstream]
+FAILED tests/test_cand01_batch_16run_v2_infra.py::test_a_missing_hashed_field_is_an_error_not_a_default
+6 failed, 40 passed in 0.49s
+sha256 restored: 7f28bf6a94902c95a010c26dc208ada550de807a864ca4fd708d749dc49d3828  (identical: YES)
+
+===================================================================
+MUTATION: allow s2_downstream=false to pass
+file: scripts/gen_cand01_batch_16run_specs_v2.py
+===================================================================
+sha256 before: 7f28bf6a94902c95a010c26dc208ada550de807a864ca4fd708d749dc49d3828
+edited
+sha256 mutated: 255bfcc5e834434d89924485f619c2e56bae6bccbd4bab9d330fe5c1fdb9540f
+--- test result ---
+=================================== FAILURES ===================================
+_______________ test_s2_downstream_false_is_refused_not_ignored ________________
+
+    def test_s2_downstream_false_is_refused_not_ignored():
+>       with pytest.raises(gv2.RefusedError, match="s2_downstream"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE RefusedError
+
+tests/test_cand01_batch_16run_v2_infra.py:254: Failed
+=========================== short test summary info ============================
+FAILED tests/test_cand01_batch_16run_v2_infra.py::test_s2_downstream_false_is_refused_not_ignored
+1 failed, 45 passed in 0.45s
+sha256 restored: 7f28bf6a94902c95a010c26dc208ada550de807a864ca4fd708d749dc49d3828  (identical: YES)
+
+===================================================================
+MUTATION: route get_news back to the GDELT-merging function
+file: tradingagents/dataflows/interface.py
+===================================================================
+sha256 before: 059bc46d63c2039e9113bba1458ba91488e6e93016b6c2ba49716738379d63db
+edited
+sha256 mutated: 28d2645336d72f6e88bf85d7a47cffd8af0ed02eb56dc5872000d7941d1086bd
+--- test result ---
+E         Left contains one more item: ('get_news_gdelt', ('NVDA', '2026-09-01', '2026-09-30'), {'as_of_cutoff': None})
+E         Use -v to get more diff
+
+tests/test_finnhub_only_scope.py:118: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  tradingagents.dataflows.finnhub_news:finnhub_news.py:667 Finnhub news provider failed: RuntimeError
+WARNING  tradingagents.dataflows.finnhub_news:finnhub_news.py:667 GDELT news provider failed: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_finnhub_only_scope.py::test_the_finnhub_company_route_is_the_finnhub_only_entry_point
+FAILED tests/test_finnhub_only_scope.py::test_get_news_never_contacts_gdelt
+FAILED tests/test_finnhub_only_scope.py::test_a_finnhub_outage_is_not_rescued_by_gdelt
+3 failed, 6 passed in 0.50s
+sha256 restored: 059bc46d63c2039e9113bba1458ba91488e6e93016b6c2ba49716738379d63db  (identical: YES)
+
+===================================================================
+MUTATION: switch verifier accepts s2_downstream=false / truthy strings
+file: tradingagents/graph/switch_verification.py
+===================================================================
+sha256 before: 5c0c3260a5590301302d4f6a956ffdb3fe64ac2bf16c282252da580f31942863
+edited
+sha256 mutated: af48460cb8232e2c86c865aa9fe920dd29d46998855c09fb6c5040b278db59db
+--- test result ---
+
+    def test_s2_downstream_false_is_rejected():
+        switches = dict(ARMS["B"])
+        switches["s2_downstream"] = False
+>       with pytest.raises(SwitchNotConsumed, match="s2_downstream"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE SwitchNotConsumed
+
+tests/test_switch_consumption.py:187: Failed
+=========================== short test summary info ============================
+FAILED tests/test_switch_consumption.py::test_s2_downstream_false_is_rejected
+1 failed, 18 passed in 0.59s
+sha256 restored: 5c0c3260a5590301302d4f6a956ffdb3fe64ac2bf16c282252da580f31942863  (identical: YES)
+

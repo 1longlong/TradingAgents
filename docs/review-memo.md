@@ -1,3 +1,5 @@
+# Review Memo — Phase Reviews, AI Audits and Recorded Human Decisions
+
 # Integrated branch records
 
 Both branch histories are retained below. Dates, result counts, approval scopes,
@@ -62,7 +64,7 @@ Workflow and checker changes require human inspection through normal PR review. 
 - Scope authorized by the user: discuss WebUI requirements in batches, then enter the Docs phase and write project documents in English. Product implementation, tests, commits, pushes, merges, deployments, dependency installation, and live API calls were not authorized.
 - Confirmed product baseline: local single-user WebUI on `127.0.0.1` without authentication; one active run at a time; coexist with an unchanged CLI and core; complete eight-step wizard; live progress, messages, tools, statistics, and full I–V report; read-only history over existing artifacts; backtest launch and results; checkpoint controls; portfolio JSON by paste or upload; cancellation with CLI-equivalent semantics; server-only provider keys; announcements with TUI parity; Chinese/English UI.
 - Explicit exclusions: new data sources/models, agent or prompt changes, trading execution, multi-user/tenancy/billing, new databases or message queues, cloud/container deployment, PDF/Word export, native mobile, multi-ticker analysis outside backtest, cross-run comparison/scoring, and any change to CLI or core behavior.
-- Artifacts created: `docs/req/requirements.yaml` (26 draft requirements, 69 acceptance criteria), `architecture-blueprint.md`, `docs/architecture/adr/001-choice.md`, `docs/architecture/invariants.md`, `docs/architecture/trace-matrix.md`, `docs/architecture/risk-list.md`, `docs/architecture/runtime-policy-catalog.md`, `docs/architecture/memory-design.md`, `docs/architecture/option-ledger.md`, `docs/architecture/evaluation-table.md`, and `docs/architecture/evaluation-logbook.md`. `README.md` was updated to point to the draft documents and to state that drafts do not authorize implementation.
+- Artifacts created: `docs/req/requirements.yaml` (26 draft requirements, 69 acceptance criteria), `architecture-blueprint.md`, `docs/architecture/adr/021-choice.md`, `docs/architecture/invariants.md`, `docs/architecture/trace-matrix.md`, `docs/architecture/risk-list.md`, `docs/architecture/runtime-policy-catalog.md`, `docs/architecture/memory-design.md`, `docs/architecture/option-ledger.md`, `docs/architecture/evaluation-table.md`, and `docs/architecture/evaluation-logbook.md`. `README.md` was updated to point to the draft documents and to state that drafts do not authorize implementation.
 - Validation performed: local YAML parsing with duplicate-key detection and a targeted validator mirroring the schema and gate rules passed (26 requirements, 69 unique criteria). The official `python -m test.ci_gates schema` was not run because the host lacks `PyYAML`, `jsonschema`, and `json5`; dependency installation was not authorized. No product tests or live tests were run.
 - Human approval status: the user confirmed the discussion baseline and authorized this Docs phase in the current conversation. The written artifacts themselves have not received a review verdict. No `[test-plan-approved]`, `[safety-approved]`, or `[governance-approved]` review is claimed.
 - Open decisions: web framework, event transport, frontend stack, final package path, default UI language, preference-file writes, backtest cancellation, download packaging, and the event-latency target.
@@ -72,7 +74,7 @@ Workflow and checker changes require human inspection through normal PR review. 
 
 - Human decision: the user approved the architecture design presented in the current conversation, including TypeScript + React + UI technology and the delegated backend, transport, packaging, history, security, and run-control choices. This approval covers documentation only; it is not a GitHub `[safety-approved]`, `[test-plan-approved]`, or `[governance-approved]` review.
 - Approved decisions: FastAPI + Uvicorn single worker; SSE; React 19 + TypeScript + Vite; Tailwind + shadcn/Radix + Lucide; Zustand + TanStack Query; React Hook Form + Zod; react-markdown + rehype-sanitize; react-i18next with English default and Chinese switch; `src/tradingagents_web/` with `[web]` extra and `tradingagents-web` entry point; in-memory single run; read-only hash-id history; complete Markdown + zip downloads; analysis cancellation only; no backtest cancellation; loopback without authentication with Host/Origin/CSRF/CSP controls; server-only keys; no server paths.
-- Artifacts updated: `architecture-blueprint.md`, `docs/architecture/adr/001-choice.md` (updated), `docs/architecture/adr/002-backend-framework-and-transport.md` through `007-run-controls.md` (new), `docs/architecture/invariants.md` (001–015), `docs/architecture/trace-matrix.md`, `docs/architecture/permission-model.md` (filled), `docs/architecture/memory-design.md`, `docs/architecture/runtime-policy-catalog.md`, `docs/architecture/option-ledger.md`, `docs/architecture/risk-list.md`, `docs/architecture/evaluation-table.md`, `docs/architecture/evaluation-logbook.md`, `docs/debt-register.md`, `README.md`, and `docs/ai-use-log.yaml`.
+- Artifacts updated: `architecture-blueprint.md`, `docs/architecture/adr/021-choice.md` (updated), `docs/architecture/adr/022-backend-framework-and-transport.md` through `007-run-controls.md` (new), `docs/architecture/invariants.md` (001–015), `docs/architecture/trace-matrix.md`, `docs/architecture/permission-model.md` (filled), `docs/architecture/memory-design.md`, `docs/architecture/runtime-policy-catalog.md`, `docs/architecture/option-ledger.md`, `docs/architecture/risk-list.md`, `docs/architecture/evaluation-table.md`, `docs/architecture/evaluation-logbook.md`, `docs/debt-register.md`, `README.md`, and `docs/ai-use-log.yaml`.
 - Validation performed: the requirements registry was unchanged; its earlier local YAML and targeted schema/gate-equivalent checks remain the only executed validation. Blueprint architecture anchors were checked locally and resolve. No architecture experiment, product test, packaging test, browser test, latency measurement, dependency audit, or live call was executed. The official `python -m test.ci_gates schema`, structure, lint, type, dependency, and security checks remain unrun because the host lacks the dev dependencies.
 - Planned versus actual: `docs/architecture/evaluation-table.md` lists EVAL-01 through EVAL-10 as planned; `docs/architecture/evaluation-logbook.md` records only the executed documentation checks. No planned result is reported as passing.
 - Remaining before implementation:
@@ -259,7 +261,6 @@ The user subsequently confirmed that no alternative vendor key is available and 
 ## Release core records (79103c3)
 
 # Review Memo — Human Review Record
-
 Each project phase requires an explicit recorded human review before it is
 declared complete. A phase without a recorded review is **not** claimed
 complete. Reviews are recorded here; AI-tool use is recorded separately in
@@ -1545,6 +1546,510 @@ Git mutations.
 - **Still pending:** explicit final **HUMAN acceptance** and the **actual new remote
   Python 3.10 CI** (no push authorized). No commit/push/new PR/merge/product live call.
 
+---
+
+# Part II — Personal token-observability review and audit records (REC-01…REC-10)
+
+**Source and status.** This part integrates the personal token-observability
+review memo from the latest personal worktree (`docs/review-memo.md`, revision
+2026-11-21), which extends the committed Feature version's REC-01…REC-08 with
+REC-09 and REC-10. It is appended to, not substituted for, the Release review
+record above.
+
+> **NO FORMAL TECHNICAL SIGN-OFF; STUDENT DOCUMENTATION REVIEW CONFIRMED.**
+> The audit reports below were written by AI subagents or offline test commands,
+> and the student directed and supervised the development. WangTianQi has
+> personally reviewed and confirmed the personal documentation as an accurate
+> account of the work, with AI assistance, on 2026-11-21. This is a documentation
+> review, not an independent technical audit or experimental reproduction, and it
+> does not convert any REC/ADR/risk/debt verdict into an independently verified
+> result. Formal record-level acceptance remains `PENDING_HUMAN_CONFIRMATION`.
+
+### Student documentation-review acknowledgement (2026-11-21)
+
+WangTianQi states: “I have personally read and reviewed all the
+personal-contribution documents involved in this documentation round. I found no
+material problems with their contents and accept the documentation as an accurate
+account of my work, with AI assistance appropriately disclosed.”
+
+This acknowledges review of the **written documentation** (Report §7, this memo's
+personal summaries, the transcript, and the personal governance records). It does
+not assert that the student independently reproduced the V2/V3 experiments,
+re-ran the full suite, or formally accepted REC-01–REC-10, the ADRs, risks or
+debts; those remain pending where recorded.
+
+**Identifier note.** The personal memo's requirement aliases were canonicalised
+during the D1/D2 integration: `FR-014` → `FR-HAR-001`, `FR-015` → `FR-OBS-005`,
+`FR-016` → `FR-CAM-001`, `NFR-004` → `NFR-VER-001`, `NFR-005` → `NFR-VER-002`;
+personal `DEBT-001…010` → `DEBT-042…051`; personal `RISK-001…014` →
+`RISK-036…049`; personal ADRs 001–006 → ADR-013…018. The AI-use log referenced
+here grew from the memo's 22 entries to the integrated 105 records
+(AUL-074…AUL-104 are the integrated personal records). Where the historical text
+below says "22 log entries" or "21 requirements", it describes the personal
+branch at that time; the integrated tree has 52 requirements and 105 records.
+
+**What is a review and what is not.** No entry in this part is a human review.
+REC-09 records the absence of committed pre-RC1 review artefacts. The pre-V2
+table below records **technical verification inside AI sessions**, not formal
+approved reviews.
+
+## Pre-V2 technical verification and review-adjacent activity (2026-09-06 → 2026-11-14)
+
+The personal register originally began at 2026-11-15 (REC-01). The session-store
+recovery (integrated as `AUL-074…AUL-104`) established the earlier chronology.
+The entries below are **technical verification performed by AI agents inside
+coding sessions**, not formal review ceremonies; where no committed review
+artefact exists, that absence is stated instead of inventing one.
+
+| Period | Activity | What was actually verified | Evidence | Review character |
+| --- | --- | --- | --- | --- |
+| 2026-09-06/07 | Host toolchain inspection before any project work | Python, pip, Node, npm and Git versions/paths listed; a second pass confirmed `nodejs` is absent while `node` exists via nvm. Read-only: no repository file was read or modified. | `AUL-096` (personal AIU-023); OpenCode sessions `ses_f893561e…`, `ses_f84573529…` | Environment verification only. Not a review, not repository development. |
+| 2026-10-20 | Observability / measurement foundation (seven sessions) | Per-agent and per-tool scoping, tool rounds, prefetch accounting, structured-output telemetry; the last session found and fixed a real smoke-test regression. An earlier checkout inspection and a three-file read-only probe are recorded separately. | `AUL-084` (AIU-011), `AUL-097` (AIU-024) | Implementation + smoke verification; no formal review. |
+| 2026-10-23/24 | Harness audit, QA and baseline | Read-only harness audit; credential-free QA before any paid benchmark; a tool-call observability discrepancy (20 LLM calls reported against zero tool calls across six tool rounds); a telemetry re-run conflict (one run directory held 19-call and 20-call artifacts); a real five-run `baseline_v2`; whole-repo pre-commit audit; a minimal repair pass; `scripts/run_token_benchmark.sh` with wrapper/harness tests. | `AUL-085` (AIU-012), `AUL-098` (AIU-025); OpenCode session `ses_e9777a47…` | QA and technical verification. The quoted 114/1,178 test figures are the agent's self-report and were not re-run. |
+| 2026-11-02/03 | Stage 0–6 optimisation campaign | Reproducible baseline `866133d`; Stage 1 report dedupe and Stage 2 structured output accepted; **Stage 4 rejected** (+3.8 % total tokens); **Stage 6 rejected and rolled back** after the QA framework found semantic information loss; ECONNRESET recovery without restarting the task. | `AUL-086` (AIU-013), `AUL-099` (AIU-026); `LOG-001`–`LOG-003` | Campaign decisions with measured evidence. No formal review artefact. |
+| 2026-11-04–14 | Main development arc | Rounds 6–8; FRED key found disabled and historical NVDA news unobtainable; shell/tool loss recovered by subagent delegation after the operator refused simulated output; **Stage-2 rollback approved**; HTTP 429 pivot; historical news/sentiment audit; batch-macro and S2 structured output; RC1 freeze `9948bf8`; CAND-01 design; two CAND-01 audits (`READY_WITH_LIMITATIONS`) and the PF-01 re-audit; stop-before-live-runs instruction. | `AUL-087` (AIU-015), `AUL-088` (AIU-016), `AUL-100` (AIU-027); `LOG-004`; `REC-09` | Technical verification and operator decisions. `REC-09` records that no committed audit report survives from this period. |
+| 2026-11-15 | Pre-V2 apparatus, C3 audit rounds 2–5, migration | C3 rounds 2–5 (REC-01…REC-04) found Critical/blocking defects and the **self-tamper incident**; the campaign was halted at **zero paid calls**; Finnhub+GDELT migration, PIT audit and the final **Finnhub-only** scope decision; explicit paid-run authorizations and withheld authorizations recorded as conversation turns; Plan C `BLOCKED` on the lost generator, then C2 reconstruction and C3 execution. | `AUL-074` (AIU-001), `AUL-075` (AIU-002), `AUL-090` (AIU-017), `AUL-101` (AIU-028), `AUL-102` (AIU-029), `AUL-103` (AIU-030); `REC-01`–`REC-04` | Formal **AI-authored** audit rounds with committed reports (REC-01–04). No human reviewer. |
+| 2026-11-16 | V2/V3 batches, freezes, audits, remediation | V2 batch (7 attempts/5 valid/1 env-failed/1 invalid/1,463,791 tokens); V3 freeze `e3b5cca` and batch (18 attempts / 16 Run IDs / 15 valid / 1 environment-failed / 2 invalid / 3,067,669 tokens); V3 audits (REC-06); final remediation (REC-07) and `50b2ca3`. | `AUL-076`–`AUL-082`, `AUL-092`, `AUL-093`, `AUL-095`; `REC-05`–`REC-07`; `LOG-005`–`LOG-011` | AI-authored audit rounds with committed reports. No human reviewer. |
+
+**What remains unresolved from this period:** the pre-V2 sessions were read at
+human-prompt level; the 509 delegated OpenCode sessions and 36 `dsh` subagent
+streams were counted and attributed to their parents, not individually reviewed.
+Early test counts quoted from session reports are self-reports. The reason the
+three early attempts were stashed, and who operated each session, are
+`NOT_VERIFIED`.
+
+## Personal sign-off register
+
+## Sign-off register
+
+| Record | Subject | Reviewer type | Sign-off |
+| --- | --- | --- | --- |
+| REC-01 | C3 apparatus audit, round 2 | AI subagent (A/B/C) | `PENDING_HUMAN_CONFIRMATION` |
+| REC-02 | C3 apparatus audit, round 3 | AI subagent (B/C) | `PENDING_HUMAN_CONFIRMATION` |
+| REC-03 | C3 apparatus audit, round 4 | AI subagent (A/B) | `PENDING_HUMAN_CONFIRMATION` |
+| REC-04 | C3 apparatus audit, round 5 | AI subagent (A/B/C) | `PENDING_HUMAN_CONFIRMATION` |
+| REC-05 | V2 final-freeze audit, rounds 2/3/3b | AI subagent (A/B/C) | `PENDING_HUMAN_CONFIRMATION` |
+| REC-06 | V3 audit A/B/C | AI subagent (A/B/C) | `PENDING_HUMAN_CONFIRMATION` |
+| REC-07 | Final-remediation audit A/B/C | AI subagent (A/B/C) | `PENDING_HUMAN_CONFIRMATION` |
+| REC-08 | Full-suite offline verification | offline test | `PENDING_HUMAN_CONFIRMATION` |
+| REC-09 | Pre-RC1 review activity, 2026-10-23 → 2026-11-14 | AI auditors in session; **no committed artefact** | `PENDING_HUMAN_CONFIRMATION` |
+| REC-10 | Record re-read: log attribution and requirement gaps | AI coding agent, read-only | `PENDING_HUMAN_CONFIRMATION` |
+
+### AI evidence review (DeepSeek Harness, AI-assisted; 2026-11-21)
+
+Reviewer identity: **DeepSeek Harness (AI-assisted evidence review)** — not an
+independent human auditor. Scope: re-read each REC record against the repository,
+the AI-use log, the audit artefacts and the local verification results; no paid
+run was performed and no human signature is implied. The human sign-off states
+above are unchanged.
+
+| Record | AI assessment | Basis and limitation |
+| --- | --- | --- |
+| REC-01 | `AI_EVIDENCE_CHECKED_WITH_LIMITATIONS` | Audit rounds and fix commits exist; conclusions are AI-authored, no human review. |
+| REC-02 | `AI_EVIDENCE_CHECKED_WITH_LIMITATIONS` | As REC-01; no human reviewer. |
+| REC-03 | `AI_EVIDENCE_CHECKED_WITH_LIMITATIONS` | As REC-01; no human reviewer. |
+| REC-04 | `AI_EVIDENCE_CHECKED_WITH_LIMITATIONS` | As REC-01; no human reviewer. |
+| REC-05 | `AI_EVIDENCE_CHECKED_WITH_LIMITATIONS` | V2 freeze records exist; the V2 certificate remains absent (`VC-07`). |
+| REC-06 | `AI_EVIDENCE_CHECKED_WITH_LIMITATIONS` | V3 audits are AI-authored and pre-fix; results are exploratory (n=1 per cell). |
+| REC-07 | `AI_EVIDENCE_CHECKED_WITH_LIMITATIONS` | Remediation records exist; no human acceptance. |
+| REC-08 | `AI_EVIDENCE_CHECKED_WITH_LIMITATIONS` | Historical personal-branch suite (2,233 passed) is distinguishable from the current local integration result (5,132 passed, 3 skipped, 2026-11-21). |
+| REC-09 | `INSUFFICIENT_EVIDENCE` | No committed artefact for the pre-RC1 review activity; retained as a documented gap. |
+| REC-10 | `AI_EVIDENCE_CHECKED_WITH_LIMITATIONS` | Read-only record re-read; attribution and requirement gaps remain recorded. |
+
+None of these assessments replaces `PENDING_HUMAN_CONFIRMATION`; they record only
+what an AI tool could verify locally. The student's 2026-11-21 review confirms the
+documentation text, not the independent correctness of these technical audits.
+
+Resolution rule used below: a record is `FIXED` only when a later commit and a
+named test/command exist; otherwise the finding is marked `NOT_VERIFIED`.
+
+---
+
+## Personal review records
+
+## REC-01 — C3 apparatus audit, round 2 (pre-paid candidate)
+
+- **Date:** 2026-11-15 evening; fix commits `24d488d` (21:44), `4eaf8cc`
+  (22:13) and `538b2b8` (22:16). The exact audit start time is `NOT_VERIFIED`.
+- **Reviewer type:** AI subagents Audit A, B and C, each a separate read-only
+  session; no human reviewer.
+- **Scope:** pre-paid CAND-01 × batch-macro apparatus: news extraction, harness,
+  specs, switch delivery and test non-vacuity.
+- **Findings:**
+  - A-02, Critical: Finnhub truncation kept the **oldest** articles, not the
+    newest. On the live NVDA 2026-09-23 sample the newest rendered article was
+    2026-09-16, while 63 in-window articles from the final two days were dropped.
+  - B-01, Critical: `prepare_run_spec` wrote a child spec with no `switches` and
+    no `config_sha256`, so every arm would run `default_config` (the AB arm);
+    all 16 labels would have produced one arm.
+  - B-02, Critical: `config_sha256` was never recomputed, so a spec with
+    `"0"*64` — or one edited after registration — was accepted.
+  - B-03 (blocking): the 16 `spec.json` edits invalidated `MANIFEST.sha256` and
+    the per-run `spec_body_sha256`; both were regenerated and verified 94/94.
+  - C-01 (blocking): the gate recomputed the spec hash but compared no shared
+    field, so a tampered `deep_model` passed.
+  - Environment/safety (blocking): the secrets file named on the command line
+    lost to the ambient environment; a probe was observed dialling the real paid
+    endpoint for 120 s before it failed fast.
+  - A-02b (severity not retained): truncation was not disclosed to the report
+    reader (`4eaf8cc`).
+  - Audit-B round-2 finding (severity not retained; non-vacuity): the rehearsal
+    path could not fail, so a green rehearsal proved nothing (`538b2b8`).
+- **Fix:** `24d488d` (A-02/B-01/B-02/B-03/C-01 and env precedence), `4eaf8cc`
+  (disclosure), `538b2b8` (failing rehearsal).
+- **Verification:** `PREFLIGHT_REPORT.md` 16-condition list; mutation log
+  `logs/mutation_tests.txt`; final confirmation run 1,990 passed / 2 failed /
+  2 skipped / 319 subtests (`logs/final_confirmation.txt`).
+- **Evidence:** `token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/PREFLIGHT_REPORT.md`,
+  `.../logs/final_confirmation.txt`, `.../logs/mutation_tests.txt`, commits
+  `24d488d`, `4eaf8cc`, `538b2b8`.
+- **Human sign-off:** `PENDING_HUMAN_CONFIRMATION`
+
+## REC-02 — C3 apparatus audit, round 3
+
+- **Date:** 2026-11-15; `41f6d90` (22:52, Audit B) and `97629cd` (23:02,
+  Audit C). Both audits returned `NOT_READY` before the fixes.
+- **Reviewer type:** AI subagents Audit B and C (separate read-only sessions).
+- **Scope:** harness/spec reproduction, arm anchoring, usage accounting, budget
+  wiring and safety.
+- **Findings:** B's findings were blocking; C recorded two blocking items
+  (C-02, C-08) and four further findings. All were fixed this round.
+  - B-03 (blocking): `--check` treated `git_head_commit`/`git_branch` as stable, so it
+    failed on every clean checkout that was not the registration commit.
+  - B-10/B-11 (blocking): recomputing `config_sha256` proved only self-agreement; the arm
+    was not anchored to the tracked `SWITCH_MATRIX.csv`, so an in-place rehash,
+    a directory rename, or a rename plus matrix edit were accepted.
+  - B-06 (blocking): a copy of `R01_NVDA_C0` in another directory carried the same name,
+    switches and hash, and could have doubled one arm's weight.
+  - B-07 (blocking): `_cmd_measure` wrote `code_state.json` before rehearsal, so a refused
+    dry run left a state file behind.
+  - C-02 (blocking): the delivered `specs/*/code_state.json` still named RC1 with a bare
+    `git_working_tree_dirty: true`, so the shipped evidence read as generated
+    from unfrozen code.
+  - C-08 (blocking): a spec-only attempt directory was not counted as occupied, so the next
+    attempt overwrote it.
+  - C-04r (further finding; severity not retained): the budget gate tested `UNKNOWN_SPEND` before the cap, so an already
+    blown cap did not block; `check()` was never called in production.
+  - C-05p (further finding; severity not retained): an unmeasured per-agent total was reported as `0`, identical to a
+    genuinely zero-token agent.
+- **Fix:** `41f6d90` (B-series), `97629cd` (C-series), with provenance refresh
+  `78c0140`/`f5e9051`.
+- **Verification:** mutation results in both commit messages (each guard removed
+  → exactly one named test red, file restored SHA-256-identical); full suite
+  2,071 passed / 2 skipped / 319 subtests; release record sealed at `41f6d90`
+  (`6748e76`).
+- **Evidence:** commits `41f6d90`, `97629cd`, `6748e76`; `C3_HALT_REPORT_20261115.md`.
+- **Human sign-off:** `PENDING_HUMAN_CONFIRMATION`
+
+## REC-03 — C3 apparatus audit, round 4
+
+- **Date:** 2026-11-15; `90c7689` (23:18) and `2770789` (23:19). Audit A
+  returned `NOT_READY` with **two Critical and three High** findings; Audit B
+  returned `NOT_READY` with **one Blocker**.
+- **Reviewer type:** AI subagents Audit A and B (separate read-only sessions).
+- **Scope:** the spending child's freeze check, frozen-field guards, spec
+  provenance and fingerprint coverage.
+- **Findings:**
+  - H-A, Critical: the child that spends money never checked the freeze; the
+    commit/fingerprint checks lived only in the separate gate invocation, so a
+    run could start from a dirty checkout that had never passed the gate.
+  - H-B, Critical: every `_preflight_gate` guard was `if field is not None`, so
+    **deleting** a frozen field skipped its check. A spec with no `switches` ran
+    `DEFAULT_CONFIG` (AB) while its directory said C0.
+  - H-C, High: the child hashed the registration, not the spec, so tampering
+    with `deep_model`, `provider` or `case.trade_date` was accepted.
+  - H-D, High: all 16 `code_state.json` claimed to precede the freeze while
+    naming a descendant commit — the opposite of the truth.
+  - H-E, High: the tree moved during the audit (the self-tamper incident; see
+    `INCIDENT_20261115B_self_tamper.md`).
+  - B-15, Blocker: the fingerprint covered **zero** registered artefacts
+    (`specs/`, `SWITCH_MATRIX.csv`, protocol, manifests were outside it); after
+    editing a registration and re-running the writer, the gate printed
+    "GATE PASSED".
+- **Fix:** `90c7689` (all of the above), `2770789` (provenance/counts/manifest).
+- **Verification:** full suite 2,080 passed / 2 skipped / 319 subtests;
+  mutations M5–M9 (fingerprint coverage, re-seal guard, mandatory fields, spec
+  cross-check, child freeze check) each restored byte-identically.
+- **Evidence:** commits `90c7689`, `2770789`; `C3_HALT_REPORT_20261115.md`.
+- **Human sign-off:** `PENDING_HUMAN_CONFIRMATION`
+
+## REC-04 — C3 apparatus audit, round 5
+
+- **Date:** 2026-11-15, 23:22–23:52 (round-5 fix commits `ff58fdc` 23:37,
+  `f556bef` 23:48, `1bba51f` 23:52); halt report `4c00aea` 23:53.
+- **Reviewer type:** AI subagents Audit A, B, C (three independent read-only
+  sessions).
+- **Scope:** the whole 16-run apparatus at the round-5 candidate.
+- **Verdicts:** A `NOT_READY`, B `READY` (C1–C5), C `NOT_READY`.
+- **Findings:**
+  - H-C, Critical: spec `case` sub-fields were accepted without matching the
+    registration field by field.
+  - R-5-B, High: the freeze designation was circular — the writer could move
+    what "the frozen commit" meant.
+  - R-5-C, High: the skip-network flag reached a paid child process.
+  - R-5-D, Medium: `C3_FROZEN_COMMIT` could replace, not merely restate, the
+    frozen reference.
+  - B-20 (Med/High), B-21 (Medium), B-23 (Medium), B-26 (Low): missing
+    protocol-arm authority test; a guard test ran the real writer; no
+    spec/config hash recorded; a silent escape hatch.
+  - C-12 (procedural, release blocker): the tree moved under Audit C
+    repeatedly. U-1/U-2 remained open at this point.
+- **Fix:** `f556bef` (H-C, non-circular designation), `ff58fdc` (B-20/21/23/26),
+  `a234f3e` (re-seal), `1bba51f` (R-5-C/R-5-D). U-1/U-2 were deliberately
+  deferred to the single re-freeze round.
+- **Verification:** 2,099 passed / 2 skipped / 319 subtests at the halt;
+  mutation proofs M14–M17 for H-C/R-5-C/R-5-D and M10/M6/M11/M12–M13 for the
+  B-series. The round-5 halt report records zero paid calls.
+- **Evidence:** `token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/C3_HALT_REPORT_20261115.md`,
+  `.../INCIDENT_20261115B_self_tamper.md`, commits `f556bef`, `ff58fdc`,
+  `a234f3e`, `1bba51f`.
+- **Human sign-off:** `PENDING_HUMAN_CONFIRMATION`
+
+## REC-05 — V2 final-freeze audit, rounds 2/3/3b
+
+- **Date:** 2026-11-16, 01:00–01:28 (`af45681` 01:00, `2f2f424` 01:10,
+  `e2b0d4a` 01:21, `1406b37` 01:25, freeze `15270b1` 01:28).
+- **Reviewer type:** AI subagents Audit A, B, C (separate read-only sessions).
+- **Scope:** A — CAND-01, news path, PIT, F1/F2/F3, PF-01; B — harness, 16
+  specs, switch delivery, freeze mechanism; C — usage, budget, telemetry,
+  freeze integrity, safety.
+- **Findings:** C2 Critical (freeze writer emitted prose after the SHA; the gate
+  passed the whole string to `git merge-base`, exit 128); H1 High
+  (`spec_body_sha256` omitted `registration_dir`/`switches_source`, so 16/16
+  recorded digests differed from the released spec); H2 High (docstring falsely
+  claimed `FREEZE_HISTORY.jsonl` was tracked and inside the fingerprint); M1
+  Medium (no path containment: a rehashed `/tmp` copy passed); L1/L2 Low
+  (`--expected-commit` replaced the reference; `--skip-network` still printed
+  "safe to spend"); R3-01/R3-02 Low (non-container `llm_call_events` raised;
+  unusable budget rendered as "uncapped").
+- **Fix:** `2f2f424` (round 2), `e2b0d4a` (round 3), `1406b37` (3b guard), with
+  `af45681` as the pre-audit remediation commit.
+- **Verification:** round-3 confirmations on `1406b37`: A 469 passed + 142
+  subtests, B 335 passed and MANIFEST 103/103, C 334 passed; fingerprints
+  identical at start and end. Final audited code `1406b37`; the release-metadata
+  commit `15270b1` changes only `c3/`, `MANIFEST.sha256` and the report, all
+  excluded from the code fingerprint.
+- **Evidence:** `token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/INDEPENDENT_AUDIT.md`,
+  `.../C3_PROTOCOL_FREEZE.md`, commits `2f2f424`, `e2b0d4a`, `1406b37`,
+  `15270b1`.
+- **Human sign-off:** `PENDING_HUMAN_CONFIRMATION`
+
+## REC-06 — V3 audit A/B/C
+
+- **Date:** 2026-11-16, 12:39–12:52. Candidate `6e66dca` (tree `3119b075`),
+  delta re-check `f19d6ed` (tree `5f6640ac`), final `c30700c` (tree
+  `6082e2cf`), freeze `e3b5cca`.
+- **Reviewer type:** AI subagents Audit A (product code and memory), Audit B
+  (harness, protocol, specs), Audit C (usage, telemetry, security); all
+  separate read-only sessions.
+- **Scope:** V3 protocol: system-component attribution, per-run memory
+  isolation, schema 3, 16 registrations and the pre-spend gate.
+- **Findings:**
+  - R1 (release blocker): worktree dirty during audit.
+  - M1 (Medium, A and C): a missing `memory_state.json` still validated
+    (fail-open).
+  - A1/A2 (Low, A): scope API accepted an agent id as a system component; the
+    harness trusted the attribution self-report.
+  - M2 (Medium, A and B): baseline provenance was asymmetric (NVDA kept, AAPL
+    excluded; NVDA was experiment-generated).
+  - M3 (Info): non-registered `measure` specs still share the generic memory log.
+  - B blockers on `afa0fc6`: schema 3 rejected; the preflight compared a
+    9-field attempt block against a 3-field registration; a stripped spec was
+    accepted.
+  - B residuals: generic-child bypass (M1), arm matrix hardcoded to V2 (L1),
+    `spec_body_sha256` not cross-root stable (L2), endpoint not hashed (L3),
+    stale docstring (L4), readiness claimed PASS (L5).
+  - C MEDIUM-1/MEDIUM-2: no-state fail-open; U-1 trusted the aggregate flag.
+  - C LOW-1..LOW-4: sentinel semantics, per-agent lower bound, stale counts,
+    budget fallback merges unreadable/malformed on a non-frozen path.
+- **Fix:** `afa0fc6` (attribution + memory isolation), `6e66dca` (schema 3,
+  memory bypass), `f19d6ed` (auditor findings), `c30700c` (stripped-spec guard).
+- **Verification:** 33 focused tests on `f19d6ed`; 233 focused tests in the
+  delta re-check; full suite on the candidate 2,204 passed / 2 pre-existing
+  failures / 2 skipped / 319 subtests; final freeze `e3b5cca` (20 checks,
+  tag `c3-v3-final-freeze`).
+- **Evidence:**
+  `token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/INDEPENDENT_AUDIT_A.md`,
+  `.../INDEPENDENT_AUDIT_B.md`, `.../INDEPENDENT_AUDIT_C.md`,
+  `.../REFLECTOR_ATTRIBUTION_AUDIT.md`, `.../MEMORY_ISOLATION_AUDIT.md`,
+  commits `afa0fc6`, `6e66dca`, `f19d6ed`, `c30700c`, `e3b5cca`.
+- **Human sign-off:** `PENDING_HUMAN_CONFIRMATION`
+
+## REC-07 — Final-remediation audit A/B/C
+
+- **Date:** 2026-11-16, 16:17–16:35. Candidate `e0ea1b0` (code fingerprint
+  `b8ba9547…`), fixes `e9eed04` (16:28), `51edd41` (16:32), `eaeebab` (16:35),
+  final `50b2ca3` (16:35).
+- **Reviewer type:** AI subagents Audit A (product logic), Audit B (telemetry and
+  experiment infrastructure), Audit C (regression and data safety); all
+  separate read-only sessions on the same commit.
+- **Scope:** R12 fallback, DSML markup sanitisation, single-pass `tool_rounds`,
+  telemetry counters, regression safety.
+- **Findings:**
+  - A HIGH: the direct prose exit (markup with no tool_calls) was not sanitised.
+  - A MEDIUM: the two `structured_llm is None` exits were not sanitised; a mixed
+    data+schema turn left an unexecuted schema call dangling; the sanitiser was
+    lossy and its field whitelist was too narrow.
+  - A LOW: an all-failed round still recorded `status="ok"`.
+  - B MEDIUM: `markup_sanitized` was also counted as a structured attempt
+    (inflating `structured_attempts`); markup leaked at three exits.
+  - B MEDIUM: the committed pre-fix probe lacked the `invoke` shim.
+  - C HIGH: the committed probe could not run on the pre-fix tree.
+  - C MEDIUM/LOW: the worktree moved during the audit; docs were untracked.
+- **Fix:** `8536274` (probe), `e9eed04` (findings), `51edd41` (separate
+  counter), `eaeebab` (run-level aggregation and doc alignment).
+- **Verification:** `tests/test_final_remediation.py` 20/20; pre-fix probe
+  4/4 detected on `e3b5cca`, 0/4 after; mutation 6/6 caught; full suite 2,227
+  passed / 4 known failed / 2 skipped / 319 subtests; three audits PASS; no open
+  High/Critical. Final code identical between `eaeebab` and `50b2ca3` for
+  `tradingagents/` and `scripts/`.
+- **Evidence:** `token_benchmarks/final_remediation_20261116/INDEPENDENT_AUDIT.md`,
+  `.../REGRESSION_AUDIT.md`, `.../TEST_RESULTS.md`,
+  `.../tests/pre_fix_detection_probe.py`, commits `e0ea1b0`, `e9eed04`,
+  `51edd41`, `eaeebab`, `50b2ca3`.
+- **Human sign-off:** `PENDING_HUMAN_CONFIRMATION`
+
+## REC-08 — Full-suite offline verification (this deliverable)
+
+- **Date:** 2026-11-19 (re-executed for this submission).
+- **Reviewer type:** offline test command; no human reviewer.
+- **Scope:** repository tests at `50b2ca3`, cwd
+  `/home/sky/cs5351/TradingAgents/.worktrees/cs5351_submission`, `TZ=UTC`,
+  interpreter `.venv/bin/python`.
+- **Command/result:** `TZ=UTC .venv/bin/python -m pytest -q` → exit 1 (the four
+  known failures): **4 failed, 2,227 passed, 2 skipped, 26 warnings, 319
+  subtests passed** (28.22 s), run before the uncommitted D7
+  test-isolation patch. With D7, `docs/code-governance/verification-constraints.md`
+  VC-01 records 2,233 passed / 2 skipped / 0 failed for the same worktree.
+- **Known failures, all classified:** two
+  `test_cand01_batch_16run_v3_infra.py` path-pinned tests (V3 specs embed the
+  original worktree's absolute paths) and two `test_cli_prefs.py` tests
+  (host-level `.env` / `~/.tradingagents/cli_prefs.json` leaks into the
+  interactive flow). No new failure was introduced by this deliverable; no
+  product file was modified.
+- **Evidence:** `token_benchmarks/final_remediation_20261116/TEST_RESULTS.md`
+  (recorded run: same 2,227/4/2/319) and this re-run.
+- **Human sign-off:** `PENDING_HUMAN_CONFIRMATION`
+
+---
+
+## REC-09 — Pre-RC1 review activity (2026-10-23 → 2026-11-14)
+
+- **Date range:** 2026-10-23 (harness read-only audit) to 2026-11-14 (CAND-01
+  audits). Reconstructed 2026-11-21 from the AI-coding session record; see
+  `docs/ai-use-session-audit.md` §2.
+- **Reviewer type:** AI auditors inside the coding sessions, plus AI delegates in
+  separate context. **No human reviewer.**
+- **Scope:** this record exists because the register above (`REC-01..08`) starts
+  on 2026-11-15. Between 2026-10-23 and 2026-11-14 the sessions show repeated
+  read-only audit passes — the harness audit, the final pre-optimisation review,
+  the RC1 token-regression root-cause analysis, the two CAND-01 audits
+  (`READY_WITH_LIMITATIONS`), and the PF-01 re-audit — and none of them left a
+  committed report in this tree. **That absence is the finding.**
+- **What can be stated:** the sessions record the verdicts (`READY_WITH_LIMITATIONS`
+  before F1/F2/F3, then READY after remediation; PF-01 raised and fixed before the
+  pilot). What cannot be stated is a report-level audit trail: the verdicts survive
+  only as conversation, and a conversation is not a review artefact.
+- **Evidence:** the session transcripts only; no committed file.
+- **Verification:** `NOT_VERIFIED` for the delivered tree. Do not cite REC-09 as
+  evidence that a pre-RC1 audit was independently reproducible.
+- **Human sign-off:** `PENDING_HUMAN_CONFIRMATION`
+
+## REC-10 — Defect found by re-reading the record (2026-11-21)
+
+- **Date:** 2026-11-21, during this submission round.
+- **Reviewer type:** AI coding agent reading the two session stores; read-only.
+- **Scope:** consistency between `docs/ai-use-log.yaml`, `docs/req/`, and the
+  recorded sessions.
+- **Findings:**
+  - `AIU-003` attributed the V2 batch to an "OpenCode batch runner" on inference
+    alone. The `~/.dsh` store shows the V2 freeze commits were made inside a
+    DeepSeek Harness session that began at 2026-11-16 00:22; the attribution was
+    therefore wrong, not merely vague. Corrected.
+  - Four shipped capabilities — the measurement harness, repeated-attempt
+    telemetry integrity, the accept/revert campaign, and executed-verification
+    fidelity — had no requirement ID even though each was argued for in a
+    recorded session. Added as FR-014..FR-016 and NFR-005; after the D1 integration these are FR-HAR-001 (measurement harness), FR-OBS-005 (telemetry selection), FR-CAM-001 (campaign) and NFR-VER-002 (executed-verification fidelity), with NFR-VER-001 covering the released suite/audit obligation.
+  - Every entry in the log carried `human_review: pending`, which is correct, but
+    the log did not say *which* entries were reconstructed after the fact. A note
+    and a `date_range` field now distinguish reconstructed entries.
+- **Fix:** `docs/ai-use-log.yaml`, `docs/req/requirements.yaml`,
+  `docs/req/req-schema.json`, `docs/architecture/trace-matrix.md`.
+- **Verification:** YAML and JSON parse (exit 0); 21 requirements / 64 acceptance
+  criteria with all referenced paths present; 22 log entries in ID order.
+- **Residual:** these corrections come from the same kind of evidence that
+  produced the original error — a reading of the record. A human must confirm
+  them. `PENDING_HUMAN_CONFIRMATION`
+
+---
+
+## Personal and integrated evidence gaps
+
+## Unverified / evidence gaps
+
+1. **Rounds 2–4 C3 finding IDs and severities are lost.** The fix commits
+   survive, but the full reports do not. `C3_HALT_REPORT_20261115.md` records
+   that reports describing B-24, B-27 and A-12 lived in a scratch worktree that
+   no longer exists. Those identifiers must not be read as "closed by name".
+2. **No post-fix paid run.** R12, DSML and `tool_rounds` fixes were verified by
+   offline fixtures, pre-fix probes and mutation only (see REC-07 and DEBT-046).
+3. **No human review of any AI-authored audit.** All verdicts above are
+   AI-generated; the sign-off register is entirely `PENDING_HUMAN_CONFIRMATION`.
+4. **No dated human authorization record for either paid batch.** The V2 and V3
+   batches were executed (their token totals are reported), but the repository
+   contains no approval artefact that names an authorizing person, a budget and a
+   date. `AGENTS.md` §8 requires such an authorization; the repository therefore
+   cannot show compliance with its own rule. This is recorded as a gap, not
+   resolved here. The session record does contain user turns that approve or
+   withhold paid execution (`AIU-018`), but a conversation turn is not the dated
+   written authorization the rule requires.
+5. **The commit-author identities are not resolved.** Git authors `WTQ`,
+   `Plan C3`, `C3 Engine`, `dsh-agent` and `t` appear in `rc1..50b2ca3`, and the
+   tree does not establish which of them are the student, which are the AI
+   toolchain, and which are both (see `docs/ai-use-log.yaml`
+   `unresolved_authorship`). Partial progress, not resolution: the DeepSeek
+   Harness store shows the 2026-11-16 00:53–01:28 block was produced inside a
+   `dsh` session, and the six `dsh-agent` commits fall in it. That leaves `WTQ`,
+   `Plan C3` and `C3 Engine` unexplained by any recorded session.
+6. **Pre-RC1 review activity has no committed artefact (REC-09).** Reviews
+   between 2026-10-23 and 2026-11-14 exist only as session conversation. The
+   delivered tree cannot reproduce them, so the review history before 2026-11-15
+   is thinner than the register's REC numbering might suggest.
+7. **The session stores are local, mutable and outside the repository.** They are
+   cited by path in `docs/ai-use-log.yaml` and `docs/ai-use-session-audit.md`. A
+   reader without those files cannot re-run the reconstruction, and nothing in
+   this tree proves the stores were not edited before they were read.
+
+- **Integration-level gap (added 2026-11-21).** The D2/D3 integration renamed the
+  personal ADRs to ADR-013…018 and renumbered personal risks/debt. The personal
+  ADRs' status is now "Retrospective documentation — human acceptance pending";
+  no ADR acceptance is claimed. The D2/D3 documentation changes themselves were
+  reviewed only by the AI that performed them.
+- **Integration-level gap (added 2026-11-21).** The D1 integration's retrospective
+  requirement IDs are canonical in this tree; the personal memo's pre-D1 IDs are
+  retained only as historical aliases (see the identifier note above).
+
+## Personal review checklist — WangTianQi
+
+This checklist is for the student, not a claim that anything below is approved.
+Open `docs/review-memo.md`, search for `PENDING_HUMAN_CONFIRMATION`, and record a
+decision for each item.
+
+- [ ] Confirm which coding sessions were personally operated, attended, or
+  delegated (OpenCode `2026-10-20 → 2026-11-15`; DeepSeek Harness
+  `2026-11-16 → 2026-11-20`). Do not rely on a commit-author string.
+- [ ] Read REC-01…REC-10 and mark each as accepted / rejected / needs-correction.
+  No record is human-approved today.
+- [ ] Provide, or explicitly declare absent, the dated paid-run authorization for
+  the V2 and V3 batches (run, provider, budget, date).
+- [ ] Confirm or leave unresolved the `WTQ`, `Plan C3`, `C3 Engine` and `t`
+  commit-author identities.
+- [ ] Confirm the retrospective ADR wording ("human acceptance pending") is
+  acceptable, or record a dated decision.
+- [ ] Confirm the RISK-036…049 and DEBT-042…051 mappings.
+- [ ] Complete the D5 transcript annotations and the final attestation in
+  `transcripts/60726054-WangTianQi.md`.
+
 ## Local release merge — 2026-11-19 (human decision pending)
 
 - Human instruction in the current conversation: merge local `release` into
@@ -2503,7 +3008,6 @@ Publication scope is all current authorized feature/webui changes, retaining
 ignored .agents/demo, real environment files, dependencies and generated output
 outside Git. The user explicitly requested local commit and remote push; no
 force push, merge, deployment or invented review approval is authorized.
-
 ## 2026-11-21 — PR #5 merge integration
 
 The repository user approved the concrete merge/conflict/test plan in chat with
