@@ -6867,3 +6867,22 @@ entries:
     coordination, architecture constraints, verification and human accountability.
   - Kept the reflection within 300–500 English words as one paragraph. Other personal reflections
     and the user's transcript renames remain unchanged. No product tests or Git publication performed.
+
+- id: AI-20261125-README-REFRESH-001
+  date: '2026-11-25'
+  tool: OpenCode
+  purpose: Rewrite the README as the current project's introduction, setup and verification guide.
+  source: User requested alignment with the project deliverable requirements and removal of obsolete upstream material.
+  human_review: Documentation revision requested; no new product, policy or release approval inferred.
+  paths:
+  - README.md
+  - docs/ai-use-log.yaml
+  notes:
+  - Organized project purpose and architecture, current capabilities, startup, repository layout,
+    offline/live/full-suite commands, CI blocking-gate design and OpenCode development instructions.
+  - Removed inherited promotional content, release news, duplicated guides and stale branch/PR/status
+    narratives while retaining upstream attribution and the Apache license reference.
+  - Checked setup and command examples against package metadata, the launcher, configuration,
+    frontend scripts and CI. Preserved canonical-root permission binding and actual authority boundaries.
+  - Verification is limited to documentation consistency, links, command syntax and diff hygiene.
+    No application tests, provider calls, dependency installation or Git publication performed.
