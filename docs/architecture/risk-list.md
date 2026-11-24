@@ -494,3 +494,30 @@ repository maintainers; action: require Linux CI plus another contributor's PR
 review before merge. Main-system offline regression, focused SQLite/ledger
 checks and the schema/lint checks are separate evidence, not substitutes for
 that missing result. No Gate, safety lock or branch protection is bypassed.
+
+## Prior-test approval evidence limits — 2026-11-24
+
+Owner: repository maintainer. Submitted Git history and GitHub review timestamps
+provide auditable chronology, not proof of when private coding began. Trigger:
+a review edit, rewritten history, platform metadata change, or a new unclassified
+implementation/test path. Action: block ambiguous evidence, preserve old records,
+review the changed plan/classification and obtain genuine approval. The initial
+ac47e1f governance installation is explicitly BOOTSTRAP; hosted end-to-end
+verification remains NOT_RUN. No scope or paid-run permission is expanded.
+
+
+## submission-fix-v1 follow-up — 2026-11-24
+
+- Owner: repository maintainer. Authentic fixed-set candidate model observations
+  are not provided. Action: authorize a specific provider/run/budget or provide
+  genuine existing observations with exact candidate/dataset provenance; until
+  then relevant PRs block, not pass. No paid execution is implied.
+- Owner: repository maintainer. ADR-029's first installation must be published
+  separately before this batch; do not widen its bootstrap to admit unrelated
+  fixes. Commit/push/PR creation remain separately authorized actions.
+- Owner: architecture maintainer. Automatic application context compaction is
+  designed in ADR-004 but not implemented. Action: obtain a separate scoped
+  implementation/test approval before claiming enforcement.
+- Native permission loading/path-operation gaps were reproduced and repaired
+  under explicit human authorization (ADR-031); keep the host sandbox and
+  command-safety limitations visible and revalidate after OpenCode upgrades.

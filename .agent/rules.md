@@ -6,7 +6,7 @@ Scope: incremental development of the existing TradingAgents system. Current dir
 
 1. **Read repository instructions first** — `AGENTS.md`,
    `architecture-blueprint.md`, the files under `docs/architecture/`, the files
-   under `docs/code-governance/`, `pyproject.toml`, and `tests/conftest.py`.
+   under `docs/code-governance/`, `pyproject.toml`, and `test/conftest.py`.
 2. **English only** for prompts, commits, review comments, and code comments.
 3. **Preserve user changes** — do not revert, reformat, or rewrite unrelated
    user-authored code; keep diffs minimal and scoped.
@@ -76,18 +76,17 @@ Scope: incremental development of the existing TradingAgents system. Current dir
     `NOT_RUN` and an unverified mechanism `NOT_VERIFIED`. Missing usage is
     `null`, never `0`. Never delete, skip, or weaken a test to obtain green.
 20. **Permissions are documented-only unless verified** —
-    `.opencode/permissions.jsonc` is a project governance artifact whose OpenCode
-    loading and rule matching are `NOT_VERIFIED`; it is defense in depth, not a
-    security boundary. `.env` reads via arbitrary shell commands cannot be
-    blocked reliably by that file. DeepSeek Harness uses its own sandbox and does
-    not inherit OpenCode configuration.
+    `.opencode/permissions.jsonc` is defense in depth, not an OS security
+    boundary. ADR-031 records verified native V1 loading and bounded file-operation
+    probes; untested tools/hosts remain `NOT_VERIFIED`. `.env` reads via arbitrary shell commands cannot be
+    blocked reliably by that file.
 21. **No MCP or new dependencies without approval** — no MCP server is configured;
     do not add one or add a runtime dependency without explicit human approval.
 
 1. Extend the baseline. Do not replace existing packages, duplicate business logic, or introduce abstractions unrelated to requirements.
 2. Assign each architecture element a primary owning module. New layers, frameworks, storage, and dependencies need requirements and architecture rationale. Do not install or upgrade dependencies without approval.
 3. Preserve `src/`, `test/offline/`, and `test/live/`, together with existing import and CLI contracts. Do not add governance directories beyond the agreed structure.
-4. The WebUI stack, service modules, and interfaces remain unapproved. Do not infer requirements from the deleted demonstration or guesses.
+4. The existing WebUI belongs to the merged release baseline; new changes still require scoped approval. Do not infer requirements from the deleted demonstration or guesses.
 
 ## 2. Test independence
 

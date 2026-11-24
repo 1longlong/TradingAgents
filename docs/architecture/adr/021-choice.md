@@ -1,7 +1,6 @@
 # ADR-021: Web Entry Point, Module Boundary, and Run-State Ownership
 
 - Status: **Accepted for documentation** by the human owner on 2026-11-05. Applicable plan, test, safety and governance changes require human review. The 2026-11-21 policy revision in ADR-012-error-handling-merge-integration.md delegates merge approval to GitHub branch protection without special markers or test-only commit chronology.
-- Date: 2026-11-05
 - Baseline: TradingAgents v0.5.0, commit `2d17df8da1536c121e4d7395ac5a5dcec9e96d6f`
 - Related requirements: `REQ-WEB-001` to `REQ-WEB-014`, `REQ-WEB-020` to `REQ-WEB-031`
 - Related invariants: `INV-WEB-001` to `INV-WEB-015`
@@ -63,7 +62,7 @@ Three facts make entry-point and state ownership safety-relevant:
 5. Accept API keys in the browser — rejected: transmits plaintext credentials into a client surface.
 
 
-## Analysis-path repair refinement — 2026-11-06
+## Analysis-path repair refinement
 
 The user authorized repairing the reviewed WebUI defects while preserving the core and CLI. Final review remains pending; this is not a GitHub review-marker approval.
 
@@ -74,7 +73,7 @@ A complete, consistent display snapshot accompanies the SSE cursor. Expired curs
 These refinements avoid stale mixed reports and missing reload results without modifying `src/cli/` or `src/tradingagents/`, adding a database, or changing business analysis semantics.
 
 
-## Addendum — real-run debate configuration, 2026-11-20
+## Addendum — real-run debate configuration
 
 The user authorized web-debate-settings-20261120-v1 on feature/webui. Extend the
 existing WebUI request surface with a typed optional debate_termination subset
@@ -88,7 +87,7 @@ addendum for the necessary Web-only checkpoint-identity extension. No dependency
 core algorithm, provider, live benchmark, trading operation or release is added.
 
 
-## TUI parity refinement — 2026-11-20
+## TUI parity refinement
 
 Under web-tui-parity-20261120-v1, extend existing events/snapshots and controls
 for observed role status, analyst timing, finalized reports and custom backtest
@@ -99,7 +98,7 @@ and simulated trading unchanged. See the blueprint/review memo for contracts
 and prior negative-test strategy.
 
 
-## Web integration refinement — 2026-11-21
+## Web integration refinement
 
 The user explicitly authorizes web-simulation-20261121-v1: frontend and necessary
 interfaces around the existing deterministic simulated-trading core. The
@@ -111,7 +110,7 @@ introduced. Pending approval objects remain process-owned and cannot be restored
 from client JSON. Only one final verification phase is requested.
 
 
-## Model defaults refinement — 2026-11-21
+## Model defaults refinement
 
 The user authorizes web-model-defaults-20261121-v1. In Web analysis only,
 TRADINGAGENTS_LLM_PROVIDER, TRADINGAGENTS_QUICK_THINK_LLM and

@@ -57,7 +57,7 @@ Semantics are confirmed by the policy object; the exact numeric defaults are in
 | `evidence_manifest_field` | AgentState field holding gate manifest evidence records | `data_quality_evidence_records` |
 | `trace_field` | AgentState field holding the termination decision trace | `debate_termination_decision` |
 
-## Budget accounting (corrected 2026-11-06)
+## Budget accounting
 
 `src/tradingagents/debate/budget.py` estimates and accounts for token/time/call
 usage deterministically. Important corrections to earlier wording:
@@ -553,3 +553,24 @@ Trigger: analysis run.
 Rule: write `message_tool.log` and `reports/<section>.md` in the CLI layout; auto-save the complete tree on success; keep partial artifacts on cancel/failure; do not write `full_states_log`.
 Enforcement: `runtime/artifacts_writer.py`.
 Fallback: emit `storage` warning; keep the analysis result and partial artifacts.
+
+## Development CI prior-test policy — ADR-029
+
+| Condition | Deterministic action | Recovery |
+| --- | --- | --- |
+| Missing, late, revoked, bot or unauthorized review | Fail approval and aggregate | Genuine test/design review before further implementation; preserve history |
+| Changed final tests/design | Fail | Review the new test-only revision; earlier epochs remain checked |
+| API failure, pagination truncation, stale PR metadata | Fail without credential/payload disclosure | Retry a current run once the evidence source is available |
+| Pure test/document preparation | NOT REQUIRED, no approval issued | Submit the test-plan Comment before implementation |
+| Exact ac47e1f initial governance installation | Explicit BOOTSTRAP, no GitHub approval claim | Maintainer reviews the installation; enforcement begins on the installed base |
+| Any other missing base policy or removed candidate checker | Fail | Restore the reviewed policy/checker; do not infer approval |
+
+
+## Submission governance failure paths
+
+| Trigger | Action | Evidence / owner |
+| --- | --- | --- |
+| Prompt/model change without base semantic policy or genuine observations | Block before release; no provider call from CI | ADR-030 / maintainer supplies real fixed-set run evidence. |
+| Wrong dataset/source identity, incomplete responses or failed quality/safety metric | Fail semantic job and aggregate; retain current release | Evaluator digest/coverage checks and metrics. |
+| Native Read/Edit root binding missing/mismatched | Deny unmatched operation; correct launch root with human oversight | ADR-031 / explicit launch command, never wildcard-widen. |
+| Context budget unknown or exhausted | Target design stops before inference; current universal compactor is not implemented | ADR-004 design addendum, not an active enforcement claim. |

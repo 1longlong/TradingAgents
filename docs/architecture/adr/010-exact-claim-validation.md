@@ -28,7 +28,6 @@
   (4) the trusted redaction is enforced at EVERY trusted plan/decision/report/
   memory boundary (not only the Research Manager) and raw debate transcripts are
   explicitly NON-AUTHORITATIVE (see §D).
-- **Date:** 2026-11-11
 - **Deciders:** CS5351 project (student); coding-agent (OpenCode Builder);
   independent reviewer (OpenCode); human review required before acceptance
 - **Trace:** `FR-DDT-002` (valid-new-evidence manifest / citation allowlist),

@@ -55,7 +55,7 @@ reset persisted state without modifying the frozen graph.
   audit integrity rather than broker behaviour.
 
 
-## Web integration refinement — 2026-11-21
+## Web integration refinement
 
 The user explicitly authorizes web-simulation-20261121-v1: frontend and necessary
 interfaces around the existing deterministic simulated-trading core. The

@@ -59,9 +59,8 @@ binding rule above.
   them does not change the application's runtime prompt.
 - **Prose rules are not a verified sandbox.** `.opencode/rules.md` and
   `.opencode/permissions.jsonc` are documented project governance. OpenCode's
-  loading of `permissions.jsonc` and its rule matching are `NOT_VERIFIED`, and
-  DeepSeek Harness does **not** inherit OpenCode configuration (it uses its own
-  sandbox/permission mechanism). Effective technical enforcement must be verified
+  loading of `permissions.jsonc` and its rule matching are `NOT_VERIFIED`.
+  Effective technical enforcement must be verified
   independently, never inferred from the presence of a file or a prose rule.
 - **Historical files are immutable.** Any future change to a binding rule must be
   a new versioned file under `prompts/` with a changelog entry; do not rewrite the

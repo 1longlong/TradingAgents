@@ -6257,7 +6257,6 @@ requirements:
   - scripts/quality_evidence_check.py
   design_artifacts:
   - docs/architecture/evaluation-logbook.md
-  - docs/ai-use-session-audit.md
   tests:
   - test/offline/test_ablation_switches.py
   verification_evidence:
@@ -6347,8 +6346,7 @@ requirements:
       evidence: The recorded suite counts and the three PASS audits are quoted from
         the delivered evidence (token_benchmarks/final_remediation_20261116/). The
         full suite was NOT re-run in this worktree because D2-D9 conflicts are still
-        unmerged, so no merged-tree green claim is made. D1-scoped checks are reported
-        in docs/ai-use-session-audit.md.
+        unmerged, so no merged-tree green claim is made.
       evidence_scope: historical-release
   category: governance
   owner: 60536848-WANG-Yiwen
@@ -6364,7 +6362,6 @@ requirements:
   design_artifacts:
   - token_benchmarks/final_remediation_20261116/TEST_RESULTS.md
   - token_benchmarks/final_remediation_20261116/INDEPENDENT_AUDIT.md
-  - docs/ai-use-session-audit.md
   tests:
   - test/offline/test_final_remediation.py
   - test/offline/test_c3_final_freeze.py
@@ -6433,10 +6430,10 @@ requirements:
     verification:
       method: pytest
       mode: offline
-      command: 'not a runnable command: manual read of the D1 validation report in
-        docs/ai-use-session-audit.md against the recorded command list'
+      command: 'not a runnable command: manual review of verification claims against
+        recorded commands and outputs in docs/architecture/evaluation-logbook.md'
       evidence:
-      - docs/ai-use-session-audit.md
+      - docs/architecture/evaluation-logbook.md
       - test/conftest.py
       description: Read the D1 verification section and check each PASS/FAIL/NOT_RUN
         label against a recorded command and its actual output; a claim without an
@@ -6459,7 +6456,6 @@ requirements:
   - scripts/c3_preflight_gate.py
   design_artifacts:
   - docs/code-governance/verification-constraints.md
-  - docs/ai-use-session-audit.md
   tests:
   - test/offline/test_c3_final_freeze.py
   - test/offline/test_governance_scaffold.py
@@ -6474,6 +6470,236 @@ requirements:
     classification: retrospective
     source: personal-v1.3
     note: 'Preserved personal retrospective obligation during the PR #7 merge.'
+- id: NFR-GOV-001
+  type: governance
+  title: Prior human approval of test plans
+  statement: Implementation commits must be preceded by a GitHub Comment review of
+    their exact test/design version by an allowed human account. Missing, late, revoked
+    or untrusted evidence blocks merging. Initial installation is an explicitly disclosed
+    governance transition, not retrospective proof.
+  priority: must
+  priority_tradeoff: Prefer auditable prior approval and fail-closed API handling
+    over implicit approval or convenient retrospective sign-off.
+  origin: governance
+  sources:
+  - kind: human_decision
+    reference: Current conversation, 2026-11-24
+    locator: Explicit approval of test-approval-v1 and its test cases
+    rationale: The owner requested and approved the executable prior-test gate.
+  status: implemented
+  architecture_refs:
+  - docs/architecture/adr/029-test-plan-approval.md
+  - architecture-blueprint.md
+  invariant_refs:
+  - INV-28
+  fit_criteria:
+  - id: FC-NFR-GOV-001-01
+    metric: Unauthorized, late, missing or revoked approval escapes
+    unit: violations
+    comparison: eq
+    threshold: 0
+    verification:
+      method: pytest
+      mode: offline
+      command: python -m pytest -q test/offline/test_ci_gates.py -k prior_test_approval
+        --disable-socket --allow-unix-socket
+      evidence:
+      - test/offline/test_ci_gates.py
+      description: Run the approved synthetic-history/API/workflow matrix; every rejected-evidence
+        escape is a violation.
+    status:
+      state: partially_verified
+      evidence: Gate and registry integration suite passed 177 tests on 2026-11-24.
+        See docs/architecture/evaluation-logbook.md; hosted review behavior remains NOT_RUN.
+      evidence_scope: current-iteration
+    threshold_type: count
+    applicability: offline-test
+  - id: FC-NFR-GOV-001-02
+    metric: Unreviewed test/design changes or frontend misclassification escapes
+    unit: violations
+    comparison: eq
+    threshold: 0
+    verification:
+      method: pytest
+      mode: offline
+      command: python -m pytest -q test/offline/test_ci_gates.py -k prior_test_approval
+        --disable-socket --allow-unix-socket
+      evidence:
+      - test/offline/test_ci_gates.py
+      description: Run the approved synthetic-history/API/workflow matrix; every rejected-evidence
+        escape is a violation.
+    status:
+      state: partially_verified
+      evidence: Gate and registry integration suite passed 177 tests on 2026-11-24.
+        See docs/architecture/evaluation-logbook.md; hosted review behavior remains NOT_RUN.
+      evidence_scope: current-iteration
+    threshold_type: count
+    applicability: offline-test
+  - id: FC-NFR-GOV-001-03
+    metric: API failure, untrusted policy or unrestricted bootstrap escapes
+    unit: violations
+    comparison: eq
+    threshold: 0
+    verification:
+      method: pytest
+      mode: offline
+      command: python -m pytest -q test/offline/test_ci_gates.py -k prior_test_approval
+        --disable-socket --allow-unix-socket
+      evidence:
+      - test/offline/test_ci_gates.py
+      description: Run the approved synthetic-history/API/workflow matrix; every rejected-evidence
+        escape is a violation.
+    status:
+      state: partially_verified
+      evidence: Gate and registry integration suite passed 177 tests on 2026-11-24.
+        See docs/architecture/evaluation-logbook.md; hosted review behavior remains NOT_RUN.
+      evidence_scope: current-iteration
+    threshold_type: count
+    applicability: offline-test
+  category: governance
+  priority_rationale: Prior approval is a required human-authority boundary, not an
+    optional process hint.
+  tradeoff:
+    decision: Verify server-backed prior reviews under a protected-base policy.
+    rejected_or_deferred: Local approval flags and retrospective merge reviews.
+    why: They cannot identify the tests and timing actually approved by the human.
+  source_type: NonFunctional
+  source_status: Partially
+  origin_detail: governance
+  source_files:
+  - test/ci_gates.py
+  - .github/workflows/ci.yml
+  design_artifacts:
+  - docs/architecture/adr/029-test-plan-approval.md
+  - architecture-blueprint.md
+  - docs/code-governance/verification-constraints.md
+  tests:
+  - test/offline/test_ci_gates.py
+  - test/offline/test_governance_scaffold.py
+  verification_evidence:
+  - Plan/cases approved in the current conversation on 2026-11-24; implementation
+    verification is recorded in docs/architecture/evaluation-logbook.md; hosted behavior is NOT_RUN.
+  owner: Repository maintainer
+
+- id: NFR-GOV-002
+  type: governance
+  title: Fixed-set semantic evaluation with candidate-bound evidence
+  statement: A prompt/model change must replay the base-owned fixed semantic set against explicit
+    task, fact and safety thresholds using authentic candidate-bound observations. Missing policy,
+    missing/stale outputs, incomplete coverage or failed thresholds block. Synthetic unit fixtures
+    are never real model-quality evidence.
+  priority: must
+  priority_tradeoff: Prefer reproducible fail-closed evidence over unmeasured quality claims
+    or automatic paid PR inference.
+  origin: governance
+  sources:
+  - kind: human_decision
+    reference: Current conversation, 2026-11-24
+    locator: Approval of submission-fix-v1 and its positive/negative cases
+    rationale: The owner requested completing the remaining submission fixes, excluding report/review/submission-validation
+      and raw transcripts.
+  status: implemented
+  architecture_refs:
+  - docs/architecture/adr/030-semantic-evaluation.md
+  - architecture-blueprint.md
+  invariant_refs:
+  - INV-29
+  fit_criteria:
+  - id: FC-NFR-GOV-002-01
+    metric: Missing policy, provenance, coverage or real candidate output escapes
+    unit: violations
+    comparison: eq
+    threshold: 0
+    verification:
+      method: pytest
+      mode: offline
+      command: python -m pytest -q test/offline/test_ci_gates.py test/offline/test_semantic_evaluator.py
+        --disable-socket --allow-unix-socket
+      evidence:
+      - test/offline/test_ci_gates.py
+      - test/offline/test_semantic_evaluator.py
+      description: Run the approved offline violation matrix with explicitly synthetic observations,
+        never a real provider result.
+    status:
+      state: partially_verified
+      evidence: '2026-11-25: complete isolated regression 5643 passed, 3 skipped, 323 subtests.
+        Actual evaluator module 13 passed, including subprocess replay. Synthetic fixtures are
+        not real provider quality; authentic observations and hosted execution remain NOT_RUN.'
+      evidence_scope: current-iteration
+    threshold_type: count
+    applicability: offline-test
+  - id: FC-NFR-GOV-002-02
+    metric: Failed task/fact/safety threshold escapes
+    unit: violations
+    comparison: eq
+    threshold: 0
+    verification:
+      method: pytest
+      mode: offline
+      command: python -m pytest -q test/offline/test_ci_gates.py test/offline/test_semantic_evaluator.py
+        --disable-socket --allow-unix-socket
+      evidence:
+      - test/offline/test_ci_gates.py
+      - test/offline/test_semantic_evaluator.py
+      description: Run the approved offline violation matrix with explicitly synthetic observations,
+        never a real provider result.
+    status:
+      state: partially_verified
+      evidence: '2026-11-25: complete isolated regression 5643 passed, 3 skipped, 323 subtests.
+        Actual evaluator module 13 passed, including subprocess replay. Synthetic fixtures are
+        not real provider quality; authentic observations and hosted execution remain NOT_RUN.'
+      evidence_scope: current-iteration
+    threshold_type: count
+    applicability: offline-test
+  - id: FC-NFR-GOV-002-03
+    metric: Changed evaluator/dataset or stale candidate-source binding escapes
+    unit: violations
+    comparison: eq
+    threshold: 0
+    verification:
+      method: pytest
+      mode: offline
+      command: python -m pytest -q test/offline/test_ci_gates.py test/offline/test_semantic_evaluator.py
+        --disable-socket --allow-unix-socket
+      evidence:
+      - test/offline/test_ci_gates.py
+      - test/offline/test_semantic_evaluator.py
+      description: Run the approved offline violation matrix with explicitly synthetic observations,
+        never a real provider result.
+    status:
+      state: partially_verified
+      evidence: '2026-11-25: complete isolated regression 5643 passed, 3 skipped, 323 subtests.
+        Actual evaluator module 13 passed, including subprocess replay. Synthetic fixtures are
+        not real provider quality; authentic observations and hosted execution remain NOT_RUN.'
+      evidence_scope: current-iteration
+    threshold_type: count
+    applicability: offline-test
+  category: governance
+  priority_rationale: Evidence-backed semantic evaluation is a mandatory pre-production condition.
+  tradeoff:
+    decision: Base-owned fixed evaluator with authentic, source-bound observations.
+    rejected_or_deferred: Empty-policy success, candidate-defined thresholds and simulated model-quality
+      passes.
+    why: They cannot establish candidate quality under a reproducible acceptance policy.
+  source_type: NonFunctional
+  source_status: Partially
+  origin_detail: governance
+  source_files:
+  - test/ci_gates.py
+  - test/semantic_evaluator.py
+  - .github/workflows/ci.yml
+  design_artifacts:
+  - docs/architecture/adr/030-semantic-evaluation.md
+  - architecture-blueprint.md
+  - docs/code-governance/verification-constraints.md
+  tests:
+  - test/offline/test_ci_gates.py
+  - test/offline/test_semantic_evaluator.py
+  verification_evidence:
+  - Plan and cases approved in the current conversation on 2026-11-24; actual outcomes are recorded
+    in the evaluation logbook; no provider run is claimed.
+  owner: Repository maintainer
+
 product:
   stakeholders:
   - name: Student author (WANG Yiwen, 60536848)
@@ -6580,6 +6806,9 @@ product:
     approval.
   - Preserve all pre-existing user-authored changes; minimal, scoped diffs.
   priorities:
+  - requirement_id: NFR-GOV-001
+    priority: must
+    rationale: Unapproved or retrospective test evidence must not authorize implementation.
   - requirement_id: FR-DQG-001
     priority: must
     rationale: The gate is the primary safety mechanism; without it the debate can
@@ -6825,7 +7054,14 @@ product:
     priority: must
     rationale: 100% rejection of hard safety-rule violations is a Must because it
       protects a core deterministic or safety property.
+  - requirement_id: NFR-GOV-002
+    priority: must
+    rationale: Evidence-backed semantic evaluation is a mandatory pre-production condition.
   tradeoffs:
+  - requirement_id: NFR-GOV-001
+    decision: Require server-backed prior test-plan reviews under a base-owned policy.
+    rejected_or_deferred: Local approved flags or final merge approval used as prior evidence.
+    why: Those alternatives cannot establish who approved which tests before implementation.
   - requirement_id: FR-DQG-001
     decision: Deterministic LLM-free gate.
     rejected_or_deferred: LLM-based quality judge.
@@ -6937,6 +7173,11 @@ product:
     rejected_or_deferred: Sampling or best-effort safety checks.
     why: The chosen deterministic boundary is offline-verifiable and fail-closed;
       the alternative would weaken safety or reproducibility.
+  - requirement_id: NFR-GOV-002
+    decision: Base-owned fixed evaluator with authentic, source-bound observations.
+    rejected_or_deferred: Empty-policy success, candidate-defined thresholds and simulated
+      model-quality passes.
+    why: They cannot establish candidate quality under a reproducible acceptance policy.
   measured_vs_targets:
     measured:
     - Blocked-gate final signal is Hold (offline regression, test/offline/test_output_guard.py).

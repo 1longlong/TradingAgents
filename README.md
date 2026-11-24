@@ -107,7 +107,7 @@ Our framework decomposes complex trading tasks into specialized roles.
 
 Clone TradingAgents:
 ```bash
-git clone https://github.com/TauricResearch/TradingAgents.git
+git clone https://github.com/1longlong/TradingAgents.git
 cd TradingAgents
 ```
 
@@ -399,7 +399,8 @@ source .venv/bin/activate
 python -m pip install -e '.[dev]'
 python -m test.ci_gates permissions
 python -m test.ci_gates structure
-OPENCODE_CONFIG=.opencode/permissions.jsonc opencode --agent plan
+task_root="$(pwd -P)"
+TRADINGAGENTS_PERMISSION_ROOT="${task_root#/}" OPENCODE_CONFIG="$task_root/.opencode/permissions.jsonc" opencode --agent plan
 ```
 
 ### WebUI
@@ -625,9 +626,26 @@ The exporter writes a new Markdown file containing the complete native sanitized
 
 The actual team repository is [1longlong/TradingAgents](https://github.com/1longlong/TradingAgents). CI checks source layout, architecture/permission boundaries, lint, full-source typing, dependency consistency/advisories, security, a fixed deterministic contract suite, complete network-isolated regression on Python 3.10–3.13, and clean installation. Requirements validation checks both JSON Schema and explicit semantic references. Changes to code, prompts, tests, or CI/developer tooling require a new AI-use entry covering the exact paths.
 
-Human merge reviews use GitHub branch protection, including the configured required reviewer count, code-owner review, stale-review dismissal, and last-push approval. CI does not require special review markers or reconstruct whether a test-only commit preceded implementation. Continue to agree on plans/tests and record real decisions in `docs/review-memo.md`; safety changes still need an ADR and human review. The compatibility command `python -m test.ci_gates approval` only explains this policy and does not certify approval.
+Prior test approval uses a submitted GitHub **Comment review**, separately from native merge approval (ADR-029 / NFR-GOV-001). The protected base reviewer IDs and checker are authoritative. API failures, missing/late/revoked reviews and changed test/design snapshots block the PR. The PR author may review AI-written tests when allowlisted; the agent must not issue the human decision. Ordinary Conversation comments and native Approve are not test-plan approvals.
 
-Runtime prompt/model evaluation uses `[tool.tradingagents.ci.semantic_evaluation]` from the PR base in `pyproject.toml`. An absent or empty policy reports **NOT RUN** without blocking; this is not a model-quality pass. A partially configured or invalid policy blocks. Once an evaluator, fixed dataset, and thresholds are configured on the base, replay and all existing quality/safety thresholds remain blocking. Prompt-contract tests alone are not model-quality evaluation.
+For each implementation epoch:
+
+1. Prepare and commit the test cases and design first, without that epoch's implementation.
+2. Open the PR, inspect **Files changed**, then select **Review changes → Comment** and submit:
+
+   ```text
+   Test plan approved for commit <full 40-character test/design commit SHA>.
+   Scope: <requirement or plan identifier>
+   ```
+
+3. Implement only after that review. Submitted/edited/dismissed review events re-run the check. Leave old approvals intact; edits use the later server timestamp and can invalidate prior evidence.
+4. If tests or the acceptance contract change, make a new test/design revision and review it before further implementation. Earlier approved epochs remain auditable; an unreviewed final test revision still blocks.
+
+The gate recognizes Python tests/fixtures and frontend tests/e2e/setup/config. It compares the blueprint and semantic requirements contract while excluding status/evidence bookkeeping. It checks submitted Git history and server review metadata; it cannot prove when private uncommitted editing began.
+
+First installation is an explicit governance transition from exact release ac47e1f, limited to the gate's named files and unchanged runtime dependencies/other CI jobs. CI reports **BOOTSTRAP**, not a GitHub approval. Maintainer review and the authentic plan/test approval remain required. All other missing base policies fail closed. Enforcement applies after this reviewed installation reaches the base; no historical approval is fabricated. Native merge rules and remote protection are not changed by installing this gate.
+
+Runtime prompt/model changes require a base-owned fixed evaluation set and explicit thresholds (ADR-030). Missing configuration, missing authentic candidate observations, wrong dataset/source hashes, incomplete cases or failed metrics block. The evaluator scores constrained task accuracy, specified factual fidelity and production output-safety replay; these are engineering acceptance checks, not trading profitability or general model quality. Obtain real responses for every case in `test/semantic_cases.json` under the actual candidate provider/models and retain genuine run provenance. Store the reviewed result at the policy's `test/semantic_observations.json` path with `origin: provider-run`, `dataset_sha256`, `source_sha256`, provider/model names, `run_reference`, and the exact case ID/text pairs. Get the candidate fingerprint with `python -m test.ci_gates semantic-source --head HEAD`. No real observation artifact is supplied by this repair: unit fixtures are synthetic, not evidence. The policy/evaluator/dataset must first enter the protected base; installation and runtime prompt/model changes are separate reviewed steps.
 
 Configure GitHub branch protection/rulesets to require the stable **`blocking-gate`** status, human reviews, and dismissal of stale approvals. Only PR/review events report that merge status; push/manual runs report `branch-checks`, so they cannot satisfy or overwrite a PR approval verdict. The aggregation rejects failed, cancelled, or skipped jobs. Workflow files alone do not configure remote branch protection, and no remote setting or passing hosted run is implied. Merge-queue integration is not configured. There is no deployment or automatic release workflow.
 
@@ -783,9 +801,10 @@ are two artifacts with two scopes, not two copies of one number.
   personal records; Release `RISK-001`–`RISK-035` and `DEBT-001`–`DEBT-041` keep
   their meanings.
 
-**Source/test layout:** `tradingagents/` and `cli/` are the product trees;
-`tests/` is the canonical suite; `src/trading/` and `src/safety/` are the approved
-additive subsystem; `test/offline/` and `test/live/` are pointer READMEs. See
+**Current source/test layout:** all application packages are under `src/`,
+including `tradingagents/`, `cli/`, `tradingagents_web/`, `trading/` and `safety/`.
+Deterministic tests are under `test/offline/`; opt-in external tests are under
+`test/live/`. These directories contain real code, not pointers. See
 [`src/README.md`](src/README.md), [`test/offline/README.md`](test/offline/README.md)
 and [`test/live/README.md`](test/live/README.md).
 
@@ -840,10 +859,8 @@ not runtime configuration.
 | [`docs/architecture/evaluation-table.md`](docs/architecture/evaluation-table.md) | Evidence | Release table + personal Part III. |
 | [`docs/code-governance/structural-constraints.md`](docs/code-governance/structural-constraints.md) | Governance | Module/structural constraints. |
 | [`docs/code-governance/verification-constraints.md`](docs/code-governance/verification-constraints.md) | Governance | Verification rules and tiers. |
-| [`docs/audits/PERSONAL_V2_TO_PR8_DOCUMENTATION_AUDIT.md`](docs/audits/PERSONAL_V2_TO_PR8_DOCUMENTATION_AUDIT.md) | Audit | Personal V2→PR #8 documentation audit and remediation tracking. |
 | [`docs/code-governance/mcp-tool-manifest.md`](docs/code-governance/mcp-tool-manifest.md) | Governance | MCP/tool policy (no MCP server configured). |
 | [`docs/ai-use-log.yaml`](docs/ai-use-log.yaml) | Governance | 108 integrated AI-use records (Release `AUL-071–073`; personal `AUL-106–108`). |
-| [`docs/ai-use-session-audit.md`](docs/ai-use-session-audit.md) | Governance | Session audit, ID mappings, tool-attribution evidence. |
 | [`docs/review-memo.md`](docs/review-memo.md) | Governance | Release reviews + personal REC-01–REC-10 (human-pending). |
 | [`docs/debt-register.md`](docs/debt-register.md) | Debt | Release DEBT-001–041 + personal DEBT-042–055. |
 | [`docs/bug-diary.md`](docs/bug-diary.md) | Evidence | Release defects + personal BUG-001–BUG-018. |
@@ -884,9 +901,6 @@ not runtime configuration.
 | [`prompts/prompt_v1.2.yaml`](prompts/prompt_v1.2.yaml) | Prompt | v1.2 implementation + verification + governance (prior authoritative; historical). |
 | [`prompts/prompt_v1.3.yaml`](prompts/prompt_v1.3.yaml) | Prompt | v1.3 plan-first + STOP + implementation + verification (current authoritative). |
 | [`docs/architecture/adr/004-governance-context-design.proposed.md`](docs/architecture/adr/004-governance-context-design.proposed.md) | ADR | PROPOSED context-assembly/compaction design (not implemented). |
-| [`docs/code-governance/ci-gate-matrix.md`](docs/code-governance/ci-gate-matrix.md) | Governance | CI gate matrix + PR review template + 8 debt categories (document only). |
-| [`docs/code-governance/agent-permissions-proposal.yaml`](docs/code-governance/agent-permissions-proposal.yaml) | Governance | Role×path deny-by-default whitelist PROPOSAL (not active). |
-| [`docs/code-governance/human-rules-proposal.md`](docs/code-governance/human-rules-proposal.md) | Governance | Proposed HUMAN-ONLY `.opencode/rules.md` text (awaiting manual adoption). |
 | [`transcripts/60536848-WANG-Yiwen.md`](transcripts/60536848-WANG-Yiwen.md) | Transcript | Annotated human-supervision record. |
 | [`src/README.md`](src/README.md) | Mapping | Documents the canonical source packages under `src/`. |
 | [`test/offline/README.md`](test/offline/README.md) | Mapping | Indexes deterministic tests under `test/offline/`. |
@@ -925,3 +939,26 @@ The source packages are under `src/`: `src/tradingagents/`, `src/cli/`, and
 external-service tests are under `test/live/`. Imports and installed commands
 keep their existing names. The release core is integrated into these existing
 trees, with no duplicate root-level implementation.
+
+
+### Current delivery and historical records
+
+The real source/test trees above supersede the old pointer-layout descriptions.
+Current verification evidence is maintained in
+[`docs/architecture/evaluation-logbook.md`](docs/architecture/evaluation-logbook.md).
+Frozen experiments and original transcripts remain historical and are not
+rewritten. `Report.md`, review records and raw session completion are maintained
+separately by humans.
+
+The additional `assets/`, `scripts/` and `token_benchmarks/` directories support
+README illustrations, executable validation/measurement tools and preserved
+experimental evidence. Keep package metadata, license and container configuration
+needed to install or run the application; the blueprint records the source baseline.
+For the submission ZIP, exclude `.git/`, `.venv/`, `.agents/`, `.env`, dependency
+`node_modules/`, caches, `build/`, `*.egg-info/` and generated WebUI `static/` files.
+Keep the environment examples, dependency manifests, frontend source and lockfile.
+
+For OpenCode 1.18.29, set the canonical launch root as shown above: native file
+permission resources omit the initial slash. The binding scopes existing
+Read/Edit rights to this checkout; it does not enable outside-directory access.
+Keep the virtual environment active and do not use automatic approval mode.

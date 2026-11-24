@@ -1,8 +1,8 @@
 # ADR-016 — Finnhub-only company news, with GDELT excluded from the configured path
 
 **Status:** Retrospective documentation — human acceptance pending
-**Date:** Not recorded in the source material. Reconstructed from the news migration
-in the CAND-01 apparatus and the V2/V3 protocols; no calendar date is asserted.
+**Provenance:** Reconstructed from the news migration
+in the CAND-01 apparatus and the V2/V3 protocols.
 **Related invariants:** INV-24.
 
 **D2 renumbering (2026-11-21):** formerly `ADR 004`. Renumbered during the Release-first integration because the

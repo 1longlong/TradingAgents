@@ -1,8 +1,8 @@
 # ADR-015 — Batch macro as an ablation switch, not a shipped default
 
 **Status:** Retrospective documentation — human acceptance pending
-**Date:** Not recorded in the source material. Reconstructed from the CAND-01
-apparatus and the V3 experiment; no calendar date is asserted.
+**Provenance:** Reconstructed from the CAND-01
+apparatus and the V3 experiment.
 **Related invariants:** INV-22, INV-23.
 
 **D2 renumbering (2026-11-21):** formerly `ADR 003`. Renumbered during the Release-first integration because the

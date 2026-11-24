@@ -1,8 +1,8 @@
 # ADR-013 — Provider-usage observability with agent/system attribution
 
 **Status:** Retrospective documentation — human acceptance pending
-**Date:** Not recorded in the source material. This decision is reconstructed from the
-freeze chain and the observability code; no calendar date is asserted.
+**Provenance:** This decision is reconstructed from the
+freeze chain and the observability code.
 **Review evidence:** three independent audit passes are recorded in
 `token_benchmarks/final_remediation_20261116/INDEPENDENT_AUDIT.md`; this ADR does not
 claim they approved this document, only that the implementation they audited is the

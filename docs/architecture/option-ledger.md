@@ -1,3 +1,8 @@
+> Current layout clarification: the inherited upstream-layout
+> exception was superseded by the merged src/test structure. Historical rejected
+> options below remain decision history, not current installation instructions.
+> Frozen experimental choices are unchanged.
+
 # Integrated core and WebUI records
 
 The canonical layout is `src/` and `test/`. The core records below describe the

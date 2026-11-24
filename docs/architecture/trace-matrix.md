@@ -46,7 +46,7 @@ enforcement.
 | NFR-BUD-001 | Budget safety | `adr/009-durable-run-usage-ledger.md`, `runtime-policy-catalog.md` | `src/tradingagents/debate/{budget,config}.py`; `src/tradingagents/debate/{usage_ledger,usage_capture,researcher_accounting}.py`; `src/tradingagents/agents/researchers/{bull,bear}_researcher.py`; `src/tradingagents/graph/{setup,conditional_logic,trading_graph}.py`; `src/cli/main.py` | `test/offline/test_debate_budget.py`; `test/offline/test_debate_precall_budget.py`; `test/offline/test_durable_usage_ledger.py`; `test/offline/test_whole_run_usage.py` | Stage-2 relevant suite: 442 passed (current tree, logbook 043). Pre-call guard prevents over-budget optional calls; summary reserve preserved; usage estimates honestly flagged (logbook 060). **2026-11-11 Stage 2 (ADR-009):** durable ledger fail-closed on unresolved/unknown spend; atomic admission (call+token+time+reserve) re-read inside a `BEGIN IMMEDIATE` txn across independent capture instances; summary reserve protected per attempt; `test/offline/test_durable_usage_ledger.py` 33 passed + `test/offline/test_whole_run_usage.py` 10 passed; full strict-offline 1940 passed / 0 sockets (logbook 080). | REAL: `debate_usage`/`run_summary.usage` (estimated flag). REAL: measured elapsed + provider token provenance now in `debate_usage` (ADR-007; test/offline/test_debate_budget.py, test_debate_researcher_timing.py); live-confirmed by 2026-11-10 D1 (measured + provider, logbook 074). ADR-009 adds a durable cross-resume ledger (reservation before call, settlement after, idempotent reconcile) and whole-run aggregation. PLANNED: live-provider concurrency/retry observation (hidden SDK retries remain `unknown`; offline-only proof). |
 
 | NFR-BC-001 | Backward compatibility | `runtime-policy-catalog.md`, `adr/010-exact-claim-validation.md`, `adr/011-deterministic-degraded-confidence-cap.md` | `src/tradingagents/debate/config.py`; `src/tradingagents/graph/setup.py`; `src/tradingagents/debate/{confidence_policy,claims,turn,models}.py` | `test/offline/test_debate_config.py`; `test/offline/test_debate_graph.py`; `test/offline/test_confidence_boundary.py`; `test/offline/test_standalone_claims.py` | Stage-2 relevant suite: 442 passed (current tree, logbook 043). **2026-11-12 two-defect repair (approved corrected plan+tests ONLY, NOT human acceptance):** the ADR-011 boundary fix keeps ordinary prices/dates byte-for-byte identical and the ADR-010 standalone recovery is additive — a legacy/qualitative turn with no standalone typed lines keeps the exact prior `claim_validation_summary` shape (no `coverage` key) and `DebateTurn` defaults (0/0); frozen EvidenceRecord(20)/SourceAttempt(7) unchanged. `test/offline/test_confidence_boundary.py` 51 + `test/offline/test_standalone_claims.py` 49 passed; full strict-offline 2290 passed / 0 sockets (logbook 085). | REAL: none dedicated. PLANNED: legacy-vs-enabled routing diff monitor. |
-| NFR-OFF-001 | Offline testability | `code-governance/verification-constraints.md` | `test/conftest.py`; `scripts/validate/strict_offline_harness.py` | `test/offline/test_data_quality_gate_graph.py`; `test/offline/test_debate_evaluator.py`; `test/offline/test_governance_scaffold.py`; `test/live/test_no_data_handling.py`; `test/offline/test_ohlcv_cache_freshness.py` | Count-and-fail harness records/asserts forbidden socket attempts (logbook 071). **2026-11-11 repair (DEBT-034/DEBT-001/DEBT-002)**: `test/live/test_no_data_handling.py` now mocks `stockstats_utils.vendor_reachable` (True → no-data `NoMarketDataError`; False → outage `VendorRateLimitError`) under `tmp_path`, and `test/offline/test_ohlcv_cache_freshness.py` uses the local wall-clock epoch with a UTC/HK/NY summer+winter matrix. Full strict-offline suite: **1844 passed, 1 skipped, 1 deselected, 22 warnings, 88 subtests, 0 forbidden socket attempts** (logbook 078). Zero-attempt now ACHIEVED offline; independently confirmed by OpenCode (focused 76 passed/0 attempts; full 1844 passed/0 attempts; TZ=UTC/HK/NY cache+no-data each 18 passed/0 attempts), logbook 078. Remote CI not re-run (push not authorized). | REAL: `@pytest.mark.integration` marker + offline conftest + count-and-fail harness. PLANNED: CI socket-deny job (see ci-gate-matrix, NOT implemented as a dedicated job). |
+| NFR-OFF-001 | Offline testability | `code-governance/verification-constraints.md` | `test/conftest.py`; `scripts/validate/strict_offline_harness.py` | `test/offline/test_data_quality_gate_graph.py`; `test/offline/test_debate_evaluator.py`; `test/offline/test_governance_scaffold.py`; `test/live/test_no_data_handling.py`; `test/offline/test_ohlcv_cache_freshness.py` | Count-and-fail harness records/asserts forbidden socket attempts (logbook 071). **2026-11-11 repair (DEBT-034/DEBT-001/DEBT-002)**: `test/live/test_no_data_handling.py` now mocks `stockstats_utils.vendor_reachable` (True → no-data `NoMarketDataError`; False → outage `VendorRateLimitError`) under `tmp_path`, and `test/offline/test_ohlcv_cache_freshness.py` uses the local wall-clock epoch with a UTC/HK/NY summer+winter matrix. Full strict-offline suite: **1844 passed, 1 skipped, 1 deselected, 22 warnings, 88 subtests, 0 forbidden socket attempts** (logbook 078). Zero-attempt now ACHIEVED offline; independently confirmed by OpenCode (focused 76 passed/0 attempts; full 1844 passed/0 attempts; TZ=UTC/HK/NY cache+no-data each 18 passed/0 attempts), logbook 078. Remote CI not re-run (push not authorized). | REAL: `@pytest.mark.integration` marker + offline conftest + count-and-fail harness. PLANNED: dedicated CI socket-deny job (not implemented in this historical snapshot). |
 | NFR-SEC-001 | Secret safety | `code-governance/verification-constraints.md` | `.env.example`; `AGENTS.md`; `.opencode/permissions.jsonc` | — | Deterministic secret scan of new files found no secrets (see `scripts/validate`). | REAL: validator `scan_secrets` (reports location only). PLANNED: pre-commit secret hook. |
 | NFR-CMP-001 | Deterministic offline baseline comparison | `adr/003-phase4a-offline-comparison.md`, `invariants.md` | `src/tradingagents/comparison/{runner,schemas,fixtures}.py`; `scripts/run_phase4a_comparison.py` | `test/offline/test_comparison_runner.py`; `test/offline/test_comparison_schemas.py` | Phase 4A comparison tests: 90 passed (current tree; correction round 73, logbook 054; narrow fail-closed correction 90, logbook 055). The actual stop reason is preserved (no_new_evidence / budget_exhausted / max_rounds_reached); a scripted run that exhausts its available rounds is recorded as `input_exhausted` and is never an early stop. Narrow fail-closed correction: `CaseResult.__post_init__` rejects a contradictory `strategy`/`early_stopped`/`stop_reason` combination (FIXED is never early-stopped; an early-stopped DYNAMIC result must carry a genuine `_DYNAMIC_STOP_REASONS` reason) so an inconsistent result can never reach the aggregate/report. | REAL: `evaluation-output/comparison_results.json` stop_reason per case. PLANNED: none. |
 | NFR-CMP-002 | Machine-readable measured-vs-estimated comparison metrics | `adr/003-phase4a-offline-comparison.md` | `src/tradingagents/comparison/{metric_formulas,schemas,runner,report}.py` | `test/offline/test_comparison_schemas.py`; `test/offline/test_comparison_runner.py` | `test/offline/test_comparison_schemas.py` + `test/offline/test_comparison_runner.py`: 90 passed (correction round 73, logbook 054; narrow fail-closed correction 90, logbook 055); evaluation-output reports `Total tool calls`, per-case `Tool calls`/`Source`, `Estimated (not measured) cases`, and the actual per-case + aggregate stop reasons. Narrow fail-closed correction: `early_stop_rate` / the early-stop label can never be produced for a contradictory `strategy`/`early_stopped`/`stop_reason` combination. | REAL: report `Source`/`Estimated` columns + `usage_provenance`. PLANNED: none. |
@@ -294,7 +294,7 @@ Legend:
 6. `planned` never means `passing`; only `docs/architecture/evaluation-logbook.md` records executed results.
 
 
-## Analysis-path repair mapping — 2026-11-06
+## Analysis-path repair mapping
 
 Execution results are recorded in `evaluation-logbook.md`; the following nodes map the repaired contracts without changing requirement approval status.
 
@@ -309,11 +309,11 @@ Execution results are recorded in `evaluation-logbook.md`; the following nodes m
 | REQ-WEB-002, REQ-WEB-007 | `test/offline/test_web_analysis_flow.py::test_resumed_run_is_running`; frontend `src/tradingagents_web/frontend/tests/run-store.test.ts` resumed/snapshot fallback cases |
 
 
-### Market-data error follow-up — 2026-11-06
+### Market-data error follow-up
 
 REQ-WEB-002/005 and INV-WEB-003/010 map to `test/offline/test_web_analysis_flow.py::test_real_market_tool_rate_limit_is_not_reported_as_llm_failure` and `::test_failure_categories_do_not_expose_exception_details`. A failed data request must remain a failed task with a truthful market-data explanation; these cases do not authorize fabricated data, a successful result, or implicit vendor fallback.
 
-## Release / WebUI merge compatibility — 2026-11-19
+## Release / WebUI merge compatibility
 
 | Scope | Source | Offline evidence | Status |
 | --- | --- | --- | --- |
@@ -322,7 +322,7 @@ REQ-WEB-002/005 and INV-WEB-003/010 map to `test/offline/test_web_analysis_flow.
 | Core ADR-011 resume confidence; FR-DQG-006; INV-1 | Same adapter sanitizes prior checkpoint state before streaming and passes trusted final state to signal extraction | Same parameterized test rejects unsafe resume before any stream and forces Hold for a blocked state despite directional text | Offline checks passed; no core/CLI implementation changed beyond importing release |
 | Historical AI-log container compatibility | `test/ci_gates.py` reads a legacy list base or an entries-envelope base without exempting new path coverage | `test/offline/test_ci_gates.py::test_ai_log_imports_legacy_list_without_waiving_new_coverage` | Positive and negative cases passed |
 
-## Unified registry validation — 2026-11-19
+## Unified registry validation
 
 | Contract | Artifacts / enforcement | Offline evidence |
 | --- | --- | --- |
@@ -331,7 +331,7 @@ REQ-WEB-002/005 and INV-WEB-003/010 map to `test/offline/test_web_analysis_flow.
 | Parse the retained V1 policy without damaging glob/URL strings; NFR-SEC-001 | `scripts/validate/validate_requirements.py::parse_jsonc` | Quoted globs, URLs, escaped quotes and unterminated-comment regression |
 | Missing YAML support and duplicate fields fail closed; NFR-SEC-001, INV-1 | `load_registry_yaml` and the governance CLI | Duplicate YAML-field and missing-dependency regressions; neither path may report unchecked data as passing |
 
-## Workspace visual-parity follow-up — 2026-11-20
+## Workspace visual-parity follow-up
 
 These rows describe frontend presentation over existing contracts. They do not
 upgrade requirement status or approve new HTTP projections. Paths below are
@@ -348,7 +348,7 @@ relative to `src/tradingagents_web/frontend/`; ADR-003 is the frontend-stack ADR
 | REQ-WEB-027; INV-WEB-001/014 | `src/tradingagents_web/frontend/src/pages/HistoryPage.tsx`: audit/comparison lack an approved read projection; no mock results or new routes | `e2e/visual-parity.spec.ts` unavailable surfaces; unchanged backend/API scope |
 
 
-## Existing-core HTTP projections — 2026-11-20
+## Existing-core HTTP projections
 
 Scope: `web-projections-20261120-v1`; ADR-002/003. These implementation records
 supersede the earlier audit/comparison interface-gap status without upgrading
@@ -390,8 +390,7 @@ time against this matrix. Two were merged into established Release rows
 (`FR-007` -> `NFR-PIT-001`, `NFR-003` -> `NFR-SEC-001`) and one into
 `FR-ANL-001` (`FR-013`); the interim point-in-time analysis row was therefore
 removed as a synonym and its paths, tests and evidence now live on
-`NFR-PIT-001` (the old personal alias is recorded in
-`ai-use-session-audit.md`, not as a registry row). The registry is 52 rows: the
+`NFR-PIT-001` (the old personal alias is not a separate registry row). The registry is 52 rows: the
 original 32 Release IDs plus 20 retrospective IDs. The complete 21-row
 reconciliation and the 64-row acceptance-criterion table follow the D1 table
 below.
@@ -414,11 +413,11 @@ below.
 | FR-OBS-005 | Telemetry selection integrity across repeated attempts | `adr/013-provider-usage-observability.md`, `evaluation-logbook.md` | `scripts/token_benchmark.py` | `test/offline/test_token_benchmark.py`; `test/offline/test_c3_regressions.py` | Named files pass offline against archived run directories. | REAL: pre-fixed selection rule; superseded attempts preserved. PLANNED: none. |
 | FR-HAR-001 | One-command archived token measurement harness | `evaluation-logbook.md`, `token_benchmarks/README.md` | `scripts/run_token_benchmark.sh`; `scripts/token_benchmark.py` | `test/offline/test_run_token_benchmark_sh.py`; `test/offline/test_token_benchmark.py` | `test/offline/test_token_benchmark.py` passes offline. `test/offline/test_run_token_benchmark_sh.py` passes in the final integrated suite (5,132 passed / 3 skipped, `94755cf`); earlier `NOT_RUN` was an environment limitation. | REAL: archived run directories + summary. PLANNED: none. |
 | FR-HAR-002 | Experiment reproducibility bound to one frozen commit | `runtime-policy-catalog.md`, `evaluation-logbook.md` | `scripts/c3_finalize_freeze.py`; `scripts/c3_verify_final_freeze.py`; `scripts/c3_build_manifest.py`; `scripts/c3_preflight_gate.py`; `scripts/gen_cand01_batch_16run_specs_v3.py` | `test/offline/test_c3_final_freeze.py`; `test/offline/test_c3_regressions.py`; `test/offline/test_cand01_batch_16run_v3_infra.py`; `test/offline/test_switch_consumption.py` | Freeze/regression checks pass offline. Two V3 infra checks are known path-sensitive failures; recorded, not hidden. | REAL: freeze record + tag + HEAD + manifest + release seal. PLANNED: none. |
-| FR-CAM-001 | Optimisation campaign with an explicit accept-or-revert decision | `evaluation-logbook.md`, `ai-use-session-audit.md` | `scripts/campaign_ablation_round.py`; `scripts/ablation_analysis.py`; `scripts/quality_evidence_check.py` | `test/offline/test_ablation_switches.py` | `test/offline/test_ablation_switches.py` passes offline. Campaign numbers NOT re-derived; recorded as NOT_VERIFIED for this submission. | REAL: campaign scripts + accept/revert records. PLANNED: none. |
+| FR-CAM-001 | Optimisation campaign with an explicit accept-or-revert decision | `evaluation-logbook.md` | `scripts/campaign_ablation_round.py`; `scripts/ablation_analysis.py`; `scripts/quality_evidence_check.py` | `test/offline/test_ablation_switches.py` | `test/offline/test_ablation_switches.py` passes offline. Campaign numbers NOT re-derived; recorded as NOT_VERIFIED for this submission. | REAL: campaign scripts + accept/revert records. PLANNED: none. |
 
 | FR-HAR-003 | Fail-closed spend contract for authorised paid runs | `token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/BUDGET_GUARD_DESIGN.md`, `runtime-policy-catalog.md` | `scripts/token_benchmark.py`; `src/tradingagents/budget_guard.py`; `scripts/gen_cand01_batch_16run_specs_v3.py` | `test/offline/test_budget_guard.py`; `test/offline/test_c3_final_freeze.py` | `test/offline/test_budget_guard.py` passes offline. Contract is a refusal rule, not a measured saving; no provider spend claimed. | REAL: mode-declared cap; distinct refusals; unknown spend never zero. PLANNED: none. |
-| NFR-VER-001 | Executed offline test suite and independent audit | `evaluation-logbook.md`, `ai-use-session-audit.md` | `test/offline/test_final_remediation.py`; `test/offline/test_c3_final_freeze.py`; `test/offline/test_c3_regressions.py`; `test/offline/test_audit_a_regressions.py`; `test/offline/test_audit_b_regressions.py`; `test/offline/test_audit_c_regressions.py` | `test/offline/test_final_remediation.py`; `test/offline/test_c3_final_freeze.py`; `test/offline/test_submission_compliance.py` | Historical: 2,227 passed / 4 known failed / 2 skipped at `50b2ca3`; .env-free 2,233 / 0 / 2 / 319; three AI audits PASS. Current integrated tree: **5,132 passed / 3 skipped**, validators PASS, `ruff check .` PASS (`94755cf`). | REAL: suite + audit reports are the verification of record. PLANNED: merged-tree green run (blocked). |
-| NFR-VER-002 | Executed verification instead of simulated results | `code-governance/verification-constraints.md`, `ai-use-session-audit.md` | `test/conftest.py`; `scripts/c3_verify_final_freeze.py`; `scripts/c3_finalize_freeze.py`; `scripts/c3_preflight_gate.py` | `test/offline/test_c3_final_freeze.py`; `test/offline/test_governance_scaffold.py` | Offline guards block live vendors; freeze verifier recomputes hashes; rehearsal-failure paths exist. Process control, DOCUMENTED_ONLY. | REAL: conftest guards + freeze verifier. PLANNED: mechanical detector for a simulated claim (none). |
+| NFR-VER-001 | Executed offline test suite and independent audit | `evaluation-logbook.md` | `test/offline/test_final_remediation.py`; `test/offline/test_c3_final_freeze.py`; `test/offline/test_c3_regressions.py`; `test/offline/test_audit_a_regressions.py`; `test/offline/test_audit_b_regressions.py`; `test/offline/test_audit_c_regressions.py` | `test/offline/test_final_remediation.py`; `test/offline/test_c3_final_freeze.py`; `test/offline/test_submission_compliance.py` | Historical: 2,227 passed / 4 known failed / 2 skipped at `50b2ca3`; .env-free 2,233 / 0 / 2 / 319; three AI audits PASS. Current integrated tree: **5,132 passed / 3 skipped**, validators PASS, `ruff check .` PASS (`94755cf`). | REAL: suite + audit reports are the verification of record. PLANNED: merged-tree green run (blocked). |
+| NFR-VER-002 | Executed verification instead of simulated results | `code-governance/verification-constraints.md` | `test/conftest.py`; `scripts/c3_verify_final_freeze.py`; `scripts/c3_finalize_freeze.py`; `scripts/c3_preflight_gate.py` | `test/offline/test_c3_final_freeze.py`; `test/offline/test_governance_scaffold.py` | Offline guards block live vendors; freeze verifier recomputes hashes; rehearsal-failure paths exist. Process control, DOCUMENTED_ONLY. | REAL: conftest guards + freeze verifier. PLANNED: mechanical detector for a simulated claim (none). |
 
 ## Release rows extended by the D1 integration
 
@@ -548,10 +547,8 @@ criterion expressed through a named test is traceable to that file.
   `FR-HAR-002` and are not hidden.
 - The campaign numbers quoted from `token_benchmarks/**` are session
   self-reports; they are not re-derived here (`FR-CAM-001`).
-- `docs/ai-use-session-audit.md` is new in the D1 integration and remains
-  `PENDING_HUMAN_REVIEW`; no human approval is implied by this matrix.
 
-## Release merge compatibility — 2026-11-20
+## Release merge compatibility
 
 | Scope | Enforcement / adaptation | Verification |
 | --- | --- | --- |
@@ -563,7 +560,7 @@ Merge authorization comes from the current user conversation; it is not a new
 product implementation or final acceptance decision.
 
 
-## One-command startup — 2026-11-20
+## One-command startup
 
 Scope/test contract `web-startup-20261120-v1`; current user approved the two
 startup modes and README update. No core/CLI, dependency or permission change.
@@ -578,7 +575,7 @@ ordering is covered by deterministic callback tests; smoke startup did not open
 a browser or invoke a real model/data provider.
 
 
-## Stage-based live activity — 2026-11-20
+## Stage-based live activity
 
 Scope: `web-activity-20261120-v1`, current user requests for TUI-like process
 messages, prominent activity and automatically selected, clickable stage tabs.
@@ -593,7 +590,7 @@ Browser evidence is Chromium only, not completion of the entire REQ-WEB-021
 browser matrix. No live provider execution is part of this presentation check.
 
 
-## Report table containment — 2026-11-20
+## Report table containment
 
 REQ-WEB-009/021, ADR-003, INV-WEB-001/012/014 map to the existing shared
 `frontend/src/components/Markdown.tsx` and scoped `styles/index.css`. Tables
@@ -605,7 +602,7 @@ contents-sidebar separation, page width, wrapping and keyboard scrolling at
 desktop, portrait and landscape sizes. No core or history-list layout changes.
 
 
-## English/Chinese interface — 2026-11-20
+## English/Chinese interface
 
 Scope: `web-i18n-20261120-v1`; REQ-WEB-014/021 and ADR-003.
 
@@ -619,7 +616,7 @@ Unknown provider/runtime diagnostics and source content retain their original
 text. Proper names, symbols, shortcuts, the CLEAR confirmation token and REVIEW
 remain literal identities. Browser execution evidence is Chromium only.
 
-## Per-analysis debate settings — 2026-11-20
+## Per-analysis debate settings
 
 Scope: `web-debate-settings-20261120-v1`; REQ-WEB-001/003/013/014, FR-DDT-004;
 ADR-001-choice, ADR-003-frontend-stack and ADR-007-run-controls addenda.
@@ -637,7 +634,7 @@ working-tree changes. This mapping records implementation evidence, not a new
 human acceptance decision or live-provider result.
 
 
-## TUI capability parity — 2026-11-20 to 2026-11-21
+## TUI capability parity
 
 Scope: web-tui-parity-20261120-v1; REQ-WEB-001/002/006/007/013/014/021,
 INV-WEB-001/003/006/007/012/014; ADR-001-choice/003-frontend-stack refinements.
@@ -654,7 +651,7 @@ remain unchanged. API keys are never needed for public-model discovery. No live
 provider evidence or final human acceptance is claimed.
 
 
-## Simulated trading Web composition — 2026-11-21
+## Simulated trading Web composition
 
 Scope: web-simulation-20261121-v1. Existing FR-TRD-001..006,
 INV-TRD-001..003, NFR-TRD-001 and REQ-WEB-001/006/007/013/014/021/023;
@@ -672,7 +669,7 @@ The user requested one final verification phase. Until that phase runs these
 rows describe coverage, not passing results or final human acceptance.
 
 
-## Frontend information simplification — 2026-11-21
+## Frontend information simplification
 
 web-ui-simplify-20261121-v1 changes presentation only. Existing IDs, domain
 semantics, API contracts and approval status remain unchanged.
@@ -688,7 +685,7 @@ No runtime provider evidence or new requirement verification status is inferred
 from this UI adjustment. Closing check outcomes belong to the evaluation logbook.
 
 
-## Backtest failure diagnostics — 2026-11-21
+## Backtest failure diagnostics
 
 Existing REQ-WEB-006/011/013, INV-WEB-003/014 and ADR-007-run-controls.md are
 implemented by errors.run_failure, RunCoordinator._execute_backtest and the
@@ -701,7 +698,7 @@ covers the categorized reference in English/Chinese without a misleading empty
 card. No requirement status or actual-provider success is inferred.
 
 
-## Editable Web model defaults — 2026-11-21
+## Editable Web model defaults
 
 web-model-defaults-20261121-v1 refines existing REQ-WEB-001/003/005/011/013 and
 INV-WEB-001/003/006/014 under ADR-001-choice.md. No requirement IDs or statuses
@@ -723,7 +720,7 @@ Existing budget/round, credential redaction, invalid-input and recovery tests
 remain required. No live-provider call or new human acceptance is inferred.
 
 
-## Per-date backtest progress — 2026-11-21
+## Per-date backtest progress
 
 web-backtest-progress-20261121-v1 uses REQ-WEB-006/007/011/021/026 and
 INV-WEB-003/009/014 under ADR-007-run-controls.md. Generic observer ownership is
@@ -744,7 +741,7 @@ backtest.spec.ts per-date progress/refresh/settlement/mobile/bilingual case.
 Existing core signature, CLI, memory, failure, slot and negative request tests
 remain required. Optional observation adds no UI dependency to the core.
 
-## PR #5 integration maintenance (2026-11-21)
+## PR #5 integration maintenance
 
 ADR-012 preserves existing requirements rather than defining new Gate or budget
 policies. NFR-AUD-001 / NFR-BUD-001 map to `src/tradingagents/agents/utils/structured.py`,
@@ -842,3 +839,39 @@ Generated header and retains full report and confidence-cap audit equality.
 This controls the known volatile input instead of removing content assertions.
 Production timestamps, confidence handling and public writer contracts remain
 unchanged; no new requirement, invariant or status is introduced.
+
+## Prior-test approval gate — test-approval-v1
+
+| Requirement / invariant | Design | Enforcer | Tests | Monitor / fallback |
+| --- | --- | --- | --- | --- |
+| NFR-GOV-001 / INV-28 | 029-test-plan-approval.md; blueprint prior-test section | test/ci_gates.py; CI review-and-log | test/offline/test_ci_gates.py prior_test_approval cases | Safe CLI decision + bound review URL/commit; failure blocks aggregate. Hosted execution NOT_RUN until publication. |
+
+The human owner approved this plan and its positive/negative cases on 2026-11-24
+in the current conversation. That approval is not a fabricated GitHub review.
+
+
+## submission-fix-v1
+
+| Obligation | Design / enforcing component | Verification / monitor |
+| --- | --- | --- |
+| NFR-GOV-002 / INV-29 | ADR-030; test/ci_gates.py; test/semantic_evaluator.py; fixed test/semantic_cases.json; base-owned semantic workflow | test/offline/test_ci_gates.py semantic failures and source binding; test/offline/test_semantic_evaluator.py quality/safety/provenance violations. Runtime monitor: CI exit status and explicit failing metric; real observations remain required. |
+| NFR-SEC-001 / REQ-WEB-026 | ADR-031; explicitly rooted native Read/Edit permission paths | test_native_permission_file_paths_have_an_explicit_root_binding and four native role probes using local scripted transport. Outside, secret and protected-write denials remain effective. |
+| NFR-DET-001 | test_undated_tools_as_of.py transport test, fixed 2026-09-02 clock | Existing GDELT failure assertion remains; no production archive-rule change. |
+| Existing AI context obligations | ADR-004 application-context addendum; existing agent factories, structured.py, graph state, memory and output guards | Source mapping and actual/target design split; automatic tokenizer/compaction is explicitly not implemented. Semantic source fingerprint links candidate code, prompts and runtime config. |
+
+No original requirement threshold, frozen protocol or experiment result is
+rewritten. Report/review/submission-validator/transcript work is excluded.
+
+## Governance directory consolidation
+
+Scope: governance-layout-v1, approved in the controlling conversation.
+
+| Existing obligation | Ownership | Verification and fallback |
+| --- | --- | --- |
+| REQ-WEB-026: installable, verifiable repository | scripts/validate/validate_requirements.py; the three required code-governance documents | TestRequiredArtifactPresence checks exact governance inventory, a valid artifact checkout and missing/empty failures for each required document. Missing evidence blocks; do not suppress the failure. |
+| NFR-SEC-001: role/path consistency | .opencode/permissions.jsonc; docs/architecture/permission-model.md | TestActivePermissionConsistency checks the actual policy, readable editable Build paths, all-role document reads, unknown-action denial, secret/external/protected denials and read-only roles. Native verification remains ADR-031's bounded evidence. |
+| NFR-GOV-001 / NFR-GOV-002 | Unchanged prior-test approval and semantic checker; verification-constraints.md | Existing approval/semantic regression cases remain. The historical first-install allowlist is unchanged and does not require a deleted document to exist. No review or quality threshold is relaxed. |
+
+Artifact inventories no longer require inactive supporting proposals. Product
+source, permission actions, original registry criteria and raw sessions are
+unchanged. Verification outcomes are recorded after execution in the logbook.

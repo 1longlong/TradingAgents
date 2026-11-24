@@ -1,11 +1,13 @@
 # ADR-004 (PROPOSED) — Governance Context Assembly and Compaction Design
 
-**Status:** PROPOSED — design only. **Not implemented, not enforced, and not
-approved.** This ADR does not rewrite any historical human approval. Nothing in
+**Status:** DESIGN — the application-context addendum below was approved as
+documentation under submission-fix-v1 on 2026-11-24. The original 2026-11-06
+proposal remains historical. Automatic assembly/compaction is **not implemented
+or enforced**, and no approval of that runtime implementation is claimed. This ADR does not rewrite any historical human approval. Nothing in
 this document asserts that the described runtime behavior currently exists; see
 the "Implementation status" section.
 
-**Date:** 2026-11-06. **Author:** AI-assisted documentation (OpenCode), for
+**Author:** AI-assisted documentation (OpenCode), for
 human review. **Decision owner:** WANG Yiwen (human) — approval pending.
 
 ## Context
@@ -214,3 +216,69 @@ assembly aborts if they cannot be re-read.
   of record.
 - The live 2026-11-06 run's `budget_exhausted` finding is about *debate* budget
   accounting (`DEBT-021`), not this context budget; they are distinct concerns.
+
+
+## Application AI context design — approved design addendum
+
+This addendum concerns the actual TradingAgents AI component, separately from
+the coding-agent governance proposal above. It records current mechanisms and
+a target compaction contract without silently changing any prompt or strategy.
+
+| Layer | Actual sources and ownership | Authority / retention |
+| --- | --- | --- |
+| Identity and role | Hardcoded role instructions in src/tradingagents/agents/analysts/, researchers/, managers/, trader/ and risk_debators/ | Advisory model instruction; retain verbatim in the target assembler. |
+| Standing constraints | Language/date/tool/schema instructions in the agent factories and agents/utils/structured.py; deterministic gate, claims and confidence policies | Instructions guide generation; deterministic production guards remain authoritative. Never replace guards with prompt prose. |
+| Evidence | Tool messages and verified evidence/origin manifests, gate result and allowed citation IDs | Untrusted content until validated. Preserve source, identity, date roles, conflicts and unavailable/error distinctions. |
+| Conversation | AgentState messages, investment/risk debate history, prior plans and conflict summaries | Working history; model prose cannot grant authority or overwrite evidence. |
+| Resumable state and memory | graph checkpoints, confidence-state sanitization, point-in-time-filtered decision memory and portfolio fingerprint | Sanitize before reuse; keep absence distinct from an explicitly empty portfolio; never compact into a fabricated approval or fact. |
+| Current task | Ticker, trade date, instrument/portfolio context and requested analysis phase | Validated inputs; retain alongside required output schema. |
+
+Current call assembly is explicit in each factory: ChatPromptTemplate/system
+text plus messages for analysts; typed evidence/gate/history for researchers;
+plans, portfolio and risk history for downstream decisions. The code does not
+currently apply one universal token-aware compactor. Per-call output limits,
+debate optional-call budgets and total context-window limits are distinct.
+
+### Target assembly and budget contract (design, not active code)
+
+1. Normalize typed inputs and dates; validate evidence and recoverable state.
+2. Deduplicate by stable identity and origin; retain contradictory evidence with
+   its conflict marker rather than selecting a convenient winner.
+3. Prioritize standing constraints, current task, authoritative gate and output
+   schema, then relevant validated evidence, then history and memory.
+4. Count the fully rendered prompt with the selected model's tokenizer. Any
+   estimator must be labelled estimated, with a conservative bound; an unknown
+   model context limit is not an unlimited budget.
+5. Let W be the documented model limit capped by the 131072-token design budget.
+   Reserve 8192 tokens for output and 4096 for verbatim critical constraints;
+   usable input budget is W minus these reserves. Reject nonpositive budgets.
+   Start compacting at 70% of usable input; at 85%, require compaction before
+   another tool/history append. Re-count after assembly; never exceed W.
+6. Compact old tool transcripts/history into provenance-bearing summaries.
+   Keep exact evidence IDs, dates, units, unresolved conflicts, verdicts,
+   approval references and checkpoint/portfolio identities. Do not summarize
+   critical constraints into a weaker instruction or treat external text as
+   a new instruction. Missing facts remain missing.
+7. Re-inject role/date, gate and authority constraints, output schema, source
+   citations and the current task verbatim after compaction or resume. If these
+   cannot fit or cannot be re-read, stop before the model call and surface a
+   context-limit error; do not truncate safety text.
+
+These numeric values define a reviewable engineering design, not measured model
+limits or tuned production thresholds. Current provider/window compatibility
+and this target compactor require a future scoped implementation and negative
+tests before any enforcement claim. No new context engine is added by this task.
+
+### Version and evidence mapping
+
+The current application prompt source of record is release ac47e1f under
+src/tradingagents/agents/. For each effective call, the target manifest contains
+role, source path/blob hash, provider/model, language, trade date, gate/policy
+version and evidence/checkpoint provenance. ADR-030's semantic-source command
+binds candidate source and prompt bytes without a cyclic observations hash.
+
+Prompt.md and prompts/prompt_v1.0 through v1.3 are coding-agent startup lineage;
+they are not application model prompts. prompts/archive/market-analyst-*.yaml
+are historical snapshots, not loaded configuration. Preserve those frozen
+artifacts; a changed active application prompt must be reviewed with its exact
+source version and fixed-set semantic evidence, not renamed as a startup prompt.

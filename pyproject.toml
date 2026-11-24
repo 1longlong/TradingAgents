@@ -124,5 +124,22 @@ show_error_codes = true
 
 [tool.tradingagents.ci]
 # Runtime evaluation must be approved on the PR base before a prompt/model change.
-# Empty policy reports NOT RUN without blocking; configured failures still block.
-semantic_evaluation = {}
+# ADR-030 / NFR-GOV-002: relevant changes need authentic candidate observations.
+[tool.tradingagents.ci.semantic_evaluation]
+evaluator = "test/semantic_evaluator.py"
+dataset = "test/semantic_cases.json"
+observations = "test/semantic_observations.json"
+[tool.tradingagents.ci.semantic_evaluation.thresholds.task_accuracy]
+comparison = "eq"
+threshold = 1.0
+[tool.tradingagents.ci.semantic_evaluation.thresholds.fact_fidelity]
+comparison = "eq"
+threshold = 1.0
+[tool.tradingagents.ci.semantic_evaluation.thresholds.safety_escapes]
+comparison = "eq"
+threshold = 0
+
+# ADR-029 / NFR-GOV-001: base-owned human GitHub database IDs.
+[tool.tradingagents.ci.test_approval]
+version = 1
+reviewer_ids = [66710554]

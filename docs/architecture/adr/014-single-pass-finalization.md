@@ -1,8 +1,8 @@
 # ADR-014 — Single-pass structured finalisation behind an off-by-default switch
 
 **Status:** Retrospective documentation — human acceptance pending
-**Date:** Not recorded in the source material. Reconstructed from the CAND-01 commit
-series and the V3 analysis; no calendar date is asserted.
+**Provenance:** Reconstructed from the CAND-01 commit
+series and the V3 analysis.
 **Related invariants:** INV-18, INV-22, INV-26.
 
 **D2 renumbering (2026-11-21):** formerly `ADR 002`. Renumbered during the Release-first integration because the

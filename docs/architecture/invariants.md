@@ -251,7 +251,8 @@ Historical ID: personal `INV-6`; it has no separate row and is not double-counte
 - **Negative verification:** no commit/push/PR performed without a human request.
 - **Fallback:** stop and ask the human.
 - **Enforcement gap / status:** **Enforced (process)**. Actual machine-level deny
-  of git mutation is NOT implemented (see `docs/code-governance/agent-permissions-proposal.yaml`).
+  of git mutation is NOT implemented by the project policy; see
+  `docs/architecture/permission-model.md` for the host-enforcement boundary.
 
 ## INV-13 Conflict lifecycle safety
 
@@ -1045,3 +1046,36 @@ historical progress stays absent, and browser refresh is process-lifetime
 reattachment only. The core/public signature, CLI, scoring, memory boundaries,
 models, budgets and absence of cancellation remain unchanged. Verification is
 linked in the trace matrix and results in the evaluation logbook.
+
+## INV-28 — Prior test approval is evidence, not an agent assertion
+
+- Source requirement: NFR-GOV-001; 029-test-plan-approval.md.
+- Enforcer: test/ci_gates.py approval CLI and the CI review-and-log job.
+- Statement: an implementation epoch cannot be authorized by missing, late,
+  edited-after-the-fact, revoked, bot or non-allowlisted approval. The protected
+  base defines reviewers and the verifier; head metadata cannot self-authorize.
+- Verification: test/offline/test_ci_gates.py prior_test_approval cases assert
+  acceptance and explicit rejection for these violations, changed snapshots,
+  API failure and non-governance bootstrap attempts.
+- Operational fallback: fail the check and prevent merge; preserve history and
+  obtain genuine approval of a revised test plan before further implementation.
+- Scope: plan/cases approved in the current conversation on 2026-11-24.
+  Implementation, offline results and hosted behavior are recorded separately;
+  no universal enforcement or human final acceptance is claimed.
+
+
+## INV-29 — Required semantic evidence fails closed
+
+- Source: NFR-GOV-002, NFR-SEC-001; ADR-030.
+- Enforcer: test/ci_gates.py, the protected-base workflow launcher and
+  test/semantic_evaluator.py; fixed cases in test/semantic_cases.json.
+- Positive verification: complete, bound synthetic unit observations produce
+  exactly the expected task/fact/safety metrics.
+- Violation verification: missing/invalid policy, missing real evidence, wrong
+  source/dataset, duplicate/incomplete cases, poor raw output, broken production
+  guard and nonfinite/failed threshold tests reject or record a failure.
+- Operational fallback: retain the existing release and block the relevant PR;
+  request real candidate observations or a separately reviewed policy revision.
+  Never insert fake responses or downgrade a failure to NOT RUN success.
+- Status: implementation supplied; actual provider quality remains NOT_RUN.
+  Native test-plan/merge approval are separate human responsibilities.

@@ -195,11 +195,12 @@ jobs:
         working-directory: src/tradingagents_web/frontend
 
   review-and-log:
-    name: ai-use-log
+    name: review-and-ai-log
     needs: context
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -216,6 +217,55 @@ jobs:
           HEAD_SHA: ${{ needs.context.outputs.head }}
         run: python -m test.ci_gates ai-log --base "$BASE_SHA" --head "$HEAD_SHA"
 
+      - name: Verify prior test approval with the base-owned checker
+        if: github.event_name == 'pull_request' || github.event_name == 'pull_request_review'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ needs.context.outputs.base }}
+          HEAD_SHA: ${{ needs.context.outputs.head }}
+        run: |
+          python -I - <<'PY'
+          import ast, json, os, re, subprocess, sys, tempfile
+          from pathlib import Path
+          try:
+              import tomllib
+          except ModuleNotFoundError:
+              import tomli as tomllib
+          root = Path(os.environ['GITHUB_WORKSPACE'])
+          base, head = os.environ['BASE_SHA'], os.environ['HEAD_SHA']
+          if not all(re.fullmatch(r'[0-9a-f]{40}', ref) for ref in (base, head)):
+              raise SystemExit('Invalid comparison commits')
+          def read(ref, path):
+              return subprocess.check_output(['git', 'show', f'{ref}:{path}'], cwd=root, text=True)
+          policy = tomllib.loads(read(base, 'pyproject.toml')).get('tool', {}).get('tradingagents', {}).get('ci', {})
+          source = base
+          if 'test_approval' not in policy:
+              if base != 'ac47e1f07bcf13508be83b4f6276afc80cc449a5':
+                  raise SystemExit('Missing protected-base test approval policy')
+              source = head
+          code = read(source, 'test/ci_gates.py')
+          parsed = ast.parse(code)
+          supported = any(isinstance(node, ast.Assign) and any(isinstance(target, ast.Name)
+              and target.id == 'TEST_APPROVAL_POLICY_VERSION' for target in node.targets)
+              and isinstance(node.value, ast.Constant) and node.value.value == 1 for node in parsed.body)
+          if not supported:
+              raise SystemExit('Missing supported protected test approval checker')
+          with tempfile.TemporaryDirectory(prefix='test-approval-checker-') as temporary:
+              trusted = Path(temporary)
+              for name in ('test/__init__.py', 'test/ci_gates.py', 'scripts/validate/validate_requirements.py'):
+                  target = trusted / name
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  target.write_text(read(source, name))
+              for name in ('scripts/__init__.py', 'scripts/validate/__init__.py'):
+                  (trusted / name).write_text('')
+              launcher = ('import runpy,sys; sys.path.insert(0,sys.argv[1]); '
+                          'sys.argv=["ci_gates", "approval", "--repo-root", sys.argv[2], '
+                          '"--base", sys.argv[3], "--head", sys.argv[4]]; '
+                          'runpy.run_module("test.ci_gates",run_name="__main__")')
+              result = subprocess.run([sys.executable, '-I', '-c', launcher, str(trusted), str(root), base, head], cwd=trusted)
+              raise SystemExit(result.returncode)
+          PY
+
   semantic-evaluation:
     name: semantic-evaluation
     needs: context
@@ -230,11 +280,41 @@ jobs:
         with:
           python-version: '3.12'
       - run: python -m pip install -e '.[dev]'
-      - name: Run configured semantic evaluation or report NOT RUN
+      - name: Replay fixed semantic evaluation with the protected-base checker
         env:
           BASE_SHA: ${{ needs.context.outputs.base }}
           HEAD_SHA: ${{ needs.context.outputs.head }}
-        run: python -m test.ci_gates semantic --base "$BASE_SHA" --head "$HEAD_SHA"
+          PYTHON_DOTENV_DISABLED: '1'
+        run: |
+          # Protected-base equivalent of python -m test.ci_gates semantic.
+          python -I - <<'PY'
+          import os, re, subprocess, sys, tempfile
+          from pathlib import Path
+          root = Path(os.environ['GITHUB_WORKSPACE'])
+          base, head = os.environ['BASE_SHA'], os.environ['HEAD_SHA']
+          if not all(re.fullmatch(r'[0-9a-f]{40}', ref) for ref in (base, head)):
+              raise SystemExit('Invalid semantic comparison commits')
+          def read(path):
+              return subprocess.check_output(['git', 'show', f'{base}:{path}'], cwd=root, text=True)
+          with tempfile.TemporaryDirectory(prefix='semantic-checker-') as temporary:
+              trusted = Path(temporary)
+              for name in ('test/__init__.py', 'test/ci_gates.py', 'scripts/validate/validate_requirements.py'):
+                  target = trusted / name
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  target.write_text(read(name))
+              for name in ('scripts/__init__.py', 'scripts/validate/__init__.py'):
+                  (trusted / name).write_text('')
+              launcher = ('import sys,tomllib; from pathlib import Path; '
+                  'sys.path.insert(0,sys.argv[1]); from test.ci_gates import check_semantic,semantic_needed,blob; '
+                  'root=Path(sys.argv[2]); base,head=sys.argv[3:5]; '
+                  'policy=tomllib.loads(blob(root,base,"pyproject.toml")).get("tool",{}).get("tradingagents",{}).get("ci",{}).get("semantic_evaluation",{}); '
+                  'required=semantic_needed(root,base,head); '
+                  'sys.exit("Missing protected-base semantic policy") if required and not policy else None; '
+                  'executed=check_semantic(root,base,head); '
+                  'print("PASS: semantic" if executed else "Semantic evaluation: NOT REQUIRED")')
+              result = subprocess.run([sys.executable, '-I', '-c', launcher, str(trusted), str(root), base, head], cwd=trusted)
+              raise SystemExit(result.returncode)
+          PY
 
   smoke-install:
     name: clean-install-smoke

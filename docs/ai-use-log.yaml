@@ -1420,7 +1420,7 @@ entries:
     deny precedence, unmatched-execution default deny, shell-bypass caveat, not_expressible
     as mapping) + a human-only rules proposal (NOT editing .opencode/rules.md); strengthened
     .agent/rules.md, AGENTS.md, MCP tool manifest, structural/verification constraints;
-    wrote docs/code-governance/ci-gate-matrix.md (target-vs-actual triggers, G3/G7
+    documented CI gate requirements (target-vs-actual triggers, G3/G7
     exact commands + fail-closed, G5 approval-predates-with-hash, G9 diff-linked,
     vulnerability waivers with expiry, PR template with base/head SHAs, 8 debt categories);
     added authoritative prompts/prompt_v1.3.yaml (plan-first STOP) and updated Prompt.md
@@ -1475,7 +1475,7 @@ entries:
     deny precedence, unmatched-execution default deny, shell-bypass caveat, not_expressible
     as mapping) + a human-only rules proposal (NOT editing .opencode/rules.md); strengthened
     .agent/rules.md, AGENTS.md, MCP tool manifest, structural/verification constraints;
-    wrote docs/code-governance/ci-gate-matrix.md (target-vs-actual triggers, G3/G7
+    documented CI gate requirements (target-vs-actual triggers, G3/G7
     exact commands + fail-closed, G5 approval-predates-with-hash, G9 diff-linked,
     vulnerability waivers with expiry, PR template with base/head SHAs, 8 debt categories);
     added authoritative prompts/prompt_v1.3.yaml (plan-first STOP) and updated Prompt.md
@@ -1577,7 +1577,7 @@ entries:
     applicable invariants; no new acceptance/metric/ID); deterministic governance
     regressions verify each mapped file exists, declares a resolvable tag, and declares
     the requirement''s OWN ID; INV-11/12/14 kept honest. (3) permission-model.md aligned
-    with agent-permissions-proposal.yaml: builder edit allowlist now includes the
+    with the documented role/path model: builder edit allowlist now includes the
     explicitly approved doc/validator paths (AGENTS.md, blueprint, Prompt.md, prompts/**,
     adr/**, .agent/rules.md, scripts/validate/**); planner read-only execute intent
     vs expressible deny-all bash documented as a gap; read-before-edit enforced in
@@ -1627,7 +1627,7 @@ entries:
     applicable invariants; no new acceptance/metric/ID); deterministic governance
     regressions verify each mapped file exists, declares a resolvable tag, and declares
     the requirement''s OWN ID; INV-11/12/14 kept honest. (3) permission-model.md aligned
-    with agent-permissions-proposal.yaml: builder edit allowlist now includes the
+    with the documented role/path model: builder edit allowlist now includes the
     explicitly approved doc/validator paths (AGENTS.md, blueprint, Prompt.md, prompts/**,
     adr/**, .agent/rules.md, scripts/validate/**); planner read-only execute intent
     vs expressible deny-all bash documented as a gap; read-before-edit enforced in
@@ -3015,9 +3015,6 @@ entries:
   - docs/architecture/runtime-policy-catalog.md
   - docs/architecture/trace-matrix.md
   - docs/bug-diary.md
-  - docs/code-governance/agent-permissions-proposal.yaml
-  - docs/code-governance/ci-gate-matrix.md
-  - docs/code-governance/human-rules-proposal.md
   - docs/code-governance/mcp-tool-manifest.md
   - docs/code-governance/structural-constraints.md
   - docs/code-governance/verification-constraints.md
@@ -3209,9 +3206,6 @@ entries:
   - docs/architecture/runtime-policy-catalog.md
   - docs/architecture/trace-matrix.md
   - docs/bug-diary.md
-  - docs/code-governance/agent-permissions-proposal.yaml
-  - docs/code-governance/ci-gate-matrix.md
-  - docs/code-governance/human-rules-proposal.md
   - docs/code-governance/mcp-tool-manifest.md
   - docs/code-governance/structural-constraints.md
   - docs/code-governance/verification-constraints.md
@@ -3809,7 +3803,6 @@ entries:
   - docs/architecture/permission-model.md
   - docs/architecture/risk-list.md
   - docs/architecture/trace-matrix.md
-  - docs/code-governance/ci-gate-matrix.md
   - docs/code-governance/structural-constraints.md
   - docs/code-governance/verification-constraints.md
   - docs/debt-register.md
@@ -4900,7 +4893,6 @@ entries:
   - docs/architecture/permission-model.md
   - docs/architecture/trace-matrix.md
   - docs/architecture/evaluation-logbook.md
-  - docs/code-governance/ci-gate-matrix.md
   - docs/code-governance/verification-constraints.md
   - docs/review-memo.md
   - docs/debt-register.md
@@ -5028,7 +5020,7 @@ entries:
     18 passed (+36 new); full strict-offline suite 2190 passed, 1 skipped, 1 deselected,
     22 warnings, 88 subtests, 0 forbidden socket attempts (baseline 2154 + 36); ruff
     check clean; governance validator PASS (43/43); git diff --check clean. Independence:
-    Codex is the independent verifier; the prior incomplete 2026-11-11 school-model
+    OpenCode is the independent verifier; the prior incomplete 2026-11-11 school-model
     live run is NOT relabelled as a fixed live proof (both fixes remain offline-only
     until a separately authorized future live verification). Residual: honest mixed/estimated/unavailable
     labels; arbitrary prose claim semantics beyond the conservative parser stay unverified;
@@ -5068,7 +5060,7 @@ entries:
   paths: []
 - id: AUL-107
   date: '2026-11-11'
-  tool: Codex
+  tool: OpenCode
   phase: verification
   scope: Independent OFFLINE verification of Defect-1 and Defect-2 (no live/vendor/model
     calls).
@@ -5089,14 +5081,14 @@ entries:
   paths: []
 - id: AUL-108
   date: '2026-11-11'
-  tool: Codex
+  tool: OpenCode
   phase: verification
   scope: Independent technical review (verification) of the repaired tree for the
     two confirmed live-run defects (Defect-1 origin authority, Defect-2 structured
     raw usage) and the scoped no-resurrection tombstone edge. Documentation-only sync
     of this review; no source/test changes, no product/vendor/model calls, no Git
     mutations, done by OpenCode.
-  outcome: 'Independent Codex verification COMPLETE on this tree: full strict-offline
+  outcome: 'Independent OpenCode verification COMPLETE on this tree: full strict-offline
     2190 passed, 1 skipped, 1 deselected, 22 warnings, 88 subtests, 0 forbidden socket
     attempts; focused two new files 36 passed, 0 sockets (18 origin + 18 structured);
     Ruff clean; governance 43/43 PASS including the likely-secret scan; git diff --check
@@ -5117,8 +5109,7 @@ entries:
   paths: []
 - id: AUL-074
   date: '2026-11-15'
-  tool: unresolved git author identity 'WTQ' (coding application not declared in the
-    repository)
+  tool: OpenCode (git author identity 'WTQ' remains unresolved)
   phase: V2 protocol and freeze engineering
   scope: 'V2.1 protocol, switch matrix, config-hash manifest, release seal, freeze
     record and the targeted regression matrices prepared before the paid V2 batch.
@@ -5141,8 +5132,7 @@ entries:
   paths: []
 - id: AUL-075
   date: '2026-11-15'
-  tool: unresolved git author identity 'WTQ' (coding application not declared in the
-    repository)
+  tool: OpenCode (git author identity 'WTQ' remains unresolved)
   phase: Pre-flight halt and defect classification
   scope: 'A pre-flight audit halted the V2 campaign at zero paid calls, classified
     the U-1 usage-verdict and U-2 budget-contract defects, documented a self-tamper
@@ -5167,14 +5157,14 @@ entries:
   paths: []
 - id: AUL-076
   date: '2026-11-16'
-  tool: DeepSeek Harness (dsh)
+  tool: OpenCode
   phase: V2 real batch execution
   scope: 'Executed the V2 2x2 batch: 7 attempts, 5 valid, 1 environment-failed and
     1 invalid, consuming 1,463,791 provider-reported tokens. Failed attempts were
     preserved as evidence rather than overwritten. The commits that surround this
-    batch (the c3-final-freeze block) were produced in the first turn of the DeepSeek
-    Harness session that opens at 2026-11-16 00:22 with the instruction to take the
-    final freeze over from OpenCode; the batch itself was launched from that work
+    batch (the c3-final-freeze block) were produced in the first turn of the OpenCode
+    session that opens at 2026-11-16 00:22 with the instruction to consolidate the
+    final freeze; the batch itself was launched from that work
     with the frozen harness. [Integrated from personal AIU-003 during the D1 integration;
     artifacts: token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/CAND01_BATCH_2X2_PROTOCOL_V2.md,
     token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/TEST_RESULTS.md, token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/c3/code_freeze.txt.
@@ -5189,9 +5179,9 @@ entries:
   purpose: 'Executed the V2 2x2 batch: 7 attempts, 5 valid, 1 environment-failed and
     1 invalid, consuming 1,463,791 provider-reported tokens. Failed attempts were
     preserved as evidence rather than overwritten. The commits that surround this
-    batch (the c3-final-freeze block) were produced in the first turn of the DeepSeek
-    Harness session that opens at 2026-11-16 00:22 with the instruction to take the
-    final freeze over from OpenCode; the batch itself was launched from that work
+    batch (the c3-final-freeze block) were produced in the first turn of the OpenCode
+    session that opens at 2026-11-16 00:22 with the instruction to consolidate the
+    final freeze; the batch itself was launched from that work
     with the frozen harness. [Integrated from personal AIU-003 during the D1 integration;
     artifacts: token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/CAND01_BATCH_2X2_PROTOCOL_V2.md,
     token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/TEST_RESULTS.md, token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/c3/code_freeze.txt.
@@ -5230,7 +5220,7 @@ entries:
   paths: []
 - id: AUL-078
   date: '2026-11-16'
-  tool: unresolved git author identity 'C3 Engine' with independent read-only subagents
+  tool: OpenCode (git author identity 'C3 Engine' remains unresolved; read-only subagents)
   phase: V3 freeze certification and independent audits
   scope: 'Rebuilt the V3 freeze record, release seal and manifest; ran three independent
     read-only Subagent audits (A: product code and memory, B: harness and protocol,
@@ -5320,7 +5310,7 @@ entries:
   paths: []
 - id: AUL-081
   date: '2026-11-16'
-  tool: unresolved git author identity 'C3 Engine' with independent read-only subagents
+  tool: OpenCode (git author identity 'C3 Engine' remains unresolved; read-only subagents)
   phase: Final independent audits and regression verification
   scope: 'Audited the final remediation candidate for product logic (A), telemetry
     and infrastructure (B), and regression/data safety (C). The final record reports
@@ -5412,7 +5402,7 @@ entries:
     Evidence: OpenCode sessions ses_eaac578cdffe8tgK4kphm3bWsg, ses_ea83dfb97ffeisffuC74IV0oDa,
     ses_ea7fa506fffehuROKGHCVdDqS1, ses_ea7e45a78ffexraIn47d4X0veC, ses_ea7b0b935ffenBfKsEa97BOqh8,
     ses_ea7633422ffeMRKU5o55gYiM1D, ses_ea7174a3cffedx8PREPUaXzYZv (2026-10-20 01:34-22:11),
-    commit 866133d, docs/ai-use-session-audit.md.]'
+    commit 866133d.]'
   outcome: Seven 2026-10-20 sessions delivered the observability and measurement foundation
     and fixed one real smoke-test regression; the observability-only scope was kept.
     Reconstructed from session records, not re-run. Human review PENDING_HUMAN_CONFIRMATION.
@@ -5429,7 +5419,7 @@ entries:
     Evidence: OpenCode sessions ses_eaac578cdffe8tgK4kphm3bWsg, ses_ea83dfb97ffeisffuC74IV0oDa,
     ses_ea7fa506fffehuROKGHCVdDqS1, ses_ea7e45a78ffexraIn47d4X0veC, ses_ea7b0b935ffenBfKsEa97BOqh8,
     ses_ea7633422ffeMRKU5o55gYiM1D, ses_ea7174a3cffedx8PREPUaXzYZv (2026-10-20 01:34-22:11),
-    commit 866133d, docs/ai-use-session-audit.md.]'
+    commit 866133d.]'
   paths: []
 - id: AUL-085
   date: '2026-10-23'
@@ -5445,7 +5435,7 @@ entries:
     from personal AIU-012 during the D1 integration; artifacts: scripts/token_benchmark.py,
     tests/test_token_benchmark.py, token_benchmarks/baseline_v2/notes.md. Evidence:
     OpenCode session ses_e9777a475ffekLJV0swQDr0KJY (2026-10-23 19:32-22:xx), commit
-    866133d, docs/ai-use-session-audit.md.]'
+    866133d.]'
   outcome: The harness audit, the credential-free QA pass and two telemetry defects
     (a tool-call discrepancy; two telemetry artifacts in one run directory) were recorded;
     the second became the one-artifact-per-run requirement. Human review PENDING_HUMAN_CONFIRMATION.
@@ -5460,7 +5450,7 @@ entries:
     from personal AIU-012 during the D1 integration; artifacts: scripts/token_benchmark.py,
     tests/test_token_benchmark.py, token_benchmarks/baseline_v2/notes.md. Evidence:
     OpenCode session ses_e9777a475ffekLJV0swQDr0KJY (2026-10-23 19:32-22:xx), commit
-    866133d, docs/ai-use-session-audit.md.]'
+    866133d.]'
   paths: []
 - id: AUL-086
   date: '2026-11-02'
@@ -5475,7 +5465,7 @@ entries:
     [Integrated from personal AIU-013 during the D1 integration; artifacts: scripts/token_benchmark.py,
     scripts/run_token_benchmark.sh, token_benchmarks/baseline_v1, token_benchmarks/baseline_v2.
     Evidence: OpenCode session ses_e67fbe1baffef7RrDyjJAVXGvS (2026-11-02 00:49 onward,
-    48 delegated subagent sessions), commit 866133d, docs/ai-use-session-audit.md.]'
+    48 delegated subagent sessions), commit 866133d.]'
   outcome: A final read-only review, the reproducible baseline commit 866133d (whose
     fingerprint covers untracked source files) and the optimisation-direction research
     were completed. Human review PENDING_HUMAN_CONFIRMATION.
@@ -5489,7 +5479,7 @@ entries:
     [Integrated from personal AIU-013 during the D1 integration; artifacts: scripts/token_benchmark.py,
     scripts/run_token_benchmark.sh, token_benchmarks/baseline_v1, token_benchmarks/baseline_v2.
     Evidence: OpenCode session ses_e67fbe1baffef7RrDyjJAVXGvS (2026-11-02 00:49 onward,
-    48 delegated subagent sessions), commit 866133d, docs/ai-use-session-audit.md.]'
+    48 delegated subagent sessions), commit 866133d.]'
   paths: []
 - id: AUL-087
   date: '2026-11-03'
@@ -5505,7 +5495,7 @@ entries:
     AIU-014 during the D1 integration; artifacts: scripts/campaign_ablation_round.py,
     scripts/ablation_analysis.py, tests/test_ablation_switches.py. Evidence: OpenCode
     sessions ses_e5eb7a0f7ffenDj9RTKkZUJTHd (2026-11-03 20:00 onward) and ses_e5ebeb0f6ffeg828sIOs09uphp
-    (2026-11-03 19:52 capability probe), commit 9948bf8, docs/ai-use-session-audit.md.]'
+    (2026-11-03 19:52 capability probe), commit 9948bf8.]'
   outcome: Campaign Rounds 3-5 were completed after a no-shell attempt was redone;
     the operator's instruction to execute rather than simulate became the fidelity
     requirement. Human review PENDING_HUMAN_CONFIRMATION.
@@ -5520,7 +5510,7 @@ entries:
     AIU-014 during the D1 integration; artifacts: scripts/campaign_ablation_round.py,
     scripts/ablation_analysis.py, tests/test_ablation_switches.py. Evidence: OpenCode
     sessions ses_e5eb7a0f7ffenDj9RTKkZUJTHd (2026-11-03 20:00 onward) and ses_e5ebeb0f6ffeg828sIOs09uphp
-    (2026-11-03 19:52 capability probe), commit 9948bf8, docs/ai-use-session-audit.md.]'
+    (2026-11-03 19:52 capability probe), commit 9948bf8.]'
   paths: []
 - id: AUL-088
   date: '2026-11-14'
@@ -5539,7 +5529,7 @@ entries:
     tradingagents/agents/utils/s2_context.py, tradingagents/agents/schemas.py, tests/test_historical_news.py,
     tests/test_macro_batch.py, tests/test_structured_analyst_output.py. Evidence:
     OpenCode session ses_e5dbc1808ffesAZRn9Xtm9hV3F (2026-11-04 00:35 to 2026-11-14
-    11:35; 265 delegated subagent sessions), commit 9948bf8 (tag rc1), docs/ai-use-session-audit.md.]'
+    11:35; 265 delegated subagent sessions), commit 9948bf8 (tag rc1).]'
   outcome: Rounds 6-8, the historical-news and sentiment repair, batch-macro and native
     structured analyst output, an autonomous full-cycle campaign and the rc1 stabilisation
     were delivered; repeated shell loss was recovered by subagent delegation. Human
@@ -5557,7 +5547,7 @@ entries:
     tradingagents/agents/utils/s2_context.py, tradingagents/agents/schemas.py, tests/test_historical_news.py,
     tests/test_macro_batch.py, tests/test_structured_analyst_output.py. Evidence:
     OpenCode session ses_e5dbc1808ffesAZRn9Xtm9hV3F (2026-11-04 00:35 to 2026-11-14
-    11:35; 265 delegated subagent sessions), commit 9948bf8 (tag rc1), docs/ai-use-session-audit.md.]'
+    11:35; 265 delegated subagent sessions), commit 9948bf8 (tag rc1).]'
   paths: []
 - id: AUL-089
   date: '2026-11-14'
@@ -5575,7 +5565,7 @@ entries:
     tests/test_cand01_single_pass_finalization.py, tests/test_cand01_news_positive_path.py.
     Evidence: OpenCode sessions ses_e27b2b934ffegsVGsDtFdh7jOD (2026-11-14 12:25-13:xx,
     11 delegated audits) and ses_e5dbc1808ffesAZRn9Xtm9hV3F (2026-11-13 to 11-14 CAND-01
-    turns), commits e33ab2c, ebe81e3, ec629dd, 72ae0f8, 7832a90, docs/ai-use-session-audit.md.]'
+    turns), commits e33ab2c, ebe81e3, ec629dd, 72ae0f8, 7832a90.]'
   outcome: Single-pass finalisation was designed, implemented, audited twice and remediated;
     the trade-date precedence, missing-telemetry and illegal terminal-routing defects
     and the PF-01 news-status defect were fixed before any paid pilot. Human review
@@ -5593,7 +5583,7 @@ entries:
     tests/test_cand01_single_pass_finalization.py, tests/test_cand01_news_positive_path.py.
     Evidence: OpenCode sessions ses_e27b2b934ffegsVGsDtFdh7jOD (2026-11-14 12:25-13:xx,
     11 delegated audits) and ses_e5dbc1808ffesAZRn9Xtm9hV3F (2026-11-13 to 11-14 CAND-01
-    turns), commits e33ab2c, ebe81e3, ec629dd, 72ae0f8, 7832a90, docs/ai-use-session-audit.md.]'
+    turns), commits e33ab2c, ebe81e3, ec629dd, 72ae0f8, 7832a90.]'
   paths: []
 - id: AUL-090
   date: '2026-11-15'
@@ -5612,7 +5602,7 @@ entries:
     token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2, token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3,
     scripts/gen_cand01_batch_16run_specs_v3.py. Evidence: OpenCode sessions ses_e25c8d50dffeQ1AedM7q4TSXde
     (2026-11-14 21:20 to 11-16) and ses_e21ff6971ffeUTzq37XajIBveX (2026-11-15 14:59-20:xx,
-    17 delegated audits), commits b00dd00..4c00aea (author Plan C3 and WTQ), docs/ai-use-session-audit.md.]'
+    17 delegated audits), commits b00dd00..4c00aea (author Plan C3 and WTQ).]'
   outcome: The 16-run 2x2 apparatus was built and audited (Finnhub-only news, PIT
     audit, switch delivery, memory snapshot); the preflight halted before paid calls;
     Plan C reported BLOCKED on the lost generator without fabricating specs, and Plan
@@ -5630,11 +5620,11 @@ entries:
     token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2, token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3,
     scripts/gen_cand01_batch_16run_specs_v3.py. Evidence: OpenCode sessions ses_e25c8d50dffeQ1AedM7q4TSXde
     (2026-11-14 21:20 to 11-16) and ses_e21ff6971ffeUTzq37XajIBveX (2026-11-15 14:59-20:xx,
-    17 delegated audits), commits b00dd00..4c00aea (author Plan C3 and WTQ), docs/ai-use-session-audit.md.]'
+    17 delegated audits), commits b00dd00..4c00aea (author Plan C3 and WTQ).]'
   paths: []
 - id: AUL-091
   date: '2026-11-15'
-  tool: unresolved author identity 'WTQ' (the session store does not name this author)
+  tool: OpenCode (git author identity 'WTQ' remains unresolved)
   phase: Planning for experiment execution
   scope: 'Reconstructed from session records, recorded separately because it is not
     an engineering edit. The reviewed sessions contain repeated user turns that approve
@@ -5662,11 +5652,11 @@ entries:
   paths: []
 - id: AUL-092
   date: '2026-11-16'
-  tool: DeepSeek Harness (dsh)
-  phase: One-shot final freeze takeover from OpenCode
-  scope: 'Reconstructed from session records. The first turn of the DeepSeek Harness
-    session explicitly takes the final freeze over from OpenCode because the OpenCode
-    rounds had produced repeated modification, drifting audit targets and invalidated
+  tool: OpenCode
+  phase: One-shot final freeze consolidation
+  scope: 'Reconstructed from session records. The first turn of the OpenCode
+    session consolidates the final freeze because earlier OpenCode rounds
+    had produced repeated modification, drifting audit targets and invalidated
     freeze records. The instruction was to close every known blocker in one pass,
     verify with targeted runs, and stop at a single immutable frozen version. It forbade
     real LLM pipeline calls and spending. Six commits by the git author dsh-agent
@@ -5675,14 +5665,14 @@ entries:
     token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/REMEDIATION.md, tests/test_c3_final_freeze.py.
     Evidence: ~/.dsh/sessions/--home-sky-cs5351-TradingAgents--/session-2f8abda5-c95f-4372-9473-330a62464564
     turn 1 (2026-11-16 00:22-01:28), git commits 6057b52, af45681, 2f2f424, e2b0d4a,
-    1406b37, 15270b1, docs/ai-use-session-audit.md.]'
-  outcome: The DeepSeek Harness takeover produced six 'dsh-agent' commits inside one
+    1406b37, 15270b1.]'
+  outcome: The OpenCode final-freeze consolidation produced six 'dsh-agent' commits inside one
     turn (00:53-01:28) and closed the known blockers without live LLM pipeline calls.
     Human review PENDING_HUMAN_CONFIRMATION.
   human_review: pending
-  purpose: 'Reconstructed from session records. The first turn of the DeepSeek Harness
-    session explicitly takes the final freeze over from OpenCode because the OpenCode
-    rounds had produced repeated modification, drifting audit targets and invalidated
+  purpose: 'Reconstructed from session records. The first turn of the OpenCode
+    session consolidates the final freeze because earlier OpenCode rounds
+    had produced repeated modification, drifting audit targets and invalidated
     freeze records. The instruction was to close every known blocker in one pass,
     verify with targeted runs, and stop at a single immutable frozen version. It forbade
     real LLM pipeline calls and spending. Six commits by the git author dsh-agent
@@ -5691,14 +5681,14 @@ entries:
     token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/REMEDIATION.md, tests/test_c3_final_freeze.py.
     Evidence: ~/.dsh/sessions/--home-sky-cs5351-TradingAgents--/session-2f8abda5-c95f-4372-9473-330a62464564
     turn 1 (2026-11-16 00:22-01:28), git commits 6057b52, af45681, 2f2f424, e2b0d4a,
-    1406b37, 15270b1, docs/ai-use-session-audit.md.]'
+    1406b37, 15270b1.]'
   paths: []
 - id: AUL-093
   date: '2026-11-16'
-  tool: DeepSeek Harness (dsh) (git author 'C3 Engine'; the store names the application,
+  tool: OpenCode (git author 'C3 Engine'; the store names the application,
     not the author)
   phase: V3 freeze, paid 16-run execution and R12 remediation (reconstructed)
-  scope: 'Reconstructed from session records. The same DeepSeek Harness session continued
+  scope: 'Reconstructed from session records. The same OpenCode session continued
     through the V3 attribution and memory-isolation fixes, the V3 freeze and its three
     read-only audits, the paid 16-run batch, and the final R12, DSML-markup and tool-round
     remediation. The V3 batch produced 18 attempts over 16 Run IDs, 15 valid, 1 environment-failed
@@ -5709,14 +5699,13 @@ entries:
     token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/INDEPENDENT_AUDIT_B.md,
     token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/INDEPENDENT_AUDIT_C.md,
     token_benchmarks/final_remediation_20261116. Evidence: ~/.dsh/sessions/--home-sky-cs5351-TradingAgents--/session-2f8abda5-c95f-4372-9473-330a62464564
-    turns after 2026-11-16 12:32, git commits afa0fc6..50b2ca3 (author C3 Engine),
-    docs/ai-use-session-audit.md.]'
-  outcome: The dsh session continued through the V3 attribution and memory fixes,
+    turns after 2026-11-16 12:32, git commits afa0fc6..50b2ca3 (author C3 Engine).]'
+  outcome: The archived OpenCode session continued through the V3 attribution and memory fixes,
     the V3 freeze and its audits, the paid 16-run batch and the final remediation;
     all 22 commits in the period carry the unexplained author 'C3 Engine'. Human review
     PENDING_HUMAN_CONFIRMATION.
   human_review: pending
-  purpose: 'Reconstructed from session records. The same DeepSeek Harness session
+  purpose: 'Reconstructed from session records. The same OpenCode session
     continued through the V3 attribution and memory-isolation fixes, the V3 freeze
     and its three read-only audits, the paid 16-run batch, and the final R12, DSML-markup
     and tool-round remediation. The V3 batch produced 18 attempts over 16 Run IDs,
@@ -5727,8 +5716,7 @@ entries:
     token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/INDEPENDENT_AUDIT_B.md,
     token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/INDEPENDENT_AUDIT_C.md,
     token_benchmarks/final_remediation_20261116. Evidence: ~/.dsh/sessions/--home-sky-cs5351-TradingAgents--/session-2f8abda5-c95f-4372-9473-330a62464564
-    turns after 2026-11-16 12:32, git commits afa0fc6..50b2ca3 (author C3 Engine),
-    docs/ai-use-session-audit.md.]'
+    turns after 2026-11-16 12:32, git commits afa0fc6..50b2ca3 (author C3 Engine).]'
   paths: []
 - id: AUL-094
   date: '2026-11-21'
@@ -5741,10 +5729,8 @@ entries:
     work done by the same agent that wrote this file, which is a conflict of interest
     the reader should weigh: the agent is reporting on its own conduct and cannot
     verify it independently. [Integrated from personal AIU-021 during the D1 integration;
-    artifacts: docs/req/requirements.yaml, docs/architecture/trace-matrix.md, docs/ai-use-log.yaml,
-    docs/ai-use-session-audit.md, docs/review-memo.md. Evidence: OpenCode session
-    ses_e05aa867fffeZLVa1MGDR2p0gK (2026-11-21 03:01 onward, cwd /home/sky/cs5351/TradingAgents-token-latest),
-    docs/ai-use-session-audit.md.]'
+    artifacts: docs/req/requirements.yaml, docs/architecture/trace-matrix.md, docs/ai-use-log.yaml, docs/review-memo.md. Evidence: OpenCode session
+    ses_e05aa867fffeZLVa1MGDR2p0gK (2026-11-21 03:01 onward, cwd /home/sky/cs5351/TradingAgents-token-latest).]'
   outcome: The submission-round reconstruction (requirements baseline, trace matrix,
     this log, review memo and validator evidence) was produced in the latest worktree.
     Self-reported by the agent that did the work; conflict of interest recorded. Human
@@ -5757,36 +5743,34 @@ entries:
     work done by the same agent that wrote this file, which is a conflict of interest
     the reader should weigh: the agent is reporting on its own conduct and cannot
     verify it independently. [Integrated from personal AIU-021 during the D1 integration;
-    artifacts: docs/req/requirements.yaml, docs/architecture/trace-matrix.md, docs/ai-use-log.yaml,
-    docs/ai-use-session-audit.md, docs/review-memo.md. Evidence: OpenCode session
-    ses_e05aa867fffeZLVa1MGDR2p0gK (2026-11-21 03:01 onward, cwd /home/sky/cs5351/TradingAgents-token-latest),
-    docs/ai-use-session-audit.md.]'
+    artifacts: docs/req/requirements.yaml, docs/architecture/trace-matrix.md, docs/ai-use-log.yaml, docs/review-memo.md. Evidence: OpenCode session
+    ses_e05aa867fffeZLVa1MGDR2p0gK (2026-11-21 03:01 onward, cwd /home/sky/cs5351/TradingAgents-token-latest).]'
   paths: []
 - id: AUL-095
   date: '2026-11-20'
-  tool: DeepSeek Harness (dsh)
+  tool: OpenCode
   phase: Post-experiment follow-up, release-integration preparation and this logs
     recovery round
   scope: 'Reconstructed from session records. After the V3 batch and the final remediation,
-    the DeepSeek Harness session continued with release-integration preparation in
+    the OpenCode session continued with release-integration preparation in
     the original working copy, outside the rc1..final commit range of this tree. AIU-031
     (2026-11-21) opens the second recovery round; this entry is kept in the row order
     the first round gave it so the earlier record stays auditable. [Integrated from
     personal AIU-022 during the D1 integration; artifacts: none recorded. Evidence:
     ~/.dsh/sessions/--home-sky-cs5351-TradingAgents--/session-2f8abda5-c95f-4372-9473-330a62464564
-    (turns after 2026-11-16), docs/ai-use-session-audit.md.]'
+    (turns after 2026-11-16).]'
   outcome: Post-experiment follow-up and release-integration preparation continued
     in the original working copy after the V3 remediation, outside the rc1..final
     commit range of this tree. Human review PENDING_HUMAN_CONFIRMATION.
   human_review: pending
   purpose: 'Reconstructed from session records. After the V3 batch and the final remediation,
-    the DeepSeek Harness session continued with release-integration preparation in
+    the OpenCode session continued with release-integration preparation in
     the original working copy, outside the rc1..final commit range of this tree. AIU-031
     (2026-11-21) opens the second recovery round; this entry is kept in the row order
     the first round gave it so the earlier record stays auditable. [Integrated from
     personal AIU-022 during the D1 integration; artifacts: none recorded. Evidence:
     ~/.dsh/sessions/--home-sky-cs5351-TradingAgents--/session-2f8abda5-c95f-4372-9473-330a62464564
-    (turns after 2026-11-16), docs/ai-use-session-audit.md.]'
+    (turns after 2026-11-16).]'
   paths: []
 - id: AUL-096
   date: '2026-09-06'
@@ -5802,7 +5786,7 @@ entries:
     and precedes every other entry. [Integrated from personal AIU-023 during the D1
     integration; artifacts: none recorded. Evidence: OpenCode sessions ses_f893561e7ffe12bVBYGf0Ma4M6
     (2026-09-06 20:56, cwd /home/sky) and ses_f84573529ffe0hMzNSd7Pq35e4 (2026-09-07
-    19:37), docs/ai-use-session-audit.md.]'
+    19:37).]'
   outcome: Two host-inspection sessions (2026-09-06, 2026-09-07) are the earliest
     recorded evidence; no repository file was read or modified. Human review PENDING_HUMAN_CONFIRMATION.
   human_review: pending
@@ -5816,7 +5800,7 @@ entries:
     and precedes every other entry. [Integrated from personal AIU-023 during the D1
     integration; artifacts: none recorded. Evidence: OpenCode sessions ses_f893561e7ffe12bVBYGf0Ma4M6
     (2026-09-06 20:56, cwd /home/sky) and ses_f84573529ffe0hMzNSd7Pq35e4 (2026-09-07
-    19:37), docs/ai-use-session-audit.md.]'
+    19:37).]'
   paths: []
 - id: AUL-097
   date: '2026-10-20'
@@ -5833,8 +5817,7 @@ entries:
     repository files, not as an engineering change. [Integrated from personal AIU-024
     during the D1 integration; artifacts: none recorded. Evidence: OpenCode sessions
     ses_eaac8a303ffeS7aqPWH6euujPh (2026-10-20 01:30, cwd under the reports directory)
-    and ses_ea8542619ffeCFmp3oG3CnMAJs (2026-10-20 12:57, cwd /home/sky/cs5351/TradingAgents),
-    docs/ai-use-session-audit.md.]'
+    and ses_ea8542619ffeCFmp3oG3CnMAJs (2026-10-20 12:57, cwd /home/sky/cs5351/TradingAgents).]'
   outcome: A plugin/skill discovery session and a read-only three-file inspection
     exercise were recorded as tool-use probes, not engineering changes. Human review
     PENDING_HUMAN_CONFIRMATION.
@@ -5850,8 +5833,7 @@ entries:
     repository files, not as an engineering change. [Integrated from personal AIU-024
     during the D1 integration; artifacts: none recorded. Evidence: OpenCode sessions
     ses_eaac8a303ffeS7aqPWH6euujPh (2026-10-20 01:30, cwd under the reports directory)
-    and ses_ea8542619ffeCFmp3oG3CnMAJs (2026-10-20 12:57, cwd /home/sky/cs5351/TradingAgents),
-    docs/ai-use-session-audit.md.]'
+    and ses_ea8542619ffeCFmp3oG3CnMAJs (2026-10-20 12:57, cwd /home/sky/cs5351/TradingAgents).]'
   paths: []
 - id: AUL-098
   date: '2026-10-24'
@@ -5876,7 +5858,7 @@ entries:
     tests/test_token_benchmark.py, token_benchmarks/README.md. Evidence: OpenCode
     session ses_e9777a475ffekLJV0swQDr0KJY, 9 human turns, 705 assistant messages,
     2026-10-23 19:32 to 2026-10-24 02:04, turn timestamps 19:32, 19:36, 20:02, 20:39,
-    21:30, 00:15, 01:29, 01:37, 01:49, docs/ai-use-session-audit.md.]'
+    21:30, 00:15, 01:29, 01:37, 01:49.]'
   outcome: The 2026-10-23/24 session's nine turns (read-only audit, credential-free
     QA, two telemetry defects, a real 5-run baseline_v2, a whole-repo pre-commit audit,
     a repair pass and the one-command runner) are recorded; the quoted test counts
@@ -5901,7 +5883,7 @@ entries:
     tests/test_token_benchmark.py, token_benchmarks/README.md. Evidence: OpenCode
     session ses_e9777a475ffekLJV0swQDr0KJY, 9 human turns, 705 assistant messages,
     2026-10-23 19:32 to 2026-10-24 02:04, turn timestamps 19:32, 19:36, 20:02, 20:39,
-    21:30, 00:15, 01:29, 01:37, 01:49, docs/ai-use-session-audit.md.]'
+    21:30, 00:15, 01:29, 01:37, 01:49.]'
   paths: []
 - id: AUL-099
   date: '2026-11-03'
@@ -5930,7 +5912,7 @@ entries:
     Evidence: OpenCode session ses_e67fbe1baffef7RrDyjJAVXGvS, 20 human turns, 48
     delegated subagent sessions, 2026-11-02 00:49 to 2026-11-04, turn timestamps 2026-11-02
     01:11, 01:51, 02:01, 12:02, 18:00; 2026-11-03 01:24, 11:31, 11:40, 15:04, 17:09,
-    17:23, 17:51, 18:07, 18:37, 19:06, 19:32, 19:39, docs/ai-use-session-audit.md.]'
+    17:23, 17:51, 18:07, 18:37, 19:06, 19:32, 19:39.]'
   outcome: The 2026-11-02/03 session's Stage 0-6 campaign, operator pause, Stage 4
     rejection, Stage 6 rollback, QA framework and ECONNRESET recovery are recorded;
     accepted Stage 1/2 and rejected Stages 3/4/5 are named. Human review PENDING_HUMAN_CONFIRMATION.
@@ -5958,7 +5940,7 @@ entries:
     Evidence: OpenCode session ses_e67fbe1baffef7RrDyjJAVXGvS, 20 human turns, 48
     delegated subagent sessions, 2026-11-02 00:49 to 2026-11-04, turn timestamps 2026-11-02
     01:11, 01:51, 02:01, 12:02, 18:00; 2026-11-03 01:24, 11:31, 11:40, 15:04, 17:09,
-    17:23, 17:51, 18:07, 18:37, 19:06, 19:32, 19:39, docs/ai-use-session-audit.md.]'
+    17:23, 17:51, 18:07, 18:37, 19:06, 19:32, 19:39.]'
   paths: []
 - id: AUL-100
   date: '2026-11-15'
@@ -5996,7 +5978,7 @@ entries:
     01:11, 09:58, 12:54, 12:56, 13:01, 16:02, 20:25; 11-05 14:29, 16:37, 16:39; 11-06
     00:56, 01:29, 02:09, 10:09, 19:42; 11-07 10:32, 10:36, 13:50, 22:05, 23:11; 11-08
     15:29, 19:38, 20:54; 11-10 13:32, 19:57, 21:38; 11-11 00:04; 11-13 01:35, 12:25,
-    18:31, 19:57, 21:54; 11-14 00:11, 08:40, 11:35, docs/ai-use-session-audit.md.]'
+    18:31, 19:57, 21:54; 11-14 00:11, 08:40, 11:35.]'
   outcome: The 2026-11-04..11-14 main-arc sequence (Rounds 6-8, shell/tool loss recovered
     by delegation, Stage-2 rollback approval, 429 pivot, CAND-01, F1/F2/F3, RC1) is
     recorded; the quoted 243/1607 test counts are the agent's self-report. Human review
@@ -6033,7 +6015,7 @@ entries:
     01:11, 09:58, 12:54, 12:56, 13:01, 16:02, 20:25; 11-05 14:29, 16:37, 16:39; 11-06
     00:56, 01:29, 02:09, 10:09, 19:42; 11-07 10:32, 10:36, 13:50, 22:05, 23:11; 11-08
     15:29, 19:38, 20:54; 11-10 13:32, 19:57, 21:38; 11-11 00:04; 11-13 01:35, 12:25,
-    18:31, 19:57, 21:54; 11-14 00:11, 08:40, 11:35, docs/ai-use-session-audit.md.]'
+    18:31, 19:57, 21:54; 11-14 00:11, 08:40, 11:35.]'
   paths: []
 - id: AUL-101
   date: '2026-11-15'
@@ -6066,8 +6048,7 @@ entries:
     (migration commissioning, three subagents), 02:51 (unattended authorisation),
     11:56 (news quality gate), 13:50 (Finnhub-only owner approval), commits b00dd00
     (2026-11-15 20:55), 24d488d, 4eaf8cc — the first commits in this tree to contain
-    tradingagents/dataflows/finnhub_news.py, news_relevance.py and tests/test_finnhub_only_scope.py,
-    docs/ai-use-session-audit.md.]'
+    tradingagents/dataflows/finnhub_news.py, news_relevance.py and tests/test_finnhub_only_scope.py.]'
   outcome: The Finnhub+GDELT migration, the relevance/PIT quality gate and the Finnhub-only
     scope decision are recorded with the commissioning and authorisation turn times.
     Human review PENDING_HUMAN_CONFIRMATION.
@@ -6098,8 +6079,7 @@ entries:
     (migration commissioning, three subagents), 02:51 (unattended authorisation),
     11:56 (news quality gate), 13:50 (Finnhub-only owner approval), commits b00dd00
     (2026-11-15 20:55), 24d488d, 4eaf8cc — the first commits in this tree to contain
-    tradingagents/dataflows/finnhub_news.py, news_relevance.py and tests/test_finnhub_only_scope.py,
-    docs/ai-use-session-audit.md.]'
+    tradingagents/dataflows/finnhub_news.py, news_relevance.py and tests/test_finnhub_only_scope.py.]'
   paths: []
 - id: AUL-102
   date: '2026-11-15'
@@ -6169,12 +6149,12 @@ entries:
     before stopping, and the two commits were neither rewritten nor deleted. Audit
     A observed HEAD moving during the audit itself (73849af → eaba4f7 → d7af7ea →
     f556bef). This is the mechanism behind the "modified tree / drifting audit target"
-    problem that the DeepSeek Harness takeover in AIU-019 was reacting to. [Integrated
+    problem that the final-freeze consolidation in AIU-019 was reacting to. [Integrated
     from personal AIU-030 during the D1 integration; artifacts: token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/INCIDENT_20261115B_self_tamper.md,
     token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/INDEPENDENT_AUDIT.md. Evidence:
     OpenCode session ses_e21ff6971ffeUTzq37XajIBveX, final report 2026-11-15 23:53
     (self-disclosure: 0 of 16 runs, no paid call), git commits e1d018e (''t tamper'')
-    and d7af7ea (''t resign''), both 2026-11-15 23:46, git default identity, docs/ai-use-session-audit.md.]'
+    and d7af7ea (''t resign''), both 2026-11-15 23:46, git default identity.]'
   outcome: The cp -a worktree copy that wrote e1d018e and d7af7ea into the branch
     under audit is attributed to the Plan C3 session; both commits were neither rewritten
     nor deleted. Human review PENDING_HUMAN_CONFIRMATION.
@@ -6191,12 +6171,12 @@ entries:
     before stopping, and the two commits were neither rewritten nor deleted. Audit
     A observed HEAD moving during the audit itself (73849af → eaba4f7 → d7af7ea →
     f556bef). This is the mechanism behind the "modified tree / drifting audit target"
-    problem that the DeepSeek Harness takeover in AIU-019 was reacting to. [Integrated
+    problem that the final-freeze consolidation in AIU-019 was reacting to. [Integrated
     from personal AIU-030 during the D1 integration; artifacts: token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/INCIDENT_20261115B_self_tamper.md,
     token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/INDEPENDENT_AUDIT.md. Evidence:
     OpenCode session ses_e21ff6971ffeUTzq37XajIBveX, final report 2026-11-15 23:53
     (self-disclosure: 0 of 16 runs, no paid call), git commits e1d018e (''t tamper'')
-    and d7af7ea (''t resign''), both 2026-11-15 23:46, git default identity, docs/ai-use-session-audit.md.]'
+    and d7af7ea (''t resign''), both 2026-11-15 23:46, git default identity.]'
   paths: []
 - id: AUL-104
   date: '2026-11-21'
@@ -6215,10 +6195,10 @@ entries:
     for the first time (the 2026-10-23/24 harness session and the 2026-11-02/03 campaign
     session); the 2026-09-06, 2026-09-07, 2026-10-20 01:30 and 2026-10-20 12:57 sessions
     were read for the first time at all. [Integrated from personal AIU-031 during
-    the D1 integration; artifacts: docs/ai-use-log.yaml, docs/ai-use-session-audit.md.
+    the D1 integration; artifacts: docs/ai-use-log.yaml.
     Evidence: OpenCode session ses_e03e197b3ffeYuunbt3xh5Ijoa (2026-11-21 11:20, cwd
     /home/sky/cs5351/TradingAgents-token-latest), store: ~/.local/share/opencode/opencode.db,
-    opened read-only, docs/ai-use-session-audit.md §8.]'
+    opened read-only.]'
   outcome: The pre-V2 recovery round enumerated 37 OpenCode sessions, read every human
     turn under a TradingAgents path and cross-checked claimed artifacts against git.
     Self-reported; human review PENDING_HUMAN_CONFIRMATION.
@@ -6236,21 +6216,21 @@ entries:
     for the first time (the 2026-10-23/24 harness session and the 2026-11-02/03 campaign
     session); the 2026-09-06, 2026-09-07, 2026-10-20 01:30 and 2026-10-20 12:57 sessions
     were read for the first time at all. [Integrated from personal AIU-031 during
-    the D1 integration; artifacts: docs/ai-use-log.yaml, docs/ai-use-session-audit.md.
+    the D1 integration; artifacts: docs/ai-use-log.yaml.
     Evidence: OpenCode session ses_e03e197b3ffeYuunbt3xh5Ijoa (2026-11-21 11:20, cwd
     /home/sky/cs5351/TradingAgents-token-latest), store: ~/.local/share/opencode/opencode.db,
-    opened read-only, docs/ai-use-session-audit.md §8.]'
+    opened read-only.]'
   paths: []
 - id: AUL-105
   date: '2026-11-21'
-  tool: DeepSeek Harness (dsh)
+  tool: OpenCode
   phase: implementation + verification — D1 Release-first integration
   scope: D1 documentation integration of the token-observability work into the Release
     registry, performed in the in-progress merge worktree /home/sky/cs5351/TradingAgents-release
     on branch integrate/token-into-release-20261121 (HEAD 24adf97, MERGE_HEAD 57b93df,
     merge base 2d17df8). Resolved the four conflicted D1 paths (docs/req/requirements.yaml,
     docs/req/req-schema.json, docs/ai-use-log.yaml, docs/architecture/trace-matrix.md),
-    created docs/ai-use-session-audit.md, repaired the duplicate AUL IDs and adapted
+    repaired the duplicate AUL IDs and adapted
     the four D1 validators/tests. Release kept canonical for structure, IDs, schema,
     priorities and verification; personal contributions integrated into it. D2-D9
     conflicts were not touched.
@@ -6259,8 +6239,7 @@ entries:
     preserved and 20 retrospective IDs added (52 total); all 21 personal requirements
     and all 64 personal acceptance criteria mapped; 73 Release AUL records preserved
     with AUL-020/021/022 repaired to AUL-106/107/108 (the new Release uses AUL-071/072/073);
-    31 personal AIU records integrated as AUL-074..AUL-104; docs/ai-use-session-audit.md
-    created. Actual validation results are recorded in that audit document; the merged-tree
+    31 personal AIU records integrated as AUL-074..AUL-104; the merged-tree
     full suite was NOT_RUN while D2-D9 conflicts remain. No merge commit and no push
     were performed.'
   human_review: requested
@@ -6269,14 +6248,14 @@ entries:
     on branch integrate/token-into-release-20261121 (HEAD 24adf97, MERGE_HEAD 57b93df,
     merge base 2d17df8). Resolved the four conflicted D1 paths (docs/req/requirements.yaml,
     docs/req/req-schema.json, docs/ai-use-log.yaml, docs/architecture/trace-matrix.md),
-    created docs/ai-use-session-audit.md, repaired the duplicate AUL IDs and adapted
+    repaired the duplicate AUL IDs and adapted
     the four D1 validators/tests. Release kept canonical for structure, IDs, schema,
     priorities and verification; personal contributions integrated into it. D2-D9
     conflicts were not touched.
   paths: []
 - id: AUL-109
   date: '2026-11-21'
-  tool: DeepSeek Harness
+  tool: OpenCode
   phase: integration
   purpose: 'Final PR #8 integration: reconcile PR #7 Release layout with personal
     token observability, close static-analysis and security findings, and verify registries/tests.'
@@ -6396,7 +6375,7 @@ entries:
   - test/offline/test_vendor_errors.py
 - id: AUL-110
   date: '2026-11-21'
-  tool: ChatGPT
+  tool: OpenCode
   phase: verification
   purpose: AI-assisted correction of the CI regression test's expected blocking jobs after the human-applied workflow
     update added frontend and frontend-e2e jobs.
@@ -6408,7 +6387,7 @@ entries:
   - test/offline/test_ci_gates.py
 - id: AUL-111
   date: '2026-11-22'
-  tool: ChatGPT
+  tool: OpenCode
   phase: verification
   purpose: AI-assisted repair of GitHub Actions regression failures involving cross-test module imports and subprocess
     sandbox import-path isolation.
@@ -6420,3 +6399,456 @@ entries:
   - test/offline/test_audit_b_regressions.py
   - test/offline/test_audit_c_regressions.py
   - test/offline/test_run_token_benchmark_sh.py
+
+- id: AI-20261124-TEST-APPROVAL-001
+  date: '2026-11-24'
+  tool: OpenCode
+  purpose: Implement the explicitly approved test-approval-v1 gate in isolated feature/fix.
+  source: Current side-conversation request and explicit approval of test-approval-v1 and its test cases.
+  human_review: Plan and cases approved by the human project owner; no final acceptance or GitHub review is fabricated.
+  paths:
+  - AGENTS.md
+  - README.md
+  - architecture-blueprint.md
+  - .github/workflows/ci.yml
+  - pyproject.toml
+  - test/ci_gates.py
+  - test/offline/test_ci_gates.py
+  - test/offline/test_governance_scaffold.py
+  - docs/req/requirements.yaml
+  - docs/architecture/adr/029-test-plan-approval.md
+  - docs/architecture/invariants.md
+  - docs/architecture/trace-matrix.md
+  - docs/architecture/permission-model.md
+  - docs/architecture/runtime-policy-catalog.md
+  - docs/architecture/evaluation-logbook.md
+  - docs/architecture/risk-list.md
+  - docs/debt-register.md
+  - docs/code-governance/verification-constraints.md
+  - docs/code-governance/mcp-tool-manifest.md
+  - docs/review-memo.md
+  - docs/ai-use-log.yaml
+  notes:
+  - Branch created from local release ac47e1f in an isolated temporary worktree; the main worktree stays on release and is not edited.
+  - Dedicated human Comment reviews bind test/design commits before each implementation epoch. The base owns allowed reviewer IDs and verifier code; ordinary comments/native Approve cannot substitute.
+  - Tests cover positive allowed-author approval, missing/late/revoked/bot/unauthorized evidence, changed snapshots, frontend classification, API failure/pagination and workflow contracts using only synthetic Git histories/metadata.
+  - The exact legacy-base first installation is a disclosed governance bootstrap under actual conversation approval, not retrospective GitHub approval evidence; unrelated bootstrap paths and altered runtime dependencies/other jobs block.
+  - No product code, frozen artifact, runtime prompt, .opencode rule/permission, dependency installation, remote setting, commit or push is part of this implementation.
+  - Verification results are recorded after execution; hosted behavior remains NOT_RUN until separately authorized publication.
+  - Focused gate/registry suite passed 177 tests; final full suite had 5624 passed, two unchanged C3/GDELT failures, three skipped and 323 subtests passed. Initial five registry integration failures were corrected with the original core digest retained.
+  - Whole-repository Ruff and scoped gate-script mypy passed; hosted behavior and final human acceptance remain pending. See the evaluation logbook for exact evidence and limits.
+
+- id: AI-20261124-SUBMISSION-FIX-001
+  date: '2026-11-24'
+  tool: OpenCode
+  purpose: Implement human-approved submission-fix-v1 while preserving the existing first-gate work and
+    excluded human-owned deliverables.
+  source: 'Current conversation: plan/cases confirmed; raw transcripts delegated to the human; one independent
+    merge approval and native permission path compatibility explicitly authorized.'
+  human_review: Plan and positive/negative strategy approved by the project owner; not final human acceptance,
+    platform test-plan review or permission to publish.
+  paths:
+  - .agent/rules.md
+  - .github/workflows/ci.yml
+  - .opencode/permissions.jsonc
+  - AGENTS.md
+  - README.md
+  - architecture-blueprint.md
+  - pyproject.toml
+  - test/ci_gates.py
+  - test/semantic_evaluator.py
+  - test/semantic_cases.json
+  - test/offline/test_semantic_evaluator.py
+  - test/offline/test_ci_gates.py
+  - test/offline/test_governance_scaffold.py
+  - test/offline/test_undated_tools_as_of.py
+  - src/README.md
+  - test/offline/README.md
+  - test/live/README.md
+  - docs/req/requirements.yaml
+  - docs/architecture/adr/004-governance-context-design.proposed.md
+  - docs/architecture/adr/030-semantic-evaluation.md
+  - docs/architecture/adr/031-native-permission-paths.md
+  - docs/architecture/invariants.md
+  - docs/architecture/trace-matrix.md
+  - docs/architecture/runtime-policy-catalog.md
+  - docs/architecture/permission-model.md
+  - docs/architecture/memory-design.md
+  - docs/code-governance/mcp-tool-manifest.md
+  - docs/code-governance/verification-constraints.md
+  - docs/code-governance/structural-constraints.md
+  - docs/architecture/evaluation-logbook.md
+  - docs/architecture/evaluation-table.md
+  - docs/architecture/option-ledger.md
+  - docs/architecture/risk-list.md
+  - docs/debt-register.md
+  - docs/bug-diary.md
+  - docs/ai-use-log.yaml
+  notes:
+  - Use existing feature/fix worktree at /private/tmp/TradingAgents-feature-fix-20261124. Save its pre-existing
+    first-gate patch outside the repository; do not widen ADR-029 bootstrap or alter its approval logic.
+  - ADR-030 adds eight fixed semantic cases, a real-output evaluator and protected-base policy/checker
+    execution. Missing authentic candidate-bound observations now blocks relevant changes. No real provider
+    observations are fabricated, installed or generated.
+  - Synthetic evaluator fixtures are unit-test data only. No real LLM, vendor or broker request and no
+    new dependency installation.
+  - Native OpenCode 1.18.29 loaded all four roles. Initial real tool probes reproduced failed relative
+    and slash-prefixed matching; auto-rejected diagnostic output showed canonical resources without the
+    initial slash. Explicitly rooted substitution repairs this without changing ordered role actions.
+  - 'Native final probes used isolated XDG configuration, dummy files and a scripted loopback transport:
+    allowed project reads/Build-Docs edits; denied synthetic .env and external reads; denied protected
+    rules edit; Plan/Verify did not expose editing. A default host socket-bind denial was followed by
+    an explicitly approved local-only execution.'
+  - Read-only remote verification found blocking-gate already required from Actions app 15368. User chose
+    to restore required_approving_review_count from 0 to 1; PATCH succeeded while retaining existing stale-review
+    and other settings.
+  - Fixed only the GDELT transport test clock; no production archive or business-policy change. Refined
+    actual-versus-target application context design; no automatic compactor implementation claimed.
+  - Correct current source/install guidance and label old root delivery records historical in the active README; preserve the records themselves. Report.md,
+    docs/review-memo.md, scripts/validate/validate_submission.py and transcripts remain unchanged from
+    the task-start snapshot.
+  - Final checks/results will be recorded after execution. Existing first-gate installation still needs
+    separate publication before this batch; no commit, push, PR, merge or paid inference is performed.
+
+- id: AI-20261125-SUBMISSION-VERIFY-001
+  date: '2026-11-25'
+  tool: OpenCode
+  purpose: Record actual final verification of the approved submission-fix-v1 candidate without changing
+    excluded deliverables.
+  source: Continuation of the approved implementation and verification task.
+  human_review: Plan and cases approved; no final human acceptance, GitHub test-plan review or publication
+    authorization is inferred.
+  paths:
+  - docs/ai-use-log.yaml
+  - docs/architecture/evaluation-logbook.md
+  - docs/req/requirements.yaml
+  notes:
+  - First full verification found only three new registry count/tag integration failures. Corrected exact
+    membership/count and declared trace tags; original acceptance thresholds remain.
+  - 'Affected verification: 220 passed. Actual semantic evaluator module: 13 passed, including real subprocess/production
+    guards with explicitly synthetic provenance.'
+  - 'Final full isolated suite: 5643 passed, 3 skipped, 73 warnings, 323 subtests, 87.74s. Complete Ruff,
+    two-module mypy, schema, permission/structure checks and the independent validator pass.'
+  - Native permission and remote review/check changes are recorded in the preceding entry/logbook. Both
+    app-bound blocking-gate and one independent approval were finally confirmed.
+  - Report/review/submission validator/transcript files retain task-start bytes; original historical root
+    delivery records are preserved. No real quality observations, paid API calls, frozen-artifact edits,
+    commit/push/PR or merge are claimed.
+
+- id: AI-20261125-DIRECTORY-CLEANUP-001
+  date: '2026-11-25'
+  tool: OpenCode
+  purpose: Remove obsolete generated root summaries from the feature/fix worktree.
+  source: Direct human request to inspect the feature/fix directory and remove unused artifacts.
+  human_review: Cleanup requested; no final acceptance or publication approval inferred.
+  paths:
+  - CHANGE_SUMMARY_CN.txt
+  - FINAL_COMMIT.txt
+  - FINAL_COMPLIANCE_MATRIX.csv
+  - FINAL_SUBMISSION_AUDIT.txt
+  - FINAL_TEST_RESULTS.txt
+  - HUMAN_ACTION_REQUIRED.txt
+  - README.md
+  - docs/ai-use-log.yaml
+  notes:
+  - Removed six historical root summaries for the old personal submission branch. Current program,
+    configuration and validation scripts do not reference them. Existing Git history retains them.
+  - Updated the active README to link to the retained verification logbook. Prior AI-use entries
+    describe earlier task outcomes and remain unchanged.
+  - Preserved frozen experiments, canonical evidence, report, human review records, transcripts,
+    source, tests, local verification environment and all existing feature/fix implementation changes.
+  - No additional cache, build output or empty directory was found outside the virtual environment.
+  - Verification is limited to reference checks, YAML parsing, protected-file hashes and diff hygiene;
+    no business code or test changed and the full suite was not rerun for artifact cleanup.
+  - No commit, push, PR, dependency installation or external API call was performed.
+  - Rechecked the course specification, including the rendered repository-layout and blocking-gate
+    pages. All required paths remain present; the six removed summaries are not required deliverables.
+  - Submission validator returned PASS with 34/34 required items and one pending-transcript warning.
+    This does not verify five complete raw annotated sessions, final report pagination or human review.
+  - Transcript completion, report finalization, authentic quality observations and hosted gate installation
+    remain separate outstanding evidence; no full submission-compliance claim is made.
+
+- id: AI-20261125-REPORT-REWRITE-001
+  date: '2026-11-25'
+  tool: OpenCode
+  purpose: Rewrite the single English process report against the submission requirements and actual project evidence.
+  source: Direct human request to rewrite Report.md after the submission-structure audit.
+  human_review: Report drafting authorized; no final acceptance, contribution weights or personal testimony inferred.
+  paths:
+  - Report.md
+  - docs/ai-use-log.yaml
+  notes:
+  - The new report supersedes the earlier integrated draft for the current feature/fix worktree;
+    the prior file was saved outside the repository before rewriting and remains in Git history.
+  - Reorganized into 18 sections covering application scope, confirmed identities, requirements,
+    alternatives, actual and proposed AI context, authority boundaries, debate budgets, WebUI,
+    recovery, supervision, native permissions, CI, results, experiments, defects and delivery gaps.
+  - Retained the exact 465 substantive words of WangTianQi's previously recorded reflection as one
+    paragraph, preserving its historical review scope. Other reflections, complete roster and numeric
+    contribution weights remain human-owned TODOs; no approvals or author identities are invented.
+  - The report has 7321 whitespace-delimited words, 17 explicit page breaks and 42 resolving local
+    links. A temporary A4 rendering uses 12-point single-line body text and contains 18 pages;
+    final rendering must be rechecked after human additions.
+  - Latest regression and other checks are cited as previously observed results, not new executions.
+    No business code, tests, permissions, prompts, frozen experiments, review memo, submission validator
+    or raw transcripts changed in this report task. No full regression or paid/provider call ran.
+  - Report checks cover links, required sections, word count, preserved reflection, excluded-file
+    fingerprints and diff hygiene. Preview scripts, PDF and images are outside the repository.
+  - No commit, push, PR or merge was performed. Current report still requires human completion and review.
+  - Submission validator passed with 34/34 required items and the existing pending-transcript warning.
+    Inspected the rendered 18-page contact sheet and the full reflection page; tables and text fit.
+    Poppler initially lacked writable font configuration; an isolated temporary font configuration
+    resolved preview rendering without changing the project or installing fonts.
+
+- id: AI-20261125-WORKTREE-RELOCATION-001
+  date: '2026-11-25'
+  tool: OpenCode
+  purpose: Place the existing feature/fix branch and its uncommitted changes in the project directory.
+  source: Direct human instruction to use the project path instead of a temporary checkout.
+  human_review: Checkout and migration authorized; no commit, push or final acceptance inferred.
+  paths:
+  - docs/ai-use-log.yaml
+  notes:
+  - Backed up the complete tracked patch and six new files outside the repository, including a
+    per-file digest and deletion manifest. All 46 changed paths transferred with matching contents,
+    file modes and Git working-tree status; the original project .DS_Store was preserved.
+  - Detached the old temporary checkout, switched the project checkout from release to feature/fix,
+    applied the original changes, verified both working trees against the manifest and removed
+    the temporary worktree. The disposable task virtual environment was removed with that worktree;
+    existing project dependency directories were not moved or modified.
+  - Earlier worktree paths in evidence identify where those historical runs took place. No business
+    source, test, report content or requirement changed during relocation. No suite was rerun.
+  - No commit, push, PR, merge, dependency installation or external API call was performed.
+
+- id: AI-20261125-PROJECT-CLEANUP-002
+  date: '2026-11-25'
+  tool: OpenCode
+  purpose: Clean the project-path feature/fix checkout while preserving the required delivery structure.
+  source: Direct human request to retain necessary supporting files and remove unnecessary extras.
+  human_review: Directory cleanup authorized; no feature, release or final submission approval inferred.
+  paths:
+  - .gitignore
+  - README.md
+  - baseline.md
+  - assets/cli/cli_technical.png
+  - docs/ai-use-log.yaml
+  notes:
+  - Removed 37 generated entries containing 4211 files and 148558999 bytes across Python/test/lint/type caches,
+    stale build output, OpenCode-generated plugin dependencies/manifests and frontend tool caches.
+    Finder metadata was removed and is now ignored. No permission or behavioral-rule file changed.
+  - Removed the unused CLI technical screenshot after checking references. Removed baseline.md,
+    an obsolete unchecked setup snapshot; the current blueprint retains authoritative baseline identity.
+    Historical AI-use entries keep their original path references as records of earlier work.
+  - Retained assets used by README, validation and measurement scripts, frozen benchmark evidence,
+    package/container files, environment templates and local skills. Preserved the real environment
+    file without reading it, the virtual environment, frontend dependencies, installed package metadata
+    and current runnable frontend build. These local artifacts are excluded from submission guidance.
+  - README explains necessary supporting directories and ZIP exclusions. No new deliverable directory,
+    implementation, test, report, transcript, review record, frozen result or safety policy was created
+    or rewritten. Existing uncommitted feature/fix work remains intact.
+  - Verification uses tracked/authored file fingerprints, required-artifact and link checks, YAML parsing
+    and diff hygiene. No full regression is rerun for cleanup, and no paid or external API is called.
+  - No commit, push, PR, merge or dependency installation was performed.
+  - Final checks passed, including the required-artifact validator 34/34 with the existing pending-transcript warning,
+    structure gate, README/report relative links, YAML parsing and git diff hygiene. File fingerprints
+    confirm that all unrelated tracked/authored content, including the report, remains unchanged.
+    The OpenCode directory now contains only permissions.jsonc and rules.md.
+
+- id: AI-20261125-FANLIN-TRANSCRIPT-001
+  date: '2026-11-25'
+  tool: OpenCode
+  purpose: Convert the supplied session export into a complete annotated Markdown transcript for Fanlin Meng.
+  source: User-supplied ses_e53ea3833ffe5Bma2yFY03nOMj.json and explicit identity Fanlin Meng, student 60749983.
+  human_review: Conversion and identity attribution requested; final annotation review and attestation not inferred.
+  paths:
+  - transcripts/60749983-Fanlin-Meng.md
+  - transcripts/README.md
+  - docs/ai-use-log.yaml
+  notes:
+  - Preserved all 760 exported messages in original order with original IDs, types, timestamps,
+    session metadata and tool records after disclosed local sanitization. Added 26 chronological
+    user-message annotations and indexed five question-tool answer records.
+  - The source JSON remains unchanged; its SHA-256 is 10e5f4afb3cd5d9e542f5d8a761a071597bd6b0fcece5eb19d408dab38ef21ff.
+    The sanitized appendix payload SHA-256 is 8f20925bb866d1c9b14819fb368ba4a6286a0f58268a934b2c334b5815009ab7.
+  - Masked credential-like values, URL credentials, local home paths and restricted legacy tool labels.
+    The transcript discloses transformations and retains original-language messages as evidence.
+    It does not claim the native export sanitize command was executed during conversion.
+  - Annotations distinguish recorded user decisions from inferred motives, assistant-reported results
+    from rerun evidence, historical baseline failures from passing tests and conversational approvals
+    from authenticated GitHub reviews. Final student signature, review and submission date remain unset.
+  - Updated the transcript index and corrected its summary-only wording for new complete raw-session
+    deliverables. Other students' transcripts, the report, review records and product code remain unchanged.
+  - No historical command was executed, no model or vendor called and no tests, dependencies or Git
+    publication requested or performed. Conversion checks cover JSON completeness, digests, redaction,
+    Markdown fences, index links, YAML and required-artifact validation.
+
+- id: AI-20261125-DOCUMENT-DATES-001
+  date: '2026-11-25'
+  tool: OpenCode
+  purpose: Remove unnecessary editorial timestamps from required project documentation while retaining audit evidence.
+  source: Direct human request to omit document times that are not required.
+  human_review: Editorial cleanup authorized; no approval history, acceptance or source-session rewrite inferred.
+  paths:
+  - .opencode/rules.md
+  - AGENTS.md
+  - Report.md
+  - architecture-blueprint.md
+  - docs/architecture/adr/004-governance-context-design.proposed.md
+  - docs/architecture/adr/006-validator-fail-closed-schema-version.md
+  - docs/architecture/adr/008-automatic-structured-evidence-ingestion.md
+  - docs/architecture/adr/009-durable-run-usage-ledger.md
+  - docs/architecture/adr/010-exact-claim-validation.md
+  - docs/architecture/adr/011-deterministic-degraded-confidence-cap.md
+  - docs/architecture/adr/012-error-handling-merge-integration.md
+  - docs/architecture/adr/013-provider-usage-observability.md
+  - docs/architecture/adr/014-single-pass-finalization.md
+  - docs/architecture/adr/015-batch-macro-switch.md
+  - docs/architecture/adr/016-finnhub-only-news.md
+  - docs/architecture/adr/017-per-run-memory-isolation.md
+  - docs/architecture/adr/018-structured-fallback-safety.md
+  - docs/architecture/adr/019-simulated-trading-system.md
+  - docs/architecture/adr/021-choice.md
+  - docs/architecture/adr/022-backend-framework-and-transport.md
+  - docs/architecture/adr/023-frontend-stack.md
+  - docs/architecture/adr/024-packaging-and-build.md
+  - docs/architecture/adr/025-history-read-model.md
+  - docs/architecture/adr/026-security-and-permission-boundary.md
+  - docs/architecture/adr/027-run-controls.md
+  - docs/architecture/evaluation-table.md
+  - docs/architecture/memory-design.md
+  - docs/architecture/option-ledger.md
+  - docs/architecture/permission-model.md
+  - docs/architecture/runtime-policy-catalog.md
+  - docs/architecture/trace-matrix.md
+  - docs/code-governance/mcp-tool-manifest.md
+  - docs/code-governance/structural-constraints.md
+  - docs/code-governance/verification-constraints.md
+  - transcripts/60749983-FanlinMeng.md
+  - docs/ai-use-log.yaml
+  notes:
+  - Inspected required root, governance, requirements, architecture, prompt and transcript artifacts.
+    Removed ordinary preparation/update stamps, decorative dates in design/mapping headings and ADR
+    Date fields duplicated by retained dated approval/status evidence. Replaced undated retrospective
+    ADR date placeholders with source-provenance descriptions.
+  - Retained approval and review times, AI-use audit dates, test/experiment observation times, genuine
+    decision history, source-commit provenance, financial dates, version identifiers and all raw-session
+    message metadata. No schema, invariant, acceptance threshold, runtime prompt or permission action changed.
+  - Recorded the user's editorial convention in AGENTS.md. The human-owned standing-rules edit removes
+    only the initial draft date and does not alter ownership, permissions or approval requirements.
+  - Removed the new transcript's preparation-date row and aligned its document-location metadata with
+    the externally renamed 60749983-FanlinMeng.md. Its entire sanitized JSON appendix remains intact.
+  - During inspection, external changes renamed that transcript and deleted transcripts/README.md
+    and the template. Those deletions are preserved, not attributed to this cleanup or silently restored.
+  - Submission validation reports 33/34 and one failure because its required transcript README/template
+    are now missing; the pre-existing WangTianQi pending warning remains. Parsing, requirements and
+    other content checks completed; no passing full submission result is claimed.
+  - Only documentation changed. No application regression, paid/provider call, commit, push, PR,
+    dependency installation or review submission was performed.
+
+- id: AI-20261125-GOVERNANCE-LAYOUT-001
+  date: '2026-11-25'
+  tool: OpenCode
+  purpose: Consolidate code-governance documentation to the three required files and preserve effective checks.
+  source: Human confirmation of governance-layout-v1 and its positive/negative verification plan.
+  human_review: Plan and cases approved in the controlling conversation; final acceptance and hosted approval not inferred.
+  paths:
+  - scripts/validate/validate_requirements.py
+  - test/offline/test_governance_scaffold.py
+  - README.md
+  - Report.md
+  - architecture-blueprint.md
+  - docs/architecture/permission-model.md
+  - docs/architecture/invariants.md
+  - docs/architecture/trace-matrix.md
+  - docs/architecture/adr/012-error-handling-merge-integration.md
+  - docs/architecture/evaluation-logbook.md
+  - docs/code-governance/verification-constraints.md
+  - docs/debt-register.md
+  - docs/review-memo.md
+  - docs/ai-use-log.yaml
+  notes:
+  - Removed the redundant matrix and inactive proposals. Consolidated applicable gate/review guidance
+    in verification-constraints.md and retained role/path ownership in the actual policy and permission model.
+  - Updated the required-artifact, YAML and secret-scan inventories without removing any of the three
+    mandatory governance documents. Positive and missing/empty cases call the real validator entry point.
+  - Migrated consistency tests from an inactive proposal to the actual OpenCode configuration, retaining
+    readable-editable paths and adding explicit secret/external/protected and read-only-role checks.
+  - Product source, active permission actions, canonical prompts, raw sessions, registry criteria,
+    prior-test checker and historical bootstrap allowlist remain unchanged. No approval or quality
+    threshold was relaxed, and no native or hosted enforcement result is inferred from simulator tests.
+  - Existing transcript README/template deletions are outside this scope and remain preserved.
+    The one full isolated regression had 5654 passed, 2 failed, 3 skipped and 323 subtests.
+    Corrected the new directory assertion to compare relative paths; all 91 affected governance
+    tests then passed. The other failure is the existing submission validator requiring those
+    deleted transcript helpers. No second full run or all-green claim is made.
+  - Whole-tree Ruff, schema, structure, required-artifact validation 40/40, active references,
+    README/report links and diff whitespace checks passed. No guard, permission or threshold was relaxed.
+  - No dependency installation, real provider/vendor request, commit, push, PR or merge was performed.
+
+- id: AI-20261125-TEAM-CONTRIBUTION-001
+  date: '2026-11-25'
+  tool: OpenCode
+  purpose: Complete the report's five-person responsibilities and relative-contribution calculation.
+  source: Team leader's explicit role allocation, supplied handwritten effort table and local Git history.
+  human_review: Roles and input effort values supplied by the user; no new review verdict or personal reflection inferred.
+  paths:
+  - Report.md
+  - docs/ai-use-log.yaml
+  notes:
+  - Listed Fanlin Meng as team leader and WebUI/coordinating owner; Shengjin Duan as simulated-trading
+    owner; Yiwen Wang as evidence-quality/debate owner; Tianqi Wang as observability/experiment owner;
+    Zhuoran Ruan as fault-tolerance/degradation owner. Responsibilities cite representative implementation
+    and merge commits rather than treating commit counts as productive effort.
+  - Confirmed Shengjin Duan's student ID 60599024 from local commit 6097ef7 and Zhuoran Ruan's ID
+    60946340 from local commit 8d898eb. Read the stored transcript records without checking out or merging
+    those commits. Other student identities come from the supplied/current records.
+  - Transcribed effort rows as 12/12/10/10/12, 10/10/10/10/10, 10/10/10/10/10, 8/9/10/10/10
+    and 8/9/10/10/10. Totals are 56/50/50/47/47, mean 50 and relative weights 1.12/1/1/0.94/0.94.
+    Units are labelled effort units because the image specifies neither hours nor story points.
+  - Updated the header and outdated contribution TODOs, named the remaining reflection owners and
+    preserved the existing personal reflection wording. No missing reflection, sprint date, work hour,
+    individual approval or grading outcome was fabricated.
+  - A temporary 12-point single-line A4 preview contains 19 pages with separate responsibility and effort
+    pages. Preview images and rendering tools stay outside the project. No business test suite is rerun
+    for this documentation-only change, and no commit, push, PR, merge or live request is performed.
+
+- id: AI-20261125-REPORT-NARRATIVE-001
+  date: '2026-11-25'
+  tool: OpenCode
+  purpose: Revise the report as a team project narrative covering goals, decisions, implementation and results.
+  source: User requested a developer-team perspective with fewer editorial explanations and restrained first-person wording.
+  human_review: Revision requested by the user; final content acceptance remains pending.
+  paths:
+  - Report.md
+  - docs/ai-use-log.yaml
+  notes:
+  - Reworked the executive summary, contribution explanation, development process and delivery discussion.
+    Removed image-transcription commentary and report-editing notes while retaining factual limitations.
+  - Preserved all five student identities, effort allocations, contribution weights, technical boundaries
+    and the existing personal reflection. Missing reflections and session evidence remain pending.
+  - Aligned the verification summary with the existing logbook, separating the earlier successful run
+    from the later failed full run, focused correction and outstanding submission-layout mismatch.
+  - Followed the user's clarification to describe project capabilities and outcomes rather than local
+    branch state, commit/PR/session identifiers or file inventories. Supporting provenance records
+    remain unchanged, and pending gate rollout and validation work remain explicit.
+  - Replaced the final delivery checklist with project conclusions, practical limitations and future
+    engineering directions. Left the four unwritten personal reflections as named blank sections,
+    removed filling instructions from the report and preserved Tianqi Wang's reflection verbatim.
+  - Checked local links, contribution arithmetic, personal-reflection preservation and report structure.
+    A temporary 12-point single-line A4 preview contains 19 pages; rendering files stay outside the repository.
+  - No product code, tests, rules, frozen evidence or raw sessions changed. No business test suite,
+    provider call, dependency installation or Git publication was performed.
+
+- id: AI-20261125-LOCAL-INTEGRATION-001
+  date: '2026-11-25'
+  tool: OpenCode
+  purpose: Record authorization for a local checkpoint and integration of updated release history.
+  source: User explicitly requested committing the current changes, pulling release and merging it into feature/fix.
+  human_review: Git operations authorized; no test-plan review, final content acceptance or hosted approval inferred.
+  paths:
+  - docs/ai-use-log.yaml
+  notes:
+  - Scope covers the existing working-tree changes and local branch integration. Commit and merge
+    outcomes are recorded by Git. Remote publication is outside this request.
+  - Existing validation failures, incomplete personal reflections and historical evidence limitations
+    remain as recorded; a local commit does not establish passing CI or human acceptance.

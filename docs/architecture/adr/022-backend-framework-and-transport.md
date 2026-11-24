@@ -1,7 +1,6 @@
 # ADR-022: Backend Framework and Event Transport
 
 - Status: **Accepted for documentation** by the human owner on 2026-11-05. Dependency approval is still required.
-- Date: 2026-11-05
 - Related requirements: `REQ-WEB-002`, `REQ-WEB-006`, `REQ-WEB-007`, `REQ-WEB-020`, `REQ-WEB-022`, `REQ-WEB-026`
 - Related ADRs: ADR-001, ADR-007
 - Related blueprint: `architecture-blueprint.md` Sections 5–8
@@ -55,7 +54,7 @@ The repository has no approved web framework or event transport. The user approv
 5. **Long polling** — higher overhead and less immediate updates.
 6. **A separate Node server** — adds a second runtime and deployment surface; the SPA is served by FastAPI instead.
 
-## Addendum — existing-core audit/comparison projections, 2026-11-20
+## Addendum — existing-core audit/comparison projections
 
 Scope follows the current user's request to fill the previously identified WebUI
 interface gaps (`web-projections-20261120-v1`). This retains FastAPI, same-origin
@@ -80,7 +79,7 @@ nor weakens the existing CSRF protected-route set.
 References: REQ-WEB-008/009/010/013/023/024/027, NFR-AUD-001,
 NFR-CMP-001/002/003, INV-WEB-001/003/004/005/011/012/014 and INV-9/10.
 
-## Addendum — local development launcher, 2026-11-20
+## Addendum — local development launcher
 
 Under the user's `web-startup-20261120-v1` authorization, add supervised local
 startup modes to the existing entry point. The backend remains one Uvicorn worker

@@ -49,7 +49,8 @@ If a task needs MCP, register the actual server/tool name, roles, inputs/outputs
 Start explicitly from the repository root:
 
 ```bash
-OPENCODE_CONFIG=.opencode/permissions.jsonc opencode --agent plan
+task_root="$(pwd -P)"
+TRADINGAGENTS_PERMISSION_ROOT="${task_root#/}" OPENCODE_CONFIG="$task_root/.opencode/permissions.jsonc" opencode --agent plan
 ```
 
 Then provide the startup instruction in `Prompt.md`. `permissions.jsonc` is not a default configuration filename; creating it does not activate it. Inspect merged rules with local `opencode --pure debug config` / `debug agent` before use, without printing credentials. Global or managed configuration can change effective permissions. Do not enable automatic approval mode.
@@ -62,7 +63,7 @@ OpenCode can recreate plugin runtime dependencies during ordinary project startu
 
 References:
 - OpenCode V1 configuration loading: https://opencode.ai/docs/config/
-- OpenCode V1 permissions: https://opencode.ai/docs/permissions/
+- OpenCode V1 permissions: https://opencode.ai/v1/docs/permissions/
 - OpenCode V2 uses a different rule format: https://opencode.ai/v2/docs/permissions
 
 This file does not claim V1/V2 compatibility. Revalidate after tool upgrades rather than treating the evolving latest remote schema as the specification for the installed version.
@@ -139,7 +140,7 @@ remains normative. The personal delivery recorded its own MCP/tooling status and
 scripts as a distinct section; it confirms that no MCP server is configured and adds the
 prohibited-tool-use and verification-status detail.
 
-Status: **established 2026-11-19**; inventory verified against the tree at base
+Status: **established**; inventory verified against the tree at base
 commit `50b2ca3` and the local OpenCode installation. This manifest lists only
 tooling that actually exists. It does not invent MCP servers.
 
@@ -213,3 +214,11 @@ anything that can reach a provider is not part of the offline gate.
 | MCP inventory empty | verified by config/file/dependency search |
 | Tool commands in §2 | verified except `opencode --version` (`NOT_VERIFIED`, `EROFS` on its log path) |
 | Permission enforcement of the tool list | `NOT_VERIFIED`; `.opencode/permissions.jsonc` is documented-only |
+
+## CI test-plan metadata reader — ADR-029
+
+This is a CI HTTP client, not a new MCP registration. It may read only GitHub PR
+and review metadata using the platform's read-only token. It neither submits a
+review nor changes GitHub rules. Normal execution exports the protected base
+checker to an isolated temporary package. No new dependency or developer-host
+permission is introduced. The documented OpenCode loading uncertainty remains.

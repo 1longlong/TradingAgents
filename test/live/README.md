@@ -1,13 +1,3 @@
-# test/live/ — pointer to opt-in live/integration tests
-
-The simulated-trading subsystem's opt-in live smoke test now lives at
-`tests/trading/live/`. This directory is a pointer, not a second test tree; live
-checks, when present, live under [`tests/`](../../tests/) and are gated by pytest
-markers. No source or test file is copied or symlinked here, and this directory
-contains no test code.
-
-Run the subsystem's live smoke test only with explicit opt-in:
-
 # Live and external-service tests
 
 External-service tests live here and require explicit network, credential and

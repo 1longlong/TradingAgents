@@ -1,7 +1,6 @@
 # ADR-006 — Governance validator fail-closed schema-version repair (subset fallback)
 
 - **Status:** **APPROVED (scoped maintenance; plan and test cases approved)**
-- **Date:** 2026-11-11
 - **Deciders:** CS5351 project (student WANG Yiwen, 60536848); Builder agent
   implementation. The human **explicitly approved this round's repair plan AND
   test cases** in the controlling conversation on 2026-11-11. That approval is a
