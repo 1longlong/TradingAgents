@@ -1,7 +1,6 @@
 # ADR-024: Package Boundary, Build Pipeline, and Packaging
 
 - Status: **Accepted for documentation** by the human owner on 2026-11-05. `pyproject.toml` and CI changes require human governance review. Under the 2026-11-21 revision in ADR-012-error-handling-merge-integration.md, merge reviews use GitHub branch protection without special markers.
-- Date: 2026-11-05
 - Related requirements: `REQ-WEB-026`, `REQ-WEB-009`
 - Related invariants: `INV-WEB-001`, `INV-WEB-015`
 - Related ADRs: ADR-001, ADR-002, ADR-003
@@ -57,7 +56,7 @@ Adding a web package inside `src/tradingagents/` would violate the structural ru
 5. Separate frontend service — rejected; adds a second process and origin/CORS complexity.
 
 
-### PR #7 CI dependency correction — 2026-11-21
+### PR #7 CI dependency correction
 
 Under the existing optional-dependency decision, regression, full-source static
 analysis and architecture/security jobs install `.[dev,web]`. The previous

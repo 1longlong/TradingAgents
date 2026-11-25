@@ -410,13 +410,11 @@ Scope, safety, or plan changes trigger **reapproval**.
 
 ## Permissions and observability
 
-- **Permissions:** a role-by-path, deny-by-default whitelist is specified in
-  `docs/architecture/permission-model.md` (Human/Planner/Builder/Verifier) and a
-  machine-readable **proposal** (not active) ships in
-  `docs/code-governance/agent-permissions-proposal.yaml`. The **existing shipped**
-  `.opencode/permissions.jsonc` is unchanged this turn, but its existence is not
-  proof it is loaded/enforced: **loading/enforcement is unverified** (RISK-006 /
-  DEBT-004). JSON-parses ≠ config-enforced.
+- **Permissions:** role/path ownership is defined in
+  `docs/architecture/permission-model.md`; `.opencode/permissions.jsonc` supplies
+  the current machine-readable Plan/Build/Verify/Docs policy. ADR-031 records
+  explicitly rooted loading and bounded native verification. Configuration
+  parsing alone does not establish enforcement for untested tools or hosts.
 - **Observability (report artifacts):** the runtime emits a gate summary
   (`0_quality/gate_summary.md`), evidence manifest (`0_quality/evidence_manifest.json`),
   debate trace (`2_research/debate_trace.json`), and run summary (`run_summary.json`),
@@ -1071,7 +1069,7 @@ identity risk is resolved (RISK-004 / DEBT-005). Remaining open items include:
 the OpenCode `permissions.jsonc` schema/enforcement against the installed
 OpenCode version (RISK-006 / DEBT-004); the degraded confidence ceiling
 (DEBT-014 — now implemented as ADR-011 Stage 4, 0.60 engineering ceiling,
-offline-verified, awaiting independent Codex review + human acceptance);
+offline-verified, awaiting independent review + human acceptance);
 automatic optional adapters (DEBT-015 / RISK-015); and the live-run
 budget-accounting basis and claim-date semantics found on 2026-11-06 (DEBT-021 /
 DEBT-022 / RISK-020 / RISK-021). This is **not** claimed to be the "only
@@ -1167,7 +1165,7 @@ envelope for malformed typed inputs without echoing submitted values, including
 nonfinite JSON numbers that cannot safely be serialized in default error detail.
 
 
-## TUI capability parity — 2026-11-20
+## TUI capability parity
 
 Scope/test plan: web-tui-parity-20261120-v1. The user approved the preceding
 capability audit recommendations, excluding language expansion and simulated
@@ -1208,7 +1206,7 @@ Direct scope authorization is recorded; no separate test-file review or final
 human acceptance is asserted.
 
 
-## Simulated-trading WebUI integration — 2026-11-21
+## Simulated-trading WebUI integration
 
 Plan/test version: web-simulation-20261121-v1. Human source: current user request
 for corresponding simulated-trading frontend, followed by explicit selection
@@ -1273,7 +1271,7 @@ schema/permissions/whitespace together only after implementation. No real
 provider calls or user runtime-state access in verification.
 
 
-## Web model defaults refinement — 2026-11-21
+## Web model defaults refinement
 
 web-model-defaults-20261121-v1 and ADR-001-choice.md supersede the W1 blanket
 lock description for provider and quick/deep model selection: environment values
@@ -1286,7 +1284,7 @@ only a non-secret provider/model baseline; stale defaults invalidate selection
 fields. Public routes and core/CLI ownership and behavior stay unchanged.
 
 
-## Backtest per-date progress — 2026-11-21
+## Backtest per-date progress
 
 web-backtest-progress-20261121-v1 / ADR-007-run-controls.md assigns generic optional
 loop observation to existing core backtest.py, and presentation state to new
@@ -1298,7 +1296,7 @@ cell/settlement status and elapsed time. The core stays independent of Web/HTTP;
 public backtest signature/results, CLI, memory and analysis semantics remain.
 
 
-## Release error-handling integration — 2026-11-21
+## Release error-handling integration
 
 Local release 9a08e08 is integrated under ADR-012-error-handling-merge-integration.md.
 The canonical src/ and test/ layout remains. New release modules keep their
@@ -1316,7 +1314,7 @@ resolution. Evidence on previous heads remains historical; merged-tree results
 are recorded separately in the evaluation logbook.
 
 
-## CI type/security contract maintenance — 2026-11-21
+## CI type/security contract maintenance
 
 ADR-012-error-handling-merge-integration.md records the user-authorized complete
 type/security repair and its negative-test strategy. Existing modules retain
@@ -1329,3 +1327,25 @@ existing two-value core/denials-output contract instead of unpacking three value
 No new core implementation, framework, dependency policy exemption, permission,
 trading policy or deterministic acceptance threshold is introduced. All CI gates
 remain active and genuine review/semantic evidence is still required.
+
+## Prior-test approval governance
+
+NFR-GOV-001 / INV-28 / ADR-029-test-plan-approval.md assign the sole gate owner
+to test/ci_gates.py, with test/offline/test_ci_gates.py as the offline contract
+suite and .github/workflows/ci.yml as the execution adapter. No product module,
+trading authority, runtime dependency or public API changes. Human Comment
+reviews bind test/design snapshots before each implementation epoch; the base
+owns policy and verifier code. First installation from ac47e1f is explicitly
+identified as a reviewed governance transition, not historical approval proof.
+
+
+## Submission maintenance integration — submission-fix-v1
+
+ADR-029 remains the prior-test approval boundary. ADR-030 owns the fixed semantic
+evaluator/cases in test/ and candidate evidence binding; relevant changes without
+real observations block. ADR-031 owns native Read/Edit root normalization with
+unchanged role rights. The current application-context layers and the explicitly
+unimplemented target compaction design are in ADR-004's 2026-11-24 addendum.
+Production source ownership, strategy, models and public API contracts do not
+change. Historical pointer directories have been superseded by real src/ and
+test/ trees; the current README is the installation/layout authority.

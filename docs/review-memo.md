@@ -28,11 +28,18 @@ For each real PR, append its URL, base/head commits, reviewer identity, review t
 
 ## GitHub review protocol
 
-Current policy, revised 2026-11-21 in ADR-012-error-handling-merge-integration.md: use ordinary human GitHub reviews and the repository's native branch protection. CI no longer requires special approval markers, a tests/design-only commit, or retrospective reconstruction of approval chronology. The compatibility `approval` command only explains this ownership and does not certify review.
+Current policy: ADR-029-test-plan-approval.md / NFR-GOV-001 / INV-28 restore an
+executable prior-test check, separately from native GitHub merge reviews. The
+human operation is Review changes → Comment with the exact two-line body in
+README.md, bound to the reviewed test/design commit. The base owns reviewer IDs
+and checker code. Each implementation epoch needs earlier matching evidence;
+final test changes also need review. Do not edit old approvals to backdate text.
 
-Continue to agree on iteration plans and tests, record authentic decisions and their scope, and update an ADR for safety-relevant changes. Reviewers assess safety and governance changes as part of their normal PR review. Never invent reviewer identities, timestamps, approvals, or model-quality evidence.
-
-A read-only protection check on 2026-11-21 confirmed one required approving review, code-owner review, stale-review dismissal, last-push approval and administrator enforcement on `release`. Required status-check contexts were empty; `blocking-gate` is not proven required by that configuration. No remote setting was changed. Dated records below describe the policy and evidence at their recorded time; obsolete marker/chronology requirements are historical, not current instructions.
+The exact first installation from ac47e1f is an explicitly authorized governance
+transition, not proof that early work had a GitHub review. Missing policy outside
+that bounded transition blocks. Only actual human decisions are records; agents
+cannot issue approval or native merge verdicts. Dated records below retain their
+original scope and describe historical policy where superseded.
 
 ## First CI adoption
 
@@ -1001,7 +1008,7 @@ guard/report/validator fixes are preserved.
   governance regressions (`TestMappedTestTraceability`) that resolve tags against
   the registry/invariants and require each requirement's OWN ID; INV-11/12/14
   stay honest.
-- `permission-model.md` aligned with `agent-permissions-proposal.yaml` (builder
+- `permission-model.md` role/path consistency checked (builder
   edit allowlist; planner execute intent vs expressible deny-all documented as a
   gap). Proposal only; active config/.github/pyproject untouched; enforcement NOT
   claimed.
@@ -1612,7 +1619,7 @@ artefact exists, that absence is stated instead of inventing one.
 | 2026-11-16 | V2/V3 batches, freezes, audits, remediation | V2 batch (7 attempts/5 valid/1 env-failed/1 invalid/1,463,791 tokens); V3 freeze `e3b5cca` and batch (18 attempts / 16 Run IDs / 15 valid / 1 environment-failed / 2 invalid / 3,067,669 tokens); V3 audits (REC-06); final remediation (REC-07) and `50b2ca3`. | `AUL-076`–`AUL-082`, `AUL-092`, `AUL-093`, `AUL-095`; `REC-05`–`REC-07`; `LOG-005`–`LOG-011` | AI-authored audit rounds with committed reports. No human reviewer. |
 
 **What remains unresolved from this period:** the pre-V2 sessions were read at
-human-prompt level; the 509 delegated OpenCode sessions and 36 `dsh` subagent
+human-prompt level; the 509 delegated OpenCode sessions and 36 archived OpenCode subagent
 streams were counted and attributed to their parents, not individually reviewed.
 Early test counts quoted from session reports are self-reports. The reason the
 three early attempts were stashed, and who operated each session, are
@@ -1635,9 +1642,9 @@ three early attempts were stashed, and who operated each session, are
 | REC-09 | Pre-RC1 review activity, 2026-10-23 → 2026-11-14 | AI auditors in session; **no committed artefact** | `PENDING_HUMAN_CONFIRMATION` |
 | REC-10 | Record re-read: log attribution and requirement gaps | AI coding agent, read-only | `PENDING_HUMAN_CONFIRMATION` |
 
-### AI evidence review (DeepSeek Harness, AI-assisted; 2026-11-21)
+### AI evidence review (OpenCode, AI-assisted; 2026-11-21)
 
-Reviewer identity: **DeepSeek Harness (AI-assisted evidence review)** — not an
+Reviewer identity: **OpenCode (AI-assisted evidence review)** — not an
 independent human auditor. Scope: re-read each REC record against the repository,
 the AI-use log, the audit artefacts and the local verification results; no paid
 run was performed and no human signature is implied. The human sign-off states
@@ -1936,8 +1943,7 @@ named test/command exist; otherwise the finding is marked `NOT_VERIFIED`.
 ## REC-09 — Pre-RC1 review activity (2026-10-23 → 2026-11-14)
 
 - **Date range:** 2026-10-23 (harness read-only audit) to 2026-11-14 (CAND-01
-  audits). Reconstructed 2026-11-21 from the AI-coding session record; see
-  `docs/ai-use-session-audit.md` §2.
+  audits). Reconstructed 2026-11-21 from the AI-coding session record.
 - **Reviewer type:** AI auditors inside the coding sessions, plus AI delegates in
   separate context. **No human reviewer.**
 - **Scope:** this record exists because the register above (`REC-01..08`) starts
@@ -1962,10 +1968,10 @@ named test/command exist; otherwise the finding is marked `NOT_VERIFIED`.
 - **Scope:** consistency between `docs/ai-use-log.yaml`, `docs/req/`, and the
   recorded sessions.
 - **Findings:**
-  - `AIU-003` attributed the V2 batch to an "OpenCode batch runner" on inference
-    alone. The `~/.dsh` store shows the V2 freeze commits were made inside a
-    DeepSeek Harness session that began at 2026-11-16 00:22; the attribution was
-    therefore wrong, not merely vague. Corrected.
+  - `AIU-003` described the V2 batch as an "OpenCode batch runner" on inference
+    alone. The external session archive links the V2 freeze commits to the
+    OpenCode session beginning at 2026-11-16 00:22. The session reference supports
+    the work chronology; it does not resolve the human Git-author identity.
   - Four shipped capabilities — the measurement harness, repeated-attempt
     telemetry integrity, the accept/revert campaign, and executed-verification
     fidelity — had no requirement ID even though each was argued for in a
@@ -2007,16 +2013,16 @@ named test/command exist; otherwise the finding is marked `NOT_VERIFIED`.
    `Plan C3`, `C3 Engine`, `dsh-agent` and `t` appear in `rc1..50b2ca3`, and the
    tree does not establish which of them are the student, which are the AI
    toolchain, and which are both (see `docs/ai-use-log.yaml`
-   `unresolved_authorship`). Partial progress, not resolution: the DeepSeek
-   Harness store shows the 2026-11-16 00:53–01:28 block was produced inside a
-   `dsh` session, and the six `dsh-agent` commits fall in it. That leaves `WTQ`,
+   `unresolved_authorship`). Partial progress, not resolution: the external session
+   archive shows the 2026-11-16 00:53–01:28 block was produced inside an archived
+   OpenCode session, and the six `dsh-agent` commits fall in it. That leaves `WTQ`,
    `Plan C3` and `C3 Engine` unexplained by any recorded session.
 6. **Pre-RC1 review activity has no committed artefact (REC-09).** Reviews
    between 2026-10-23 and 2026-11-14 exist only as session conversation. The
    delivered tree cannot reproduce them, so the review history before 2026-11-15
    is thinner than the register's REC numbering might suggest.
 7. **The session stores are local, mutable and outside the repository.** They are
-   cited by path in `docs/ai-use-log.yaml` and `docs/ai-use-session-audit.md`. A
+   cited by path in `docs/ai-use-log.yaml`. A
    reader without those files cannot re-run the reconstruction, and nothing in
    this tree proves the stores were not edited before they were read.
 
@@ -2036,8 +2042,9 @@ Open `docs/review-memo.md`, search for `PENDING_HUMAN_CONFIRMATION`, and record 
 decision for each item.
 
 - [ ] Confirm which coding sessions were personally operated, attended, or
-  delegated (OpenCode `2026-10-20 → 2026-11-15`; DeepSeek Harness
-  `2026-11-16 → 2026-11-20`). Do not rely on a commit-author string.
+  delegated (OpenCode work recorded across `2026-10-20 → 2026-11-20`, with
+  records in the primary database and external archive). Do not rely on a
+  commit-author string.
 - [ ] Read REC-01…REC-10 and mark each as accepted / rejected / needs-correction.
   No record is human-approved today.
 - [ ] Provide, or explicitly declare absent, the dated paid-run authorization for
@@ -2073,9 +2080,8 @@ decision for each item.
   imported release governance-validation job; no check is waived.
 - AI-log histories are retained in the existing entries envelope. The release
   reused AUL-020/021/022 for different events; date-qualified imported keys retain
-  `original_id`, dates, scopes and review decisions. Tool display names are
-  normalized to OpenCode under the existing human instruction; original release
-  provenance remains available at `79103c3`.
+  `original_id`, dates, scopes and review decisions. Original release provenance
+  remains available at `79103c3`.
 - `.agents/` and `demo/` remain local, untracked and unstaged. They are not merge
   deliverables. No original frontend, demo, credential file or actual user data
   was read or changed for this integration.
@@ -3185,3 +3191,72 @@ committing, pushing and submitting this repair. Publish the verified candidate
 on feature/webui with a normal push and update existing PR #7 to release.
 This supersedes the preceding implementation-phase publication limit only;
 no force push, merge, review approval or remote-protection change is authorized.
+
+## Test-plan approval gate — test-approval-v1, 2026-11-24
+
+Human authorization: the project owner explicitly approved test-approval-v1 and
+its positive/negative cases in the current side conversation, answering
+(English translation) "Approve the plan and test cases; continue implementation". The approved scope
+includes the gate, tests, existing CI review events, reviewer configuration,
+requirements/ADR/governance records, and no business code, remote protection,
+dependency installation, commit or push. This is actual conversation approval,
+not a fabricated GitHub review or final acceptance.
+
+The isolated feature/fix worktree starts at release ac47e1f. The main worktree
+remains on release. Approved cases cover allowed human COMMENT reviews before
+implementation, missing/late/edited/revoked reviews, bots/unauthorized accounts,
+wrong commits, changed tests/contracts, frontend test classification, API failure,
+pagination and workflow wiring. Full isolated regression runs once after edits;
+any inherited date-sensitive GDELT failure must remain visible.
+
+ADR-029 owns the design. NFR-GOV-001 / INV-28 register the actual new obligation.
+Normal verification uses the protected base policy/checker and GitHub metadata.
+Initial installation is a separate, explicitly reviewed governance transition
+from ac47e1f, not retrospective proof of a GitHub test-plan approval. No source
+or experiment prompt, frozen artifact, business rule or native merge permission
+is changed by this iteration.
+
+Test preparation provenance: the first authored test draft preceded the checker
+implementation and had SHA-256 ddbd678b151673594179d934042392822354200231c9c9378869e915c557a106.
+The human approved the versioned cases/strategy before those files were authored;
+this hash records file provenance, not a claim that the human separately reviewed
+that byte hash or submitted a GitHub review. Additional boundary cases refine
+the same approved scope. All fixture accounts/commits/times are synthetic.
+
+
+Implementation verification: the focused gate/registry suite passed 177 tests.
+The first full run exposed five integration failures from the new registry row;
+these were corrected without changing the original core contract digest. The
+final full run passed 5624 tests with two remaining failures in unchanged C3
+checkout-import isolation and date-sensitive GDELT behavior. Details and exact
+commands are in the evaluation logbook. Ruff and scoped gate-script mypy passed.
+The candidate remains uncommitted/unpushed; hosted checks and final human
+acceptance remain pending. No approval of this implementation is fabricated.
+
+## Governance directory consolidation — governance-layout-v1
+
+- Reviewer: human project owner in the controlling conversation.
+- Decision: execution plan and positive/negative test cases approved before changes.
+- Approval date: 2026-11-25.
+- Scope: retain the three required code-governance documents; remove the redundant
+  gate matrix and inactive permission/rule proposals; update references and the
+  artifact validator; test the actual OpenCode policy instead of the inactive proposal.
+- Approved verification: required artifacts present; missing or empty required
+  governance documents block validation; permitted project reads remain available;
+  editable Build paths remain readable; read-only roles and secret/protected-path
+  denials remain covered; one final isolated regression with no provider calls.
+- Boundaries: preserve product behavior, effective permissions, approval semantics,
+  semantic quality thresholds, canonical prompts and raw session data. No Git
+  publication, paid evaluation or final implementation acceptance is authorized.
+- Hosted test-plan review: not supplied by this conversational approval.
+
+### Governance-layout-v1 technical verification
+
+Implementation and verification are recorded in the evaluation logbook. The
+three-file layout, required-artifact validator and actual-policy tests are in
+place. Ruff, schema, structure and document validation pass; all 91 affected
+governance tests pass after correcting an absolute/relative test-path mismatch.
+The single full run recorded two failures; one was that corrected assertion,
+and one remains the pre-existing missing transcript-helper contract. No second
+full run or green-suite result is asserted. Final human acceptance is pending;
+this technical summary does not issue an APPROVE verdict or a GitHub review.

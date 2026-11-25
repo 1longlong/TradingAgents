@@ -198,15 +198,22 @@ def test_a_yfinance_failure_is_a_vendor_error_not_a_report(func, args):
     ("finnhub", ("AAPL", "2026-08-25", "2026-09-01")),
     ("gdelt", ("AAPL", "2026-08-25", "2026-09-01")),
 ])
-def test_a_news_transport_failure_is_a_vendor_error_not_a_report(adapter, args):
+def test_a_news_transport_failure_is_a_vendor_error_not_a_report(adapter, args, monkeypatch):
     """Returning the failure as text makes the router count it as an answer, so
     the chain stops and the analyst reads the error message as if it were data.
     A broken transport must be classified into the vendor-error hierarchy by the
     adapter itself, never escape as a bare exception that aborts the node."""
     import urllib.request
+    from datetime import datetime, timezone
 
     from tradingagents.dataflows import finnhub_news, gdelt_news
     from tradingagents.dataflows.errors import VendorError
+
+    # ADR-016 / NFR-DET-001: keep the fixture inside GDELT's rolling archive.
+    # This is a transport test; archive-expiry behavior has separate coverage.
+    clock = mock.Mock(wraps=datetime)
+    clock.now.return_value = datetime(2026, 9, 2, tzinfo=timezone.utc)
+    monkeypatch.setattr(gdelt_news, "datetime", clock)
 
     func = (
         finnhub_news.fetch_news_finnhub if adapter == "finnhub" else gdelt_news.get_news_gdelt

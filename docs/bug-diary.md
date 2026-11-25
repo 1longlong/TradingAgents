@@ -872,3 +872,24 @@ checked. No timestamp is stripped from reports or comparisons, no test is
 skipped/retried, and production source, business rules and CI remain unchanged.
 Actual local results are recorded in the evaluation logbook after execution;
 no remote passing run is claimed by this local repair.
+
+
+## SUBMISSION-20261124-GDELT-CLOCK — repaired test fixture
+
+The transport-error test used 2026-08-25 while the real 89-day archive boundary
+advanced past that date. GDELT correctly returned HISTORICAL_UNSUPPORTED before
+transport, so pytest did not see the expected VendorError. Reproduce with
+`pytest -q test/offline/test_undated_tools_as_of.py -k news_transport_failure`.
+Classification: date-dependent test setup, NFR-DET-001. Freeze only this test's
+GDELT clock at 2026-09-02; retain the failure assertion and production window.
+
+## SUBMISSION-20261124-NATIVE-PATHS — repaired configuration compatibility
+
+OpenCode parsed relative path allowlists but denied the intended AGENTS.md read.
+Canonical slash-prefixed patterns also failed. A local scripted transport and
+auto-rejected diagnostic request identified V1's slashless canonical resource.
+Classification: guardrail integration mismatch, NFR-SEC-001 / ADR-031. Bind only
+Read/Edit patterns to the normalized project root; keep roles and denials.
+Final native probes verify intended reads/writes and rejected secret, external
+and protected-file operations. This is bounded runtime evidence, not an OS
+sandbox proof. No real secret file was used in any probe.

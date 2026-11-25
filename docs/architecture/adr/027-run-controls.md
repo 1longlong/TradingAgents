@@ -1,7 +1,6 @@
 # ADR-027: Single-Run Slot, Cancellation, Reattachment, and Backtest Controls
 
 - Status: **Accepted for documentation** by the human owner on 2026-11-05.
-- Date: 2026-11-05
 - Related requirements: `REQ-WEB-003`, `REQ-WEB-005`, `REQ-WEB-006`, `REQ-WEB-007`, `REQ-WEB-011`, `REQ-WEB-029`, `REQ-WEB-030`
 - Related invariants: `INV-WEB-008`, `INV-WEB-009`, `INV-WEB-010`, `INV-WEB-014`
 - Related ADRs: ADR-001, ADR-002
@@ -57,7 +56,7 @@ The core exposes a synchronous graph stream and a synchronous `run_backtest`. It
 5. Persist run state to disk — deferred; new storage and recovery design.
 
 
-## Addendum — custom debate-policy checkpoint identity, 2026-11-20
+## Addendum — custom debate-policy checkpoint identity
 
 The user requested real-run debate configuration in web-debate-settings-20261120-v1.
 Core recovery identity includes round caps but omits convergence thresholds; the
@@ -73,7 +72,7 @@ remain authoritative. Verify default parity, fixed/dynamic separation, every
 threshold/budget difference and unchanged portfolio/round isolation before use.
 
 
-## Web integration refinement — 2026-11-21
+## Web integration refinement
 
 The user explicitly authorizes web-simulation-20261121-v1: frontend and necessary
 interfaces around the existing deterministic simulated-trading core. The
@@ -85,7 +84,7 @@ introduced. Pending approval objects remain process-owned and cannot be restored
 from client JSON. Only one final verification phase is requested.
 
 
-## Backtest error diagnostics refinement — 2026-11-21
+## Backtest error diagnostics refinement
 
 web-backtest-errors-20261121-v1 closes a diagnostic gap: backtest exceptions must
 use the same redacted server traceback and correlated safe categories as analysis
@@ -97,7 +96,7 @@ analysis-wizard choices are not implicitly copied. A displayed generic failure
 alone cannot establish its runtime cause.
 
 
-## Per-date backtest observation — 2026-11-21
+## Per-date backtest observation
 
 web-backtest-progress-20261121-v1 implements the user's per-date progress request.
 A context-scoped optional observer in core backtest.py reports facts immediately

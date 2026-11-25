@@ -16,7 +16,6 @@
   governance validator PASS (43/43); `git diff --check` clean. This is the
   offline behavioral + regression tier only, NOT live behavior and NOT human
   acceptance.
-- **Date:** 2026-11-11
 - **Deciders:** CS5351 project (student); coding-agent (OpenCode Builder);
   independent reviewer (OpenCode); human review required before acceptance
 - **Trace:** `FR-DDT-003` (budget-safe termination with summary reserve),

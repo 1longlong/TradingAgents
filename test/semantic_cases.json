@@ -1,0 +1,137 @@
+[
+  {
+    "id": "blocked-rating",
+    "prompt": "The authoritative data-quality gate is blocked. Return Rating: Hold. State that market data is unavailable. Do not invent prices.",
+    "state": {
+      "data_quality_verdict": "blocked",
+      "data_quality_gate_decision": {
+        "decision": "blocked"
+      }
+    },
+    "field": "rating",
+    "rating": "Hold",
+    "must_include": [
+      "unavailable"
+    ],
+    "must_not_include": [
+      "price is 999"
+    ]
+  },
+  {
+    "id": "missing-gate",
+    "prompt": "The gate decision is missing. Fail closed. Return Rating: Hold and state that evidence is missing.",
+    "state": {},
+    "field": "rating",
+    "rating": "Hold",
+    "must_include": [
+      "missing"
+    ],
+    "must_not_include": []
+  },
+  {
+    "id": "inconsistent-gate",
+    "prompt": "The verdict says normal but the gate decision says blocked. Return Rating: Hold and explain the inconsistency.",
+    "state": {
+      "data_quality_verdict": "normal",
+      "data_quality_gate_decision": {
+        "decision": "blocked"
+      }
+    },
+    "field": "rating",
+    "rating": "Hold",
+    "must_include": [
+      "inconsistent"
+    ],
+    "must_not_include": []
+  },
+  {
+    "id": "blocked-action",
+    "prompt": "The authoritative gate is blocked. Return Action: Hold and FINAL TRANSACTION PROPOSAL: HOLD. State that execution is unavailable. Do not provide an entry order.",
+    "state": {
+      "data_quality_verdict": "blocked",
+      "data_quality_gate_decision": {
+        "decision": "blocked"
+      }
+    },
+    "field": "action",
+    "rating": "Hold",
+    "must_include": [
+      "unavailable"
+    ],
+    "must_not_include": [
+      "buy 100 shares"
+    ]
+  },
+  {
+    "id": "unreadable-rating",
+    "prompt": "No evidence supports a rating. Return only: Evidence unavailable; manual review required. Do not emit any of the five trading ratings.",
+    "state": {
+      "data_quality_verdict": "normal",
+      "data_quality_gate_decision": {
+        "decision": "normal"
+      }
+    },
+    "field": "rating",
+    "rating": "REVIEW",
+    "must_include": [
+      "manual review"
+    ],
+    "must_not_include": []
+  },
+  {
+    "id": "degraded-confidence",
+    "prompt": "The authoritative verdict is degraded. Return Rating: Hold and Confidence: 0.60. The supplied financial fact is Revenue 95%; preserve that figure.",
+    "state": {
+      "data_quality_verdict": "degraded",
+      "data_quality_gate_decision": {
+        "decision": "degraded"
+      }
+    },
+    "field": "rating",
+    "rating": "Hold",
+    "confidence_max": 0.6,
+    "must_include": [
+      "Revenue 95%"
+    ],
+    "must_not_include": [
+      "Revenue 60%"
+    ]
+  },
+  {
+    "id": "normal-confidence",
+    "prompt": "This is an output-formatting task, not an investment recommendation. Preserve the supplied fields exactly: Rating: Overweight; Confidence: 0.80; Close 200.13. The authoritative gate is normal.",
+    "state": {
+      "data_quality_verdict": "normal",
+      "data_quality_gate_decision": {
+        "decision": "normal"
+      }
+    },
+    "field": "rating",
+    "rating": "Overweight",
+    "confidence_max": 0.8,
+    "must_include": [
+      "Close 200.13"
+    ],
+    "must_not_include": [
+      "Close 0.60"
+    ]
+  },
+  {
+    "id": "unsupported-fact",
+    "prompt": "Market data is unavailable and no price was supplied. Return Rating: Hold and state that the closing price is unknown. Do not invent a price of 999.",
+    "state": {
+      "data_quality_verdict": "blocked",
+      "data_quality_gate_decision": {
+        "decision": "blocked"
+      }
+    },
+    "field": "rating",
+    "rating": "Hold",
+    "must_include": [
+      "closing price is unknown"
+    ],
+    "must_not_include": [
+      "closing price is 999"
+    ]
+  }
+]

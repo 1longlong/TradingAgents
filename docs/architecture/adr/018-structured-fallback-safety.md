@@ -1,8 +1,8 @@
 # ADR-018 — Structured fallback must be legal, prompt-preserving, and markup-free
 
 **Status:** Retrospective documentation — human acceptance pending
-**Date:** Not recorded in the source material. Reconstructed from the V3 analysis and
-the remediation commits; no calendar date is asserted.
+**Provenance:** Reconstructed from the V3 analysis and
+the remediation commits.
 **Related invariants:** INV-18, INV-19, INV-26.
 
 **D2 renumbering (2026-11-21):** formerly `ADR 006`. Renumbered during the Release-first integration because the

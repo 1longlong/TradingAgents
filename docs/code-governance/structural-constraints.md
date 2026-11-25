@@ -2,7 +2,7 @@
 
 ## 1. Status and scope
 
-These constraints apply to increments on the TradingAgents v0.5.0 baseline. No WebUI requirements registry, architecture blueprint, or technical selection has been approved yet. This document neither replaces those designs nor approves a WebUI implementation.
+These constraints apply to increments on the TradingAgents v0.5.0 baseline. The existing WebUI and integrated core are the current baseline. Historical design and approval records retain their scope; this document grants no new feature approval.
 
 The current-state evidence is `pyproject.toml`, `src/tradingagents/`, `src/cli/`, and existing tests. The deleted demonstration is not a source of product requirements.
 
@@ -37,7 +37,7 @@ Place new product source under `src/`, deterministic tests under `test/offline/`
 
 ## 4. Deterministic safety boundaries
 
-The following subjects were identified from baseline code. They are not yet formally numbered invariants. Assign real IDs and traceability in the requirements and invariant registers before implementation:
+The following subjects were identified from baseline code. Their identifiers and enforcement are recorded in the current invariant and requirement registers. New changes must retain that traceability:
 
 - Preserve `REVIEW` when no rating is recognizable. Do not replace it with `Hold` or execute trades from it.
 - Do not bypass point-in-time validation or analysis-date boundaries through a presentation layer or new entry point.
@@ -144,7 +144,7 @@ use a distinct identifier series; where they restate a Release rule, the Release
 govers. `src/trading/` and `src/safety/` are real source trees, not pointer directories;
 only `test/offline/` and `test/live/` are pointer READMEs.
 
-Status: **established 2026-11-19** for the CS5351 final-submission tree (base
+Status: **established** for the CS5351 final-submission tree (base
 commit `50b2ca3`). These constraints describe the repository as it actually is,
 not an idealized layout. A constraint marked `DOCUMENTED_ONLY` has no mechanical
 check; a constraint marked `NOT_VERIFIED` has a claimed mechanism whose

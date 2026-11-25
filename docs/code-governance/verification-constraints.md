@@ -6,7 +6,7 @@ Humans must approve the iteration plan and test strategy before product implemen
 
 Only humans issue approval decisions. Changes to approved requirements, interfaces, safety boundaries, or test standards require a revision and approval of the affected scope. Do not request the same valid approval again.
 
-Plan/test agreement is a development process requirement and can be recorded in the actual conversation or review memo. CI does not require a test-only commit, special review markers, or reconstruct historical approval chronology. GitHub branch protection owns human merge review, as revised in ADR-012-error-handling-merge-integration.md on 2026-11-21. This policy supersedes contradictory review-marker requirements in historical records below.
+Plan/test agreement remains a human development requirement. The 2026-11-24 revision in ADR-029-test-plan-approval.md also verifies it in CI using a dedicated GitHub Comment review bound to the exact test/design revision. The base reviewer IDs/checker are authoritative. Every implementation epoch needs earlier matching evidence; final tests/design need a valid review. Ordinary Conversation comments and native merge approvals do not qualify. This supersedes the 2026-11-21 removal of the executable approval check without rewriting historical evidence. The exact first-install transition is disclosed as BOOTSTRAP, not a historical approval pass.
 
 ## 2. Three verification tiers
 
@@ -79,28 +79,52 @@ rejects unsupported validation keywords; it never runs registry commands.
 
 | Gate | Required before merge |
 | --- | --- |
-| Human merge review | GitHub branch protection enforces human approval; CI does not duplicate review history or special-marker checks |
+| Prior test approval | Base-owned verifier checks allowed human Comment reviews before each implementation epoch; missing/late/revoked evidence blocks |
 | Static analysis | Lint, type, and dependency checks on every commit; contract, security, API-surface, and permission checks on safety-relevant pull requests |
 | Schema | YAML passes the schema and necessary semantic checks |
-| Semantic evaluation | For prompt/model changes, absent/empty base policy reports NOT RUN; invalid/partial policies and configured evaluation failures block |
+| Semantic evaluation | For prompt/model changes, absent/empty policy or missing authentic candidate observations block; fixed-set metrics and safety thresholds must pass |
 | Regression | All previous suites pass with zero regressions |
 | AI-use log | Code/prompt changes update `docs/ai-use-log.yaml` meaningfully; touching its timestamp is insufficient |
 
-`.github/workflows/ci.yml` runs on pushes to all branches, PR updates, review submissions/edits/dismissals, and manual dispatch. The `blocking-gate` aggregation fails if any prerequisite fails, is cancelled, or is skipped. No `continue-on-error` or automatic baseline waiver is used. Unconfigured semantic evaluation completes its job with an explicit NOT RUN notice, not a model-quality pass. The former review API step and its `pull-requests: read` permission are removed; provider credentials are not exposed to PR code, and `pull_request_target` is not used.
+`.github/workflows/ci.yml` runs on pushes to all branches, PR updates, review submissions/edits/dismissals, and manual dispatch. The `blocking-gate` aggregation fails if any prerequisite fails, is cancelled, or is skipped. No `continue-on-error` or automatic baseline waiver is used. Unconfigured required semantic evaluation fails closed; documentation-only changes report NOT REQUIRED. The review job has contents/read and pull-requests/read only; its isolated checker reads GitHub review metadata and never issues approval. No write permission is added; provider credentials are not exposed to PR code, and `pull_request_target` is not used.
 
 Only PR/review events publish the merge-required `blocking-gate` status. Push and manual events report `branch-checks` and do not claim PR approval, so their results cannot satisfy the required merge gate or overwrite its review verdict. Require only the PR aggregation as the stable merge check.
 
 Configure branch protection/rulesets separately to require `blocking-gate`, human PR review, and stale-review dismissal on every integration branch. Do not permit direct pushes or reviewer bypass for protected safety/governance changes. Protect workflow/checker modifications through human review. No remote setting is implied by a local YAML file, and merge-queue integration is not configured.
 
-Use ordinary GitHub reviews under the configured branch protection instead of special markers or CI chronology checks. The current protocol and historical records are in `docs/review-memo.md`. Public API/contract compatibility is checked by the fixed contract suite and full regression; safety changes require an ADR and human review, not an invented claim of complete automatic API-surface equivalence. The compatibility `approval` command prints this ownership notice only; exit status zero is not approval evidence.
+Test-plan reviews use the two-line body and operation documented in README.md / ADR-029. GitHub supplies author IDs, reviewed commit, submittedAt and updatedAt; the later timestamp prevents edited text being backdated. A review must be on a test/design-only revision and in the PR ancestry. Python/frontend fixtures and test configuration are included. Revised test epochs are allowed only with a new review before related implementation; all earlier implementation remains checked. Native merge reviews are a distinct boundary. The CLI never treats a local approved flag as authority. Safety changes still require an ADR and genuine human review.
 
 AI-use records must add a new meaningful entry covering the exact changed code/prompt/tooling paths. Existing entries or a timestamp-only edit are insufficient. Log checks compare canonical source paths so the approved mechanical root-to-src relocation is not mistaken for a new product implementation.
 
 For runtime prompt/model changes, the semantic gate reads `[tool.tradingagents.ci.semantic_evaluation]` from the PR base. That approved policy must specify `evaluator`, `dataset`, and numeric `thresholds`. The evaluator and dataset must already exist unchanged on that base. The evaluator runs against candidate `src/`, outside the checkout, with Python socket calls disabled and credential-like environment variables removed. A fresh report must contain the exact dataset SHA-256, sample count, and every required metric.
 
-An absent or empty base policy reports NOT RUN without blocking. A partial or invalid policy blocks; changes without runtime prompt/model impact report NOT REQUIRED. No real semantic evaluator or product quality thresholds have been invented, and the current policy remains empty. Establish a real evaluator and dataset in a separately reviewed base change before relying on model-quality evaluation.
+ADR-030 / NFR-GOV-002 / INV-29 supersede the historical empty-policy waiver. A required evaluation without a base-owned evaluator, fixed dataset, observations path and thresholds blocks. Establish those artifacts through a separately reviewed installation before runtime prompt/model changes. The existing prior-test gate installation is a separate change; do not enlarge its bootstrap exception.
 
-The configured evaluator accepts `--dataset PATH --output PATH`; its dataset is a nonempty JSON list. Its JSON report contains `dataset_sha256`, `sample_count`, and `metrics`. Thresholds specify `comparison` (`eq`, `lte`, `gte`) and a finite numeric `threshold`. Configured but missing evaluators, altered datasets, empty reports, nonfinite metrics, and failed thresholds still block the change. Candidate policy edits cannot disable evaluation already configured on the base. Fixed prompt-contract tests are additional checks, not a substitute for model-quality evaluation.
+The evaluator accepts `--dataset PATH --observations PATH --source-sha256 HASH --output PATH`. Its fixed set is a nonempty JSON list. Authentic candidate observations name the provider, quick/deep models and real run provenance, with the exact dataset and source SHA-256 and one output per case. No authentic observations are supplied by this implementation; synthetic test fixtures never count as model evidence. Missing observations, stale hashes, invalid/duplicate/missing cases, missing reports, nonfinite metrics and failed thresholds block.
+
+The configured metrics are constrained task accuracy = 1.0, specified fact fidelity = 1.0 and production output-safety escapes = 0. They do not measure investment returns or general model quality. The isolated evaluator runs the real candidate rating/output/confidence code without credentials or Python network calls. Genuine provider-run provenance remains human-reviewed. Fixed prompt-contract tests are additional checks, not a replacement for actual candidate outputs.
+
+
+### CI ownership and review record
+
+The executable workflow is `.github/workflows/ci.yml`; `test/ci_gates.py` owns
+repository schema, structure, role/path, prior-test approval, AI-use and semantic
+checks. This document is the consolidated gate specification. Presence and
+secret-scan inventories in `scripts/validate/validate_requirements.py` require
+all three code-governance files; missing or empty files block validation.
+
+Before merge, the human review memo must cover requirement alignment,
+architecture and authority boundaries, code and test quality, security,
+efficiency and operational metadata. Record the scoped changes, actual commands
+and results, unrun checks, remaining risks and a human verdict of APPROVE,
+CHANGES REQUIRED or REJECT. A technical check cannot issue that verdict.
+Retain the prior-test approval chronology independently of the final merge review.
+
+The development permission source is `.opencode/permissions.jsonc`, with its
+role/path explanation in `docs/architecture/permission-model.md`. Consistency
+tests inspect that actual configuration, require readable editable paths and
+check permitted project reads and denied secret/protected operations. They
+complement native verification and do not imply universal sandbox enforcement.
 
 ## 7. Baseline failures and honest reporting
 
@@ -268,7 +292,7 @@ verification. In the completed integration tree (`94755cf`) the full suite is
 **5,132 passed / 3 skipped**, both validators PASS and `ruff check .` PASS; the
 `NOT_RUN` value below is historical.
 
-Status: **established 2026-11-19** for the CS5351 final-submission tree (base
+Status: **established** for the CS5351 final-submission tree (base
 commit `50b2ca3`). This document defines how verification must be performed and
 what evidence must be retained. It records both what was run and what failed;
 a command that runs but fails is still a result, not a pass.

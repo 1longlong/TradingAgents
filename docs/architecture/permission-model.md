@@ -1,3 +1,16 @@
+> Native permission verification update — submission-fix-v1:
+> OpenCode 1.18.29 loaded all four project roles. Real native operations against
+> a loopback scripted transport verified allowed project reads, Build/Docs
+> writes, rejected synthetic .env reads, rejected external reads and rejected
+> Build edits of the protected rules file. Plan/Verify did not expose edit tools.
+> Earlier NOT_VERIFIED descriptions below are historical for those tested cases,
+> not a claim of an OS sandbox or proof of every command/tool/host combination.
+>
+> The defect was path-format matching: V1 Read/Edit resources use the canonical
+> absolute path without its initial slash. Set TRADINGAGENTS_PERMISSION_ROOT to
+> that normalized project root and explicitly load permissions.jsonc (ADR-031).
+> Rights, protected paths and external-directory denial remain unchanged.
+
 # TradingAgents WebUI Permission Model
 
 Status: **Approved for documentation by the human owner on 2026-11-05.** Implementation still requires human review of applicable safety/governance changes. Under the 2026-11-21 CI policy revision in ADR-012-error-handling-merge-integration.md, GitHub branch protection owns merge approval; special review markers are not required. This document defines the WebUI runtime permission boundary and its relationship to the coding-agent roles. Runtime permissions are unchanged by that CI revision.
@@ -122,12 +135,10 @@ and schema expressibility are not claims about this branch's current policy.
 
 This document defines what each automated actor role is and is not permitted to
 do in this repository, **per path, deny by default**. It is the prose authority.
-The machine-readable artifacts are:
-- the on-disk `.opencode/permissions.jsonc` (broad `read`/`edit` allows;
-  **unchanged this turn**). Its mere existence is **NOT** proof it is the
-  loaded/enforced configuration — that is **UNVERIFIED**.
-- a **PROPOSAL** in `docs/code-governance/agent-permissions-proposal.yaml`
-  (role-by-path deny-by-default whitelist) that is **NOT active configuration**.
+The machine-readable role/path policy is `.opencode/permissions.jsonc`, loaded
+explicitly with the canonical launch-root binding described in README. ADR-031
+records bounded native verification of that policy. The file's presence or
+successful parsing alone does not prove host enforcement.
 
 > **Honest status:** JSON that parses is not proof that the installed OpenCode
 > version loads and enforces it. Actual runtime enforcement is **UNVERIFIED**
@@ -209,27 +220,19 @@ approval — default deny.
 
 Evidence is reported in separate pieces; none of them alone proves enforcement.
 
-- **On-disk file:** `.opencode/permissions.jsonc` exists (broad allows, not
-  path-scoped) — **unchanged this turn**. Its existence is **NOT** evidence that
-  it is the loaded/active configuration; that is **UNVERIFIED**.
-- **Proposal:** `docs/code-governance/agent-permissions-proposal.yaml` — a
-  machine-readable role-by-path deny-by-default whitelist, **NOT active**, marked
-  as such (v0.2).
-- **Expressibility gap (honest):** the inspected per-agent schema exposes a
-  single `edit` verdict and a `bash` pattern map — it has **no per-path `edit`
-  map** and **no plain `read` key**. Therefore the machine-readable
-  `expressible_permission_maps` can only approximate this path-level model: the
-  per-path edit allowlist and the read denials above are **process-enforced
-  only**. In particular the planner's read-only *execute intent* is expressible
-  only as a deny-all bash map (a prefix allowlist is not a security boundary, see
-  the shell-pattern caveat), which is a deliberate conservative mismatch, not
-  schema-enforced read-only execution. Nothing in the expressible subset proves
-  the path rules are enforced; do not describe it as verified role/path
-  enforcement.
-- **Human-only rules:** `.opencode/rules.md` is **HUMAN-ONLY** under the course
-  specification. It is **NOT edited by any agent**. Any proposed human text is in
-  `docs/code-governance/human-rules-proposal.md`, marked *awaiting WANG Yiwen
-  manual adoption*.
+- **Current configuration:** `.opencode/permissions.jsonc` declares deny-by-default
+  tool and path rules for Plan, Build, Verify and Docs. Its ordered rule actions
+  and human-owned boundaries remain authoritative.
+- **Required process controls:** role allowlists do not grant plan approval, human
+  review, permission to spend money or authorization to publish. Shell command
+  allowlists are not an operating-system sandbox.
+- **Native evidence:** ADR-031 and the evaluation logbook record OpenCode 1.18.29
+  loading and allowed/denied file operations with explicit root binding. Untested
+  tools, hosts and future versions remain unverified.
+- **Standing rules:** `.opencode/rules.md` remains human-owned. Safety or permission
+  changes require the applicable architecture decision and explicit human approval.
+- **Earlier version evidence:** the observations below retain their historical
+  scope and do not supersede the current V1 policy or ADR-031.
 - **Version evidence (separate):**
   - OpenCode **binary** version: `1.18.25` (`opencode --version`).
   - `@opencode-ai/sdk` **package** version: `1.18.25` (static type package; not
@@ -329,14 +332,14 @@ commits were produced).
 personal section reports `1.18.29`. `opencode --version` currently fails (`EROFS` opening its
 log), so the exact version is `NOT_VERIFIED` and neither number is asserted here.
 
-### 1. Coding-agent permissions (OpenCode / Codex / other assistants)
+### 1. OpenCode permissions
 
 #### Declarative
 
 | Artefact | What it declares |
 | --- | --- |
 | `AGENTS.md` | Roles, allowed/forbidden actions, approval points, frozen artifacts, definition of done, and the enforcement-status table. |
-| `.opencode/rules.md`, `.agent/rules.md` | Short restatements of `AGENTS.md` for OpenCode and other coding agents. |
+| `.opencode/rules.md`, `.agent/rules.md` | Short restatements of `AGENTS.md` for OpenCode. |
 | `.opencode/permissions.jsonc` | A `permission` object with `allow` / `ask` / `deny` rules for `edit`, `webfetch`, and `bash` patterns. |
 | `Prompt.md`, `prompts/prompt_v1.0.yaml`–`prompt_v1.3.yaml` | The static startup prompt and the four Release coding-agent startup prompts (historical v1.0–v1.2 and current v1.3; not runtime configuration). The separate Market Analyst runtime-prompt snapshots are historical exports under `prompts/archive/`. |
 
@@ -546,3 +549,12 @@ person reviewed or signed any specific run.
 | Credential audit | `token_benchmarks/live_pilot_2x2/cand01_batch_16run_v3/c3/env_credential_audit.txt` |
 | Preflight / freeze / budget / memory gates | `scripts/token_benchmark.py`; `scripts/c3_preflight_gate.py`; `scripts/c3_verify_final_freeze.py`; `tradingagents/budget_guard.py` |
 | Gate tests | `tests/test_c3_final_freeze.py`; `tests/test_c3_regressions.py`; `tests/test_budget_guard.py`; `tests/test_memory_isolation.py` |
+
+## Prior-test approval verifier — ADR-029
+
+The CI verifier reads GitHub PR/review metadata with contents/read and
+pull-requests/read only. It cannot submit reviews, merge PRs or change remote
+protection. Code and reviewer IDs are exported from the protected base into an
+isolated temporary package; candidate code is not imported under the token.
+The exact legacy-base first installation is separately disclosed and requires
+maintainer review. No OpenCode ACL or native merge permission changes here.

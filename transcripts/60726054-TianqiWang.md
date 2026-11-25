@@ -1,7 +1,7 @@
 # Student-annotated transcript — WangTianQi (60726054)
 
 > **STATUS: AI-ASSISTED; HUMAN-REVIEWED AND CONFIRMED; SIGNATURE PENDING.**
-> This file was drafted on 2026-11-21 by DeepSeek Harness (dsh) from committed
+> This file was drafted on 2026-11-21 by OpenCode from committed
 > evidence and the recorded AI-coding sessions, at the project owner's request.
 > WangTianQi has personally read and reviewed this documentation and confirmed it
 > as an accurate account of the work, with AI assistance, on 2026-11-21
@@ -17,8 +17,8 @@
 | Course | CS5351 |
 | Submission date | `PENDING_HUMAN_CONFIRMATION` (not yet supplied) |
 | Repository | `TradingAgents`; integration worktree branch `integrate/token-into-release-20261121`, base `24adf97`, merging personal feature `57b93df` (personal final code `50b2ca3`) |
-| AI tools used | **OpenCode** (2026-10-20 → 2026-11-15) and **DeepSeek Harness / dsh** (2026-11-16 → 2026-11-21), as separate coding applications. The model id `CS5351/DeepSeek-V4-Flash` is a model, not a tool. |
-| Evidence basis | `docs/ai-use-log.yaml` (`AUL-074`–`AUL-108`), `docs/ai-use-session-audit.md`, `docs/architecture/evaluation-logbook.md`, `docs/bug-diary.md`, `docs/review-memo.md`, `git log` of `2d17df8..50b2ca3`, and the recorded sessions |
+| AI coding tool | **OpenCode** for the documented work from 2026-10-20 through 2026-11-21. The model id `CS5351/DeepSeek-V4-Flash` is a model, not the coding tool. |
+| Evidence basis | `docs/ai-use-log.yaml` (`AUL-074`–`AUL-108`), `docs/architecture/evaluation-logbook.md`, `docs/bug-diary.md`, `docs/review-memo.md`, `git log` of `2d17df8..50b2ca3`, and the recorded sessions |
 
 ## How to read this draft
 
@@ -30,14 +30,14 @@
   `NOT_VERIFIED`.
 - **Failures are kept.** Rejected optimisations, invalid runs, rollbacks and
   process incidents are recorded, not smoothed over.
-- **Two tools, two periods.** OpenCode produced the work recorded from 2026-10-20 to
-  2026-11-15; DeepSeek Harness produced the 2026-11-16 freeze, the paid batches, the
-  remediation and the 2026-11-21 documentation rounds. This split is evidenced by
-  the two session stores, the commit timestamps and the commit content; it is not
-  inferred from a model name.
+- **Recorded work periods.** OpenCode assisted the feature work recorded from
+  2026-10-20 to 2026-11-15, the 2026-11-16 freeze and paid batches, the remediation
+  and the 2026-11-21 documentation rounds. Session records, commit timestamps
+  and commit content identify the work periods; model names do not identify
+  a coding application or a human author.
 - **Unresolved authorship.** Git authors `WTQ`, `Plan C3`, `C3 Engine`, `dsh-agent`
   and `t` appear in the history. Only `dsh-agent` is partly explained (the
-  2026-11-16 00:22–01:28 dsh session). `t` is git's default single-character
+  2026-11-16 00:22–01:28 archived OpenCode session). `t` is git's default single-character
   `user.name`. Do not read a commit-author string as a person's identity.
 - **No credentials.** No key, token or `.env` value appears here, and none may be
   pasted in.
@@ -504,8 +504,7 @@
   after the test-isolation fixes. The historical merged-tree statement was
   `NOT_RUN` (`DEBT-054`); the completed integration tree (`94755cf`) records
   **5,132 passed / 3 skipped**, both validators PASS and `ruff check .` PASS.
-- **Evidence links.** `AUL-094`, `AUL-104`; `0fddb9f`, `3097060`, `57b93df`;
-  personal `docs/ai-use-session-audit.md`.
+- **Evidence links.** `AUL-094`, `AUL-104`; `0fddb9f`, `3097060`, `57b93df`.
 - **Remaining doubt.** The personal governance files were introduced 2026-11-19;
   they did not govern the October/early-November work.
 - **Human confirmation.** `HUMAN_CONFIRMATION_REQUIRED — WangTianQi must confirm
@@ -523,8 +522,8 @@
   52 requirements (32 Release + 20 retrospective), 108 unique AI-use records
   after the PR #5 merge (the D1-repaired records are `AUL-106/107/108`; the
   Release PR #5 records use canonical `AUL-071/072/073`), ADR-001–ADR-019,
-  INV-1–INV-27 plus INV-TRD, the merged architecture/governance documents and
-  `docs/ai-use-session-audit.md`. D4–D6 (this round) added the review memo, bug
+  INV-1–INV-27 plus INV-TRD, and the merged architecture/governance documents.
+  D4–D6 (this round) added the review memo, bug
   diary, debt register, Report integration and this transcript draft.
 - **What was accepted / rejected / changed.** The Release-first mapping was
   accepted by the owner as the integration policy; the personal ADRs' status is
@@ -538,7 +537,7 @@
   that earlier point.
 - **Evidence links.** `docs/req/requirements.yaml`, `docs/architecture/adr/`,
   `docs/architecture/invariants.md`, `docs/ai-use-log.yaml`,
-  `docs/ai-use-session-audit.md`, `docs/review-memo.md`, `docs/bug-diary.md`,
+  `docs/review-memo.md`, `docs/bug-diary.md`,
   `docs/debt-register.md`.
 - **Remaining doubt.** The local integrated suite is green; remote CI/push, the
   student's signature, and the human review items remain outstanding.
@@ -551,7 +550,7 @@
 ## Known gaps and honesty statement
 
 - The pre-V2 sessions were read at human-prompt level. The 509 delegated OpenCode
-  sessions and 36 dsh subagent streams were counted and attributed to their parents,
+  sessions and 36 archived OpenCode subagent streams were counted and attributed to their parents,
   **not individually reviewed** (`AUL-104`).
 - Test counts quoted from session reports (114/1,178; 243 news tests; 1,607 passed)
   are **agent self-reports** and were not re-run for this transcript.

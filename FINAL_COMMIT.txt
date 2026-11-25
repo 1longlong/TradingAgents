@@ -1,6 +1,0 @@
-Base (published code): 50b2ca332a660531837d7c12e108141862651d97
-Course-deliverable commit: 0fddb9f (feat(cs5351): course submission deliverables,
-  governance and blocking CI gate)
-Branch: fix/cs5351-final-submission (local only)
-The branch head is the commit that adds the FINAL_* audit files on top of 0fddb9f;
-see `git log --oneline 50b2ca3..HEAD`.

@@ -20,7 +20,6 @@
   cases ONLY and is **not** a final human acceptance of any item. Stages 1
   (ADR-008), 2 (ADR-009), 3 (ADR-010) and 4 (this ADR) are implemented in the
   working tree.
-- **Date:** 2026-11-11
 - **Deciders:** CS5351 project (student); coding-agent (OpenCode Builder);
   independent reviewer (OpenCode); human review required before acceptance
 - **Trace:** `FR-DQG-006` (degraded-run restriction / confidence ceiling),

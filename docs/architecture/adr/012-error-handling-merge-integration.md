@@ -61,7 +61,7 @@ repository review/check requirements; no approval is authored on behalf of a
 different contributor.
 
 
-## WebUI layout integration — 2026-11-21
+## WebUI layout integration
 
 The user requested updating local release and merging it into feature/webui,
 including conflict resolution. Release 9a08e08 is imported into WebUI 977a22b.
@@ -81,7 +81,7 @@ Gate, model, trading or budget policies. Historical PR approval/verification
 records above retain their original scope and do not approve this local merge.
 
 
-## Authorized CI type/security repair — 2026-11-21
+## Authorized CI type/security repair
 
 Scope: web-ci-types-security-20261121-v1. After the CI diagnosis and explicit
 scope question, the user authorized repairing all type/security issues while
@@ -141,7 +141,7 @@ covers this necessary dependency declaration; no separate release or platform
 approval is inferred. Existing API/data semantics and tests stay authoritative.
 
 
-## Simplify CI review and evaluation policy — 2026-11-21
+## Simplify CI review and evaluation policy
 
 Scope: web-ci-policy-simple-20261121-v1. The user explicitly asked to make the
 two overly strict gates simpler after their failure modes were explained. This
@@ -188,3 +188,20 @@ Consequences: CI reflects executable automatic checks instead of impossible
 historical metadata. Human merge review remains on GitHub and is not claimed by
 a green CI result. Unconfigured evaluation is visibly unrun, not model-quality
 proof. Prior recorded failures and approvals retain their historical truth.
+
+## Required governance document layout
+
+Governance-layout-v1 consolidates the gate and review specification in
+verification-constraints.md and retains structural-constraints.md and
+mcp-tool-manifest.md as the other code-governance artifacts. Roles and path
+rights are specified by the existing permission-model.md and the actual
+.opencode/permissions.jsonc configuration. Redundant inactive proposals do not
+establish permission authority and are not required artifacts.
+
+The validator and governance tests follow that ownership: require all three
+retained documents and reject missing/empty required artifacts; check the actual
+role policy rather than an inactive proposal. Effective permissions, prior-test
+approval logic, semantic thresholds and business behavior remain unchanged.
+Reopen if consolidation loses an active constraint or makes a mandatory check
+optional. The fallback is to block verification and restore the missing contract
+in its owning artifact, not to skip the failing check.

@@ -1,7 +1,6 @@
 # ADR-026: Security and Permission Boundary
 
 - Status: **Accepted for documentation** by the human owner on 2026-11-05. Implementation requires applicable human safety review; dependency/CI/packaging changes require human governance review. Under the 2026-11-21 revision in ADR-012-error-handling-merge-integration.md, merge reviews use GitHub branch protection without special markers. Runtime security boundaries remain unchanged.
-- Date: 2026-11-05
 - Related requirements: `REQ-WEB-013`, `REQ-WEB-020`, `REQ-WEB-023`, `REQ-WEB-024`, `REQ-WEB-025`, `REQ-WEB-031`
 - Related invariants: `INV-WEB-002`, `INV-WEB-003`, `INV-WEB-004`, `INV-WEB-005`, `INV-WEB-012`, `INV-WEB-013`
 - Related blueprint: `architecture-blueprint.md` Sections 6.7, 11

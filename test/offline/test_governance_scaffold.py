@@ -10,7 +10,8 @@ real draft-2020-12 schema (the same path CI enforces); when it is absent, the
 deterministic subset fallback is exercised and the jsonschema test is skipped
 (so it is clear the real schema is only enforced where jsonschema is present).
 
-Traceability: NFR-SEC-001 (secret scan), NFR-OFF-001 (offline harness
+Traceability: NFR-SEC-001 (secret scan), NFR-GOV-001 (registry integration),
+NFR-OFF-001 (offline harness
 count-and-fail logic); also verifies the mapped-test traceability governance
 regression (tag resolution) without inventing acceptance or new IDs.
 """
@@ -18,6 +19,7 @@ regression (tag resolution) without inventing acceptance or new IDs.
 import importlib.util
 import json
 import re
+import shutil
 from pathlib import Path
 
 import pytest
@@ -466,20 +468,58 @@ class TestRequiredArtifactPresence:
             assert path.exists(), rel
             assert path.stat().st_size > 0, rel
 
-    def test_inventory_includes_current_adrs_prompt_and_proposals(self):
-        # The current v1.3 prompt, proposed ADR-004/005, and the permission/CI/
-        # human-rule PROPOSALS must be in the required-artifact inventory. Presence
-        # and parse only — this does NOT mean enforcement or implementation.
+    def test_inventory_retains_current_adrs_prompt_and_required_governance(self):
+        # REQ-WEB-026 / ADR-012: required documents remain checked after cleanup.
         req = set(validate_requirements.REQUIRED_FILES)
         for rel in (
             "prompts/prompt_v1.3.yaml",
             "docs/architecture/adr/004-governance-context-design.proposed.md",
             "docs/architecture/adr/005-blocked-output-multiline-containment.md",
-            "docs/code-governance/agent-permissions-proposal.yaml",
-            "docs/code-governance/ci-gate-matrix.md",
-            "docs/code-governance/human-rules-proposal.md",
         ):
             assert rel in req, rel
+        expected = {
+            "docs/code-governance/structural-constraints.md",
+            "docs/code-governance/verification-constraints.md",
+            "docs/code-governance/mcp-tool-manifest.md",
+        }
+        for inventory in (req, set(validate_requirements.SCAN_FILES)):
+            assert {p for p in inventory if p.startswith("docs/code-governance/")} == expected
+        assert {p.relative_to(ROOT).as_posix()
+                for p in (ROOT / "docs/code-governance").iterdir()} == expected
+
+    @pytest.fixture
+    def validator_checkout(self, tmp_path, monkeypatch):
+        # Only public required artifacts are copied; no credentials or user state.
+        for rel in validate_requirements.REQUIRED_FILES:
+            target = tmp_path / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(ROOT / rel, target)
+        monkeypatch.setattr(validate_requirements, "ROOT", tmp_path)
+        return tmp_path
+
+    def test_required_governance_documents_pass_validation(self, validator_checkout, capsys):
+        """REQ-WEB-026 / ADR-012: the actual required-artifact entry point passes."""
+        assert validate_requirements.main() == 0
+        assert "RESULT: PASS" in capsys.readouterr().out
+
+    @pytest.mark.parametrize("filename", [
+        "structural-constraints.md", "verification-constraints.md", "mcp-tool-manifest.md",
+    ])
+    @pytest.mark.parametrize("failure", ["missing", "empty"])
+    def test_missing_or_empty_required_governance_blocks(
+        self, validator_checkout, capsys, filename, failure,
+    ):
+        """REQ-WEB-026 / ADR-012: removing a required document still fails closed."""
+        rel = "docs/code-governance/" + filename
+        assert rel in validate_requirements.REQUIRED_FILES
+        path = validator_checkout / rel
+        if failure == "missing":
+            path.unlink()
+        else:
+            path.write_text("")
+        assert validate_requirements.main() == 1
+        label = "MISSING" if failure == "missing" else "EMPTY"
+        assert f"{label} artifact: {rel}" in capsys.readouterr().out
 
     def test_yaml_inventory_parses(self):
         import yaml
@@ -607,7 +647,8 @@ class TestMappedTestTraceability:
 
     def test_registry_composition_is_the_release_32_plus_retrospective_rows(self):
         # Exact composition, not just a count: every Release ID must survive and
-        # the registry must contain exactly the Release IDs plus the D1 rows.
+        # the registry must contain exactly the Release, D1, WebUI and newly
+        # approved governance rows. New rows do not become historical evidence.
         ids = _registry_ids(load_real_requirements())
         assert ids >= RELEASE_REQUIREMENT_IDS, sorted(RELEASE_REQUIREMENT_IDS - ids)
         # The PR #7 merge adds the 26 WebUI requirements to this registry.
@@ -616,7 +657,8 @@ class TestMappedTestTraceability:
         )
         web_ids = {rid for rid in ids if rid.startswith("REQ-WEB-")}
         assert len(web_ids) == 26, sorted(web_ids)
-        assert len(ids) == 78
+        assert ids == RELEASE_REQUIREMENT_IDS | D1_RETROSPECTIVE_IDS | web_ids | {"NFR-GOV-001", "NFR-GOV-002"}
+        assert len(ids) == 80
         assert len(ids & D1_RETROSPECTIVE_IDS) == 20
         assert len(web_ids) == 26
 
@@ -973,49 +1015,70 @@ class TestStrictOfflineHarness:
 
 
 @pytest.mark.unit
-class TestPermissionProposalConsistency:
-    """Proposal-only consistency (2026-11-10): read-before-edit holds.
+class TestActivePermissionConsistency:
+    """NFR-SEC-001 / ADR-031: inspect the actual configured role/path policy.
 
-    This reads the NON-ACTIVE proposal YAML and asserts every editable path is
-    also readable (excluding human-only/frozen), and that the required docs are
-    readable. It does NOT claim enforcement; the proposal's
-    ``active_configuration`` stays false.
+    These deterministic checks complement the native probes; they do not claim
+    that a simulator proves host enforcement.
     """
 
-    def _proposal(self):
-        import yaml
+    def _policy(self):
+        path = ROOT / ".opencode/permissions.jsonc"
+        return validate_requirements.parse_jsonc(path.read_text(encoding="utf-8"))
 
-        path = ROOT / "docs/code-governance/agent-permissions-proposal.yaml"
-        return yaml.safe_load(path.read_text(encoding="utf-8"))
+    def test_default_role_and_unknown_actions_fail_closed(self):
+        from test.ci_gates import permission_effect
 
-    def test_proposal_is_inactive(self):
-        assert self._proposal()["active_configuration"] is False
+        policy = self._policy()
+        assert policy["default_agent"] == "plan"
+        assert set(policy["agent"]) == {"plan", "build", "verify", "docs"}
+        for role in policy["agent"]:
+            assert permission_effect(policy, role, "unknown_tool", "unlisted") == "deny"
 
     def test_builder_edits_are_readable(self):
-        proposal = self._proposal()
-        frozen = set(proposal["always_denied"]["edit"])
-        builder = proposal["roles"]["builder"]
-        reads = builder["read"]
-        for edit in builder.get("edit", []):
-            if edit in frozen:
+        from test.ci_gates import permission_effect
+
+        policy = self._policy()
+        edits = policy["agent"]["build"]["permission"]["edit"]
+        checked = 0
+        for pattern, action in edits.items():
+            if action not in {"allow", "ask"}:
                 continue
-            covered = False
-            for rd in reads:
-                if edit == rd:
-                    covered = True
-                    break
-                if rd.endswith("/**") and edit.startswith(rd[:-3]):
-                    covered = True
-                    break
-            assert covered, f"builder edit {edit!r} is not readable by builder"
+            path = pattern.removeprefix("{env:TRADINGAGENTS_PERMISSION_ROOT}/")
+            path = path.replace("**", "permission_probe.py").replace("*", "permission_probe")
+            if permission_effect(policy, "build", "edit", path) in {"allow", "ask"}:
+                assert permission_effect(policy, "build", "read", path) in {"allow", "ask"}, path
+                checked += 1
+        assert checked > 0
 
     def test_required_docs_readable_by_all_roles(self):
-        proposal = self._proposal()
-        for role in ("planner", "builder", "verifier"):
-            reads = proposal["roles"][role]["read"]
+        from test.ci_gates import permission_effect
+
+        policy = self._policy()
+        for role in ("plan", "build", "verify", "docs"):
             for doc in (".agent/rules.md", "AGENTS.md", "architecture-blueprint.md",
                         "Prompt.md", "README.md", "Report.md"):
-                assert doc in reads, f"{role} cannot read {doc}"
+                assert permission_effect(policy, role, "read", doc) == "allow", (role, doc)
+
+    @pytest.mark.parametrize("role", ["plan", "build", "verify", "docs"])
+    def test_secret_external_and_protected_operations_are_denied(self, role):
+        from test.ci_gates import permission_effect
+
+        policy = self._policy()
+        for tool, resource in (
+            ("read", ".env"), ("read", "docs/.env"), ("read", "not-allowlisted.txt"),
+            ("edit", ".opencode/rules.md"), ("edit", ".opencode/permissions.jsonc"),
+            ("external_directory", "/outside/project/"),
+        ):
+            assert permission_effect(policy, role, tool, resource) == "deny", (role, tool, resource)
+
+    @pytest.mark.parametrize("role", ["plan", "verify"])
+    def test_read_only_roles_cannot_edit_project_files(self, role):
+        from test.ci_gates import permission_effect
+
+        policy = self._policy()
+        for path in ("src/example.py", "test/offline/test_example.py", "docs/review-memo.md"):
+            assert permission_effect(policy, role, "edit", path) == "deny", (role, path)
 
 
 @pytest.mark.unit
@@ -1060,9 +1123,9 @@ class TestUnifiedRegistryContracts:
     def test_core_acceptance_evidence_is_explicitly_historical(self):
         entries = [
             r for r in load_real_requirements()["requirements"]
-            if not r["id"].startswith("REQ-")
+            if r["id"] in RELEASE_REQUIREMENT_IDS
+            and not r["id"].startswith("REQ-")
             and "-TRD-" not in r["id"]
-            and r["id"] not in D1_RETROSPECTIVE_IDS
         ]
         assert len(entries) == 22
         for row in entries:
@@ -1129,8 +1192,8 @@ class TestUnifiedRegistryContracts:
         rows = []
         operators = {"eq": "==", "ne": "!=", "lt": "<", "lte": "<=", "gt": ">", "gte": ">="}
         for entry in load_real_requirements()["requirements"]:
-            if (entry["id"].startswith("REQ-") or "-TRD-" in entry["id"]
-                    or entry["id"] in D1_RETROSPECTIVE_IDS):
+            if (entry["id"] not in RELEASE_REQUIREMENT_IDS
+                    or entry["id"].startswith("REQ-") or "-TRD-" in entry["id"]):
                 continue
             fit = entry["fit_criteria"][0]
             verification = fit["verification"]

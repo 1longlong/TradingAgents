@@ -8,7 +8,7 @@ Extend the existing TradingAgents system with a WebUI. Preserve analysis, backte
 - Working branch: `feature/webui`, created from that baseline. Source and tests have moved to `src/`, `test/offline/`, and `test/live/`.
 - Existing stack and entry point: Python >=3.10, setuptools, LangGraph/LangChain, Typer/Rich; `tradingagents = cli.main:app`.
 - The WebUI exists under `src/tradingagents_web/`. Preserve its server/runtime, API, frontend, CLI separation, and current public contracts. The untracked `demo/` is a standalone design prototype, not a production entry point.
-- Requirements and architecture records exist for both the release core and WebUI. Preserve their original IDs, status and approval scope. The unified registry uses the WebUI-based 1.1 format with all 48 original core/WebUI requirement IDs plus 10 imported simulated-trading IDs; historical evidence and original status are retained explicitly.
+- Requirements and architecture records exist for both the release core and WebUI. Preserve their original IDs, status and approval scope. The unified registry uses format 1.1, retaining the 48 original core/WebUI IDs, 10 simulated-trading IDs and 20 token-observability IDs, plus NFR-GOV-001/002. Historical evidence and approval scopes remain explicit.
 
 Use the user's current direct instructions to determine scope, and preserve existing workspace changes. Honor explicit approval already given for the same scope without asking again. Do not infer approval for additional features, safety changes, or releases.
 
@@ -91,7 +91,7 @@ Follow the three verification tiers and six blocking gates in `docs/code-governa
 
 Existing commands include `python -m ruff check .`, `python -m pytest -q test/offline`, `python -m pytest -q test/live`, `python -m pytest -q`, import smoke checks, and `tradingagents --help`. Live and full-suite execution require the necessary external-service authorization and cost conditions. Unrun checks are not passing checks.
 
-CI defines schema checks, AI-log coverage, lint/types/dependencies, architecture/security checks, full network-isolated regression, and clean-install checks. Human merge approval belongs to GitHub branch protection; CI does not require special approval markers or historical test-only commit chronology. Plan/test agreement and authentic records remain process requirements. Runtime semantic evaluation reports NOT RUN without blocking when the base policy is absent/empty; partial or invalid configuration and configured evaluation failures block. NOT RUN is not model-quality evidence. The aggregate status is `blocking-gate`; requiring it remotely is a separate repository setting. Both local registry validators pass for the merged 1.1 format; historical results remain historical until re-verified. Repository configuration is not evidence of passing GitHub runs or enabled branch protection. See ADR-012-error-handling-merge-integration.md for the 2026-11-21 policy revision.
+CI defines schema checks, AI-log coverage, lint/types/dependencies, architecture/security checks, full network-isolated regression, and clean-install checks. ADR-029-test-plan-approval.md / NFR-GOV-001 / INV-28 add prior test approval separately from native merge approval: an allowed human submits a two-line GitHub Comment review bound to a test/design commit before implementation. Existing review events re-run verification; ordinary Conversation comments and native Approve do not issue test-plan approval. The base owns the checker/reviewer policy. Missing/late/revoked evidence and API failures block. The exact ac47e1f installation transition is disclosed separately, never as retrospective approval proof. ADR-030 / NFR-GOV-002 / INV-29 require base-owned semantic evaluation for prompt/model changes: missing policy, missing authentic candidate-bound observations, invalid reports and failed thresholds block. Unit fixtures are not real model-quality evidence. The aggregate status is blocking-gate; requiring it remotely remains a repository setting. Historical results and approvals retain their actual scope; local files alone never prove hosted enforcement or human acceptance.
 
 Record actual AI use, plan/test approvals, bugs, debt, and human review. Do not invent sessions, approval times, test results, or contributions. Update rules within one sprint of a requirements change; update before coding if current safety or correctness depends on it. Re-read critical rules and valid approvals after context compaction or recovery.
 
@@ -114,6 +114,9 @@ usage and resume-sanitization contexts as the CLI/Python path. Core invariants
 and ADRs apply alongside WebUI invariants; use full ADR filenames when the
 numeric prefixes overlap. Existing source imports and commands remain stable.
 All project documentation, instructions and code comments are English.
+Omit routine document creation/update dates and decorative date suffixes. Retain
+time information needed for approvals, review chronology, verification and
+experiment evidence, source provenance, raw sessions and business date semantics.
 
 ## Imported simulated-trading subsystem
 
@@ -150,3 +153,16 @@ preserving the personal token-observability implementation and evidence.
 - Ordinary integration work and matching regression-test maintenance are
   authorized within the approved scope; changes to safety policy,
   dependencies, or human-only files require separate human action.
+
+## Submission maintenance scope
+
+submission-fix-v1 was approved in the controlling conversation. Preserve the
+existing ADR-029 gate; its isolated first installation must precede this batch
+and is not widened. Report.md, docs/review-memo.md, submission validation and
+raw transcripts are excluded from this batch. No source business rule, frozen
+experiment or canonical prompt changes. Native permissions require the explicit
+canonical-root binding in README (ADR-031). Its bounded native probes supersede
+older NOT_VERIFIED loading/path statements only for the tested version/cases.
+Context design is specified in
+ADR-004; proposed automatic compaction is not claimed to be running. No paid
+model evaluation or Git publication is authorized by this maintenance scope.

@@ -474,3 +474,13 @@ A retry is a new run with a new request. The web layer never infers an outcome f
 - Server restart loses the in-memory run record and event buffer.
 - Decision log, run artifacts, and checkpoints remain on disk.
 - The CLI/API can resume a checkpointed run; the web does not claim cross-process recovery.
+
+
+## Context compaction boundary
+
+ADR-004's application-context design distinguishes durable state, PIT-filtered
+memory and volatile conversation text. A future compactor must preserve exact
+record IDs/date roles, gate verdicts, portfolio/checkpoint identities and
+provenance; it may not turn prose into evidence or fabricate missing values.
+Current memory/checkpoint ownership, retention and sanitization are unchanged.
+No universal token-aware compactor is installed by submission-fix-v1.

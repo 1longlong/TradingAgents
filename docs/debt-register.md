@@ -91,7 +91,7 @@ live findings; they are recorded, not fixed.
 | --- | --- | --- | --- |
 | DEBT-021 | Live debate budget accounting ignores actual provider usage. `record_call_usage` estimates time from prompt+response characters / 30 and estimates tokens from characters, instead of using provider-reported `exact_tokens` / measured `exact_seconds`. 2026-11-06 NVDA live run: Bull actual 12.72 s vs 2,171.77 estimated seconds; 18,058 reported tokens vs 16,289 estimated. The pre-call guard then refused Bear with `budget_exhausted` before any complete Bull/Bear round (0 rounds). The guard is active and safe; the accounting BASIS is the defect. | Dynamic termination ends on a mis-estimated budget in real runs; dynamic-vs-fixed cost comparison is unreliable live. | `Open (recorded)`. `TODO (60536848-WANG-Yiwen): in a separately authorized implementation round, pass provider usage + an injectable measured clock into `exact_tokens`/`exact_seconds`, keep explicitly-labelled estimates as fallback, and add complete/incomplete-round budget tests. Do NOT raise the production threshold to hide the gap.` Addressed (2026-11-10, ADR-007, offline): measured injectable clock + provider usage provenance, labelled fallback, complete/incomplete-round + provenance tests; caps NOT raised. LIVE-CONFIRMED (2026-11-10 D1, logbook 074): real Bull+Bear, one complete round, stop max_rounds_reached, measured seconds + provider tokens. REMAINING: cross-resume/failed-checkpoint budget accounting NOT solved; all-agent production totals untracked.` **2026-11-11 Stage 2 (ADR-009, offline): durable cross-resume/failed-checkpoint accounting ADDRESSED offline** via a run-scoped SQLite reservation/settlement ledger (`tradingagents/debate/usage_ledger.py`) — reservations precede calls, settlements survive a post-provider crash, resume reconciles idempotently, unknown/unresolved spend fails closed, and whole-run usage is aggregated for reporting (`tests/test_durable_usage_ledger.py` 33 passed; `tests/test_whole_run_usage.py` 10 passed; full strict-offline 1940 passed / 0 sockets, logbook 080). NOT live-confirmed; not final acceptance. |
 | DEBT-022 | Live citation allowlist does not validate claim-date semantics. In the NVDA 2026-11-06 run, Bull cited the valid close evidence ID but relabelled the `observed_at=2026-11-04` close (200.13) as "2026-11-05" in prose and in structured `new_claims`. The allowlist verifies record eligibility (known/High-or-Medium/on-or-before target), not the semantic truth of a claim's stated date/value. | A saved research report can carry a factually wrong observation date despite citing a valid ID. | **Addressed offline for typed exact claims — Stage 3 (2026-11-11, ADR-010; approved plan+tests ONLY, NOT human acceptance)**: `tradingagents/evidence/origin.py` carries versioned, evidence-ID-keyed typed origin metadata (distinct target / observation / availability / filed_at / published_at / retrieved_at roles + unit/currency/scale; the 20 locked `EvidenceRecord` fields are unchanged); `tradingagents/debate/claims.py` deterministically validates a typed `ClaimRecord` (date role/value/unit/scale) against the cited record + origin. A wrong exact date/value/unit on a valid ID no longer counts as valid new evidence, cannot create/resolve a factual conflict, and is redacted from the trusted plan/trader/final decision; the Research Manager receives a verified/rejected/unverified summary. `tests/test_exact_claim_validation.py` 48 passed + `tests/test_exact_claim_runtime.py` 9 passed; full strict-offline 2044 passed / 0 sockets (logbook 081). REMAINING (honest): only typed exact claims and common inline exact prose are deterministically validated; arbitrary natural-language semantics are NOT proven (unparseable prose stays `unverified`), and default yfinance/AV fundamentals remain undated. Independent review + human acceptance pending. Owner: `TODO (60536848-WANG-Yiwen): independent OpenCode review; human acceptance; live validation.` |
-| DEBT-023 | Evaluation debt: the full offline suite is not all-green (known date-sensitive cache failures + a network-reachability baseline), and no type-check, dependency/vulnerability, fixed semantic-eval, or diff-aware AI-use-log gates exist. The requirements-schema fallback (no `jsonschema`) enforces only a subset, not the extended `fit_criterion` conditionals. | Verification gaps could let a regression or a non-compliant requirement pass unnoticed. | `Open (recorded)`. `TODO (60536848-WANG-Yiwen): decide on the cache/network baselines; implement the CI gates in docs/code-governance/ci-gate-matrix.md (authorized round); ensure `jsonschema` is installed wherever the schema is relied on.` |
+| DEBT-023 | Evaluation debt: the full offline suite is not all-green (known date-sensitive cache failures + a network-reachability baseline), and no type-check, dependency/vulnerability, fixed semantic-eval, or diff-aware AI-use-log gates exist. The requirements-schema fallback (no `jsonschema`) enforces only a subset, not the extended `fit_criterion` conditionals. | Verification gaps could let a regression or a non-compliant requirement pass unnoticed. | `Open (recorded)`. `TODO (60536848-WANG-Yiwen): decide on the cache/network baselines; implement the CI gates defined in docs/code-governance/verification-constraints.md (authorized round); ensure `jsonschema` is installed wherever the schema is relied on.` |
 | DEBT-024 | Prompt rot: `prompts/prompt_v1.3.yaml` is authoritative in `Prompt.md`, but `.opencode/rules.md` (HUMAN-ONLY) still references `prompts/prompt_v1.2.yaml`. | An agent reading `.opencode/rules.md` sees a stale prompt version. | **Partially resolved** (2026-11-10): `prompt_v1.3.yaml` is now in the validator's `REQUIRED_FILES`/`YAML_FILES`/`SCAN_FILES` lists. The `.opencode/rules.md` stale v1.2 reference stays OPEN because that file is HUMAN-ONLY: `TODO (60536848-WANG-Yiwen): adopt the human-rules proposal to advance the reference to v1.3.` |
 | DEBT-025 | Hidden dependency / coupling: the blocked-run memory log now imports `tradingagents.agents.utils.output_guard.HOLD`, coupling `memory.py` to the guard module; the guard and `rating` share a recognizer whose grammar must stay aligned. | A future change to either module could silently break the other. | `Open (documented)`. `TODO (60536848-WANG-Yiwen): keep the shared recognizer single-sourced; cover the coupling with tests (already in test_output_guard/test_memory_log).` |
 | DEBT-026 | Agent-induced bloat (lesson): a first guard regex caused catastrophic backtracking and a descriptor cap required rework before the final single linear recognizer (logbook 067). This churn was corrected in-pass, not shipped. | Rework cost; risk of recurrence if a future agent reintroduces regex-based recognition. | `Resolved (lesson recorded)`. Prefer the single shared linear recognizer; avoid backtracking regexes. |
@@ -403,14 +403,14 @@ or record a reviewed baseline), then restore a whole-repo blocking lint job.
 ## DEBT-053 — Commit-author identities are unresolved
 
 - **Description:** git authors `WTQ`, `Plan C3`, `C3 Engine` and `t` appear in the
-  personal history. `dsh-agent` is partly explained by the DeepSeek Harness
+  personal history. `dsh-agent` is partly explained by the OpenCode
   session of 2026-11-16 00:22–01:28; the others are not named by any recorded
   session. `t` is git's default single-character `user.name`, not a person.
 - **Impact:** personal contribution attribution is uncertain; the merged tree
   must not assign those commits to a named student without evidence.
 - **Status:** `OPEN` (accepted as unresolved, not invented).
 - **Evidence:** `docs/ai-use-log.yaml` `unresolved_authorship`; `AUL-103`
-  (self-tamper record); `docs/review-memo.md` gap 5; `docs/ai-use-session-audit.md`.
+  (self-tamper record); `docs/review-memo.md` gap 5.
 - **Owner:** `PENDING_HUMAN_CONFIRMATION`.
 - **Next action:** the student either confirms the mapping or the records stay
   "unresolved".
@@ -425,7 +425,7 @@ or record a reviewed baseline), then restore a whole-repo blocking lint job.
   reconstruction; nothing in the tree proves the stores were not edited before
   they were read.
 - **Status:** `ACCEPTED` (inherent limitation of the evidence source).
-- **Evidence:** `docs/ai-use-session-audit.md` §1/§8; `docs/review-memo.md` gap 7.
+- **Evidence:** `docs/review-memo.md` gap 7.
 - **Owner:** `PENDING_HUMAN_CONFIRMATION`.
 - **Next action:** prefer git-committed artefacts for any claim that must be
   reproducible; label store-derived claims as session evidence.
@@ -521,3 +521,30 @@ enforcement. Required status contexts were empty. Maintainers must separately
 configure the aggregate status if mandatory remote CI enforcement is desired;
 this task does not change remote protection. Local edits do not update PR #7
 until a separately authorized commit and push.
+
+## Prior-test approval deployment evidence — 2026-11-24
+
+Owner: repository maintainer. Action: after an explicitly authorized publication,
+exercise a real test-only PR review and implementation epoch. Hosted behavior is
+NOT_RUN until then. The exact legacy-base installation is a human-reviewed
+bootstrap, not a reconstructed historical approval. Git committer timestamps
+cannot attest private uncommitted work; human process oversight remains necessary.
+The unrelated GDELT date-sensitive regression found during the earlier read-only
+audit is outside test-approval-v1 and must remain visible if reproduced.
+
+
+## submission-fix-v1 follow-up — 2026-11-24
+
+- Owner: repository maintainer. Authentic fixed-set candidate model observations
+  are not provided. Action: authorize a specific provider/run/budget or provide
+  genuine existing observations with exact candidate/dataset provenance; until
+  then relevant PRs block, not pass. No paid execution is implied.
+- Owner: repository maintainer. ADR-029's first installation must be published
+  separately before this batch; do not widen its bootstrap to admit unrelated
+  fixes. Commit/push/PR creation remain separately authorized actions.
+- Owner: architecture maintainer. Automatic application context compaction is
+  designed in ADR-004 but not implemented. Action: obtain a separate scoped
+  implementation/test approval before claiming enforcement.
+- Native permission loading/path-operation gaps were reproduced and repaired
+  under explicit human authorization (ADR-031); keep the host sandbox and
+  command-safety limitations visible and revalidate after OpenCode upgrades.

@@ -1562,7 +1562,7 @@ scope: Second half of the HUMAN-APPROVED 2026-11-10 repair plan (plan/test
    resolvable tag, and declares the requirement's OWN ID; INV-11/12/14 honest
    status asserted.
 
-3. permission-model.md aligned with agent-permissions-proposal.yaml: builder
+3. permission-model.md role/path consistency: builder
    edit allowlist now includes the explicitly approved documentation/validator
    paths (AGENTS.md, architecture-blueprint.md, Prompt.md, prompts/**, adr/**,
    .agent/rules.md, scripts/validate/**); planner execute intent (read-only) vs
@@ -4095,3 +4095,223 @@ No new product code, threshold, dependency, workflow, skip/retry, commit, push
 or remote setting change. No repeated suite or new GitHub passing result is
 claimed. The hosted regression remains failed until a later authorized
 publication and CI run verifies this candidate.
+
+
+## Prior-test approval gate — test-approval-v1, 2026-11-24
+
+Scope: NFR-GOV-001 / INV-28 / 029-test-plan-approval.md. The human owner
+approved the plan and positive/negative cases before implementation in the
+current conversation. No GitHub human decision or final acceptance is inferred.
+Work took place on feature/fix in an isolated worktree at release ac47e1f;
+the main worktree remains on release and was not edited.
+
+The checker verifies each implementation epoch against a dedicated, allowlisted
+human Comment review of the exact ancestor test/design commit, using server
+review times and the base-owned verifier/policy. Cases include allowed-author
+review, missing/late/edited/revoked/bot/unauthorized evidence, changed snapshots,
+Python/frontend classification, unrelated base advances, dependency/runtime
+configuration, API failure/pagination, policy removal/self-authorization, bounded
+first installation, and actual isolated workflow execution of base code.
+All Git histories and review metadata in these tests are synthetic.
+
+Verification used the existing main-worktree virtual environment; no dependency
+was installed. Pytest subprocesses preserved PATH/HOME/TMPDIR only, set
+PYTHON_DOTENV_DISABLED=1 and PYTHONDONTWRITEBYTECODE=1, and denied Python
+sockets. No real environment file, provider credentials or paid API was used.
+
+- First full run: `python -m pytest -q --disable-socket --allow-unix-socket
+  -p no:cacheprovider --tb=short`: **5614 passed, 7 failed, 3 skipped**,
+  323 subtests passed, 84.68s. Five failures exposed this iteration's registry
+  integration omissions: the new 79th row, its mapped-test traceability tag,
+  and historical-core selectors that incorrectly included the new row.
+  Corrected explicit membership/selectors and tags; the original 22-core
+  contract digest and all original requirement rows remain unchanged.
+- After those fixes and added boundary cases, focused
+  `python -m pytest -q --disable-socket --allow-unix-socket
+  -p no:cacheprovider --tb=short test/offline/test_ci_gates.py
+  test/offline/test_governance_scaffold.py`: **177 passed**, 24.36s.
+- Final full run with the same isolation/options: **5624 passed, 2 failed,
+  3 skipped**, 73 warnings, 323 subtests passed, 86.58s. Remaining failures:
+  - Existing `test_c3_final_freeze.py::TestImportRootIsolation::
+    test_the_gate_script_imports_its_own_repository`: the unchanged C3 child
+    launcher prepends the checkout root rather than src; the reused editable
+    environment resolves tradingagents to the main checkout. This is a
+    checkout/environment isolation failure, not a passing regression result.
+    Neither the launcher nor its assertion was changed or bypassed.
+  - Existing `test_undated_tools_as_of.py::
+    test_a_news_transport_failure_is_a_vendor_error_not_a_report[gdelt-args1]`:
+    fixed August/September dates now exceed the GDELT historical window, so
+    historical-unsupported returns before the expected transport exception.
+    This date-sensitive failure is outside the approved gate scope and remains
+    visible. No fixture, skip, retry, threshold or business behavior was weakened.
+  - Skips: no real DeepSeek key, disabled opt-in live trading, and absent
+    optional langchain_aws. They are not live-service passing evidence.
+- Whole-repository `python -m ruff check --no-cache .`: **PASS**.
+- Scoped `python -m mypy --follow-imports=silent
+  --cache-dir=/tmp/feature-fix-mypy test/ci_gates.py`: **PASS**, one source
+  file. No new whole-source type-check result is claimed.
+
+Hosted GitHub review/API behavior remains **NOT_RUN**, including first-install
+BOOTSTRAP. A maintainer must review the installation before publication/merge;
+BOOTSTRAP is not retrospective approval. No commit, push, PR, remote protection
+change, product source change, frozen-artifact edit or .opencode ACL/rule edit
+was made. Schema/artifact and final diff checks are recorded below after execution.
+
+Final record-only validation after updating the evidence:
+
+- `python -m test.ci_gates schema`: **PASS**.
+- `python scripts/validate/validate_requirements.py`: **PASS**, 43/43
+  required artifacts valid, no likely governance-file secrets detected.
+- Direct data comparison against release: **PASS**, all original 78 requirement
+  rows unchanged; only NFR-GOV-001 added. Original core digest remains pinned.
+- Direct candidate/base configuration comparison: **PASS**, every changed path
+  belongs to the named bootstrap installation scope, runtime dependencies and
+  all other CI jobs are unchanged, and the new AI-use entry covers all paths.
+  This is a local comparison, not execution of the hosted bootstrap verdict.
+- `git diff --check`: **PASS**. Product source/scripts, .opencode/.agent and
+  Prompt.md have no diff against release. Main checkout is still release with
+  its pre-existing untracked .DS_Store; no main-checkout edit was made.
+
+
+## submission-fix-v1 verification — 2026-11-24/25
+
+The human approved the plan/cases, delegated raw transcripts to themselves,
+authorized native permission path compatibility without broader rights, and
+chose one independent merge approval. Implementation stayed in the existing
+feature/fix worktree. Report.md, docs/review-memo.md, submission validator and
+transcript bytes remain equal to the task-start fingerprints. No business
+source, frozen experiment or canonical prompt changed.
+
+### Native permission evidence (OpenCode 1.18.29)
+
+All four roles loaded from isolated temporary XDG directories. A deterministic
+loopback OpenAI-compatible transport supplied tool calls; these were test
+fixtures, not real model inference or student project-session transcripts.
+Initial relative and slash-prefixed whitelist probes failed required reads.
+Auto-rejected diagnostic requests exposed slashless canonical resource paths.
+The explicitly rooted V1 configuration then passed the real operations:
+
+- Plan/Verify: AGENTS.md reads completed, synthetic .env and external reads
+  rejected; edit was absent from their offered tools.
+- Build: project read/edit completed, protected rules read completed, protected
+  rules edit rejected, synthetic .env and external reads rejected.
+- Docs: document read/edit completed, synthetic .env and external reads rejected.
+- Total final native operations: 16 (7 permitted, 9 denied), all expected; no
+  real secret, external provider, broker or new package install. The initial
+  host sandbox socket-bind rejection was resolved with explicit approval for
+  the local-only probe. This is bounded native-runtime evidence, not proof of
+  shell confinement, every tool or every future OpenCode release.
+
+### Remote protection
+
+Readback initially found blocking-gate already bound to Actions app 15368 and
+review count zero. The authorized review PATCH set the count to one. A later
+readback showed an empty check list; an authorized required-status PATCH
+explicitly restored the app-bound check. Final readback confirms strict=true,
+contexts=[blocking-gate], app_id=15368, required reviews=1 and enforce_admins=true.
+No force push, merge, publication, reviewer decision or extra native review
+setting was changed. One approval requires someone other than the PR author.
+
+### Local checks and observed corrections
+
+An ignored task-local .venv reuses only the already-installed dependency
+directories and adds this worktree's src. No dependency was installed/upgraded.
+The shared main editable installation is not used as the source of truth. This
+resolved the inherited C3 child-import isolation failure without touching its
+script/assertion. Test subprocesses preserve PATH/HOME/TMPDIR, clear provider
+environment, disable dotenv/bytecode and deny Python sockets.
+
+- Initial whole-tree Ruff found one new import-order issue in the GDELT test;
+  corrected only that import block. Whole-tree Ruff subsequently passes.
+- Scoped mypy found an optional comparison-operator type; explicit string
+  validation keeps malformed policy fail-closed. Recheck passes two modules.
+- Schema, permission checker and independent requirements validator pass;
+  43/43 required artifacts and no likely governance-file secrets.
+- First complete isolated regression: 5639 passed, 3 failed, 3 skipped,
+  73 warnings, 323 subtests; 87.35s. Failures were the old 79-row count and
+  missing declared NFR-GOV-002 trace tags after adding the 80th row. Corrected
+  exact membership/count/tags, preserving the original core acceptance digest.
+- Affected checker/evaluator/governance/GDELT/C3-import verification: 220 passed,
+  25.46s. The added actual evaluator subprocess/candidate-binding test then
+  passed with its complete module: 13 passed, 4.61s. Its observations are
+  explicitly synthetic unit data, never supplied as real quality evidence.
+
+No authentic test/semantic_observations.json is fabricated or supplied. Real
+provider quality and hosted execution remain NOT_RUN. Required relevant changes
+without that evidence block. Existing first-gate bootstrap cannot absorb this
+batch; install it separately, then use genuine prior approvals for subsequent
+implementation epochs. Git publication remains outside this task.
+
+
+Final regression after the explicitly recorded mapping corrections and actual
+evaluator integration case: **5643 passed, 3 skipped, 73 warnings, 323 subtests
+passed**, 87.74s, 2026-11-25. Same credential-free/socket-denied full-tree command
+as above, using the worktree-local interpreter. Skips are the real DeepSeek
+key-dependent call, opt-in live trading and optional langchain_aws. The three
+first-run failures are repaired; neither they nor prior historical failures are
+rewritten as passing attempts. No frontend/browser, live API or paid run added.
+
+Final whole-tree Ruff, two-module checker/evaluator mypy, schema, native policy
+simulator, structural checker, independent requirements validator and diff
+whitespace checks pass. README/source/offline/live Markdown links resolve. The
+first-gate approval functions retain exact task-start ASTs. Excluded files retain
+task-start hashes; historical root delivery records retain original bytes and
+are labelled historical in README. Original 78 requirement rows and thresholds
+remain untouched; only the pre-existing NFR-GOV-001 and this batch's NFR-GOV-002
+are additional. No Git publication or hosted passing result is claimed.
+
+## Governance layout verification
+
+Scope: governance-layout-v1; plan and positive/negative cases approved by the
+human project owner in the controlling conversation. Verification date:
+2026-11-25. Working directory is the project checkout on feature/fix, HEAD
+ac47e1f, with existing uncommitted work preserved.
+
+The directory now contains only structural-constraints.md,
+verification-constraints.md and mcp-tool-manifest.md. The validator inventories
+require those documents and no inactive proposals. The former proposal tests
+now check the actual OpenCode role/path policy; permission actions are unchanged.
+The historical first-install approval allowlist and approval functions remain
+unchanged. Raw session records and frozen artifacts retain their bytes.
+
+Executed checks:
+
+- `python -m ruff check --no-cache .`: PASS.
+- `python -m test.ci_gates schema`: PASS.
+- `python -m test.ci_gates structure`: PASS.
+- `python scripts/validate/validate_requirements.py`: PASS, 40/40 required
+  artifacts; no likely secrets. Three inactive supporting files were removed
+  from this inventory; all required governance artifacts remain checked.
+- README/report links resolve; no active reference to the removed documents
+  remains. Original raw-session text and the immutable bootstrap allowlist
+  retain their historical references. `git diff --check`: PASS.
+
+One full regression was executed through the project .venv interpreter:
+
+```bash
+python -B -m pytest -q --disable-socket --allow-unix-socket \
+  -p no:cacheprovider --tb=short
+```
+
+The child environment retained PATH/HOME/TMPDIR only, with TZ=UTC,
+PYTHON_DOTENV_DISABLED=1 and PYTHONDONTWRITEBYTECODE=1. No provider credentials,
+real model/vendor call or dependency installation was used.
+
+Result: **5654 passed, 2 failed, 3 skipped, 74 warnings, 323 subtests passed**,
+93.35 seconds. The new exact-directory assertion incorrectly compared absolute
+paths with relative paths. Fixed it to compare repository-relative paths while
+retaining the exact three-file expectation. The other failure is the existing
+submission-validator wrapper: transcripts/README.md and the template were
+externally deleted before this task, so that unchanged validator returns 33/34.
+Those deletions are preserved and this unrelated contract is not weakened.
+
+After the path correction, the complete affected governance module passed:
+**91 passed**, 16.96 seconds, with the same offline options. This includes valid
+artifact validation, missing/empty cases for each mandatory document and actual
+role-policy consistency/denial cases. No second full regression was run; the
+full-tree run is not reported as green. The three skips are the key-dependent
+DeepSeek test, opt-in live trading and optional langchain_aws.
+
+Full-run log: /tmp/tradingagents-governance-layout-regression.log. No browser,
+new native-permission probe, paid evaluation, Git commit/push/PR or merge was
+performed. Final human implementation acceptance and hosted CI remain unclaimed.

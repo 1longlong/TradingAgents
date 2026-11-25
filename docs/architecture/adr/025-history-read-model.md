@@ -1,7 +1,6 @@
 # ADR-025: Read-Only History and Artifact Identifiers
 
 - Status: **Accepted for documentation** by the human owner on 2026-11-05.
-- Date: 2026-11-05
 - Related requirements: `REQ-WEB-009`, `REQ-WEB-010`, `REQ-WEB-024`, `REQ-WEB-030`
 - Related invariants: `INV-WEB-004`, `INV-WEB-005`, `INV-WEB-011`
 - Related ADRs: ADR-001, ADR-006

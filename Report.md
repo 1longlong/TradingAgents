@@ -1,906 +1,353 @@
-# Report.md — Phase Progress Report and Student Reflection
-
-> **Status label (integrated draft / not final):**
-> This report merges the Release team's Phase 1–4A process report with the
-> personal Token Observability / CAND-01 report. It deliberately separates
-> **completed evidence** from **planned work**, records **historical failures and
-> limitations**, and records Section 7 as **AI-assisted text reviewed and
-> confirmed by WangTianQi on 2026-11-21**; the transcript's formal signature
-> remains pending. No submission, demo or grading claim is made. The Release team's preliminary reflection is preserved
-> below with its original first-person voice; its separate authorship is not
-> recorded in the tree.
-
-## 1. Project summary
-
-The project extends the downstream `TradingAgents` framework along three
-workstreams that are integrated in this tree but have distinct provenance:
-
-1. **Deterministic Data Quality Gate** (Release team) — a pure, LLM-free node
-   that validates the verified market snapshot before the Bull/Bear debate and
-   fails closed on missing or low-quality evidence.
-2. **Dynamic, evidence-aware debate termination** (Release team) — a
-   deterministic Debate Evaluator that stops the debate on evidence/model-conflict
-   staleness or budget exhaustion rather than always running a fixed number of
-   rounds.
-3. **Token observability and CAND-01 measurement** (personal feature, WangTianQi)
-   — per-agent/system usage attribution that never turns missing usage into zero,
-   a Single-Pass structured finalisation path behind an off-by-default switch, a
-   batch-macro ablation switch, a Finnhub-only news scope, per-run memory
-   isolation for experiments, and a frozen 2×2 measurement apparatus with
-   pre-spend gates.
-
-The Release work is the canonical baseline and is recorded in ADR-001–ADR-012 and ADR-019, and
-`FR-DQG-*`/`FR-DDT-*`/`FR-TRD-*`; the personal work is recorded retrospectively in
-ADR-013–ADR-018 and `FR-ANL-*`/`FR-OBS-*`/`FR-HAR-*`/`FR-CAM-*`/`NFR-VER-*`.
-
-## 2. Completed evidence (verified)
-
-This section reports only work whose evidence was observed. See
-`docs/architecture/evaluation-logbook.md` and `docs/architecture/evaluation-table.md`
-for per-command outcomes.
-
-### Phase 1 — Analysis
-
-- Read-only analysis of the repository; requirements frozen.
-- Deliverable: frozen requirements in `docs/req/requirements.yaml` (v1.0
-  read-only prompt `prompts/prompt_v1.0.yaml`).
-- Human review recorded in `docs/review-memo.md`.
-
-### Phase 2 — Contract / deterministic gate core
-
-- Implemented the typed, JSON-safe evidence model and the deterministic gate
-  core under `tradingagents/evidence/` (models, adapter, validate, policy,
-  quality, gate).
-- Decimal-math cleanup applied (quantized `Decimal`, no float noise).
-- Human review recorded.
-
-### Phase 3A — Gate graph integration
-
-- Added the dependency-injectable `data_quality_gate` node and the gate-aware
-  router (`should_continue_after_data_gate`).
-- Added gate-aware structured `AgentState` fields.
-- Human review recorded.
-
-### Phase 3B — Dynamic debate termination
-
-- Implemented the `tradingagents/debate/` package (config, models, turn, budget,
-  evidence_manifest, state, evaluator, evaluator_node).
-- Researchers' verdict gate and research-manager hold contract enforced
-  (citation allowlist from the gate manifest).
-- Human review recorded.
-
-### Phase 3B — Deterministic ConflictRecord runtime lifecycle (FR-DDT-005)
-
-- Added a pure, LLM-free conflict tracker (`tradingagents/debate/conflicts.py`)
-  that creates, observes (deduplicates/merges), resolves, and escalates
-  `ConflictRecord` objects derived **only** from the structured
-  `conflict_assertions` a `DebateTurn` carries (parsed by `turn.py` from the
-  `DEBATE_METADATA` `conflict_a` marker).
-- Conflict IDs are deterministic SHA-1 digests of `(normalized topic, kind)`;
-  evidence validation fails closed (an unknown/Low/future evidence ID never
-  creates a conflict, and a re-observation citing such an ID drops the open
-  conflict); empty evidence on a new factual/interpretive conflict does not
-  create it; a turn with no assertions contributes no conflict; action-only
-  disagreement is tracked but never blocks termination; malformed
-  assertions/state are skipped, never guessed.
-- The evaluator node persists the derived conflicts plus a safe, structured,
-  prose-free `ConflictSummary` (resolution/escalation notes and an authoritative
-  open-blocking count) to debate state, and the Research Manager injects that
-  summary safely (empty when no tracked conflict).
-- Human review requested (see `docs/review-memo.md`).
-
-### Stage 2 — Multi-category gate + report artifacts
-
-- Extended the gate with a deterministic multi-category engine
-  (`tradingagents/evidence/multi_category_gate.py`) that evaluates the one
-  critical market group plus the optional categories (fundamentals, news,
-  sentiment). Optional categories without a trustworthy structured source
-  produce an explicit deterministic unavailable/insufficient result (stable
-  reason codes; no fabricated source/date/unit; no analyst-prose parsing) and
-  may degrade — but never block — under a versioned multi-category policy,
-  while a missing/blocked market category always fails closed to `blocked`.
-- Added the shared deterministic, redacted report artifacts
-  (`tradingagents/report_artifacts.py`) wired into the CLI/API report writer
-  (`tradingagents/reporting.py`, reached by both the CLI and
-  `TradingAgentsGraph.save_reports`): `0_quality/evidence_manifest.json`,
-  `0_quality/gate_summary.md`, `2_research/debate_trace.json`,
-  `run_summary.json`, and concise `Data Quality` / `Run Summary` sections in
-  `complete_report.md`. Output is derived only from structured run state, never
-  analyst prose, and every value is passed through secret redaction. Absent
-  gate/debate state yields safe defaults, not invented values.
-- **Scoping note:** the multi-category gate is proven at the engine + test level
-  (`test_stage2_multicategory_gate.py`) and the report artifacts at the shared
-  writer level (`test_report_artifacts_stage2.py`; `test_reporting.py`). **The
-  multi-category engine is now the runtime graph default.** The LangGraph gate
-  node (`create_data_quality_gate_node`) delegates to
-  `evaluate_multi_category_gate`, evaluating the critical market category plus
-  the optional categories. Trustworthy structured optional-category evidence
-  enters **only** through the explicit `data_quality_optional_evidence` state
-  contract (a mapping of category -> serialized `EvidenceGroupQuality` dict) —
-  never parsed from analyst prose; an absent optional category yields a
-  deterministic unavailable/insufficient result that degrades under the
-  versioned policy. The market category stays fail-closed. Legacy public state
-  keys, routing behavior, deterministic run IDs, and node-factory injection are
-  preserved, and the evidence layer no longer imports the graph package
-  (circular-import removed; shared market-record construction lives in the
-  evidence adapter). RISK-009 / DEBT-009 are resolved.
-
-### Phase 4A — Deterministic offline baseline comparison (NFR-CMP-*)
-
-- Added a pure, LLM-free, network-free **comparison model/runner**
-  (`tradingagents/comparison/`): typed/validated schemas, explicit metric
-  formulas, a fail-closed replay/aggregation runner, a deterministic JSON +
-  Markdown report writer, and representative scripted fixtures (scenarios
-  D / E / F).
-- **Apples-to-apples:** both strategies are replayed over the identical case
-  identity `(ticker, target_date, evidence_snapshot_id, policy_version)` and
-  identical scripted Bull/Bear turns. A mismatch, missing partner, or duplicate
-  fails closed with `PairingError`.
-- **Derived metrics:** evidence-citation coverage from **valid** cited evidence
-  IDs (filtered through the manifest allowlist), false-strong-conclusion rate from
-  an explicit `strong_conclusion` flag plus the gate/quality outcome (never from
-  prose), measured-vs-estimated separation via the `estimated` flag, and
-  zero-denominator safety (returns `None`, never fabricates).
-- **Scenario outcomes (scripted, offline):** D — dynamic stops early on
-  `no_new_evidence`; E — dynamic **extends** to absorb a new High/Medium
-  evidence ID; F — dynamic **genuinely stops on `budget_exhausted`** (rule 2),
-  preserving the summary reserve (9000 + 8000 <= 20000) and never exceeding the
-  hard cap (the fixed baseline spends 27000 > 20000).
-- **Correction round (Phase 4A human review, 2026-10-22 → 2026-10-23):**
-  implemented before approval. A `SCORED` traceability result requires exactly
-  four non-null scores in `TRACEABILITY_DIMENSIONS` order (missing/extra/null/
-  reordered sets fail closed); a scripted input that simply runs out of rounds
-  is recorded as `input_exhausted` and is **never** a dynamic-policy early stop;
-  and the actual deterministic `stop_reason` is preserved end-to-end (per-case
-  result, per-case + aggregate JSON, and the Markdown per-case + aggregate
-  tables). Regression coverage added; **73 focused comparison tests pass** (was
-  47).
-- **Human traceability** is a documented rubric with human-entered scores;
-  every case is reported `pending` until a human scores it. No human
-  traceability scores were entered by this change.
-- A `scripts/run_phase4a_comparison.py` replays the scripted fixtures and writes
-  `evaluation-output/comparison_results.json` +
-  `evaluation-output/comparison_report.md`.
-- **Honest status (Phase 4A):** the numbers are deterministic **offline scripted
-  fixtures**, **not** live-provider measurements; they cannot support a
-  production-grade performance claim. Human traceability is **pending a human
-  score**. **No production thresholds were tuned** (fixtures use test-pinned
-  policy knobs, policy version `1.0`). Phase 4B (live-provider benchmarking /
-  production tuning) is **not performed**.
-- Human review decision (historical): Phase 4A is **approved with limitations**
-  (WANG Yiwen 60536848, 2026-10-23; `docs/review-memo.md`).
-
-### Pre-V2 development history — personal workstream (2026-09-06 → 2026-11-15)
-
-This chronology is reconstructed from the recorded AI-coding sessions (integrated
-as `AUL-074`–`AUL-104`) and from committed evidence. It is deliberately not
-compressed into a single sentence: the pre-V2 work is where the measurement
-discipline, the freeze apparatus and most of the disclosed failures come from.
-Where the evidence is only an agent's session report, that is said.
-
-**2026-09-06/07 — host and toolchain inspection (no repository work).** Two
-read-only sessions listed the host toolchain (Python, pip, Node, npm, Git) and
-checked command availability (`node` via nvm, no `nodejs`). No repository file was
-read or modified. This is environment verification, not project development
-(`AUL-096`).
-
-**2026-10-19/20 — checkout, exploration and foundation.** The upstream project was
-cloned and the feature branch created from `2d17df8`; three early attempts were
-stashed and the reason is `NOT_VERIFIED` (personal report §4). A plugin/skill
-discovery session and a read-only three-file inspection exercise are recorded as
-tool-use probes, not engineering changes (`AUL-097`). Seven 2026-10-20 sessions
-then built the observability and measurement foundation: per-agent and per-tool
-scoping, tool rounds, prefetch accounting, structured-output telemetry and the
-measurement surface, under an explicit "observability only, no trading-semantics
-change" instruction. The last session found and fixed a real end-to-end
-smoke-test regression rather than redesigning the system (`AUL-084`).
-
-**2026-10-23/24 — harness audit, QA and the first real baseline.** A read-only
-harness audit confirmed the harness existed; a credential-free QA pass ran before
-any paid benchmark. The session investigated two telemetry defects: a tool-call
-observability discrepancy (20 reported LLM calls against a different tool-call
-count) and a telemetry re-run conflict in which one run directory held two
-telemetry artifacts with different call counts. Both became later invariants
-(`BUG-017`, `BUG-018`, `FR-OBS-005`). A real five-run `baseline_v2` was executed,
-followed by a whole-repository pre-commit audit, a minimal repair pass and the
-one-command `scripts/run_token_benchmark.sh` with wrapper/harness tests. The
-quoted 114 / 1,178 test figures are the agent's self-report and were not re-run
-(`AUL-085`, `AUL-098`).
-
-**2026-11-02/03 — Stage 0–6 optimisation campaign.** The reproducible baseline
-`866133d` was created with a code fingerprint that includes untracked source files.
-The campaign then ran Stages 0–6. Stage 1 (report dedupe) and Stage 2 (structured
-one-shot output) were accepted; **Stage 4 (tool-payload compression) was rejected**
-on its five completed measurements (total tokens +3.8 %); **Stage 6 (evidence
-packets) was rejected and rolled back** after the QA framework found semantic
-information loss. The operator paused the campaign before leaving the machine and
-required every attempt to be preserved; an ECONNRESET / "No deployments available"
-interruption was recovered without restarting the task. These are experiment
-decisions with measured evidence, not defects (`AUL-086`, `AUL-099`,
-`LOG-001`–`LOG-003`).
-
-**2026-11-04–14 — main development arc.** Round 6 found the FRED key disabled and
-historical NVDA news unobtainable for the study date; Round 7 was a
-configuration-matched baseline. A mid-run loss of shell/filesystem tools followed;
-the operator refused static reading or simulated output and instructed recovery by
-Explore-Subagent delegation, with the main agent auditing and only the subagent
-executing. The operator approved a Stage-2 rollback, a clean-control re-run
-against a pinned tree fingerprint, and later an interrupted D1 benchmark re-run
-with the attempt preserved. A sustained Yahoo News HTTP 429 forced a pivot to
-configuration-matched replay. A historical-news/sentiment audit asked whether any
-real news had ever been fetched, followed by an autonomous full-cycle repair, a
-Batch-Macro + S2 structured-output completion campaign, per-arm valid-run top-up,
-RC1 stabilisation (`9948bf8`, 2026-11-12), the RC1 token-regression root-cause
-analysis, the CAND-01 single-pass design, an independent pre-live re-audit, the
-F1/F2/F3 remediation and the PF-01 news-status fix, and finally a preflight plus
-8-run A/B request and a stop of all live runs to restore tooling (`AUL-087`,
-`AUL-088`, `AUL-100`, `LOG-004`). The two CAND-01 audits returned
-`READY_WITH_LIMITATIONS` before F1/F2/F3 and READY after remediation; **no
-committed review report survives from this period** (`REC-09`).
-
-**2026-11-15 — pre-V2 apparatus, migration, audit rounds and the halt.** The 16-run
-2×2 apparatus was built and audited: the news route was reduced to Finnhub only
-after the GDELT quality gate found repeated 429s and a ticker-relevance leak, the
-PIT behaviour was audited, switch delivery and config hashing were verified, and
-the memory snapshot was registered. The preflight halted the campaign at **zero
-paid calls**. C3 audit rounds 2–5 (REC-01–REC-04) found Critical/blocking defects,
-including a configuration that would have run one arm under four names, a
-fingerprint that covered zero registered artefacts, and a self-tamper incident in
-which a `cp -a` worktree copy committed into the branch under audit. The incidents
-were disclosed and repaired additively; history was not rewritten. Plan C reported
-`BLOCKED` because the only experiment-spec generator could not be recovered, and
-it did **not** fabricate replacement specs; Plan C2 reconstructed the generator and
-re-registered the protocol. Paid-run authorizations and withholdings are recorded
-as conversation turns (`AUL-074`, `AUL-075`, `AUL-090`, `AUL-101`–`AUL-103`,
-`BUG-012`, `BUG-013`).
-
-### Phase 5 — Token observability and CAND-01 measurement (personal delivery, 2026-10-20 → 2026-11-16)
-
-This phase is recorded retrospectively: its requirement IDs and ADRs did not exist
-while the code was written. It is ADR-013–ADR-018 and
-`FR-ANL-*`/`FR-OBS-*`/`FR-HAR-*`/`FR-CAM-*`/`NFR-VER-*` in the integrated registry.
-
-**5.1 Observability and attribution (`FR-OBS-001/002/003/004`, `FR-ANL-004`;
-ADR-013).** `tradingagents/observability.py` installs a per-run collector whose
-`AttributionContext` has exactly one of `agent`, `system` or `none`. The pre-graph
-reflector is `system:pre_graph_reflector`; an unscoped call stays `none` and the
-harness treats it as `INCOMPLETE`. A provider usage field that was not reported is
-`null` and is counted as missing, never added as zero; run totals close over
-agent, system and unattributed buckets (`INV-15`–`INV-17`). One atomic telemetry
-artifact is written per CLI run. The product graph does not abort on `none`; the
-harness voids the sample. Telemetry carries counts, sizes, hashes and ids, never
-prompt/tool/news/memory content (`INV-27`).
-
-**5.2 Single-Pass structured finalisation (`FR-ANL-003/005`; ADR-014, ADR-018).**
-The three tool-loop analysts can bind the report schema as an extra tool on the
-terminal call, avoiding a second full-context rewrite. The switch
-`single_pass_finalization_enabled` defaults to `False` and requires structured
-output (`INV-22`). Every fallback returns free text with a `None` typed object
-(`INV-26`), never a dangling `tool_call` (`INV-18`) and never protocol markup
-(`INV-19`). Accounting settles each outbound attempt once at the transport
-boundary (ADR-009).
-
-**5.3 Batch macro (`FR-ANL-006`; ADR-015).** `get_macro_indicators_batch` fetches
-several FRED series in one tool round while preserving each series text exactly;
-when disabled, the tool is removed from both the analyst and the news `ToolNode`
-(`INV-23`). The V3 factorial's batch-macro effect is exploratory: mean −17,702
-tokens/run but not robust (about −695 excluding the environment-degraded R01;
-AAPL +1,612); n=1 per cell.
-
-**5.4 News provenance (`FR-ANL-008`; ADR-016).** Company news routes only to
-`get_news_finnhub_only`; global news under that route is `CONFIG_DISABLED`; a
-Finnhub outage is never rescued by GDELT. The GDELT adapter remains in the tree
-but is unreachable from the configured route. Publication times are UTC-normalised
-and filtered against an exclusive upper bound; undated articles are excluded in
-historical runs; relevance comes from provenance, not model prose (`INV-24`,
-merged `INV-3`).
-
-**5.5 Memory isolation (`FR-ANL-009`; ADR-017).** For registered experiment runs,
-each run copies one immutable snapshot into its own attempt directory, hashes it
-into `config_sha256`, refuses a missing/changed/modified copy before spending, and
-invalidates a run whose baseline changed afterwards (`INV-20`). This is
-**harness-only**: a generic `propagate()` run or the CLI `measure` path still uses
-the shared host memory log (`DEBT-050`).
-
-**5.6 Measurement, spend contract and freeze (`FR-HAR-001/002/003`, `FR-CAM-001`).**
-`scripts/run_token_benchmark.sh` resolves the repository from any cwd, defaults to
-the fixed benchmark ticker/trade date, supports a credential-free dry-run and
-archives every attempt. A measurement is reproducible from commit + annotated tag
-+ freeze record + per-file `MANIFEST.sha256` + per-run `config_sha256` (`INV-21`).
-A paid run is admitted only under an explicit budget contract: a null cap is
-unlimited only with `budget_mode="uncapped_authorized"`; missing/malformed/missing
-mode/non-integer cap are distinct refusals; unknown spend is never zero
-(`FR-HAR-003`). Optimisation rounds end in an explicit accept or revert
-(`FR-CAM-001`).
-
-**5.7 V2 and V3 experiments and results.** V2 (freeze `15270b1`) attempted 7 runs:
-5 valid, 1 environment-failed (R05a01) and 1 invalid (R06, unattributed call),
-consuming 1,463,791 provider-reported tokens. It exposed the unattributed reflector
-call and cross-run memory pollution (`BUG-007`, `BUG-008`). V3 (freeze `e3b5cca`)
-ran 18 attempts over 16 Run IDs: 15 valid, 1 environment-failed (R02a01) and 2
-invalid (R12a01/a02, provider 400), consuming 3,067,669 tokens; valid runs carried
-298 LLM and 432 tool calls. Combined: 25 attempts, 20 valid, 4,531,460 tokens
-(4,112,224 valid; 419,236 failed). The Single-Pass effect on the balanced
-three-block mean was **−19,589 tokens/run (−8.96 %)**, negative in all three
-blocks; the Batch-Macro effect was not robust. These are **exploratory**
-measurements: n=1 per cell, one model, one trade date, no repeats and no confidence
-intervals (`DEBT-047`).
-
-**5.8 Rejected and abandoned approaches.** The V1 protocol's spec generator was
-lost, so its hashes cannot be reproduced; it was abandoned and re-registered as
-V2/V2.1. Batch macro was not adopted as a default optimisation. The CC arm was not
-adopted as a default despite the cheapest mean: 2 of 3 valid runs had degraded
-DSML reports and 1 crashed (R12). A pre-RC1 Stage 1/2 line was real locally but was
-not deliverable evidence. The Stage 4 and Stage 6 campaign candidates were rejected
-and rolled back in the pre-V2 campaign (above).
-
-**5.9 Final remediation and independent technical audits (2026-11-16).** R12
-provider-400 fallback, DSML markup leakage and single-pass `tool_rounds` were fixed
-in `e0ea1b0` and follow-ups, with 20 regression tests, a pre-fix detection probe
-(4/4 detected on `e3b5cca`, 0/4 after) and mutation checks (6/6 caught)
-(`BUG-009`–`BUG-011`). Three final audits (A product logic, B telemetry and
-infrastructure, C regression and data safety) returned PASS with no open
-High/Critical (`REC-07`). The audits are **AI-authored**; they are independent of
-each other, not of the AI toolchain, and no human reviewed them.
-
-**5.10 Verification state and limits.** The recorded suite at `50b2ca3` is 2,227
-passed / 4 known failed / 2 skipped / 319 subtests; the two V3 absolute-path tests
-and two host-coupled `cli_prefs` tests are classified (`DEBT-042`, `DEBT-043`). A
-`.env`-free run of the submission deliverable reports 2,233 passed / 0 failed / 2
-skipped / 319 subtests — that is the submission branch, not a re-measurement of
-`50b2ca3`. No paid rerun was executed after the final remediation (`DEBT-046`).
-There is no ground truth for decision quality and no claim of trading alpha
-(`DEBT-048`). In the completed integration tree (`94755cf`) the full local suite is
-**5,132 passed / 3 skipped**, both validators PASS, and `ruff check .` PASS. The
-older `NOT_RUN` statements in the historical sections describe earlier snapshots
-and are retained as history.
-
-### Recorded V2/V3 experimental evidence (evidence boundaries)
-
-| Phase | Attempts / sample | Dispositions | Recorded tokens | Evidence |
-| --- | --- | --- | --- | --- |
-| V2 | 7 attempts | 5 valid; 1 environment-failed (`R05a01`); 1 invalid | 1,463,791 provider-reported | `token_benchmarks/live_pilot_2x2/cand01_batch_16run_v2/TEST_RESULTS.md`, `MANIFEST.sha256`, REC-01–REC-05 |
-| V3 | 18 attempts across 16 Run IDs | 15 valid; 1 environment-failed; 2 invalid (`R12a01`, `R12a02`, provider 400) | 3,067,669 provider-reported | `.../cand01_batch_16run_v3/TEST_RESULTS.md`, `MANIFEST.sha256`, REC-06 |
-
-The V3 work added system-component attribution, the telemetry schema changes and
-per-run memory isolation; freeze/re-freeze records and independent AI subagent
-audits accompany it. **Evidence limitations:** the raw provider telemetry is
-git-ignored and absent from the delivered tree, so the totals are archived ledger
-values that cannot be recomputed from the delivered artifacts alone. The V3
-comparisons are exploratory (n=1 per cell, one model, one trade date). The final
-remediation occurred **after** the measurements; no post-remediation paid
-benchmark was run, and offline regression tests do not establish new performance
-results. See `DEBT-046` (no post-fix paid rerun), `DEBT-052` (no dated paid-run
-authorization artefact), and REC-01–REC-07 for the audit provenance.
-
-### Final delivery (2026-11-21)
-
-- Personal feature `57b93df` (final personal code `50b2ca3`) completed and merged.
-- D1–D9 documentation integrated: 52 requirements, 108 unique AUL records,
-  19 ADRs (`ADR-012` Release error handling; `ADR-019` simulated trading;
-  Release `AUL-071–073`; personal repaired `AUL-106–108`).
-- Old-base merge `702d957`; PR #5 Release `9a08e08`; second merge `f2220a6`;
-  final documentation commit `94755cf`.
-- Branch pushed; GitHub PR **#8** (`release` ← `integrate/token-into-release-20261121`)
-  is open, `MERGEABLE`, with **7/7 CI checks successful** at run
-  `44886419113` (tests on Python 3.10–3.13, clean-install smoke, strict Ruff,
-  governance validation). **PR #8 is not merged**; reviewer approval remains
-  outstanding.
-
-### Blocked final-output enforcement (2026-11-06 review finding 1)
-
-- A 2026-11-06 independent offline review reproduced an end-to-end defect: with
-  missing critical market data the real gate returned `blocked`, the graph
-  correctly skipped Bull/Bear and the Research Manager rewrote its recommendation
-  to Hold, but Trader -> risk debate -> Portfolio Manager still carried a
-  synthetic noncompliant model Buy into `final_trade_decision`, and
-  `SignalProcessor` returned Buy. The blocked verdict was not authoritative at the
-  output boundary (design sections 3.6/7.3).
-- **Fix:** a single deterministic, LLM-free guard
-  (`tradingagents/agents/utils/output_guard.py`) reads the gate state
-  fail-closed (missing/malformed/inconsistent -> `blocked`) and pins only the
-  decision field (Recommendation / Rating / Action) to Hold on blocked runs, for
-  both structured and free-text output, preserving the rationale,
-  evidence-insufficient explanation and recovery conditions. It is wired into the
-  Research Manager (replacing the prior duplicated coercion), the Trader, and the
-  Portfolio Manager. No numeric confidence ceiling was invented (review finding 4
-  remains open and recorded). The adversarial Buy fixtures are deterministic
-  enforcement tests, not a measured live incident.
-- **Verification:** the independent-review demo now yields `final_signal` = Hold
-  (was Buy); `tests/test_output_guard.py` **47 passed**, affected suite **294
-  passed**; full offline suite **3 failed / 1528 passed** (the 3 known
-  date-sensitive cache tests, pre-existing, no new regression; not claimed
-  green) — logbook 058.
-
-### Maintenance corrections (2026-11-06 operator technical review)
-
-The operator technical review (not a human phase approval) confirmed the primary
-blocked-to-Buy escape was fixed and requested narrow corrections, which are
-complete:
-
-- **Guard edge cases (logbook 059):** the guard now pins *every* recognized
-  decision header (Recommendation/Rating/Action) and *every* `FINAL TRANSACTION
-  PROPOSAL` marker, regardless of whether a primary header exists, with Markdown
-  bullet/heading/value markup tolerated around the decision field only (rationale
-  prose is never rewritten); a documented narrow rule neutralises a blocked
-  Trader's executable entry/stop/position sizing while keeping the quoted
-  rationale. `tests/test_output_guard.py` **55 passed**; idempotence preserved.
-- **Pre-call budget guards (logbook 060, finding 2):** a conservative admission
-  guard runs before every Bull/Bear, so `max_calls=1` executes exactly one debate
-  call and skips safely to the Research Manager with `budget_exhausted` for the
-  incomplete round; the summary reserve stays reachable; `enabled=False` keeps the
-  legacy fixed-round baseline. Usage remains an honest estimate, not a physical
-  provider bound. `tests/test_debate_precall_budget.py` **14 passed**.
-- **Audit exports (logbook 061, finding 3):** `evidence_manifest.json` associates
-  each record's validations by `evidence_id` and exports the separate
-  `validation_results_by_evidence_id` map; `run_summary.json` adds
-  `run_id`/`asset_type`/`snapshot_id` (null when unavailable), `quality_counts`,
-  and `usage_provenance` (debate calls separate from total-run calls; unmeasured
-  tool/input-output counts explicit `None`, never fabricated).
-  `tests/test_report_artifacts_audit.py` **12 passed**.
-- **Second review corrections (logbook 063):** (1) the pre-call guard's token/time
-  check now requires remaining >= reserved summary **plus the estimated next-call
-  cost**, not merely the reserve (a remaining-equals-reserve case was wrongly
-  admitted); exact token/time boundaries are tested before the first Bull and
-  before Bear, and the check is honestly labelled `estimated` /
-  `debate_calls_only` (the call limit is debate calls, not total-run budget).
-  (2) Audit export now prefers a present authoritative map entry but otherwise
-  preserves a record's own embedded validations instead of overwriting them with
-  `[]`, with deterministic ordering; disagreeing `run_id`/`snapshot_id` is marked
-  ambiguous (null + flag) rather than silently choosing a first identity, and the
-  false claim that the adapter mints `snapshot_id` was removed (null until a real
-  snapshot identity is recorded). `tests/test_debate_precall_budget.py` **22
-  passed**, `tests/test_report_artifacts_audit.py` **20 passed**.
-- **Verification (logbook 062/063):** full offline suite **3 failed / 1578 passed**
-  (the 3 known date-sensitive cache tests; not claimed green), Ruff clean,
-  governance validator PASS, `git diff --check` clean.
-- **Operator/AI technical verification (logbook 064, not a human approval):**
-  464 focused tests passed in 1.82s; the offline demo returns
-  `final_signal=Hold` on the blocked adversarial-model run; `max_calls=1` gives
-  `actual_debate_calls=1`; evidence validation counts export as `[7,7,7,7,6]`;
-  Ruff, governance validator (35/35, no likely secrets) and `git diff --check`
-  pass. A stricter fully offline run (socket.connect disabled,
-  `-m "not integration"`) observed **4 failed / 1577 passed / 1 skipped / 1
-  deselected** — the 3 known date-sensitive cache tests plus the known Yahoo
-  reachability/exception-type baseline. This is recorded **separately** from the
-  earlier 3-failure run under different connectivity conditions; neither run is
-  all-green.
-- **Status:** the 2026-10-23 human approvals remain historical for their reviewed
-  scope. The 2026-11-06 guard/budget/audit maintenance fixes are technically
-  verified and **await explicit human review** — no human approval is recorded
-  for them and no traceability scores were entered.
-- **Still open (not hidden):** review finding 4 (degraded confidence ceiling is
-  not a validated numeric cap; DEBT-014) and broader original-design item 5
-  (automatic multi-category adapters / full source-attempt lifecycle;
-  DEBT-015/RISK-015) — explicitly out of scope for these maintenance milestones.
-
-### Independent recheck 2026-11-06 (findings 1, 2, 3 fixed; awaiting human review)
-
-A second, independent AI technical recheck (not a human approval) reproduced
-three further defects on the maintenance tree; all three are now fixed and
-regression-tested offline:
-
-- **Finding 1 (High) — blocked verdict could still become a final Buy for
-  alternative rating headers.** `Rating：Buy` (fullwidth colon) and
-  `Final rating: Buy` escaped because the guard anchored labels while
-  `extract_rating` NFKC-normalized and searched within a line, taking the last
-  rating. The guard now recognizes the same header grammar the extractor reads
-  (fullwidth colon, prefixed labels such as "Final rating", unicode dashes,
-  repeated/trailing alternative labels); additionally the final signal boundary is
-  gate-aware (`SignalProcessor.process_signal(text, state)` returns Hold on a
-  blocked run) and the memory log records Hold for a blocked run. Complete-graph
-  regressions (`Rating：Buy`, `Final rating: Buy`, separator cases) end Hold.
-- **Finding 2 (High) — real gate -> manifest -> debate quality propagation was
-  broken.** `evaluate_multi_category_gate` discarded the aggregator's per-record
-  status map and serialized the provisional adapter records
-  (`Low`/`unvalidated`), so a normal/Medium gate run produced empty
-  `EvidenceManifest.valid_ids`, an empty allowlist, and round-1 `no_new_evidence`.
-  Each record's own classification/reasons/validations are now applied before
-  serialization (never a blanket promotion from the group rating).
-  `tests/test_gate_debate_integration.py` proves, through the *real* gate node,
-  that a cited+linked Medium/High ID counts as new while genuine Low/Blocked/future
-  evidence does not, and that report `quality_counts` reflect Medium, not five Low.
-- **Finding 3 (Medium) — guard concatenated Hold with following prose.**
-  `Rating: Buy because ...` became `Rating: Holdbecause ...` (final signal
-  REVIEW). The semantic whitespace separator and markdown boundary are now
-  preserved across every decision-field variant; guarded output is idempotent and
-  parses to Hold.
-- **Verification:** `tests/test_output_guard.py` **90 passed**;
-  `tests/test_gate_debate_integration.py` **9 passed**; focused affected suite
-  **480 passed**; strict fully offline suite (socket.connect disabled,
-  `-m "not integration"`) **4 failed / 1621 passed / 1 skipped / 1 deselected /
-  88 subtests** — the *same* 3 known date-sensitive cache tests plus the known
-  Yahoo reachability baseline; no new regression; not claimed all-green. Ruff
-  clean; governance validator PASS (35/35, no secrets); `git diff --check` clean
-  (logbook 065).
-- **Operator recheck (2026-11-06, technical feedback, not a human approval):** a
-  residual was reproduced in the current guard — fullwidth labels/values
-  (`Ｒａｔｉｎｇ：Ｂｕｙ`) and arbitrarily prefixed labels
-  (`My final overall investment rating: Buy`) still parsed as Buy on the plain
-  textual signal, so the saved report/decision text and memory DECISION body could
-  contradict the Hold tag even though the structured signal was Hold. The previous
-  claim that the guard and parser share the same grammar was **false** (bounded
-  descriptor count, only the fullwidth colon handled). Corrected narrowly: the
-  guard now canonicalises every parser-recognized labelled rating line to
-  `**Rating**: Hold` using the rating parser's own shared NFKC/label recognition
-  (not a finite prefix list), preserving the natural-language tail as
-  non-executable explanation and staying idempotent. Fullwidth/prefixed/repeated/
-  trailing labels and full-graph report+memory tag/body consistency are covered;
-  normal/degraded behavior is unchanged and no policy/optional adapter changed.
-  `cli/main.py` is byte-identical to HEAD — there is **no CLI change** in this
-  tree (the signal hook is `TradingAgentsGraph.process_signal(curr_state)`).
-  Focused suite **480 passed**; strict offline suite **4 failed / 1621 passed**
-  (same baselines; logbook 066). This remains **awaiting explicit human review**.
-
-- **Operator executable-instruction maintenance (2026-11-06, technical, not a
-  human approval):** on the current tree a blocked run with a fake model returning
-  `Ａｃｔｉｏｎ：Ｂｕｙ / Entry Price：100 / Stop Loss：95 / Position Sizing：20% /
-  FINAL TRANSACTION PROPOSAL: BUY because momentum improved` had `**Action**: Hold`
-  prepended but left all four executable lines intact; long/fullwidth
-  `Recommendation` headers and explained proposal markers behaved the same. Fixed
-  with one shared **linear** recognizer
-  (`rating.decision_header`/`_split_header`: NFKC-first, arbitrary plain
-  descriptor with no cap, required separator, single-word value; blockquotes and
-  narrative mentions excluded) used by the guard. Every decision field is pinned
-  to `**<Label>**: Hold`; a blocked Trader's fullwidth entry/stop/sizing fields
-  become `not applicable`; an explained proposal marker becomes
-  `FINAL TRANSACTION PROPOSAL: **HOLD**` with the tail kept. Rationale, quoted
-  alternatives and recovery conditions are preserved, the operation is idempotent
-  and fast on long prose, and `extract_rating` now honours the structural decision
-  over quoted/narrative mentions so the plain signal, report and memory agree.
-  `cli/main.py` unchanged. `tests/test_output_guard.py` **130 passed**; focused
-  affected suite **520 passed**; strict offline suite **4 failed / 1661 passed**
-  (same baselines; logbook 067). Corrected in-pass interruptions: a catastrophic
-  backtracking regex, an empty-tail/cap design, and the parser/guard disagreement.
-  This remains **awaiting explicit human review**.
-
-- **Scope integrity:** Phase 4A scripted numbers remain labelled scripted and are
-  **not** presented as proof of runtime integration; finding 2 is proven by the
-  real-gate integration test, not by the scripted fixtures. The prior
-  guard/budget/audit changes are preserved. These fixes **await explicit human
-  review** — no human approval or traceability score is recorded for them. The
-  CLI state-passing hardening gap, the degraded confidence ceiling (DEBT-014) and
-  automatic optional-category adapters (DEBT-015/RISK-015) remain explicitly OPEN;
-  no numeric policy was invented.
-
-### Verification evidence (observed)
-
-- **ConflictRecord runtime lifecycle** (this task): a deterministic tracker plus
-  evaluator-node and research-manager integration is implemented and verified.
-  `tests/test_debate_conflicts.py`: **39 passed**; the
-  conflict/debate/graph/Stage-2 relevant suite: **490 passed** (logbook 046).
-- **Runtime multi-category gate integration** (prior task): the LangGraph default
-  gate node now uses the multi-category engine. New graph-level tests prove
-  normal/degraded/blocked routing, structured optional-evidence handling, absent
-  optional evidence (degrades, never fabricates), legacy compatibility,
-  point-in-time rejection, and deterministic serialization. The exact command is
-  recorded in `docs/architecture/evaluation-logbook.md` (entry 043).
-- Stage-2 relevant suite, current working tree: **442 passed** across the gate,
-  the debate evaluator, budget, config, evidence manifest, debate graph/turn,
-  evidence models, structured validator, researchers' verdict gate, the
-  research-manager hold contract, the Stage 2 multi-category gate
-  (`test_stage2_multicategory_gate.py`: 26 passed), and the Stage 2 report
-  artifacts (`test_report_artifacts_stage2.py`: 16 passed). The exact command
-  is recorded in `docs/architecture/evaluation-logbook.md` (entry 043).
-- **Phase 4A comparison** (this task): `tests/test_comparison_runner.py` +
-  `tests/test_comparison_schemas.py` = **47 passed** (17 runner + 30 schemas);
-  `scripts/run_phase4a_comparison.py` wrote 3 scripted cases to
-  `evaluation-output/` — entry 049. Scenario F budget-exhaustion route verified
-  by decision trace (`gate_blocked` inactive, `budget` active;
-  route=SUMMARIZE, stop_reason=BUDGET_EXHAUSTED) — entry 050. Governance
-  validator, governance tests, Ruff, and `git diff --check` clean — entry 051.
-- **Phase 4A correction round** (human review, 2026-10-22 → 2026-10-23): the
-  four requested corrections were implemented and verified — strict four-non-null
-  `SCORED` traceability validation in `TRACEABILITY_DIMENSIONS` order;
-  `input_exhausted` distinct from a dynamic early stop; actual `stop_reason`
-  preserved in results, JSON/aggregates, and Markdown; regression coverage
-  added. **73 focused comparison tests pass** (was 47); the comparison script
-  regenerated `evaluation-output/` preserving the actual stop reasons (entry
-  054). Human traceability scores remain pending.
-- **Phase 4A narrow fail-closed correction** (short re-review, 2026-10-23): a
-  `CaseResult` carrying a contradictory `strategy`/`early_stopped`/`stop_reason`
-  combination (e.g. a `FIXED` result claiming an early stop, or an
-  `early_stopped == True` dynamic result with an empty / `input_exhausted` /
-  `max_rounds_reached` / unknown stop reason) is now rejected at construction in
-  `CaseResult.__post_init__`, reusing the single `_DYNAMIC_STOP_REASONS`
-  allowlist, so an inconsistent result can never reach the aggregate or report.
-  **90 focused comparison tests pass** (was 73); governance validator PASS (34/34,
-  no secrets); governance scaffold tests 16 passed; Ruff (full repo) clean;
-  `git diff --check` clean (entry 055). Human traceability scores remain pending.
-- **Phase 4A reporting-gap fix** (independent review): the aggregate/report now
-  visibly preserves the estimated-vs-measured usage provenance
-  (`CaseAggregate.tool_usage_estimated`, `fixed/dynamic_estimated_cases`) and
-  includes tool-call counts (per case + aggregate) in both JSON and Markdown;
-  an estimated value is never presented as measured. Verification is entry 053.
-- Full offline suite after Phase 4A integration (re-run, current tree): **3
-  failed, 1432 passed, 2 skipped, 88 subtests**, all three failures the
-  pre-existing date-sensitive cache tests (entry 052; the network-reachability
-  baseline did not fail on this run).
-- Full offline suite after the Phase 4A correction round (re-run, current tree):
-  **4 failed, 1463 passed, 2 skipped, 22 warnings, 88 subtests**, all four the
-  documented pre-existing baselines (3 date-sensitive cache tests +
-  the network-reachability baseline), with **no new regression** (entry 054).
-- Full offline suite (current tree, re-run): **3 failed, 1391 passed, 2 skipped,
-  88 subtests**, with the pre-existing date-sensitive cache failures (logbook
-  047). A prior re-run (logbook 044) additionally showed 1
-  network-reachability baseline failure. Ruff on changed files,
-  `git diff --check`, the governance validator, and the governance scaffold
-  tests all clean — entry 048.
-
-### Live verification (2026-11-06, authorized; AI technical evidence, NOT human approval)
-
-- **Scope:** one authorized end-to-end school-model run against
-  `https://llm.cs.cityu.edu.hk/v1`, model `CS5351/DeepSeek-V4-Flash`, ticker
-  **NVDA**, target date **2026-11-05**, using real public data tools + the real
-  gate/managers/Trader/risk. Credentials stayed in memory only; not written.
-- **Result:** 18 successful model calls, **202,622 gateway-reported tokens**; no
-  model HTTP error, no truncation; final gate **degraded**; final (state-aware and
-  textual) signal **Overweight**. A first harness attempt (18 calls / 178,453
-  tokens) failed only because the local streaming harness omitted `graph.ticker`
-  before logging — a **harness error, not a project bug**; the corrected rerun
-  totals **36 calls / 381,075 reported tokens** (retry cost not hidden).
-- **Market evidence:** five market records, `observed_at=2026-11-04`,
-  `target_date=2026-11-05`, all **Medium** (each validated 7/7/7/7/6); optional
-  fundamentals/news/sentiment all **Low/unavailable** → degraded (not fabricated
-  normal). This is honest, not a bug.
-- **OPEN issues found (NOT fixed; source unchanged):**
-  1. **Budget accounting basis (RISK-021 / DEBT-021):** researchers pass no
-     actual latency/usage; the budget recorded **2,171.77 s estimated** for a Bull
-     call whose actual latency was **12.72 s**, and 16,289 estimated vs 18,058
-     reported tokens. The estimate exhausted the 600 s debate budget, so Bear was
-     refused with `budget_exhausted` and **0 complete Bull/Bear rounds** ran.
-  2. **Claim-date semantics (RISK-020 / DEBT-022):** Bull correctly cited the
-     valid close evidence ID but relabelled the Nov-4 close (200.13) as Nov-5 in
-     prose/metadata; the allowlist validates eligibility, not claim-date truth.
-- **Counterfactual blocked replay (deterministic, offline):** the saved live
-  Research Manager / Trader / Portfolio Manager outputs were fed through the
-  blocked guard; all primary decisions became Hold and sizing became
-  not-applicable. This is a **replay of saved outputs, NOT an additional live run**
-  and NOT a live blocked-path proof.
-- **Not all-bug-proof:** the live gate was **degraded, not blocked**; the normal
-  multi-round path and a real blocked-path live run were **not** exercised live.
-  A completed-round live check and a blocked-path live check require separate
-  explicit authorization (RISK-023).
-- **Existing open items unchanged:** degraded confidence ceiling (DEBT-014),
-  automatic optional adapters (DEBT-015/RISK-015), and the CLI state-passing gap
-  remain OPEN.
-
-### Documentation / requirements revision (2026-11-06, documentation-only)
-
-- Extended `docs/req/req-schema.json` and `docs/req/requirements.yaml` with a
-  product/PRD block, per-requirement structured `fit_criterion` (metric /
-  operator / threshold / unit / verification / applicability / status),
-  `priority_rationale`, `tradeoff`, `origin`, and `category`; added an explicit
-  `deferred_scope` (Won't/deferred) block. All 22 IDs and historical `type`
-  values are preserved (schema_version advanced to v1.1, additive).
-- Expanded the invariant register, added proposed ADR-004 (governance context
-  design, not implemented), a role-by-path deny-by-default permission model + a
-  non-active machine-readable proposal, a human-only rules proposal, a CI gate
-  matrix (document only), and authoritative prompt **v1.3** (plan-first STOP).
-- This revision is **documentation-only**: no source, tests, CI, or active
-  configuration were changed; it is **not human-approved** and awaits review.
-
-### Documentation / traceability consistency batch (2026-11-10, documentation-only)
-
-- Three verification **tiers** are now Structural / Regression / Behavioral;
-  offline-vs-live is a **separate evidence axis** (never a substitute tier, never
-  live proof). `docs/code-governance/verification-constraints.md`.
-- All 29 requirement-mapped test files now carry an accurate `Traceability:`
-  declaration of their own FR/NFR ID; deterministic governance regressions resolve
-  those tags against the registry/invariants and require each requirement's own
-  ID. The 22 requirement IDs are unchanged; INV-11/12/14 stay honest (unmapped /
-  proposed).
-- The role-by-path permission model, its non-active machine-readable proposal, the
-  validator (narrow dangling-reference resolution + true forced-fallback
-  regressions), the required-artifact/YAML inventory (prompt v1.3, ADR-004/005,
-  the proposals), and the NFR-OFF-001 count-and-fail harness were synchronized.
-  The proposal remains **inactive**; no active permission, CI, `.github/**`,
-  `pyproject.toml`, or `.opencode/**` config was changed, and actual enforcement is
-  **UNVERIFIED** and not claimed.
-- This batch is **documentation/traceability-only** (plus deterministic test and
-  validator additions); it is technically verified offline (validator PASS 42/42;
-  governance 48 passed; mapped+focused 1000 passed; strict-offline 4 failed / 1768
-  passed with 1 intercepted attempt) and **awaits human acceptance**. Independent
-  OpenCode verification of the current files recorded the same final result (see
-  logbook 072).
-
-### Verification evidence (provided, not re-run in this environment)
-
-The task supplied the following verification outcomes that were observed in the
-sandbox/prior runs. They are recorded as evidence of record but are **not
-re-claimed as a fully-green full suite here**:
-
-- OpenCode-related suite: **420 passed**.
-- Independent full offline suite in the sandbox: **1275 passed, 1 skipped,
-  1 deselected, 88 subtests**, with **three known date-sensitive cache failures**
-  and **one network-reachability-dependent baseline failure**.
-- An earlier OpenCode environment saw **1276 passed** with **only the three
-  date-sensitive cache failures**.
-
-> This figure is recorded verbatim (it is part of the known evidence
-> supplied for this deliverable). It is **not** reproducible from the
-> default offline run in the current environment, and it is **not** claimed
-> as a green full suite. See `docs/architecture/risk-list.md` and
-> `docs/debt-register.md`. The current working tree yields **490 passed** for
-> the conflict/debate/graph/Stage-2 relevant subset (re-run by this task, entry
-> 046).
-
-## 3. Known risks / debt (not hidden)
-
-- **Date-sensitive cache failures** in a small number of tests (see
-  `tests/test_ohlcv_cache_freshness.py`-adjacent and `tests/test_date_boundaries.py`
-  families). They depend on the current clock, so a "green" result is not
-  reproducible across days.
-- **Vendor reachability dependence** in one baseline test; in a sandbox without
-  network reachability that single baseline can fail even though the code is
-  correct.
-- **Real-provider paths** are exercised only by mocks/stubs/LiveTest in the
-  offline suite; no paid/vendor call is made by the deterministic tests.
-- **Conflict lifecycle subtlety** — the deterministic tracker's evidence
-  validation, dedup/merge, and resolve/escalate ordering is subtle and easy to
-  mis-order; it is mitigated by targeted tests (`tests/test_debate_conflicts.py`)
-  and fail-closed evidence validation (RISK-011).
-- **Student identity** — now confirmed as **WANG Yiwen**, CS5351 student ID
-  **60536848** (`transcripts/60536848-WANG-Yiwen.md`). The transcript was
-  initially created under a provisional identity slug and has been finalized.
-- **Feature-branch checkpoint (2026-11-10)** — the human authorized committing
-  and pushing the existing maintenance/documentation work to
-  `feature/data-quality-debate-control` as work in progress. This is not final
-  human acceptance, a PR, or authorization to merge into release. Earlier
-  uncommitted/not-pushed statements describe pre-checkpoint snapshots; Git
-  history and the remote branch are the authority for publication status.
-  The new measured-budget/partial-debate-attribution repair plan and its live
-  blocked-path verification remain proposed and unimplemented.
-- **2026-11-10 repair batches (plan + tests human-approved; acceptance PENDING,
-  technical only)** — the first batch fixed three reproduced defects (blocked
-  multiline executable containment in the output guard, present-empty
-  authoritative validation override in report artifacts, and shared duplicate-ID
-  uniqueness across the validator's real and fallback paths; the second batch is
-  documentation/traceability consistency). The strict-offline count-and-fail
-  harness observes the **same 4 known baseline failures** (3 date-sensitive
-  `test_ohlcv_cache_freshness` + the `test_no_data_handling` vendor-reachability
-  baseline) and **1 intercepted outbound socket attempt** (no connection made)
-  from that baseline, so **NFR-OFF-001 stays PARTIAL/OPEN** (DEBT-002/RISK-002)
-  and the suite is **not all-green**. No baseline test/CI/waiver was modified; no
-  human acceptance, CI enforcement, permission enforcement, traceability score, or
-  green-suite claim is made.
-- **OpenCode permission schema / enforcement uncertainty** — the installed
-  binary is `1.18.25`; the SDK static type shape and the broad `.opencode/
-  permissions.jsonc` are recorded, but **load/enforcement is UNVERIFIED** (a
-  benign probe is still pending). See `docs/debt-register.md` DEBT-004/DEBT-027.
-- **Live-verification findings (2026-11-06, OPEN, not fixed)** — budget
-  accounting uses estimates not provider usage (Bear refused, 0 complete rounds;
-  RISK-021/DEBT-021) and a cited valid ID did not prevent a wrong claim date
-  (RISK-020/DEBT-022). The run was degraded (not blocked); live integration is
-  not all-bug-proof. See §"Live verification" below.
-- **Personal token-observability risks (RISK-036…RISK-049)** — missing or
-  contradictory provider usage (`RISK-041`), harness-only memory isolation
-  (`RISK-040`), freeze/spec paths not portable (`RISK-045`), no ground truth for
-  decision quality (`RISK-046`), endpoint not in the config hash (`RISK-047`),
-  generic/CLI runs bypassing the harness gates (`RISK-048`), and the recorded
-  suite being red at `50b2ca3` (`RISK-049`). See `docs/architecture/risk-list.md`.
-- **Personal token-observability debt (DEBT-042…DEBT-055)** — host-coupled
-  `cli_prefs` tests, absolute paths in V3 specs, single-pass per-tool telemetry
-  gap, CSV markup counter, no post-fix live rerun, n=1 per cell, no ground truth,
-  endpoint not hashed, generic `measure` sharing memory, the ruff baseline, plus
-  the recovered history/governance debt (no dated paid-run authorization, unresolved
-  commit authors, local session stores, the transcript signature/attestation). See
-  `docs/debt-register.md`.
-- **Phase 4A results are scripted offline fixtures, not live-provider
-  measurements** — they cannot support a production-grade performance claim;
-  human traceability is pending a human score; no production thresholds were
-  tuned. This is stated in `evaluation-output/comparison_report.md` and in the
-  Phase 4A section above. The Phase 4A human review is recorded as **Approved
-  with limitations** (WANG Yiwen 60536848, 2026-10-23; `docs/review-memo.md`,
-  logbook 056): the fail-closed correction and short re-review were accepted,
-  subject to the recorded limitations (offline-only verification, the full suite
-  is not completely green due to the known date-sensitive cache failures, human
-  traceability scores remain `pending`, and no final production threshold tuning
-  was performed). The prior **Changes requested** decision is retained verbatim
-  as historical audit evidence.
-
-## 4. Planned work (not yet done)
-
-- Resolve the OpenCode permission schema uncertainty once exact schema can be
-  verified against the installed OpenCode version.
-- Decide on date-sensitive cache tests (stabilize or document as known) and the
-  network-reachability-dependent baseline.
-- **Phase 4A** — deterministic offline baseline-comparison infrastructure is
-  implemented and verified as scripted fixtures (see the Phase 4A section
-  above). **Phase 4B** (production threshold tuning, further live-provider
-  benchmarking) is **not started**, and no production thresholds were tuned. The
-  personal V2/V3 paid campaigns were run under dated, run-specific authorizations
-  and do not authorize further spend. Any future Phase 4B or live-provider work
-  requires explicit, separate authorization.
-- **D7–D9 integration and delivery** — completed. Old-base merge `702d957`,
-  PR #5 Release `9a08e08`, second merge `f2220a6`, final documentation commit
-  `94755cf`; branch pushed and PR **#8** opened against `release` with 7/7 CI
-  checks successful at the verified point. PR #8 is **not merged**; reviewer
-  approval remains outstanding. The historical `NOT_RUN` statements above are
-  time-scoped and no longer describe the current tree.
-- **Human review and sign-off** — WangTianQi has personally reviewed and
-  confirmed the personal documentation as an accurate account of the work, with
-  AI assistance (2026-11-21). Formal record-level sign-offs for REC-01–10,
-  ADR/risk/debt items, the transcript signature and the dated paid-run
-  authorization remain `PENDING_HUMAN_CONFIRMATION`; documentation review is not
-  independent technical audit or experimental reproduction.
-- No submission, demo, or grading claim is made or implied by this document.
-
-## 5. Release-team preliminary reflection (v1, preserved)
-
-*This is the Release team's preliminary draft, preserved in its original
-first-person voice. The tree does not separately record who wrote it (Release
-approvals are recorded under WANG Yiwen, 60536848), so no author is asserted here.
-It is not WangTianQi's reflection; the personal reflection section is §7.*
-
-The two improvements were chosen because both are *deterministic* and
-*offline-testable*, which made them a good fit for demonstrating rigor under
-governance constraints rather than only relying on vendor/LLM call quality. The
-Data Quality Gate forces the system to fail closed: a low-quality dataset can
-no longer quietly reach a full-strength debate. That single property (no
-`normal` on error or missing evidence) was the most instructive design decision.
-
-The dynamic debate termination introduces a subtle tension: the whole point of
-reduce-cost is to stop early, but the evaluator must never stop so early that it
-has not reserved enough budget to summarize the debate. Encoding those two rules
-(a reserve for summary, and a no-new-evidence patience) as explicit,
-deterministic, configurable rules was more valuable than a hand-tuned heuristic.
-
-Looking ahead, the largest open risk is not the code but the verification record:
-date-sensitive and network-reachability-dependent tests mean that "the suite is
-green" is only meaningful on a specific day and network. The honest position,
-recorded throughout this scaffold, is to state the exact observed outcomes and
-the known failures rather than claim a blanket pass.
-
-## 6. Contribution attribution
-
-This tree merges two lines of work; the report must not assign either line to the
-wrong contributor.
-
-| Contribution | Provenance | Evidence |
-| --- | --- | --- |
-| Upstream TradingAgents v0.5.0 (graph topology, prompts scaffold, CLI, vendor router, PIT corpus) | inherited, not this project | `2d17df8`; `architecture-blueprint.md` |
-| Data Quality Gate, dynamic debate termination, evidence capture, durable usage ledger, confidence cap, Phase 4A comparison, simulated trading | **Release team** (WANG Yiwen 60536848 and the Release history) | ADR-001–ADR-012, ADR-019; `FR-DQG-*`, `FR-DDT-*`, `FR-TRD-*`, `NFR-CMP-*` |
-| Token observability and attribution, Single-Pass, batch macro, Finnhub-only news, per-run memory isolation, measurement harness/freeze, V2/V3 campaigns | **WangTianQi's personal feature** (submitted through the token-observability line) | ADR-013–ADR-018; `FR-ANL-*`, `FR-OBS-*`, `FR-HAR-*`, `FR-CAM-*`, `NFR-VER-*` |
-| AI-assisted implementation, tests, audits and documentation | OpenCode sessions (2026-10-20 → 2026-11-15) and DeepSeek Harness sessions (2026-11-16 → 2026-11-20, and the 2026-11-21 documentation rounds) | `docs/ai-use-log.yaml` `AUL-074`–`AUL-108` (Release `AUL-071–073`; personal repaired records `106–108`); `docs/ai-use-session-audit.md` |
-| Human decisions and approvals | recorded where evidenced; otherwise explicitly absent | `docs/review-memo.md`; `AUL-102`; paid-run authorization gap `DEBT-052` |
-
-**No formal technical/record-level human sign-off exists for any personal review, audit, ADR, risk or debt item.** The personal documentation itself has been reviewed and confirmed by WangTianQi with AI assistance on 2026-11-21; that review does not independently verify audit findings or reproduce experiments.
-Commit authors `WTQ`, `Plan C3`, `C3 Engine` and `t` are unresolved
-(`DEBT-053`); do not read a commit-author string as a person's identity. No
-contribution above is attributed to a teammate merely because the merged tree
-contains it, and WangTianQi is not credited with the Release team's development
-history.
-
-## 7. Personal reflection — WangTianQi (AI-ASSISTED; HUMAN-REVIEWED AND CONFIRMED)
-
-*AI-assisted text. The four paragraphs below were prepared by DeepSeek Harness
-from the documented project history and inserted with the owner's authorization.
-WangTianQi has personally read and reviewed them and confirmed them as an accurate
-account of the work, with AI assistance, on 2026-11-21. They remain AI-assisted
-prose, not an independently authored or independently verified testimony.*
-
-**7.1 Individual motivation.**
-
-The objective that interested me most was making token usage measurable and attributable, rather than simply trying to reduce the total number of tokens. In a multi-agent trading system, a lower token count is not meaningful unless we know which components generated the usage and whether retries, tool interactions and final decisions were measured consistently. I therefore focused on establishing reliable observability before evaluating optimisation. The frozen 2×2 experiment provided a structured way to examine single-pass finalisation while controlling the experimental configuration. For me, the main value of this work was developing a transparent measurement approach, not claiming that one optimisation would always save tokens or improve trading performance.
-
-**7.2 The V2 halt and the subsequent re-freezes.**
-
-The V2 preflight halt demonstrated why experimental reliability must take priority over execution speed. The audit identified blocking defects before any paid batch calls were made, including problems affecting the integrity of the experimental setup and its verification process. Continuing at that point could have consumed resources while producing results that were difficult to interpret or reproduce. Although the repeated corrections and re-freezes increased the schedule overhead, they established clearer boundaries between implementation changes and measured experiments. I came to see the halt as a necessary quality-control decision rather than simply a delay. A smaller set of trustworthy results is more useful than a larger set produced by an unreliable measurement process.
-
-**7.3 Lessons about measurement, evidence and audit independence.**
-
-This project helped me understand that passing tests, preserving frozen artifacts and obtaining audit reports are different forms of evidence. Automated tests establish whether specified behaviours hold in the tested environment, while manifests and hashes help establish artifact integrity. AI-generated audits can identify important defects, but several AI reviewers do not automatically provide independent human verification. I also learned to be cautious when interpreting the V3 measurements because the experiment had a small sample size and its results preceded the final remediation. In future work, I would place greater emphasis on independently checking representative usage records, verifying the links between raw observations and reported metrics, preserving approval records for paid experiments, and clearly separating exploratory findings from validated conclusions.
-
-**7.4 Whether the freeze and audit overhead was justified.**
-
-The freeze and audit process was more extensive than I would ideally expect for a course project. It involved substantial documentation, repeated checks and many commits without directly producing additional experimental data. However, the process exposed serious problems, including a configuration that could have executed the same experimental arm under different labels and a verification weakness that could have accepted altered registration evidence. Without those checks, the resulting comparisons might have appeared convincing while being fundamentally unreliable. If I repeated the project, I would retain reproducible experiment specifications, manifest verification, preflight checks, clear run identities and independent review. At the same time, I would simplify repetitive paperwork and avoid audit rounds that add little new evidence. The objective should be proportionate rigor, not maximum documentation.
-
-## 8. AI-prepared status of this report
-
-The technical content of this report was assembled by an AI coding agent (DeepSeek
-Harness, 2026-11-21) from committed evidence and the recorded sessions. It is an
-integrated report. Section 7 contains AI-assisted first-person text prepared from
-the project record and inserted with the owner's authorization; WangTianQi has
-reviewed and confirmed that text on 2026-11-21. The D5 transcript's content review
-is likewise confirmed, while its formal signature and attestation remain pending.
+# TradingAgents: Supervised Development of an AI Research Application
+
+**Team project report**
+
+**Team:** Fanlin Meng (60749983, team leader); Shengjin Duan (60599024); Yiwen Wang (60536848); Tianqi Wang (60726054); Zhuoran Ruan (60946340).
+
+**Project foundation:** TradingAgents v0.5.0, extended with research controls, usage observability, a browser workspace, simulated trading and fault-tolerance improvements.
+
+## 1. Executive summary
+
+TradingAgents is an AI-enabled investment research application. It combines specialist analysis, an investment debate, a trading proposal and risk review into an advisory assessment. We extended the existing open-source TradingAgents system to improve research controls, execution visibility and usability while preserving its command-line and Python interfaces. Alongside the product work, the project established a supervised OpenCode development process linking requirements, architecture, implementation, verification and human decisions.
+
+The project has four connected workstreams. The core work adds deterministic evidence-quality controls and evidence-aware debate termination. The observability work records provider usage and supports controlled experiments on finalisation and tool batching. The WebUI exposes analysis, reports, historical artifacts, backtests and simulated account operations through a browser. The governance work defines role permissions, review boundaries and CI checks, including prior test approval and fixed-set semantic evaluation.
+
+The most important design decision is the separation of authority. Language models interpret evidence and generate arguments; deterministic components decide whether evidence is usable, whether further calls fit a budget, whether a final signal is permitted and whether a simulated order may execute. A persuasive explanation cannot grant itself execution permission or turn missing evidence into a verified fact.
+
+Verification combined deterministic offline regression, interface checks, native permission probes and controlled model experiments. A complete maintenance regression on 25 November 2026 passed **5,643 tests and 323 subtests**, with three skips. A later governance-cleanup run exposed two failures; the new path assertion was corrected and its module passed, while a submission-layout failure remains open. Section 14 separates these runs and their results. Historical model experiments identified opportunities to reduce token use alongside reliability problems requiring further work.
+
+The resulting application brings research, progress monitoring, historical reports, backtesting and simulated account workflows into a single browser workspace. Further development will focus on service resilience, long-running task recovery and broader evaluation of research quality and resource use.
+
+<div style="break-after: page; page-break-after: always;"></div>
+
+## 2. Team, responsibilities and contribution accounting
+
+### 2.1 Responsibilities and coordination
+
+The five-member team organized development into complementary workstreams covering research controls, observability, WebUI integration, simulated trading and fault tolerance. Fanlin Meng led coordination across these areas, aligning requirements, integration dependencies and delivery priorities. OpenCode supported implementation, verification and documentation, with team members directing development and reviewing the results.
+
+**Fanlin Meng (60749983) — team leader, WebUI requirements and project coordination.** Led WebUI requirements discovery, TUI capability mapping and browser workflow design; coordinated task allocation, scope decisions, integration, review readiness and delivery organization. Supervised the analysis wizard, live activity and reconnection, history/reports, backtest progress, bilingual interface and Web adapters, including the simulated-account interface. This work brought the team's core capabilities together in the browser workspace.
+
+**Shengjin Duan (60599024) — simulated-trading requirements and subsystem.** Developed the deterministic path from an advisory research output to simulated execution: safety rules, engine-issued authorization, human approval, sizing, portfolio accounting, audit integrity, persistence/reset and clock-driven walk-forward backtesting. Maintained the boundary between research recommendations and execution authority.
+
+**Yiwen Wang (60536848) — evidence quality and debate-control requirements.** Developed the Data Quality Gate, evidence validation and provenance, deterministic dynamic debate termination, conflict handling, truthful participation, budget/usage controls and downstream output/confidence restrictions. Connected requirements and invariants to offline verification and the Phase 4A comparison.
+
+**Tianqi Wang (60726054) — token observability and controlled optimization.** Developed per-agent/tool usage attribution, single-pass structured finalization, batch-macro evaluation, experimental memory isolation and the benchmark measurement and registration workflow. Analyzed token consumption, fallback behavior and reliability across experimental configurations.
+
+**Zhuoran Ruan (60946340) — fault tolerance, degradation and execution reliability.** Developed vendor-failure classification, bounded retries and circuit breakers, request-context isolation, structured-output recovery, bounded analyst tool loops and explicit fallback behavior. Added compatible checkpoints, atomic report/state writes and integration checks while preserving data-quality and trading controls.
+
+Fanlin coordinated dependencies across the five workstreams: evidence and debate controls feed the research graph; fault tolerance protects its execution; the simulated subsystem consumes accepted research output through its safety gateway; the WebUI exposes those capabilities; observability supports diagnosis and controlled evaluation. Each member remained responsible for explaining and reviewing their own contribution. The Plan, Build, Verify and Docs roles describe process activities, while individual review decisions remain recorded in the review memo.
+
+<div style="break-after: page; page-break-after: always;"></div>
+
+### 2.2 Recorded effort and relative contribution
+
+Contribution is assessed on a common effort-unit scale across five sprints. The allocation covers requirements analysis, design, implementation, verification, documentation and project coordination. Fanlin Meng's contribution includes the additional coordination and organization responsibilities of the team leader. The table summarizes each member's effort and relative contribution.
+
+| Student        | Sprint 1 | Sprint 2 | Sprint 3 | Sprint 4 | Sprint 5 |   Total |   Weight |
+| -------------- | -------: | -------: | -------: | -------: | -------: | ------: | -------: |
+| Fanlin Meng    |       12 |       12 |       10 |       10 |       12 |      56 |     1.12 |
+| Shengjin Duan  |       10 |       10 |       10 |       10 |       10 |      50 |     1.00 |
+| Yiwen Wang     |       10 |       10 |       10 |       10 |       10 |      50 |     1.00 |
+| Tianqi Wang    |        8 |        9 |       10 |       10 |       10 |      47 |     0.94 |
+| Zhuoran Ruan   |        8 |        9 |       10 |       10 |       10 |      47 |     0.94 |
+| **Team total** |   **48** |   **50** |   **50** |   **50** |   **52** | **250** | **5.00** |
+
+The mean effort is (56 + 50 + 50 + 47 + 47) / 5 = **50 effort units**. A member's relative contribution equals that member's total effort divided by the mean:
+
+- Fanlin Meng: 56 / 50 = **1.12**.
+- Shengjin Duan: 50 / 50 = **1.00**.
+- Yiwen Wang: 50 / 50 = **1.00**.
+- Tianqi Wang: 47 / 50 = **0.94**.
+- Zhuoran Ruan: 47 / 50 = **0.94**.
+
+
+<div style="break-after: page; page-break-after: always;"></div>
+
+## 3. Application problem, users and scope
+
+A user researching a stock needs to inspect market evidence, understand competing arguments and see how a recommendation was reached. An LLM can summarize and compare information, but it can also overstate confidence, cite unavailable material, confuse dates or continue consuming resources without producing a useful final assessment. The project therefore treats research quality, operational visibility and controlled failure as engineering concerns alongside the model-generated explanation.
+
+The application serves a local, single-user workflow. The user selects an instrument and analysis date, chooses relevant analysts and model settings, supplies optional portfolio context and starts research. Progress and intermediate reports remain visible as the workflow advances. The result can be inspected as a report, saved through the existing artifact layout and revisited through history. A separate serial backtest runs the established analysis across ticker/date cells. These features support investigation; they do not promise profitable decisions.
+
+Development began with TradingAgents v0.5.0. Preserving its CLI and Python interfaces allowed existing workflows to continue while new modules added browser access and stronger controls. Integration brought the research, observability, simulated-trading and fault-tolerance workstreams together behind a consistent user experience. Experiment records retain the configuration and implementation versions used for each measurement to support reproducibility.
+
+The simulated-trading subsystem is an independent extension with a simulated portfolio, deterministic checks, human approvals, audit records and walk-forward execution. Its browser integration composes the existing subsystem. It does not connect the project to a real brokerage, and its approvals must not be confused with the application's advisory investment ratings.
+
+The project scope focuses on local research and simulated execution. Production threshold tuning, real broker execution, unattended live trading and multi-user deployment remain outside this scope. Provider changes and further live benchmarking require a separate review of compatibility, cost and verification needs.
+
+A useful scope correction arose during development: prototype controls needed to match available business operations. We checked the browser design against existing core capabilities and identified the adapters needed for integration. This prioritized capability parity, error visibility and clear workflows over decorative dashboard content.
+
+<div style="break-after: page; page-break-after: always;"></div>
+
+## 4. Requirements engineering and change control
+
+The requirements registry combines a machine-readable product description with individually identified requirements. Its schema validates structure; the entries describe behavior, invariants, verification, priority and sources. The registry contains 80 requirements covering product behavior and development governance, including prior test approval and protected semantic evaluation. These governance requirements extend the review process while preserving the existing product acceptance thresholds.
+
+Requirements are grouped by responsibility: evidence quality, debate control and conflict handling, browser capabilities, simulated trading and usage observability. Cross-cutting requirements cover measurement, compatibility, cost, security and offline verification. Stable identifiers connect these workstreams to architecture decisions, implementation responsibilities and acceptance checks.
+
+MoSCoW priorities guided scope decisions. Evidence gating, fail-closed behavior and credential protection were classified as Must requirements because they establish essential safety boundaries. Compatibility and presentation refinements were assessed against user value, implementation cost and acceptance criteria. This helped separate the basic working analysis chain from improvements that could follow in later iterations.
+
+A fit criterion must identify something a machine can check. Examples include a blocked gate never yielding a directional final signal, an invalid API request being rejected without leaking submitted secrets, and a malformed semantic report blocking the change. General aspirations such as understandable research or lower cost need a defined rubric, measurement method and scope before becoming verified results.
+
+Change control follows the chain from requirement to design, source, test and observation. The trace matrix records enforcing components and evidence. The invariant register adds operational fallback actions. When a test exposes an architectural weakness, the correction updates the relevant decision and trace rather than only patching the immediate symptom.
+
+Requirement changes were most visible in per-analysis debate configuration, editable provider defaults, per-date backtest progress and stronger CI evidence checks. These changes came from usage feedback and exposed ambiguities in the original interaction design. Volatility was reviewed through individual change episodes; a sprint-level numerical series was not collected. The next iteration should record accepted additions, modifications and removals at each requirement baseline, together with their reasons and owners, to support quantitative process evaluation.
+
+<div style="break-after: page; page-break-after: always;"></div>
+
+## 5. Architecture candidates and system boundaries
+
+The selected architecture retains the existing LangGraph research flow and adds deterministic control components around model-generated work. It separates domain policy from UI presentation, provider adaptation and evidence persistence. This choice allowed the team to test safety behavior without requiring a paid model to produce the same sentence twice.
+
+| Candidate                                              | Main benefit                                                        | Principal weakness                                                         | Outcome                                                             |
+| ------------------------------------------------------ | ------------------------------------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Deterministic evidence gate and rule-based termination | Auditable decisions, offline testing and explicit fallback behavior | Requires careful adapters and boundary tests; cannot guarantee model truth | Selected                                                            |
+| LLM judges evidence quality and decides when to stop   | Flexible natural-language reasoning                                 | Nondeterministic authority, weak reproducibility and additional cost       | Rejected for authoritative controls                                 |
+| Fixed-round research without an evidence gate          | Simple and close to the inherited workflow                          | Weak control of evidence failures and optional debate spend                | Retained only as an applicable comparison or compatibility baseline |
+| Best-effort usage accounting with a wall-clock limit   | Small implementation effort                                         | Missing usage can hide overspend; summaries may be stranded                | Rejected as the sole budget mechanism                               |
+
+The architecture evaluation used determinism, fail-closed safety, compatibility, auditability, budget behavior, testability and point-in-time integrity as qualitative decision criteria. These criteria favored explicit policy components over model-controlled authority. Integration also standardized component ownership and the organization of implementation and verification work across the separate workstreams.
+
+The system separates responsibilities into five main areas. The research core owns orchestration, evidence, debate, provider clients, reporting and memory. The terminal interface preserves established workflows. The WebUI owns browser interactions, public API contracts and execution-state presentation. The simulated-trading subsystem manages account behavior, while the safety gateway controls execution authorization. Offline and live verification are organized around the same boundaries.
+
+The dependency direction matters: the research core does not import browser presentation logic. The WebUI adapts core interfaces and projects execution state into public snapshots and events. The simulated subsystem consumes research output through its own deterministic pipeline rather than treating prose as an executable instruction.
+
+The architecture trades concurrency for simpler correctness. A single active operation protects shared configuration and state in the local application. Increasing concurrency would require an explicit design for configuration isolation, persistence and memory ownership, not merely removing the active-slot check.
+
+<div style="break-after: page; page-break-after: always;"></div>
+
+## 6. AI context, assembly and authority
+
+The research pipeline uses language models for interpretation and argument generation. Analysts interpret tool results; researchers compare bullish and bearish arguments; downstream roles generate a plan and assess risk. The context supplied to those roles includes identity, standing constraints, retrieved evidence, conversation history, resumable state and the current task. Separating these layers preserves their different provenance and authority.
+
+Identity and role instructions originate in the agent factories. Standing constraints include date, language, schema and permitted-evidence instructions. Tool responses and evidence manifests supply external material. Graph state carries prior reports, debate history and unresolved conflicts. Checkpoints and filtered decision memory support continuity. The current ticker, date and optional portfolio context define the immediate task. External text cannot override the standing constraints or grant tool permissions.
+
+Current context assembly is distributed across factories, prompt templates, graph state and structured-output helpers. Analysts receive system text and messages; researchers receive gate-aware evidence and debate history; managers receive plans, portfolio context and risk discussion. Optional-call budgets control debate resource use, while context-window management addresses the amount of material in an individual request. A universal token-aware compactor remains a proposed extension.
+
+The proposed context-management design defines W as the documented model context limit, capped at 131,072 tokens. It reserves 8,192 tokens for output and 4,096 for critical constraints. Compaction begins at 70% of the remaining input budget and becomes mandatory at 85% before further history is appended. These initial design parameters provide a concrete basis for future implementation and evaluation.
+
+The proposed assembly pipeline validates inputs, deduplicates by identity, preserves conflicting evidence, prioritizes constraints and task data, counts the rendered context, compacts old history and recounts. After compaction or resume, it re-injects role, date, gate authority, output schema and task constraints verbatim. If those cannot fit, the target behavior is to stop before the model call, rather than truncate the safety instructions. Implementing and validating this target needs a future approved task.
+
+Development instructions and application prompts have separate lifecycles. A static startup instruction establishes the OpenCode development workflow, while agent factories and runtime helpers assemble the research requests. Recording the source version of active prompts makes application behavior traceable and supports targeted semantic evaluation when those prompts change.
+
+<div style="break-after: page; page-break-after: always;"></div>
+
+## 7. Deterministic safety boundaries
+
+The data-quality gate turns validated evidence and policy into an explicit quality result. Missing, contradictory, stale or failed input must not silently become normal evidence. The gate's result and reason codes are propagated downstream so that later model prose cannot erase the original limitation. Its value lies in the complete path to the final report, rather than the existence of a gate node alone.
+
+A blocked result must prevent a directional final recommendation. Output guards constrain ratings and executable-looking content, while confidence policies prevent degraded evidence from retaining unjustifiably strong confidence. An unreadable or unrecognized rating is handled as `REVIEW`, which must remain distinct from a valid `Hold`. This avoids converting a parsing failure into an apparently deliberate neutral investment judgment.
+
+Citation allowlists and evidence identifiers provide traceability, but a model can cite an existing identifier while misstating the date, unit or implication of an observation. This defect led to a stronger emphasis on preserving identity, time and factual roles in claim checks. It also showed why a citation-presence check alone cannot establish factual fidelity.
+
+The simulated-trading boundary is separate. A research rating is input to a deterministic pipeline, not permission to execute. The safety engine remains the executor gateway, and only its approved path can reach the simulated executor. Human approval, quote validity, portfolio state, sizing rules and idempotency are evaluated independently of the model's confidence. Real broker operations remain outside the implemented project scope.
+
+| Boundary              | Authoritative mechanism                           | Failure response                                |
+| --------------------- | ------------------------------------------------- | ----------------------------------------------- |
+| Evidence acceptance   | Validation and gate policy                        | Block or degrade with explicit reasons          |
+| Final research output | Rating parser, output guard and confidence policy | Restrict unsafe signal; retain uncertainty      |
+| Optional debate work  | Budget admission and termination rules            | Stop further optional work and preserve wrap-up |
+| Simulated execution   | Safety engine and issued approval                 | Reject or leave pending; do not execute prose   |
+| Files and credentials | Validated paths, redaction and permission checks  | Deny access or return a safe categorized error  |
+
+Positive and violation cases exercise these boundaries, including blocked evidence, malformed ratings, exhausted budgets and unauthorized execution attempts. Operational fallback actions and ownership are recorded in the invariant register and runtime policy catalog.
+
+<div style="break-after: page; page-break-after: always;"></div>
+
+## 8. Debate termination, budgets and observability
+
+A fixed number of debate rounds is easy to understand but can repeat old arguments or spend resources after useful evidence has stopped changing. The project's dynamic evaluator observes structured debate state, evidence novelty, conflicts and budget conditions. It produces an explicit stop reason instead of asking a model to decide whether further reasoning is worth its own cost.
+
+Evidence-aware termination must preserve enough capacity to summarize. Optional-call admission therefore considers reserve requirements before work begins. Token and time estimates are not relabeled as exact provider measurements. Actual usage, missing attribution and provider behavior remain observable even when execution terminates early. A stop should leave an inspectable result or explicit failure, not a silently incomplete report.
+
+The conflict lifecycle records observed disagreements using structured inputs. Identity generation, deduplication, resolution and escalation are deterministic. A disagreement invented by model prose does not automatically become a trusted conflict record; references need to satisfy the evidence contract. The evaluator can then distinguish repeated unresolved material from genuinely new supported information.
+
+Backward compatibility is deliberate. Disabling the dynamic feature retains the established fixed-round behavior where specified. Custom policy settings must affect run identity and checkpoint compatibility, while unchanged default settings preserve the corresponding baseline behavior. This protects users from accidentally resuming a run under a materially different debate policy.
+
+Usage observability serves a different purpose from termination. The ledger and attribution machinery record which model role generated usage, including raw structured attempts, fallbacks and otherwise easy-to-miss calls. Missing usage is not zero usage. Cached input is already part of input usage and must not be added again when calculating totals. Reliable attribution is a prerequisite for meaningful optimization claims.
+
+The single-pass and batch-macro experiments examine two possible reductions in repeated work: combining prose and structured finalization, and reducing repeated tool-call overhead. Their runtime switches, measurement apparatus and historical results must remain distinct from the dynamic-termination feature. A token saving measured for one switch and one model does not establish an improvement for every debate policy.
+
+<div style="break-after: page; page-break-after: always;"></div>
+
+## 9. WebUI and backend integration
+
+The WebUI translates existing research capabilities into browser interactions. It is not a second implementation of the agents. FastAPI endpoints validate public requests; runtime adapters invoke the core graph; a coordinator controls the active operation; projectors convert internal events into bounded public data; artifact readers expose supported historical results. The React frontend renders those contracts and handles user navigation, drafts and progress.
+
+The analysis form loads server configuration and credential status without exposing keys. Provider and model environment values are defaults for interactive analysis, rather than a restriction that forces a single provider into the selector. Model changes must remain consistent with provider-specific settings: an endpoint or thinking option belonging to one provider must not silently migrate to another. Backtests retain the documented server-default behavior, which is a different interface contract.
+
+Execution visibility developed from a simple running state into stage-aware activity. Users can follow messages, tool calls, role activity and completed reports, switch stage tabs and inspect earlier content. Reload and reconnect restore the authoritative snapshot rather than starting another analysis. Closing a page does not mean cancellation; cancelling does not guarantee that an already-running provider request is interrupted immediately.
+
+The UI also exposes report history, research-audit details, policy comparison and analysis backtests. These views have different meanings. Audit explains recorded evidence and gate decisions. Policy comparison replays predefined offline scenarios against policies and must be labelled as such. It is not a comparison of real investment strategies or a substitute for configuring a live analysis. Analysis backtesting executes serial ticker/date cells and reports their actual progress and settlement.
+
+Simulated account screens connect to the existing trading core through necessary APIs. Account balances, decisions, approval expiry, reset confirmation, audit entries and walk-forward results are represented as operations with authority boundaries. A browser button cannot bypass an engine-issued approval. Presentation simplification keeps material warnings and confirmation steps while removing decorative counts and repetitive explanation.
+
+The interface supports Chinese and English labels. Instrument symbols, source reports, provider diagnostics and literal control tokens retain their identities instead of being mistranslated. Markdown tables and long content are contained so that reports cannot expand over the navigation panel.
+
+<div style="break-after: page; page-break-after: always;"></div>
+
+## 10. State, persistence and recovery
+
+Long research runs need continuity, but persistent state can also preserve mistakes. The design distinguishes model conversation, decision memory, graph checkpoints, saved reports, usage records and simulated account data. Each has a different owner and lifetime. Treating them as one general-purpose memory store would weaken both reproducibility and recovery safety.
+
+Graph checkpoints support resuming interrupted analysis. Run identity includes relevant configuration and policy information so that an incompatible run is not resumed accidentally. Portfolio fingerprints distinguish absent portfolio context from an explicitly empty portfolio. On restore, confidence and gate-related state are sanitized before downstream use. Recovery must not turn a previous partial result into a newly authorized decision.
+
+Decision memory is relevant only when its identity and point-in-time constraints match the requested analysis. Later knowledge must not leak into an earlier analysis date. Experimental memory isolation is particularly important: one measured arm must not inherit another arm's decisions, and a supposedly empty baseline must remain unchanged. Historical memory-pollution defects motivated stronger ownership and manifest checks.
+
+Saved reports and historical artifacts are read through constrained paths. User-provided JSON content is input data, not a capability to open an arbitrary server path. Artifact discovery, downloads and checkpoint operations require validation and redaction. Readers validate supported formats and expose parsing errors explicitly, keeping missing data distinguishable from available report content.
+
+For browser continuity, event buffers and snapshots restore the current view after reconnecting to the running server. This design supports navigation and temporary connection loss during a long analysis. Durable background execution across server restarts would require a persistent job service and remains outside the current implementation.
+
+The simulated subsystem owns account state and append-only audit records. Resume parameters, account identity and execution epochs protect walk-forward continuation. Audit corruption, state ownership conflicts and post-fill persistence failures must fail closed or surface explicitly. A restart does not restore stale pending approval as new execution authority.
+
+Atomic file replacement protects individual writes, while the local single-active-operation design limits overlapping research tasks. Account and audit rules handle the simulated subsystem's separate persistence boundaries. Retention, privacy and ownership are documented in the memory/state design. Concrete error responses and recovery actions are listed in the runtime policy catalog.
+
+<div style="break-after: page; page-break-after: always;"></div>
+
+## 11. Supervised development process
+
+The development workflow separates discovery, planning, implementation and verification. OpenCode first examines the current system, requirements and architecture constraints, then proposes a bounded plan covering affected interfaces, requirement identifiers, positive and negative cases, steps and risks. Human approval is required before implementation and when scope or safety assumptions change. This workflow provides a consistent structure for subsequent development; the historical evidence gaps are discussed below.
+
+Build then changes only the approved ownership paths. The team uses the existing baseline as a constraint, preserving user changes and public contracts. Tests evaluate required behavior and violation cases. A separate verification role checks evidence rather than trusting the implementation's self-description. Human review at the relevant boundary records what was accepted and what remains unresolved.
+
+A typical maintenance example was the WebUI's misleading failure message. The symptom initially appeared to be a model-provider problem, but the traceback identified Yahoo market-data throttling. Investigation narrowed the correction to error classification and visibility while preserving data-source behavior. The revised message distinguished temporary vendor failure from a missing model key. Diagnosing the failing layer before changing code reduced unnecessary implementation work.
+
+Another example concerned configuration semantics. The analysis selector initially offered only the provider configured in the environment. Usage feedback clarified that these values should define defaults while retaining provider selection. The resulting contract separates default values from available choices and prevents incompatible provider options from carrying across a change. Request handling, UI drafts, tests and documentation were updated together.
+
+Governance maintenance followed a separate approved scope. The native permission-path repair required explicit authorization because it affected a protected configuration file. The repair preserved the existing access rights and added bounded compatibility checks. Team members retained ownership of raw session exports and final review decisions, keeping development assistance separate from human accountability.
+
+Process review identified gaps in earlier evidence: some audits were tool-generated, some approval artifacts were missing and some original sessions remained outside the repository. In response, the project introduced stronger approval and logging requirements for future changes. These findings reinforced the distinction between automated diagnosis and human acceptance, and informed stronger traceability controls for subsequent development.
+
+<div style="break-after: page; page-break-after: always;"></div>
+
+## 12. Coding permissions and tool governance
+
+The permission model is deny-by-default and role-specific. Plan and Verify inspect approved material without editing source. Build can change approved implementation paths, while Docs can maintain allowlisted artifacts. Protected rules, secrets, external directories and safety-sensitive changes retain additional restrictions. A file permission is not human approval of a feature or permission to spend money.
+
+Machine-readable permissions alone are insufficient evidence. During maintenance, OpenCode 1.18.29 loaded the configuration but native reads did not match relative whitelist paths. Slash-prefixed absolute paths also failed. A bounded diagnostic showed that the V1 matching resource used a canonical absolute path without the initial slash. This was a configuration compatibility problem, not evidence that broader access was needed.
+
+The repair binds read and edit permissions to the canonical project location at startup. It preserves secret denials, external-directory restrictions, protected-resource behavior and role distinctions. File discovery and content search retain their own permission rules. Explicit configuration loading and root binding ensure that a missing or incorrect binding leaves access denied.
+
+Verification used isolated temporary state, synthetic files and a deterministic local scripted transport. It did not use a real model or student session. All four roles loaded. Sixteen final file operations had the expected outcomes: seven permitted and nine denied. Plan and Verify did not expose editing. Build could perform approved source operations but could not edit protected rules; secret and external reads were rejected. Docs could edit permitted documentation.
+
+The probes established native file-operation compatibility for OpenCode 1.18.29. Filesystem and network isolation remain the responsibility of the execution host, and shell confinement requires separate controls. Runtime upgrades or changes to resource-path formatting therefore require the permission checks to be repeated.
+
+The MCP tool manifest defines allowed capabilities by role. Default verification uses isolated data and excludes real credentials, user runtime data and paid calls. If a configuration becomes incompatible, native editing stops until a reviewed correction restores the intended access rules.
+
+<div style="break-after: page; page-break-after: always;"></div>
+
+## 13. Verification strategy and blocking gates
+
+Verification has structural, regression and behavioral tiers. Structural checks examine imports, ownership, schema, API boundaries and permissions. Regression replays previous suites under network isolation. Behavioral checks examine defined output quality and safety thresholds. A green structural check cannot stand in for a measured model-quality result, and a plausible model answer cannot substitute for a deterministic invariant test.
+
+| Gate                | Implementation and expected blocking behavior                                                                                                                                           |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Prior test approval | Independently controlled policy and checks validate authentic approval of the exact test/design snapshot before implementation. Missing, late, revoked or unverifiable evidence blocks. |
+| Static analysis     | Lint, source type checking and dependency checks run in CI; architecture, API contracts, security and permission checks cover relevant boundaries.                                      |
+| Requirements schema | The consolidated registry validates against its JSON schema, with required references and structural checks.                                                                            |
+| Semantic evaluation | Prompt/model changes require fixed-set, candidate-bound observations and passing task, factual and safety thresholds. Missing evidence blocks.                                          |
+| Regression          | The prior test suites run; failed prerequisites prevent the aggregate gate from succeeding.                                                                                             |
+| AI-use logging      | Relevant changes require meaningful new use records covering the changed paths.                                                                                                         |
+
+The prior-test checker and reviewer policy are controlled independently of the proposed change, reducing the risk of self-authorization. Rollout separates initial gate installation from the changes it will subsequently govern. This establishes the review mechanism before broader maintenance proceeds and keeps the installation exception limited to its intended purpose.
+
+Semantic evaluation uses eight fixed cases and the application's output guards. Evaluation observations identify the provider, quick and deep models, run reference and the versions of the dataset and implementation. The acceptance thresholds are task accuracy 1.0, factual fidelity 1.0 and zero safety escapes on that bounded set. Synthetic observations verify the evaluator's behavior; research quality against real provider outputs has not yet been established through this gate.
+
+Repository protection complements the workflow checks. The last configuration verification confirmed a required aggregate CI check, strict status checks, administrator enforcement and one independent approving review. Merge approval and prior test approval serve different purposes: one accepts a change for integration, while the other establishes that its test/design snapshot was reviewed before implementation.
+
+Together, the gates make structural correctness, regression behavior, semantic quality and human oversight explicit integration criteria. Hosted execution of the pending workflow changes remains part of the delivery plan.
+
+<div style="break-after: page; page-break-after: always;"></div>
+
+## 14. Verification results and interpretation
+
+Maintenance verification on 25 November 2026 used an isolated Python environment with the project source selected explicitly. Provider environment values were cleared, dotenv and bytecode generation disabled, and Python sockets denied. This made the regression deterministic and kept it independent of model credentials, market-data availability and external service costs.
+
+The regression ran with network access blocked, cache creation disabled and concise failure reporting. Keeping external calls out of this suite made failures attributable to application behavior and integration rather than service availability.
+
+| Check                                            | Recorded result                                                                    | Interpretation                                                                                    |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Submission-maintenance full regression           | 5,643 passed; 3 skipped; 73 warnings; 323 subtests passed; 87.74 seconds           | Successful full run before the later governance cleanup                                           |
+| Governance-cleanup full regression               | 5,654 passed; 2 failed; 3 skipped; 74 warnings; 323 subtests passed; 93.35 seconds | Found a path assertion error and a submission-layout mismatch                                     |
+| Governance module after path correction          | 91 passed; 16.96 seconds                                                           | Confirmed the corrected assertion and affected governance checks                                  |
+| Earlier checker/evaluator and integration checks | 220 passed; semantic evaluator module 13 passed                                    | Covered approval validation, clock/import behavior and synthetic semantic observations            |
+| Whole-tree Ruff, schema and structure            | Pass after governance cleanup                                                      | Static and structural verification                                                                |
+| Checker/evaluator scoped mypy                    | Pass, two modules in the maintenance run                                           | Type verification of the changed checker/evaluator scope                                          |
+| Independent requirements validator               | Pass, 40/40 items after cleanup                                                    | Required-artifact checks with the three mandatory governance documents retained                   |
+| Submission validator                             | 33/34 items; one pending-transcript warning                                        | Open mismatch between expected session-support materials and the simplified deliverable structure |
+
+The three skips covered a DeepSeek-key-dependent test, opt-in live simulated-trading testing and the optional Bedrock dependency. These tests remain outside the offline result. The requirements validator and submission validator examine different artifact inventories, so their totals describe different checks.
+
+Earlier maintenance runs exposed outdated requirement-count expectations, missing traceability, incorrect test-environment resolution and a date-sensitive news-data fixture. Corrections aligned the checks with the requirements, isolated the intended implementation and supplied a fixed test clock. A later verification run also caught inconsistent path normalization in an artifact check. Correcting the comparison restored the affected checks while preserving their acceptance criteria.
+
+The remaining submission-layout failure concerns session-support materials that the validator expects but the simplified deliverable structure omits. A second full regression has not followed the path-assertion correction, so the latest full run remains a failed run despite the successful focused check. Browser verification belongs to the earlier WebUI workstream and was not repeated during governance maintenance. The evaluation logbook preserves the commands, failed attempts and scoped results.
+
+<div style="break-after: page; page-break-after: always;"></div>
+
+## 15. Experimental findings and limits
+
+Evaluation used two complementary approaches. Phase 4A compares the fixed-round baseline with the evidence-gated, dynamically controlled flow through deterministic scripted fixtures. These cases isolate policy behavior, stop reasons and traceability without calling an LLM. They establish control-flow behavior; measuring live-provider savings and assessing human traceability require separate observations.
+
+The token-observability work contains historical live experiments on single-pass finalization and batch-macro tooling. The V3 design used four arms: B, the two-call baseline; AB, batch macro alone; C0, single pass alone; and CC, both switches. Structured output and the downstream setting were held constant. These experiments measured provider-reported usage, not realized investment returns.
+
+For the balanced NVDA, AAPL and XOM blocks, mean total tokens were 218,734 for B, 206,338 for AB, 204,450 for C0 and 181,443 for CC. Each ticker/arm cell had one measured sample. JPM was excluded from the balanced comparison because its CC cell was missing. Keeping the balanced subset separate from pooled observations maintained a consistent basis for comparing the four configurations.
+
+Lower usage did not imply stronger reliability. The historical CC block included provider errors and raw markup in reports; single-pass arms also encountered fallbacks. A failed cell cannot be replaced by a convenient successful retry without preserving the experimental rule and attempt history. Structural completion of a decision field also does not establish factual or investment quality.
+
+The measurements were exploratory and preceded later remediation. With one sample per ticker/arm cell, they provide neither confidence intervals nor a strong basis for statistical ranking. No post-remediation paid rerun or investment-outcome evaluation has been completed. The results therefore guide further engineering work rather than establish the performance of the application or its investment recommendations.
+
+The engineering value of the experiments was discovering measurement requirements: consistent arm configuration, complete attribution, stable memory baselines, verifiable manifests and honest failed-cell accounting. Future live work requires an approved protocol, spending authorization, authentic observations and repeatability.
+
+<div style="break-after: page; page-break-after: always;"></div>
+
+## 16. Defects, human oversight and process improvement
+
+The defect diary records symptoms, reproduction steps, classifications, causes, fixes and invariant gaps. Reviewing these cases helped identify recurring integration weaknesses and improve the development workflow. Defect analysis was qualitative; normalized per-sprint counts and severity-adjusted escape rates were not collected. The following episodes illustrate the changes driven by supervision and verification.
+
+| Observed problem                                                     | What supervision or verification caught                           | Engineering response                                                          |
+| -------------------------------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Blocked research still exposed unsafe final content                  | A correct gate result did not guarantee safe final output         | Strengthen downstream guards and multiline violation tests                    |
+| Yahoo rate limiting appeared as model authentication/contact failure | The traceback identified market-data access, not the selected LLM | Categorize errors, retain correlation references and avoid fabricated data    |
+| Backtest failure hid its traceback                                   | A generic banner was not actionable diagnostic evidence           | Log the underlying exception safely and return categorized failure            |
+| Long backtests appeared stalled                                      | Serial ticker/date work was invisible between completion events   | Expose per-cell progress and settlement without claiming instant cancellation |
+| Experimental arms could share incorrect settings or memory           | Valid-looking labels did not prove distinct execution             | Verify effective configuration, identity, memory isolation and manifests      |
+| Permissions parsed but denied intended native reads                  | Syntax and simulator checks did not prove actual matching         | Run bounded native probes and bind the canonical root explicitly              |
+
+These cases reveal a recurring pattern: a correct local component can still fail at an interface. Gate-to-report propagation, environment-to-form defaults, source-to-installed-import resolution and policy-to-native-tool matching all needed integration evidence. The process improved when checks exercised those transitions rather than reproducing only the implementation's internal steps.
+
+Several human interventions clarified business intent. The browser should show the actual execution messages, provider settings should be selectable defaults, per-date backtest work should be visible and unnecessary descriptions should be removed. Such feedback converted ambiguous presentation choices into testable contracts. Review also protected the distinction between simulated and real execution, and between a synthetic comparison and a measured strategy result.
+
+Governance overhead itself became a lesson. Repeated audits and freeze paperwork can consume time without adding independent evidence. The proportionate approach is to retain exact specifications, essential hashes, negative tests and authentic decisions while avoiding duplicate summaries. Documentation was simplified by removing duplicate generated summaries while retaining formal evaluation records, frozen experiment evidence and human decisions.
+
+<div style="break-after: page; page-break-after: always;"></div>
+
+## 17. Individual reflections
+
+### Fanlin Meng — 60749983
+
+In this project, I was responsible for WebUI requirements and overall coordination. My most important lesson was learning to integrate OpenCode into a software engineering process. Initially, I tended to describe an outcome and let it analyze and implement changes. As tasks grew, I found that unspecified scope, constraints and acceptance criteria could be filled in through assumptions. A locally reasonable result could therefore conflict with the project's overall goals. Developers need to define execution boundaries and check whether the implementation preserves their intent. Requirements discussions showed that using an agent makes precise requirements more important. For ambiguous tasks, asking OpenCode to inspect the system, explain its understanding and propose an approach was more effective than immediately requesting code. Expressions such as matching existing capabilities or simplifying an interface needed explicit preservation rules, modification boundaries and observable acceptance conditions. Requirements, architecture constraints and interface descriptions became shared working references rather than documents written after development. As team leader, I also had to connect separate tasks. OpenCode could complete an individual task quickly, but conclusions from one conversation did not necessarily carry into subsequent work. Recording agreed responsibilities, design decisions and critical constraints reduced repeated explanation and context drift. However, documentation introduced its own maintenance cost: duplicated or contradictory instructions could mislead later development. A smaller set of authoritative documents, updated alongside requirements and verification criteria, was more useful than accumulating summaries. Verification changed how I assessed agent output. Executable code, passing checks and satisfied requirements represent different judgments. When OpenCode assists with both implementation and tests, they may share the same mistaken assumption. Human review should therefore examine whether tests follow the requirements, cover negative cases and protect existing behavior. Reviewing the proposed approach and verification method before implementation helped expose misunderstandings earlier and discouraged acceptance based solely on a completion message. If I organized a similar project again, I would use smaller iterations, establish acceptance scenarios and cross-module constraints earlier, and reduce records that add little practical value. OpenCode's contribution extends beyond coding speed to problem analysis, option comparison and defect diagnosis. These capabilities become dependable only when requirements management, architecture constraints, version control and independent verification form a coherent feedback loop. The project clarified the division of responsibility in effective collaboration: the agent performs work that can be inspected and checked, while developers remain accountable for objectives, tradeoffs and final acceptance.
+
+### Shengjin Duan — 60599024
+
+### Yiwen Wang — 60536848
+
+### Tianqi Wang — 60726054
+
+The objective that interested me most was making token usage measurable and attributable, rather than simply trying to reduce the total number of tokens. In a multi-agent trading system, a lower token count is not meaningful unless we know which components generated the usage and whether retries, tool interactions and final decisions were measured consistently. I therefore focused on establishing reliable observability before evaluating optimisation. The frozen 2×2 experiment provided a structured way to examine single-pass finalisation while controlling the experimental configuration. For me, the main value of this work was developing a transparent measurement approach, not claiming that one optimisation would always save tokens or improve trading performance. The V2 preflight halt demonstrated why experimental reliability must take priority over execution speed. The audit identified blocking defects before any paid batch calls were made, including problems affecting the integrity of the experimental setup and its verification process. Continuing at that point could have consumed resources while producing results that were difficult to interpret or reproduce. Although the repeated corrections and re-freezes increased the schedule overhead, they established clearer boundaries between implementation changes and measured experiments. I came to see the halt as a necessary quality-control decision rather than simply a delay. A smaller set of trustworthy results is more useful than a larger set produced by an unreliable measurement process. This project helped me understand that passing tests, preserving frozen artifacts and obtaining audit reports are different forms of evidence. Automated tests establish whether specified behaviours hold in the tested environment, while manifests and hashes help establish artifact integrity. AI-generated audits can identify important defects, but several AI reviewers do not automatically provide independent human verification. I also learned to be cautious when interpreting the V3 measurements because the experiment had a small sample size and its results preceded the final remediation. In future work, I would place greater emphasis on independently checking representative usage records, verifying the links between raw observations and reported metrics, preserving approval records for paid experiments, and clearly separating exploratory findings from validated conclusions. The freeze and audit process was more extensive than I would ideally expect for a course project. It involved substantial documentation, repeated checks and many commits without directly producing additional experimental data. However, the process exposed serious problems, including a configuration that could have executed the same experimental arm under different labels and a verification weakness that could have accepted altered registration evidence. Without those checks, the resulting comparisons might have appeared convincing while being fundamentally unreliable. If I repeated the project, I would retain reproducible experiment specifications, manifest verification, preflight checks, clear run identities and independent review. At the same time, I would simplify repetitive paperwork and avoid audit rounds that add little new evidence. The objective should be proportionate rigor, not maximum documentation.
+
+### Zhuoran Ruan — 60946340
+
+<div style="break-after: page; page-break-after: always;"></div>
+
+## 18. Conclusions and future work
+
+The project extended TradingAgents from an existing terminal-oriented research application into a browser-accessible workspace with stronger research controls and operational visibility. The main contributions combine evidence-quality assessment, dynamic debate control, usage attribution, fault tolerance and simulated trading. Browser workflows make intermediate reasoning, tool activity, reports and backtest progress accessible throughout execution. Together, these extensions improve the ability to inspect how an assessment was produced and understand why a run stopped or failed.
+
+A central architectural outcome is the separation of model reasoning from deterministic authority. Language models interpret information and develop competing arguments, while explicit policies govern evidence acceptance, resource budgets, output restrictions and simulated execution. Shared interfaces preserve this separation across terminal and browser workflows. This approach made important failure conditions reproducible through offline tests and reduced dependence on a particular provider's wording or availability.
+
+Development also showed that integration deserves as much attention as individual components. A correct evidence gate can lose its effect downstream, a valid configuration can be interpreted incorrectly by an interface, and an apparently complete experiment can contain inconsistent settings or shared state. Human feedback and negative tests helped expose these problems. Requirements, architecture decisions and verification improved when they evolved around observable behavior rather than isolated implementation details. OpenCode supported this process through analysis, implementation and diagnosis, with developers retaining responsibility for scope and acceptance.
+
+The application still has practical limits. Market-data availability and model latency affect research completion. The local execution model favors a single active operation, and browser reconnection does not provide durable background execution across server restarts. Experimental token reductions came from small samples and were accompanied by reliability problems, so their findings remain exploratory. Simulated execution provides a controlled environment for exercising decisions and safety rules; investment effectiveness and real-world trading safety require different forms of evaluation.
+
+Future work should prioritize broader and repeated research-quality evaluation, clearer measurement of latency and resource use, and recovery of long-running operations. Context management could be extended through the proposed compaction design while preserving critical constraints and evidence provenance. Concurrency would require explicit isolation of configuration, memory and persistent state. These directions build on the project's main lesson: useful AI capabilities depend on clear boundaries, visible execution and evidence that the complete workflow behaves as intended.

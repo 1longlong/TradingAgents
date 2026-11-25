@@ -305,3 +305,6 @@ token_benchmarks/final_remediation_20261116/MANIFEST.sha256
 # Local skills and standalone design references are not versioned.
 /.agents/
 /demo/
+
+# macOS Finder metadata.
+.DS_Store

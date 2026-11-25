@@ -1,7 +1,6 @@
 # ADR-023: Frontend Stack and UI Technology
 
 - Status: **Accepted for documentation** by the human owner on 2026-11-05. Dependency approval is still required.
-- Date: 2026-11-05
 - Related requirements: `REQ-WEB-001`, `REQ-WEB-002`, `REQ-WEB-008`, `REQ-WEB-014`, `REQ-WEB-021`, `REQ-WEB-025`
 - Related ADRs: ADR-002
 - Related blueprint: `architecture-blueprint.md` Sections 6.8, 8, 12
@@ -57,7 +56,7 @@ The user explicitly selected TypeScript, React, and a suitable UI technology. Th
 5. **Plain CSS** — faster initially, but Tailwind tokens and Radix components improve consistency and accessibility.
 6. **No i18n library** — a custom dictionary is possible for two languages, but pluralization, interpolation, and key checking are better served by react-i18next.
 
-## Addendum — local Vite development mode, 2026-11-20
+## Addendum — local Vite development mode
 
 The user approved one-command `--dev` / `--build` startup in
 `web-startup-20261120-v1`. Vite is an owned loopback-only development process;
@@ -68,7 +67,7 @@ launcher. Built/static operation still needs only the Python service. This adds
 no dependency, production Node service, deployment step or frontend feature.
 
 
-## Addendum — stage-based live activity, 2026-11-20
+## Addendum — stage-based live activity
 
 The user's `web-activity-20261120-v1` request replaces the oversized live-run
 hero and explanatory banner with a compact activity workspace. Its progress
@@ -87,7 +86,7 @@ view to avoid duplicating reports. Dependencies, ratings, agent logic, run
 lifecycle, privacy/redaction and cancellation contracts are unchanged.
 
 
-## Addendum — English/Chinese interface, 2026-11-20
+## Addendum — English/Chinese interface
 
 The user requested `web-i18n-20261120-v1`. Reuse existing i18next and
 react-i18next; add a workspace namespace to the existing English/Chinese JSON
@@ -107,7 +106,7 @@ history titles and holding-window labels have presentation-only formatters;
 custom values remain untouched. No translation service, dependency, backend
 endpoint or runtime-prompt change is introduced. Final human acceptance pending.
 
-## Addendum — per-analysis debate controls, 2026-11-20
+## Addendum — per-analysis debate controls
 
 For web-debate-settings-20261120-v1, use a collapsed native details section in
 the existing Research setup step. Public policy defaults come from the config
@@ -123,7 +122,7 @@ without settings are not assigned current defaults. Native details and numeric
 inputs retain keyboard behavior; two columns become one on narrow screens.
 
 
-## TUI parity refinement — 2026-11-20
+## TUI parity refinement
 
 Under web-tui-parity-20261120-v1, extend existing events/snapshots and controls
 for observed role status, analyst timing, finalized reports and custom backtest
@@ -134,7 +133,7 @@ and simulated trading unchanged. See the blueprint/review memo for contracts
 and prior negative-test strategy.
 
 
-## Web integration refinement — 2026-11-21
+## Web integration refinement
 
 The user explicitly authorizes web-simulation-20261121-v1: frontend and necessary
 interfaces around the existing deterministic simulated-trading core. The
@@ -146,7 +145,7 @@ introduced. Pending approval objects remain process-owned and cannot be restored
 from client JSON. Only one final verification phase is requested.
 
 
-## Information hierarchy refinement — 2026-11-21
+## Information hierarchy refinement
 
 The user authorizes web-ui-simplify-20261121-v1 to reduce nonessential information
 and duplicate navigation. This updates the presentation of existing features,

@@ -1,8 +1,8 @@
 # ADR-017 — Per-run memory isolation for the measured 2×2
 
 **Status:** Retrospective documentation — human acceptance pending
-**Date:** Not recorded in the source material. Reconstructed from the V3 protocol and
-the V3 freeze; no calendar date is asserted.
+**Provenance:** Reconstructed from the V3 protocol and
+the V3 freeze.
 **Related invariants:** INV-20, INV-27.
 
 **D2 renumbering (2026-11-21):** formerly `ADR 005`. Renumbered during the Release-first integration because the

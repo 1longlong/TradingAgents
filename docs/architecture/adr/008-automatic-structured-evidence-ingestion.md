@@ -6,7 +6,6 @@
   by WANG Yiwen (60536848) in the controlling conversation on 2026-11-11; that
   approval authorizes the plan and the test cases ONLY, and is not a final human
   acceptance. Only Stage 1 (this ADR) is implemented; Stages 2–4 are NOT.
-- **Date:** 2026-11-11
 - **Deciders:** CS5351 project (student); coding-agent (OpenCode Builder);
   human review required before acceptance
 - **Trace:** `FR-DQG-004` (multi-category gate engine), `FR-DQG-005` (report
