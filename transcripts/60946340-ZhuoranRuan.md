@@ -11,13 +11,13 @@
 
 ## 1 Purpose and provenance
 
-This is an annotated summary of eleven actual OpenCode sessions associated with the student’s TradingAgents error-handling and execution-reliability work. It is not a transcript of a conversation with ChatGPT or Codex. The student supplied the identity above and clarified that D5 is an individual submission. User-role messages are treated as the student-side intervention record; the export itself is not an independent identity-verification mechanism.
+This is an annotated summary of eleven actual OpenCode sessions associated with the student’s TradingAgents error-handling and execution-reliability work. The student supplied the identity above and clarified that D5 is an individual submission. User-role messages are treated as the student-side intervention record; the export itself is not an independent identity-verification mechanism.
 
 The exports contain **5,515 messages, including 42 user-role messages**. Counts describe exported message objects, not code changes, tests or approvals. Two older D-drive setup/debug sessions were outside this selected implementation directory and are excluded.
 
 **Summary versus raw evidence:** this Markdown is a navigation and supervision record, not a substitute for the full raw transcript required by D5. Original JSON files remain local under `private_raw/`; their hashes appear below. They have not been uploaded. Reading copies and automatic intervention candidates are derivative artifacts. OpenCode’s `--sanitize` export redacts user text on this installed version, so that export alone cannot demonstrate the actual interventions.
 
-**Evidence boundaries:** quoted instructions are authentic source excerpts. Labels and rationales below are explanatory summaries of the instruction’s stated problem or constraint, not newly invented historical statements by the student. References to independent tests inside prompts are assertions recorded at that time; preparing this document did not rerun or independently certify those tests. Later approval of a stage is not retroactively treated as approval before earlier code.
+**Evidence boundaries:** quoted instructions are authentic source excerpts. Omitted local paths are marked in brackets. Labels and rationales below are explanatory summaries of the instruction’s stated problem or constraint, not newly invented historical statements by the student. References to independent tests inside prompts are assertions recorded at that time; preparing this document did not rerun or independently certify those tests. Later approval of a stage is not retroactively treated as approval before earlier code.
 
 ## 2 Individual scope and supervision approach
 
@@ -215,7 +215,7 @@ All 42 user-role messages are indexed here. Excerpts are shortened for navigatio
 - **Anchor:** `ses_e553a47eaffe1ANZmgcsVUBjhW` / `M0001`
 - **Message ID:** `msg_1aac5b818001koUMIhkpLbDxln`
 - **Recorded time:** 2026-11-05T16:14:07.027000+08:00
-- **Source excerpt:** 继续 TradingAgents 的异常处理优化。 项目目录： C:\Users\86187\Documents\ChatGPT\project\TradingAgents-0.5.0 当前分支：feature/error-handling 小组远程：team 第一批已提交并推送：567e58d 第一批已完成： - 供应商异常分类与来源归因 - 多供应商失败聚合及关键错误传播 - 相关回归测试 - 缓存时间问题修复 开始前阅读适用的 AGENTS.md，检查 Git 状态， 并查看提交 567e58d 及相关代码，
+- **Source excerpt:** 继续 TradingAgents 的异常处理优化。 项目目录： [local path omitted]/TradingAgents-0.5.0 当前分支：feature/error-handling 小组远程：team 第一批已提交并推送：567e58d 第一批已完成： - 供应商异常分类与来源归因 - 多供应商失败聚合及关键错误传播 - 相关回归测试 - 缓存时间问题修复 开始前阅读适用的 AGENTS.md，检查 Git 状态， 并查看提交 567e58d 及相关代码，
 - **Rationale and interpretation:** The instruction identifies a specific failure or narrows an earlier approach. Rationale: satisfy the explicit behavior, compatibility and verification constraints in this message rather than broadening the batch.
 
 ### I07 Reject and redirect after reproduction
@@ -279,7 +279,7 @@ All 42 user-role messages are indexed here. Excerpts are shortened for navigatio
 - **Anchor:** `ses_e50f7a50affe1dpGSiTQZcxu71` / `M0001`
 - **Message ID:** `msg_1af085af8001awhTxVIkPCqiHd`
 - **Recorded time:** 2026-11-06T12:05:22.960000+08:00
-- **Source excerpt:** 开始下一项优化：数据供应商轻量熔断。 本轮只分析，不修改代码。 项目目录： C:\Users\86187\Documents\ChatGPT\project\TradingAgents-0.5.0 预期分支：feature/error-handling 1. 阅读适用的AGENTS.md，检查Git状态和最近提交，保护已有修改。 2. 阅读 interface.py、retry_session.py、errors.py 及相关测试， 确认一次供应商逻辑调用与内部重试的边界。 3. 找出熔断检查、最终结果记录、恢复探
+- **Source excerpt:** 开始下一项优化：数据供应商轻量熔断。 本轮只分析，不修改代码。 项目目录： [local path omitted]/TradingAgents-0.5.0 预期分支：feature/error-handling 1. 阅读适用的AGENTS.md，检查Git状态和最近提交，保护已有修改。 2. 阅读 interface.py、retry_session.py、errors.py 及相关测试， 确认一次供应商逻辑调用与内部重试的边界。 3. 找出熔断检查、最终结果记录、恢复探
 - **Rationale and interpretation:** The instruction limits the stage to inspection or reproduction. Rationale: establish the actual call path, baseline and risks before authorizing implementation.
 
 ### I15 Correction or scope redirection
@@ -327,7 +327,7 @@ All 42 user-role messages are indexed here. Excerpts are shortened for navigatio
 - **Anchor:** `ses_e500096f1fferdaDjkjtVB62SC` / `M0001`
 - **Message ID:** `msg_1afff69100016OczjspX7Vr8FL`
 - **Recorded time:** 2026-11-06T16:35:13.956000+08:00
-- **Source excerpt:** 开始下一项异常模式优化：分析师工具循环保护。 本轮只分析，不修改代码。 项目目录： C:\Users\86187\Documents\ChatGPT\project\TradingAgents-0.5.0 预期分支：feature/error-handling 1. 阅读适用的AGENTS.md，检查分支、Git状态和最近提交。 如果上一批熔断修改尚未提交，报告状态后停止， 不自行提交、清理或覆盖。 2. 阅读： - graph/setup.py - graph/conditional_logic.py - gra
+- **Source excerpt:** 开始下一项异常模式优化：分析师工具循环保护。 本轮只分析，不修改代码。 项目目录： [local path omitted]/TradingAgents-0.5.0 预期分支：feature/error-handling 1. 阅读适用的AGENTS.md，检查分支、Git状态和最近提交。 如果上一批熔断修改尚未提交，报告状态后停止， 不自行提交、清理或覆盖。 2. 阅读： - graph/setup.py - graph/conditional_logic.py - gra
 - **Rationale and interpretation:** The instruction limits the stage to inspection or reproduction. Rationale: establish the actual call path, baseline and risks before authorizing implementation.
 
 ### I21 Scoped implementation authorization

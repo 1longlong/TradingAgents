@@ -26,7 +26,7 @@ Default to no tool or path access. See `.opencode/permissions.jsonc` for concret
 | Subagents, new conversations, automations | Denied | Denied | Denied | Denied | Require separate explicit user authorization and configured permissions |
 | Commit, push, merge, publish | Denied | Denied | Denied | Denied | Not included in current scope; configure separately if explicitly authorized |
 
-`.opencode/permissions.jsonc` targets installed OpenCode 1.18.29 using V1 `permission`, `agent`, and `bash` fields. This conversation host exposes different interfaces, such as `functions.exec`, `exec_command`, `apply_patch`, and `web__run`; align their responsibilities explicitly. The JSONC does not automatically configure other hosts.
+`.opencode/permissions.jsonc` targets installed OpenCode 1.18.29 using V1 `permission`, `agent`, and `bash` fields. Verify capabilities and permissions separately on each other execution host.
 
 This V1 installation does not support URL-object rules for webfetch, so its permission is `ask`. Use current authorization and tool confirmation to restrict requests to necessary official documentation; do not claim this version enforces domain rules. Typical sources include the official sites for Python, pytest, LangChain, and tools or dependencies actually used.
 

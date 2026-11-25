@@ -7267,8 +7267,7 @@ migration_notes:
 - Original release scope deferrals are preserved in product.historical_scope; later
   inherited implementations and the previously authorized layout are not misrepresented
   as still blocked. Live benchmarking and production tuning remain deferred.
-- Tool display labels follow the existing OpenCode naming instruction; original branch
-  provenance is recorded in source_baselines.
+- Original branch provenance is recorded in source_baselines.
 - '2026-11-20: imported the ten existing FR-TRD/INV-TRD/NFR-TRD requirements from
   release 24adf97 into schema 1.1; IDs, statements, tradeoffs, typed thresholds, original
   statuses and historical evidence are retained. Only test layout references are normalized

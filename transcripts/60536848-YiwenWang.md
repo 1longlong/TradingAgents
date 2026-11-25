@@ -8,10 +8,8 @@
 > `docs/architecture/risk-list.md` (RISK-004) and `docs/debt-register.md`
 > (DEBT-005).
 
-> Merge normalization (2026-11-19): tool display labels follow the existing
-> OpenCode naming instruction. This annotated record's original text remains
-> available in release commit `79103c3`; dates, review decisions and events are
-> not new merge approvals.
+> This annotated record's original text remains available in release commit
+> `79103c3`. The dates, review decisions and events retain their original scope.
 
 ## Purpose and provenance
 

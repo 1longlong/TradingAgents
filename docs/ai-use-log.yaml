@@ -581,8 +581,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-002
   date: '2026-10-20'
   tool: OpenCode
@@ -599,8 +598,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-003
   date: '2026-10-21'
   tool: OpenCode
@@ -617,8 +615,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-004
   date: '2026-10-21'
   tool: OpenCode
@@ -636,8 +633,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-005
   date: '2026-10-21'
   tool: OpenCode (review)
@@ -654,8 +650,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-006
   date: '2026-10-21'
   tool: OpenCode
@@ -672,8 +667,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-007
   date: '2026-10-21'
   tool: OpenCode
@@ -691,8 +685,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-008
   date: '2026-10-21'
   tool: OpenCode
@@ -709,8 +702,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-009
   date: '2026-10-21'
   tool: OpenCode
@@ -736,8 +728,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-010
   date: '2026-10-21'
   tool: OpenCode
@@ -762,8 +753,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-011
   date: '2026-10-21'
   tool: OpenCode
@@ -783,8 +773,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-012
   date: '2026-10-21'
   tool: OpenCode
@@ -814,8 +803,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-014
   date: '2026-10-21'
   tool: OpenCode
@@ -852,8 +840,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-013
   date: '2026-10-21'
   tool: OpenCode
@@ -876,8 +863,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-015
   date: '2026-10-22'
   tool: OpenCode
@@ -902,8 +888,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-016
   date: '2026-10-23'
   tool: OpenCode
@@ -938,8 +923,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-017
   date: '2026-10-23'
   tool: OpenCode
@@ -973,8 +957,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-018
   date: '2026-10-23'
   tool: OpenCode
@@ -1002,8 +985,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-019
   date: '2026-10-23'
   tool: OpenCode
@@ -1057,8 +1039,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-020
   date: '2026-11-06'
   tool: OpenCode
@@ -1100,8 +1081,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-021
   date: '2026-11-06'
   tool: OpenCode
@@ -1143,8 +1123,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-022
   date: '2026-11-06'
   tool: OpenCode
@@ -1186,8 +1165,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-023
   date: '2026-11-06'
   tool: OpenCode
@@ -1224,8 +1202,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-024
   date: '2026-11-06'
   tool: OpenCode
@@ -1278,8 +1255,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-025
   date: '2026-11-06'
   tool: OpenCode
@@ -1330,8 +1306,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-026
   date: '2026-11-06'
   tool: OpenCode
@@ -1392,8 +1367,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-027
   date: '2026-11-06'
   tool: OpenCode
@@ -1488,8 +1462,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-028
   date: '2026-11-10'
   tool: OpenCode
@@ -1562,8 +1535,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-029
   date: '2026-11-10'
   tool: OpenCode
@@ -1647,8 +1619,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-030
   date: '2026-11-10'
   tool: OpenCode (external live verification)
@@ -1696,8 +1667,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-031
   date: '2026-11-10'
   tool: OpenCode
@@ -1739,8 +1709,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-032
   date: '2026-11-10'
   tool: OpenCode (OpenCode-supervised planning)
@@ -1762,8 +1731,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-033
   date: '2026-11-10'
   tool: OpenCode
@@ -1789,8 +1757,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-034
   date: '2026-11-10'
   tool: OpenCode
@@ -1841,8 +1808,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-035
   date: '2026-11-10'
   tool: OpenCode
@@ -1892,8 +1858,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-036
   date: '2026-11-10'
   tool: OpenCode
@@ -1940,8 +1905,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-037
   date: '2026-11-10'
   tool: OpenCode
@@ -1970,8 +1934,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-038
   date: '2026-11-10'
   tool: OpenCode
@@ -2005,8 +1968,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-039
   date: '2026-11-10'
   tool: OpenCode
@@ -2050,8 +2012,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-040
   date: '2026-11-11'
   tool: OpenCode (CS5351/DeepSeek-V4-Flash) — Builder
@@ -2108,8 +2069,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-041
   date: '2026-11-11'
   tool: OpenCode
@@ -2140,8 +2100,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-042
   date: '2026-11-11'
   tool: OpenCode (CS5351/DeepSeek-V4-Flash) — Builder
@@ -2191,8 +2150,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-043
   date: '2026-11-11'
   tool: OpenCode (CS5351/DeepSeek-V4-Flash) — Builder; independent review by OpenCode
@@ -2247,8 +2205,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-044
   date: '2026-11-11'
   tool: OpenCode (CS5351/DeepSeek-V4-Flash) — Builder; independent review by OpenCode
@@ -2327,8 +2284,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-045
   date: '2026-11-11'
   tool: OpenCode (CS5351/DeepSeek-V4-Flash) — Builder; independent review by OpenCode
@@ -2401,8 +2357,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-020-20261111
   date: '2026-11-11'
   tool: OpenCode
@@ -2485,8 +2440,7 @@ entries:
     original_id; date and human-review scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
   - The release log reused original_id for different events. The imported key includes
     the event date to retain both records unambiguously; scope/date/review decision
     are unchanged.
@@ -2516,8 +2470,7 @@ entries:
     original_id; date and human-review scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
   - The release log reused original_id for different events. The imported key includes
     the event date to retain both records unambiguously; scope/date/review decision
     are unchanged.
@@ -2554,8 +2507,7 @@ entries:
     original_id; date and human-review scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
   - The release log reused original_id for different events. The imported key includes
     the event date to retain both records unambiguously; scope/date/review decision
     are unchanged.
@@ -2643,8 +2595,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-047
   date: '2026-11-12'
   tool: OpenCode — independent verification (documented by OpenCode; documentation-only
@@ -2684,8 +2635,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-048
   date: '2026-11-12'
   tool: OpenCode (CS5351/DeepSeek-V4-Flash) — Builder; independent review by OpenCode
@@ -2764,8 +2714,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-049
   date: '2026-11-12'
   tool: OpenCode — independent verification (documented by OpenCode; documentation/comment
@@ -2809,8 +2758,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-050
   date: '2026-11-12'
   tool: OpenCode — human-authorized Git publication
@@ -2840,8 +2788,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-051
   date: '2026-11-12'
   tool: OpenCode — builder implementation (approved Python 3.10 CI repair)
@@ -2898,8 +2845,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-052
   date: '2026-11-12'
   tool: OpenCode — independent technical verification (documented by OpenCode; docs/status
@@ -2944,8 +2890,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AUL-053
   date: '2026-11-12'
   tool: OpenCode — human-authorized Git publication
@@ -2971,8 +2916,7 @@ entries:
     scope retained.
   notes:
   - The source record did not contain a per-file paths list; no path attribution is
-    invented. Tool display names are normalized to OpenCode under the existing user
-    instruction.
+    invented.
 - id: AI-20261119-MERGE-001
   date: '2026-11-19'
   tool: OpenCode
@@ -3897,35 +3841,6 @@ entries:
     CSRF, occupied-port refusal and Ctrl+C cleanup.
   - Final Chromium E2E 12 passed; temporary harness corrections and unrun Windows/live
     verification are recorded in the evaluation logbook.
-- id: AI-20261120-NAMING-001
-  date: '2026-11-20'
-  tool: OpenCode
-  purpose: Normalize development-agent and tool display names to OpenCode across project
-    documentation at the explicit request of the user.
-  source: Current user conversation; explicit documentation-wide naming instruction
-  human_review: User authorized editorial name normalization; no new feature approval
-    or verification outcome is asserted
-  paths:
-  - AGENTS.md
-  - README.md
-  - architecture-blueprint.md
-  - docs/code-governance/mcp-tool-manifest.md
-  - docs/architecture/adr/004-governance-context-design.proposed.md
-  - docs/ai-use-log.yaml
-  - prompts/prompt_v1.0.yaml
-  - prompts/prompt_v1.1.yaml
-  - prompts/prompt_v1.2.yaml
-  - prompts/prompt_v1.3.yaml
-  - docs/review-memo.md
-  notes:
-  - Documentation labels only; original dates, contribution scope, approvals and results
-    remain unchanged.
-  - Historical prompt role wording is normalized under the user instruction; binding
-    behavior and human gates are unchanged.
-  - The OpenCode label follows the requested documentation naming convention and does
-    not assert an additional tool session or execution.
-  - Existing uncommitted startup changes are preserved; no product implementation,
-    dependency or Git mutation is part of this naming change.
 - id: AI-20261120-MAINCHECK-001
   date: '2026-11-20'
   tool: OpenCode
@@ -4655,8 +4570,7 @@ entries:
   - Local release fast-forwarded from 24adf97 to 9a08e08. Canonical src/test layout,
     existing WebUI features, core/CLI contracts and both histories retained.
   - Intentional root CHANGELOG deletion retained; existing ADR/evaluation/trace records
-    preserve release scope. Incoming tool labels normalized to OpenCode under prior
-    user instruction.
+    preserve release scope.
   - Core and CLI match release byte for byte except the pre-existing optional backtest
     progress observer. No new product/safety/trading/model/prompt/dependency changes
     made by conflict resolution.

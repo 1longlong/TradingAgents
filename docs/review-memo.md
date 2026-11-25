@@ -2080,9 +2080,8 @@ decision for each item.
   imported release governance-validation job; no check is waived.
 - AI-log histories are retained in the existing entries envelope. The release
   reused AUL-020/021/022 for different events; date-qualified imported keys retain
-  `original_id`, dates, scopes and review decisions. Tool display names are
-  normalized to OpenCode under the existing human instruction; original release
-  provenance remains available at `79103c3`.
+  `original_id`, dates, scopes and review decisions. Original release provenance
+  remains available at `79103c3`.
 - `.agents/` and `demo/` remain local, untracked and unstaged. They are not merge
   deliverables. No original frontend, demo, credential file or actual user data
   was read or changed for this integration.

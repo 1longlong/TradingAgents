@@ -4,8 +4,7 @@
 # in intent: any change to a binding rule is a new versioned file under prompts/,
 # and the change is captured below. See Prompt.md for the human-readable anchor.
 # v1.2 is the prior authoritative version; v1.1 and earlier are retained
-# for traceability. Development-tool labels were normalized to OpenCode at the
-# user's request on 2026-11-20; binding rules and phase gates are unchanged.
+# for traceability.
 
 version: "v1.3"
 phase: "implementation"

@@ -1,7 +1,6 @@
 .git
 .venv
 .env
-.claude
 .idea
 .vscode
 .DS_Store
